@@ -183,7 +183,7 @@ const QuestionnaireForm: React.FC = () => {
       />
       
       {!isRandomized && (
-        <Card title="Questions manuelles" className="mb-6">
+        <Card title="Questions manuelles\" className="mb-6">
           <div className="mb-4 flex justify-between items-center">
             <h4 className="text-sm font-medium text-gray-700">
               Questions sélectionnées ({currentTotal}/{totalQuestions})

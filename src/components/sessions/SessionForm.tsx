@@ -148,7 +148,7 @@ const SessionForm: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {participants.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" colSpan={6}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500\" colSpan={6}>
                     <div className="text-center py-4 text-gray-500">
                       Aucun participant ajouté. Utilisez le bouton "Ajouter participant" pour commencer.
                     </div>
