@@ -8,7 +8,8 @@ import {
   Settings, 
   LogOut,
   HardHat,
-  FileText
+  FileText,
+  BookOpen
 } from 'lucide-react';
 import { useLogStore } from '../../stores/logStore';
 
@@ -55,6 +56,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
 
   const menuItems = [
     { id: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard size={20} /> },
+    { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
     { id: 'questionnaires', label: 'Questionnaires', icon: <ClipboardList size={20} /> },
     { id: 'sessions', label: 'Sessions', icon: <Users size={20} /> },
     { id: 'exams', label: 'Mode examen', icon: <FileSpreadsheet size={20} /> },

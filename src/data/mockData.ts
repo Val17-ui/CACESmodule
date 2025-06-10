@@ -44,12 +44,12 @@ export const mockSessions: Session[] = [
 ];
 
 export const mockParticipants: Participant[] = [
-  { id: '1', firstName: 'Jean', lastName: 'Dupont', email: 'j.dupont@example.com', company: 'Duval Construction', hasSigned: true, score: 85, passed: true },
-  { id: '2', firstName: 'Marie', lastName: 'Laurent', email: 'm.laurent@example.com', company: 'Duval Construction', hasSigned: true, score: 92, passed: true },
-  { id: '3', firstName: 'Pierre', lastName: 'Martin', email: 'p.martin@example.com', company: 'Martin BTP', hasSigned: false },
-  { id: '4', firstName: 'Sophie', lastName: 'Dubois', email: 's.dubois@example.com', company: 'Martin BTP', hasSigned: false },
-  { id: '5', firstName: 'Thomas', lastName: 'Leroy', email: 't.leroy@example.com', company: 'LMN Logistics', hasSigned: true, score: 65, passed: false },
-  { id: '6', firstName: 'Camille', lastName: 'Moreau', email: 'c.moreau@example.com', company: 'Industries ABC', hasSigned: true, score: 78, passed: true }
+  { id: '1', firstName: 'Jean', lastName: 'Dupont', organization: 'Duval Construction', identificationCode: 'DC001', deviceId: 1, hasSigned: true, score: 85, passed: true },
+  { id: '2', firstName: 'Marie', lastName: 'Laurent', organization: 'Duval Construction', identificationCode: 'DC002', deviceId: 2, hasSigned: true, score: 92, passed: true },
+  { id: '3', firstName: 'Pierre', lastName: 'Martin', organization: 'Martin BTP', identificationCode: 'MB001', deviceId: 3, hasSigned: false },
+  { id: '4', firstName: 'Sophie', lastName: 'Dubois', organization: 'Martin BTP', identificationCode: 'MB002', deviceId: 4, hasSigned: false },
+  { id: '5', firstName: 'Thomas', lastName: 'Leroy', organization: 'LMN Logistics', identificationCode: 'LMN001', deviceId: 5, hasSigned: true, score: 65, passed: false },
+  { id: '6', firstName: 'Camille', lastName: 'Moreau', organization: 'Industries ABC', identificationCode: 'ABC001', deviceId: 6, hasSigned: true, score: 78, passed: true }
 ];
 
 export const mockQuestions: Question[] = [
@@ -67,7 +67,10 @@ export const mockQuestions: Question[] = [
     timeLimit: 45,
     isEliminatory: true,
     referential: 'R489',
-    category: 'Signalisation'
+    theme: 'securite',
+    createdAt: '2025-01-10',
+    usageCount: 25,
+    correctResponseRate: 78
   },
   {
     id: '2',
@@ -83,7 +86,10 @@ export const mockQuestions: Question[] = [
     timeLimit: 30,
     isEliminatory: true,
     referential: 'R486',
-    category: 'Équipements de protection'
+    theme: 'securite',
+    createdAt: '2025-01-15',
+    usageCount: 18,
+    correctResponseRate: 85
   },
   {
     id: '3',
@@ -99,7 +105,10 @@ export const mockQuestions: Question[] = [
     timeLimit: 45,
     isEliminatory: false,
     referential: 'R489',
-    category: 'Prises de poste'
+    theme: 'technique',
+    createdAt: '2025-01-20',
+    usageCount: 32,
+    correctResponseRate: 65
   },
   {
     id: '4',
@@ -115,7 +124,10 @@ export const mockQuestions: Question[] = [
     timeLimit: 30,
     isEliminatory: true,
     referential: 'R489',
-    category: 'Situations d\'urgence'
+    theme: 'securite',
+    createdAt: '2025-01-25',
+    usageCount: 28,
+    correctResponseRate: 45
   },
   {
     id: '5',
@@ -131,7 +143,10 @@ export const mockQuestions: Question[] = [
     timeLimit: 30,
     isEliminatory: false,
     referential: 'R482',
-    category: 'Réglementation'
+    theme: 'reglementation',
+    createdAt: '2025-02-01',
+    usageCount: 15,
+    correctResponseRate: 72
   }
 ];
 
@@ -142,6 +157,10 @@ export const mockQuestionnaires: Questionnaire[] = [
     referential: 'R489',
     questions: mockQuestions.filter(q => q.referential === 'R489'),
     passingThreshold: 70,
+    themeDistribution: { reglementation: 15, securite: 15, technique: 10 },
+    eliminatoryCount: 3,
+    isRandomized: false,
+    totalQuestions: 40,
     createdAt: '2025-05-10',
     updatedAt: '2025-06-01'
   },
@@ -151,6 +170,10 @@ export const mockQuestionnaires: Questionnaire[] = [
     referential: 'R486',
     questions: mockQuestions.filter(q => q.referential === 'R486'),
     passingThreshold: 80,
+    themeDistribution: { reglementation: 12, securite: 18, technique: 10 },
+    eliminatoryCount: 4,
+    isRandomized: true,
+    totalQuestions: 40,
     createdAt: '2025-04-20',
     updatedAt: '2025-05-15'
   }

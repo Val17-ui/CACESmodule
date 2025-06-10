@@ -17,8 +17,9 @@ export interface Participant {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
-  company: string;
+  organization?: string;
+  identificationCode?: string;
+  deviceId?: number;
   hasSigned: boolean;
   score?: number;
   passed?: boolean;
@@ -33,8 +34,20 @@ export interface Question {
   timeLimit: number;
   isEliminatory: boolean;
   referential: string;
-  category: QuestionCategory;
   theme: QuestionTheme;
+  image?: string;
+  createdAt: string;
+  usageCount: number;
+  correctResponseRate: number;
+}
+
+export interface QuestionStatistics {
+  questionId: string;
+  usageCount: number;
+  correctResponses: number;
+  totalResponses: number;
+  correctResponseRate: number;
+  lastUsed?: string;
 }
 
 export interface Questionnaire {
@@ -46,35 +59,51 @@ export interface Questionnaire {
   themeDistribution: Record<QuestionTheme, number>;
   eliminatoryCount: number;
   isRandomized: boolean;
+  totalQuestions: number;
   createdAt: string;
   updatedAt: string;
 }
 
-export type ReferentialType = 'R389' | 'R486' | 'R482' | 'R484' | 'R485' | 'R489' | 'R490';
+export interface DeviceMapping {
+  deviceId: number;
+  hardwareId: string;
+  isActive: boolean;
+}
+
+export interface GeneralSettings {
+  deviceMappings: DeviceMapping[];
+  maxDevices: number;
+}
+
+export type ReferentialType = 'R482' | 'R484' | 'R485' | 'R486' | 'R489' | 'R490';
 
 export const referentials: Record<ReferentialType, string> = {
-  'R389': 'Chariots automoteurs',
-  'R486': 'Plates-formes élévatrices',
   'R482': 'Engins de chantier',
   'R484': 'Ponts roulants',
   'R485': 'Chariots de manutention',
+  'R486': 'Plates-formes élévatrices',
   'R489': 'Chariots élévateurs',
   'R490': 'Grues de chargement'
+};
+
+export const referentialLimits: Record<ReferentialType, { min: number; max: number }> = {
+  'R482': { min: 20, max: 45 },
+  'R484': { min: 25, max: 50 },
+  'R485': { min: 20, max: 40 },
+  'R486': { min: 25, max: 50 },
+  'R489': { min: 20, max: 50 },
+  'R490': { min: 30, max: 55 }
 };
 
 export type QuestionTheme = 
   | 'reglementation'
   | 'securite'
-  | 'technique'
-  | 'environnement'
-  | 'maintenance';
+  | 'technique';
 
 export const questionThemes: Record<QuestionTheme, string> = {
   reglementation: 'Réglementation',
   securite: 'Sécurité',
-  technique: 'Technique',
-  environnement: 'Environnement',
-  maintenance: 'Maintenance'
+  technique: 'Technique'
 };
 
 export type QuestionCategory = 'theory' | 'practice' | 'eliminatory';

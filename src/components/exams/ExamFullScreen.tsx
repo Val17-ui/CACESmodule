@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Timer, Users } from 'lucide-react';
+import { Timer, Users, ArrowLeft } from 'lucide-react';
 import { Question } from '../../types';
 import { logger } from '../../utils/logger';
+import Button from '../ui/Button';
 
 interface ExamFullScreenProps {
   question: Question;
@@ -11,6 +12,7 @@ interface ExamFullScreenProps {
   deviceCount: number;
   responses: Record<number, string>;
   isTestMode?: boolean;
+  onExitFullScreen: () => void;
 }
 
 const ExamFullScreen: React.FC<ExamFullScreenProps> = ({
@@ -21,6 +23,7 @@ const ExamFullScreen: React.FC<ExamFullScreenProps> = ({
   deviceCount,
   responses,
   isTestMode = false,
+  onExitFullScreen,
 }) => {
   const [timeLeft, setTimeLeft] = useState(timeLimit);
 
@@ -51,6 +54,13 @@ const ExamFullScreen: React.FC<ExamFullScreenProps> = ({
     <div className="fixed inset-0 bg-gray-100 flex flex-col p-8">
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center space-x-4">
+          <Button
+            variant="outline"
+            icon={<ArrowLeft size={20} />}
+            onClick={onExitFullScreen}
+          >
+            Retour
+          </Button>
           <span className="text-2xl font-bold">
             Question {currentQuestionIndex + 1}/{totalQuestions}
           </span>
@@ -75,6 +85,17 @@ const ExamFullScreen: React.FC<ExamFullScreenProps> = ({
       <div className="flex-1 flex flex-col justify-center max-w-4xl mx-auto w-full">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold mb-8">{question.text}</h2>
+          
+          {question.image && (
+            <div className="mb-8">
+              <img 
+                src={question.image} 
+                alt="Illustration de la question"
+                className="max-w-2xl mx-auto rounded-lg shadow-md"
+              />
+            </div>
+          )}
+          
           <div className="grid grid-cols-2 gap-6">
             {question.options.map((option, index) => (
               <div
