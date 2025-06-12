@@ -6,7 +6,6 @@ import Sessions from './pages/Sessions';
 import Exams from './pages/Exams';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
-import LogViewer from './components/log/AppLogViewer';
 import { logger } from './utils/logger';
 
 function App() {
@@ -41,7 +40,6 @@ function App() {
   return (
     <div className="font-sans antialiased text-gray-900 bg-gray-50">
       {renderPage()}
-      <LogViewer />
     </div>
   );
 }

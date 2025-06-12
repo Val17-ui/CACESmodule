@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { useLogStore } from '../stores/logStore';
 
 export type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS';
 
@@ -52,6 +53,7 @@ class Logger {
     }
 
     this.logs.push(entry);
+    useLogStore.getState().fetchLogs();
     this.persistLog(entry);
   }
 
