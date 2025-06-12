@@ -4,9 +4,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import Textarea from '../ui/Textarea'; // Assuming Textarea is a custom component
-import Checkbox from '../ui/Checkbox'; // Assuming Checkbox is a custom component
-import Fieldset from '../ui/Fieldset'; // Assuming Fieldset is a custom component
+// Textarea, Checkbox, Fieldset removed
 import Badge from '../ui/Badge'; // Assuming Badge is a custom component
 import { Question, QuestionType, CACESReferential, QuestionTheme, questionTypes, referentials, questionThemes } from '../../types';
 import { addQuestion, updateQuestion, getQuestionById, QuestionWithId } from '../../db';
@@ -40,6 +38,22 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    // This is the effect itself.
+    // It will run when imagePreview changes.
+
+    // Return a cleanup function.
+    // This cleanup function will run:
+    // 1. Before the effect runs again (if imagePreview changes).
+    // 2. When the component unmounts.
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+        // console.log('Revoked object URL:', imagePreview); // Optional: for debugging
+      }
+    };
+  }, [imagePreview]); // Dependency array: effect runs when imagePreview changes
 
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -93,6 +107,9 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
     } else if (name === 'hasImageToggle') {
       setHasImage(checked);
       if (!checked) {
+        if (imagePreview) {
+          URL.revokeObjectURL(imagePreview);
+        }
         setImageFile(null);
         setImagePreview(null);
         setQuestion(prev => ({ ...prev, image: undefined }));
@@ -128,12 +145,18 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setImageFile(file); // Store as File, will be converted to Blob on save
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview); // Revoke old URL before setting new one
+      }
+      setImageFile(file);
       setImagePreview(URL.createObjectURL(file));
     }
   };
 
   const removeImage = () => {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview); // Explicitly revoke before clearing
+    }
     setImageFile(null);
     setImagePreview(null);
     setHasImage(false);
@@ -241,26 +264,32 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
             max={120}
           />
           <div className="flex items-center space-x-4 mt-6">
-            <Checkbox
-              label="Question éliminatoire"
-              name="isEliminatory"
-              checked={question.isEliminatory}
-              onChange={handleCheckboxChange}
-            />
+            <label htmlFor="isEliminatoryCheckbox" className="flex items-center">
+              <input
+                type="checkbox"
+                id="isEliminatoryCheckbox"
+                name="isEliminatory"
+                checked={question.isEliminatory}
+                onChange={handleCheckboxChange}
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="ml-2 text-sm text-gray-700">Question éliminatoire</span>
+            </label>
           </div>
         </div>
       </Card>
 
       <Card title="Contenu de la question" className="mb-6">
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="questionTextarea" className="block text-sm font-medium text-gray-700 mb-2">
             Texte de la question *
           </label>
-          <Textarea // Changed from textarea to Textarea component
-            name="text" // Added name for handleInputChange
+          <textarea // Replaced Textarea with textarea
+            id="questionTextarea"
+            name="text"
             rows={4}
             value={question.text}
-            onChange={(e) => handleInputChange(e as any)} // Cast needed if Textarea has different event type
+            onChange={handleInputChange}
             className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             placeholder="Entrez le texte de la question..."
             required
@@ -273,12 +302,17 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
             <label className="block text-sm font-medium text-gray-700">
               Image associée (optionnel)
             </label>
-            <Checkbox
-              label="Ajouter une image"
-              name="hasImageToggle"
-              checked={hasImage}
-              onChange={handleCheckboxChange}
-            />
+            <label htmlFor="hasImageToggleCheckbox" className="flex items-center">
+              <input
+                type="checkbox"
+                id="hasImageToggleCheckbox"
+                name="hasImageToggle"
+                checked={hasImage}
+                onChange={handleCheckboxChange}
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="ml-2 text-sm text-gray-700">Ajouter une image</span>
+            </label>
           </div>
           
           {hasImage && (
