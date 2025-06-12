@@ -23,6 +23,8 @@ export interface Participant {
   hasSigned: boolean;
   score?: number;
   passed?: boolean;
+  company?: string;
+  email?: string;
 }
 
 export interface Question {
@@ -36,9 +38,9 @@ export interface Question {
   referential: string;
   theme: QuestionTheme;
   image?: string;
-  createdAt: string;
-  usageCount: number;
-  correctResponseRate: number;
+  createdAt?: string;
+  usageCount?: number;
+  correctResponseRate?: number;
 }
 
 export interface QuestionStatistics {
@@ -113,3 +115,15 @@ export const questionCategories: Record<QuestionCategory, string> = {
   practice: 'Pratique',
   eliminatory: 'Éliminatoire'
 };
+
+// Types pour la génération PPTX
+export interface PPTXQuestion {
+  question: string;
+  correctAnswer: boolean;
+  duration?: number;
+  imagePath?: string;
+}
+
+export interface PPTXGenerationOptions {
+  fileName?: string;
+}

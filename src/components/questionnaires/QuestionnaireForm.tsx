@@ -5,10 +5,13 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import ThemeSelector from './ThemeSelector';
-import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits } from '../../types';
+import PPTXGenerator from './PPTXGenerator';
+import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits, Question } from '../../types';
+import { mockQuestions } from '../../data/mockData';
 import { logger } from '../../utils/logger';
 
 const QuestionnaireForm: React.FC = () => {
+  const [questionnaireName, setQuestionnaireName] = useState('');
   const [selectedReferential, setSelectedReferential] = useState<string>('');
   const [totalQuestions, setTotalQuestions] = useState(40);
   const [showValidationWarning, setShowValidationWarning] = useState(false);
@@ -68,6 +71,37 @@ const QuestionnaireForm: React.FC = () => {
   const isOverTotal = currentTotal > totalQuestions;
   const isUnderTotal = currentTotal < totalQuestions;
 
+  // Générer les questions pour le PPTX (simulation basée sur la distribution)
+  const generateQuestionsForPPTX = (): Question[] => {
+    if (!selectedReferential) return [];
+    
+    // Filtrer les questions par référentiel
+    const availableQuestions = mockQuestions.filter(q => q.referential === selectedReferential);
+    
+    if (availableQuestions.length === 0) return [];
+    
+    const selectedQuestions: Question[] = [];
+    
+    // Pour chaque thème, sélectionner le nombre de questions demandé
+    Object.entries(themeDistribution).forEach(([theme, count]) => {
+      const themeQuestions = availableQuestions.filter(q => q.theme === theme);
+      
+      for (let i = 0; i < count && i < themeQuestions.length; i++) {
+        // Convertir en format Vrai/Faux pour OMBEA
+        const originalQuestion = themeQuestions[i % themeQuestions.length];
+        const convertedQuestion: Question = {
+          ...originalQuestion,
+          type: 'true-false',
+          options: ['Vrai', 'Faux'],
+          correctAnswer: Math.random() > 0.5 ? 0 : 1 // Simulation aléatoire pour la démo
+        };
+        selectedQuestions.push(convertedQuestion);
+      }
+    });
+    
+    return selectedQuestions.slice(0, totalQuestions);
+  };
+
   const getLimitsWarning = () => {
     if (!selectedReferential || !referentialLimits[selectedReferential as ReferentialType]) {
       return null;
@@ -92,6 +126,10 @@ const QuestionnaireForm: React.FC = () => {
     return null;
   };
 
+  // Vérifier si on peut générer le PPTX
+  const canGeneratePPTX = questionnaireName.trim() && selectedReferential && currentTotal > 0;
+  const generatedQuestions = canGeneratePPTX ? generateQuestionsForPPTX() : [];
+
   return (
     <div>
       <Card title="Informations générales" className="mb-6">
@@ -99,6 +137,8 @@ const QuestionnaireForm: React.FC = () => {
           <Input
             label="Nom du questionnaire"
             placeholder="Ex: CACES R489 Standard"
+            value={questionnaireName}
+            onChange={(e) => setQuestionnaireName(e.target.value)}
             required
           />
           
@@ -181,9 +221,18 @@ const QuestionnaireForm: React.FC = () => {
         isRandomized={isRandomized}
         selectedReferential={selectedReferential}
       />
+
+      {/* Générateur PPTX - Affiché seulement si les conditions sont remplies */}
+      {canGeneratePPTX && (
+        <PPTXGenerator
+          questions={generatedQuestions}
+          questionnaireName={questionnaireName}
+          referential={selectedReferential}
+        />
+      )}
       
       {!isRandomized && (
-        <Card title="Questions manuelles\" className="mb-6">
+        <Card title="Questions manuelles" className="mb-6">
           <div className="mb-4 flex justify-between items-center">
             <h4 className="text-sm font-medium text-gray-700">
               Questions sélectionnées ({currentTotal}/{totalQuestions})
