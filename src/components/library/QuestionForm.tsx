@@ -379,9 +379,9 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
               </div>
               <div className="flex-shrink-0">
                 { (question.options?.length || 0) > 2 && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     icon={<Trash2 size={16} />}
                     onClick={() => removeOption(index)}
                   />
@@ -395,8 +395,8 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
         
         { (question.options?.length || 0) < 4 && (
           <div className="mt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               icon={<Plus size={16} />}
               onClick={handleAddOption}
             >

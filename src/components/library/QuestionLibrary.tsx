@@ -46,7 +46,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     { value: '', label: 'Toutes les recommandations' },
     ...Object.entries(referentials).map(([value, label]) => ({
       value,
-      label: `${value} - ${label}`,
+      label: ` ${value} - ${label}`,
     }))
   ];
 
@@ -157,7 +157,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
             value={selectedReferential}
             onChange={(e) => setSelectedReferential(e.target.value)}
           />
-          
+
           <Select
             label="Thème"
             options={themeOptions}
@@ -170,7 +170,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
             value={selectedEliminatory}
             onChange={(e) => setSelectedEliminatory(e.target.value)}
           />
-          
+
           <Select
             label="Trier par"
             options={sortOptions}
