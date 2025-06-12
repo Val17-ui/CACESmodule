@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import Layout from '../components/layout/Layout';
 import DeviceSettings from '../components/settings/DeviceSettings';
 import GeneralSettings from '../components/settings/GeneralSettings';
+import SystemLogViewer from '../components/settings/SystemLogViewer';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { Settings as SettingsIcon, Usb, Save } from 'lucide-react';
+import { Settings as SettingsIcon, Usb, Save, ScrollText } from 'lucide-react';
 
 type SettingsProps = {
   activePage: string;
@@ -12,11 +13,12 @@ type SettingsProps = {
 };
 
 const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'devices'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'devices' | 'system_log'>('general');
 
   const tabs = [
     { id: 'general', label: 'Paramètres généraux', icon: <SettingsIcon size={20} /> },
     { id: 'devices', label: 'Configuration des boîtiers', icon: <Usb size={20} /> },
+    { id: 'system_log', label: 'Journal Système', icon: <ScrollText size={20} /> },
   ];
 
   const headerActions = (
@@ -39,7 +41,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as 'general' | 'devices')}
+                onClick={() => setActiveTab(tab.id as 'general' | 'devices' | 'system_log')}
                 className={`
                   flex items-center py-4 px-1 border-b-2 font-medium text-sm
                   ${activeTab === tab.id
@@ -58,6 +60,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
         <div className="mt-6">
           {activeTab === 'general' && <GeneralSettings />}
           {activeTab === 'devices' && <DeviceSettings />}
+          {activeTab === 'system_log' && <SystemLogViewer />}
         </div>
       </Card>
     </Layout>
