@@ -6,7 +6,8 @@ import QuestionStatistics from '../components/library/QuestionStatistics';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card'; // Import Card for feedback display
 import { Plus, FileUp, FileDown, BarChart3 } from 'lucide-react';
-import { exportQuestionsToCsv, parseQuestionsCsv, RawCsvQuestion } from '../utils/csvProcessor';
+// import { exportQuestionsToCsv } from '../utils/csvProcessor'; // Remove or comment out
+import { importQuestionsFromExcel, RawExcelQuestion, exportQuestionsToExcel } from '../utils/excelProcessor'; // Add Excel import and export
 import { mockQuestions } from '../data/mockData'; // Using mockQuestions as a placeholder for actual data
 import { Question, ReferentialType, QuestionTheme, referentials, questionThemes } from '../types';
 
@@ -45,38 +46,43 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
     setEditingQuestionId(null);
   };
 
-  const handleExportCsv = () => {
+  const handleExportExcel = async () => { // Make it async
     // TODO: Replace mockQuestions with actual questions from state/store when available
     const questionsToExport: Question[] = mockQuestions;
 
     if (questionsToExport.length === 0) {
-      // Optionally, inform the user that there's nothing to export
       console.log("No questions to export."); // Or use a logger/toast
+      setImportFeedback(["Aucune question à exporter."]);
       return;
     }
 
-    const csvString = exportQuestionsToCsv(questionsToExport);
+    setImportFeedback(["Préparation du fichier Excel pour l'export..."]); // Inform user
 
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) { // feature detection
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', 'questions_export.csv');
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } else {
-      // Handle cases where download attribute is not supported (e.g., older browsers)
-      // This might involve opening the CSV in a new window or other fallbacks.
-      // For now, a console log will suffice for this fallback.
-      console.error("CSV download not supported by this browser.");
+    try {
+      const blob = await exportQuestionsToExcel(questionsToExport); // await the promise
+
+      const link = document.createElement('a');
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'questions_export.xlsx'); // New filename
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setImportFeedback(["Export Excel terminé avec succès."]);
+      } else {
+        console.error("Excel download not supported by this browser.");
+        setImportFeedback(["Erreur: Téléchargement Excel non supporté par ce navigateur."]);
+      }
+    } catch (error: any) {
+      console.error("Erreur lors de l'exportation Excel:", error);
+      setImportFeedback([`Erreur inattendue lors de l'exportation Excel: ${error.message || error.toString()}`]);
     }
   };
 
-  const handleImportCsvClick = () => {
+  const handleImportExcelClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = ""; // Reset file input
       fileInputRef.current.click();
@@ -85,123 +91,152 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
 
   const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
-    setImportFeedback(["Traitement du fichier..."]);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      if (!text) {
-        setImportFeedback(["Erreur: Impossible de lire le fichier."]);
-        return;
+    setImportFeedback(["Traitement du fichier Excel..."]);
+
+    try {
+      const { data: rawQuestions, errors: processingErrors, rawHeaders } = await importQuestionsFromExcel(file);
+
+      if (processingErrors.length > 0) {
+        const feedbackMessages = ["Erreurs lors du traitement du fichier Excel :", ...processingErrors];
+        if (rawHeaders && rawHeaders.length > 0) {
+            feedbackMessages.push(`En-têtes détectés: ${rawHeaders.join(', ')}`);
+        }
+        setImportFeedback(feedbackMessages);
+        // Stop if importQuestionsFromExcel reported errors and no data,
+        // or if critical errors occurred (e.g. header mismatch)
+        if (rawQuestions.length === 0 && processingErrors.some(e => e.includes("essentiel manquant") || e.includes("Aucune feuille"))) return;
       }
 
-      const { data: rawQuestions, errors: parsingErrors, columnHeaders } = parseQuestionsCsv(text);
-
-      if (parsingErrors.length > 0) {
-        setImportFeedback([
-          "Erreurs lors du parsing CSV:",
-          ...parsingErrors,
-          `En-têtes détectés: ${columnHeaders.join(', ')}`
-        ]);
-        return;
+      if (rawQuestions.length === 0 && processingErrors.length === 0) { // No data and no initial processing errors
+          setImportFeedback(["Aucune donnée de question valide trouvée dans le fichier Excel."]);
+          return;
       }
 
-      if (rawQuestions.length === 0) {
-        setImportFeedback(["Aucune donnée trouvée dans le fichier CSV."]);
-        return;
-      }
-
+      // Even if there were non-critical errors from importQuestionsFromExcel (e.g. no valid data after header)
+      // but some rawQuestions were extracted, proceed to detailed validation.
+      // If rawQuestions is empty here, it means either no data rows or they were all filtered by importQuestionsFromExcel.
+      // processImportedQuestions will then confirm if 0 were valid.
       processImportedQuestions(rawQuestions);
-    };
-    reader.onerror = () => {
-      setImportFeedback([`Erreur de lecture du fichier: ${reader.error?.message || 'Unknown error'}`]);
-    };
-    reader.readAsText(file);
+
+    } catch (error: any) {
+      console.error("Erreur lors de l'importation Excel:", error);
+      setImportFeedback([`Erreur inattendue lors de l'importation : ${error.message || error.toString()}`]);
+    }
   };
 
-  const processImportedQuestions = (rawQuestions: RawCsvQuestion[]) => {
+  const processImportedQuestions = (rawQuestions: RawExcelQuestion[]) => {
     const newQuestions: Question[] = [];
-    const feedback: string[] = [`${rawQuestions.length} lignes trouvées dans le CSV.`];
+    // Keep initial feedback from handleFileSelected if any, or set new one.
+    // For simplicity, this will overwrite. A better UX might append.
+    const feedback: string[] = [`${rawQuestions.length} lignes de données brutes trouvées dans le fichier Excel.`];
     let importedCount = 0;
 
     rawQuestions.forEach((rawQ, index) => {
-      const rowNum = index + 2; // CSV data starts from row 2 (after header)
+      const rowNum = index + 2; // Assuming data starts from Excel row 2
       const errorsForRow: string[] = [];
 
-      if (!rawQ.text) errorsForRow.push("Le champ 'text' est manquant.");
-      if (!rawQ.referential) errorsForRow.push("Le champ 'referential' est manquant.");
-      if (!rawQ.theme) errorsForRow.push("Le champ 'theme' est manquant.");
-      if (!rawQ.optionA) errorsForRow.push("Le champ 'optionA' est manquant.");
-      if (!rawQ.optionB) errorsForRow.push("Le champ 'optionB' est manquant.");
-      if (!rawQ.correctAnswer) errorsForRow.push("Le champ 'correctAnswer' est manquant.");
-      if (rawQ.isEliminatory === undefined || rawQ.isEliminatory === null || rawQ.isEliminatory.trim() === '') {
-          errorsForRow.push("Le champ 'isEliminatory' est manquant.");
+      const questionText = typeof rawQ.text === 'string' ? rawQ.text.trim() : null;
+      if (!questionText) errorsForRow.push("Le champ 'Texte de la question' est manquant.");
+
+      const referentialText = typeof rawQ.referential === 'string' ? rawQ.referential.trim() : null;
+      if (!referentialText) errorsForRow.push("Le champ 'Référentiel (Code)' est manquant.");
+      else if (!Object.keys(referentials).includes(referentialText as ReferentialType)) {
+        errorsForRow.push(`Référentiel '${referentialText}' invalide.`);
       }
 
-      if (rawQ.referential && !Object.keys(referentials).includes(rawQ.referential as ReferentialType)) {
-        errorsForRow.push(`Referentiel '${rawQ.referential}' invalide.`);
-      }
-      if (rawQ.theme && !Object.keys(questionThemes).includes(rawQ.theme as QuestionTheme)) {
-        errorsForRow.push(`Thème '${rawQ.theme}' invalide.`);
+      const themeText = typeof rawQ.theme === 'string' ? rawQ.theme.trim() : null;
+      if (!themeText) errorsForRow.push("Le champ 'Thème (Code)' est manquant.");
+      else if (!Object.keys(questionThemes).includes(themeText as QuestionTheme)) {
+        errorsForRow.push(`Thème '${themeText}' invalide.`);
       }
 
       const options: string[] = [];
-      if (rawQ.optionA) options.push(rawQ.optionA);
-      if (rawQ.optionB) options.push(rawQ.optionB);
-      if (rawQ.optionC) options.push(rawQ.optionC); // Will be undefined if not present, filtered later
-      if (rawQ.optionD) options.push(rawQ.optionD); // Will be undefined if not present, filtered later
+      const optA = typeof rawQ.optionA === 'string' ? rawQ.optionA.trim() : null;
+      const optB = typeof rawQ.optionB === 'string' ? rawQ.optionB.trim() : null;
+      if (!optA) errorsForRow.push("Le champ 'Option A' est manquant ou vide."); else options.push(optA);
+      if (!optB) errorsForRow.push("Le champ 'Option B' est manquant ou vide."); else options.push(optB);
 
-      const definedOptions = options.filter(opt => opt !== undefined && opt !== null).map(opt => opt.trim());
-      if (definedOptions.length < 2) errorsForRow.push("Au moins 2 options (A et B) avec du contenu sont requises.");
+      // Optional options C and D
+      const optC = typeof rawQ.optionC === 'string' ? rawQ.optionC.trim() : null;
+      if (optC) options.push(optC);
+      const optD = typeof rawQ.optionD === 'string' ? rawQ.optionD.trim() : null;
+      if (optD) options.push(optD);
 
+      // definedOptions are already trimmed and non-null if pushed
+      if (options.length < 2 && (errorsForRow.length === 0 || (!errorsForRow.includes("Le champ 'Option A' est manquant ou vide.") && !errorsForRow.includes("Le champ 'Option B' est manquant ou vide.")))) {
+         // Avoid duplicate error if A or B already reported as missing
+         errorsForRow.push("Au moins 2 options (A et B) avec du contenu sont requises.");
+      }
 
       let correctAnswerIndex = -1;
-      const caLetter = rawQ.correctAnswer?.trim().toUpperCase();
-      if (caLetter === 'A') correctAnswerIndex = 0;
-      else if (caLetter === 'B') correctAnswerIndex = 1;
-      else if (caLetter === 'C') correctAnswerIndex = 2;
-      else if (caLetter === 'D') correctAnswerIndex = 3;
-      else errorsForRow.push(`Valeur de 'correctAnswer' (${rawQ.correctAnswer}) invalide. Doit être A, B, C, ou D.`);
+      const caRaw = typeof rawQ.correctAnswer === 'string' ? rawQ.correctAnswer.trim().toUpperCase() : null;
+      if (!caRaw) errorsForRow.push("Le champ 'Bonne Réponse (Lettre A-D)' est manquant.");
+      else {
+        if (caRaw === 'A') correctAnswerIndex = 0;
+        else if (caRaw === 'B') correctAnswerIndex = 1;
+        else if (caRaw === 'C') correctAnswerIndex = 2;
+        else if (caRaw === 'D') correctAnswerIndex = 3;
+        else errorsForRow.push(`Valeur de 'Bonne Réponse' (${caRaw}) invalide. Doit être A, B, C, ou D.`);
+      }
 
-      if (correctAnswerIndex !== -1 && correctAnswerIndex >= definedOptions.length) {
-        errorsForRow.push(`'correctAnswer' (${caLetter}) pointe vers une option non définie ou vide.`);
+      if (correctAnswerIndex !== -1 && correctAnswerIndex >= options.length) {
+        errorsForRow.push(`'Bonne Réponse' (${caRaw}) pointe vers une option non définie ou vide.`);
       }
 
       let isEliminatoryBool: boolean | undefined = undefined;
-      if (rawQ.isEliminatory !== undefined && rawQ.isEliminatory !== null) {
-          const elimVal = rawQ.isEliminatory.trim().toUpperCase();
-          if (elimVal === 'TRUE' || elimVal === '1') isEliminatoryBool = true;
-          else if (elimVal === 'FALSE' || elimVal === '0') isEliminatoryBool = false;
-          else errorsForRow.push(`Valeur de 'isEliminatory' (${rawQ.isEliminatory}) invalide. Doit être TRUE, FALSE, 1, ou 0.`);
+      const elimValRaw = rawQ.isEliminatory;
+      if (elimValRaw === null || elimValRaw === undefined || String(elimValRaw).trim() === '') {
+        errorsForRow.push("Le champ 'Éliminatoire (OUI/NON)' est manquant.");
+      } else if (typeof elimValRaw === 'boolean') {
+        isEliminatoryBool = elimValRaw;
+      } else if (typeof elimValRaw === 'string') {
+        const elimVal = elimValRaw.trim().toUpperCase();
+        if (elimVal === 'OUI' || elimVal === 'TRUE' || elimVal === '1') isEliminatoryBool = true;
+        else if (elimVal === 'NON' || elimVal === 'FALSE' || elimVal === '0') isEliminatoryBool = false;
+        else errorsForRow.push(`Valeur de 'Éliminatoire' (${elimValRaw}) invalide. Doit être OUI, NON, TRUE, FALSE, 1, ou 0.`);
+      } else {
+         errorsForRow.push(`Type de donnée inattendu pour 'Éliminatoire': ${typeof elimValRaw}`);
       }
 
+      let timeLimitNum: number | undefined = undefined;
+      if (rawQ.timeLimit !== null && rawQ.timeLimit !== undefined && String(rawQ.timeLimit).trim() !== '') {
+        if (typeof rawQ.timeLimit === 'number') {
+          timeLimitNum = rawQ.timeLimit;
+        } else if (typeof rawQ.timeLimit === 'string') {
+          timeLimitNum = parseInt(rawQ.timeLimit.trim(), 10);
+          if (isNaN(timeLimitNum)) {
+            errorsForRow.push(`Valeur de 'Temps Limite' (${rawQ.timeLimit}) invalide. Doit être un nombre.`);
+            timeLimitNum = undefined;
+          }
+        }
+         if (timeLimitNum !== undefined && (timeLimitNum < 5 || timeLimitNum > 120)) { // Example range validation
+            errorsForRow.push(`'Temps Limite' (${timeLimitNum}) doit être entre 5 et 120 secondes.`);
+        }
+      } // timeLimit is optional, so no error if missing/empty
 
       if (errorsForRow.length > 0) {
         feedback.push(`Ligne ${rowNum}: Erreurs - ${errorsForRow.join('; ')}`);
       } else {
-        const questionTimeLimit = rawQ.timeLimit ? parseInt(rawQ.timeLimit, 10) : undefined;
         const newQuestion: Question = {
           id: generateQuestionId(),
-          text: rawQ.text!,
-          referential: rawQ.referential as ReferentialType,
-          theme: rawQ.theme as QuestionTheme,
-          options: definedOptions,
-          correctAnswer: correctAnswerIndex,
-          isEliminatory: isEliminatoryBool!,
-          timeLimit: (questionTimeLimit !== undefined && !isNaN(questionTimeLimit)) ? questionTimeLimit : undefined,
-          image: rawQ.imageName || undefined,
-          type: (rawQ.type as 'multiple-choice' | 'true-false') || 'multiple-choice',
+          text: questionText!, // Already validated as non-null
+          referential: referentialText as ReferentialType, // Already validated
+          theme: themeText as QuestionTheme, // Already validated
+          options: options, // Already populated with trimmed, non-null strings
+          correctAnswer: correctAnswerIndex, // Validated
+          isEliminatory: isEliminatoryBool!, // Validated
+          timeLimit: timeLimitNum,
+          image: (typeof rawQ.imageName === 'string' ? rawQ.imageName.trim() : null) || undefined,
+          type: ((typeof rawQ.type === 'string' ? rawQ.type.trim() : null) as 'multiple-choice' | 'true-false') || 'multiple-choice',
         };
-
         newQuestions.push(newQuestion);
         importedCount++;
       }
     });
 
-    feedback.push(`${importedCount} questions importées avec succès.`);
+    feedback.push(`${importedCount} questions importées avec succès sur ${rawQuestions.length} lignes de données brutes.`);
     setImportFeedback(feedback);
 
     console.log("Questions importées (prêtes à être ajoutées) :", newQuestions);
@@ -218,16 +253,16 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
             <Button
               variant="outline"
               icon={<FileUp size={16} />}
-              onClick={handleImportCsvClick}
+              onClick={handleImportExcelClick}
             >
-              Importer CSV
+              Importer Excel
             </Button>
             <Button
               variant="outline"
               icon={<FileDown size={16} />}
-              onClick={handleExportCsv}
+              onClick={handleExportExcel} // Changed from handleExportCsv
             >
-              Exporter CSV
+              Exporter Excel {/* Updated text */}
             </Button>
             <Button
               variant="outline"
@@ -307,11 +342,11 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
         type="file"
         ref={fileInputRef}
         onChange={handleFileSelected}
-        accept=".csv"
+        accept=".xlsx, .xls" // Updated accept types
         style={{ display: 'none' }}
       />
       {importFeedback.length > 0 && (
-        <Card title="Résultat de l'importation CSV" className="mb-4">
+        <Card title="Résultat de l'importation Excel" className="mb-4"> {/* Updated title */}
           <div className="p-4 space-y-1 text-sm max-h-40 overflow-y-auto">
             {importFeedback.map((msg, idx) => (
               <p key={idx} className={msg.toLowerCase().includes("erreur") || msg.toLowerCase().includes("errors") ? "text-red-600" : ""}>{msg}</p>
