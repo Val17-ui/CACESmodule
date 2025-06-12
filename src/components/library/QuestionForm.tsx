@@ -40,7 +40,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ questionId, onSave }) => {
   };
 
   const handleAddOption = () => {
-    if (options.length < 6) {
+    if (options.length < 4) {
       setOptions([...options, '']);
     }
   };
@@ -122,7 +122,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ questionId, onSave }) => {
             onChange={(e) => setTimeLimit(parseInt(e.target.value) || 30)}
             min={5}
             max={120}
-            required
           />
           
           <div className="flex items-center space-x-4 mt-6">
@@ -243,7 +242,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ questionId, onSave }) => {
           ))}
         </div>
         
-        {options.length < 6 && (
+        {options.length < 4 && (
           <div className="mt-4">
             <Button 
               variant="outline" 

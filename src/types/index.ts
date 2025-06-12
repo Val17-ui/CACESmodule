@@ -33,7 +33,7 @@ export interface Question {
   type: 'multiple-choice' | 'true-false';
   options: string[];
   correctAnswer: number | number[];
-  timeLimit: number;
+  timeLimit?: number;
   isEliminatory: boolean;
   referential: string;
   theme: QuestionTheme;
