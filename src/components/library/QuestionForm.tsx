@@ -6,17 +6,19 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Badge from '../ui/Badge';
 import { Question, QuestionType, CACESReferential, QuestionTheme, questionTypes, referentials, questionThemes } from '../../types';
-import { addQuestion, updateQuestion, getQuestionById, QuestionWithId } from '../../db';
+import { StorageManager, StoredQuestion } from '../../services/StorageManager'; // Import StorageManager
+// QuestionWithId from '../../db' might not be needed if StoredQuestion is used for initialQuestionState directly
+// For now, let's assume StoredQuestion (which is QuestionWithId) is sufficient.
 import { logger } from '../../utils/logger';
 
 interface QuestionFormProps {
-  onSave: (question: QuestionWithId) => void;
+  onSave: (question: StoredQuestion) => void;
   onCancel: () => void;
   questionId?: number | null; // For editing existing questions, changed to number
 }
 
 const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionId }) => {
-  const initialQuestionState: QuestionWithId = {
+  const initialQuestionState: StoredQuestion = {
     text: '',
     type: QuestionType.QCM,
     options: ['', '', '', ''],
@@ -31,7 +33,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
     correctResponseRate: 0
   };
 
-  const [question, setQuestion] = useState<QuestionWithId>(initialQuestionState);
+  const [question, setQuestion] = useState<StoredQuestion>(initialQuestionState); // Changed to StoredQuestion
   const [hasImage, setHasImage] = useState(false);
 
   const [imageFile, setImageFile] = useState<Blob | null>(null);
@@ -62,7 +64,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
       setIsLoading(true);
       const fetchQuestion = async () => {
         try {
-          const existingQuestion = await getQuestionById(questionId);
+          const existingQuestion = await StorageManager.getQuestionById(questionId); // Use StorageManager
           if (existingQuestion) {
             setQuestion(existingQuestion);
             if (existingQuestion.image instanceof Blob) {
@@ -215,31 +217,41 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
       }
     }
 
-    const questionData: QuestionWithId = {
-      ...question,
+    // Prepare data for saving, ensuring ID is handled correctly for add/update
+    // The 'id' property should not be sent for new questions.
+    // For existing questions, 'id' from question state is used for update.
+    const { id: currentId, ...dataToSave } = question;
+
+    const questionData: Omit<StoredQuestion, 'id'> & { id?: number } = {
+      ...dataToSave,
       image: imageToSave,
       options: question.options?.map(opt => opt.toString()) || [],
-      createdAt: question.id ? question.createdAt : new Date().toISOString(),
-      // correctAnswer is already an index string from the radio button values
+      createdAt: currentId ? question.createdAt : new Date().toISOString(),
       correctAnswer: question.correctAnswer,
     };
 
-    if (!questionId) {
-        delete questionData.id; // Let Dexie auto-increment ID for new questions
-    }
-
     try {
       setIsLoading(true);
-      let savedQuestionResult = { ...questionData }; // Initialize with current data
+      let savedQuestionResult: StoredQuestion;
 
-      if (questionId) {
-        await updateQuestion(questionId, questionData);
+      if (questionId) { // Corresponds to editing an existing question
+        // StorageManager.updateQuestion expects the ID and the partial data.
+        // questionData here already has the full structure, which is fine for Dexie's update.
+        // We must ensure 'id' is not in the 'updates' object itself if StorageManager.updateQuestion strictly forbids it.
+        // However, our StorageManager.updateQuestion is implemented to handle this.
+        await StorageManager.updateQuestion(questionId, questionData);
         logger.success('Question modifiée avec succès');
-        savedQuestionResult.id = questionId;
+        // For onSave, we need the full question object, including the ID.
+        savedQuestionResult = { ...questionData, id: questionId };
       } else {
-        const newId = await addQuestion(questionData);
+        // For new questions, StorageManager.addQuestion expects data without an 'id'.
+        // The 'questionData' object as constructed above (if currentId was undefined) will not have an 'id' property.
+        const newId = await StorageManager.addQuestion(questionData); // questionData is Omit<StoredQuestion, 'id'> here
         logger.success(`Question créée avec succès avec l'ID: ${newId}`);
-        if (newId !== undefined) savedQuestionResult.id = newId;
+        if (newId === undefined) {
+          throw new Error("Failed to create question, new ID is undefined.");
+        }
+        savedQuestionResult = { ...questionData, id: newId };
       }
       onSave(savedQuestionResult);
     } catch (error) {

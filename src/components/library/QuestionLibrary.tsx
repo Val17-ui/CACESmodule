@@ -5,8 +5,8 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
-import { QuestionTheme, referentials, questionThemes } from '../../types'; // Removed Question, ReferentialType, QuestionType as they are part of QuestionWithId or not used directly
-import { getAllQuestions, QuestionWithId } from '../../db'; // QuestionWithId includes Question fields
+import { QuestionTheme, referentials, questionThemes } from '../../types';
+import { StorageManager, StoredQuestion } from '../../services/StorageManager'; // Import StorageManager
 type QuestionLibraryProps = {
   onEditQuestion: (id: string) => void;
 };
@@ -17,7 +17,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   const [selectedEliminatory, setSelectedEliminatory] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const [sortBy, setSortBy] = useState<string>('recent');
-  const [questions, setQuestions] = useState<QuestionWithId[]>([]);
+  const [questions, setQuestions] = useState<StoredQuestion[]>([]); // Changed to StoredQuestion[]
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
@@ -26,7 +26,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     const fetchQuestions = async () => {
       setIsLoading(true);
       try {
-        const fetchedQuestions = await getAllQuestions();
+        const fetchedQuestions = await StorageManager.getAllQuestions(); // Use StorageManager
         setQuestions(fetchedQuestions);
         setError(null);
       } catch (err) {
@@ -84,7 +84,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   }, [questions, selectedReferential, selectedTheme, selectedEliminatory, searchText]);
 
   const sortedQuestions = useMemo(() => {
-    let sortableItems: QuestionWithId[] = [...filteredQuestions];
+    let sortableItems: StoredQuestion[] = [...filteredQuestions]; // Type will be StoredQuestion[] due to filteredQuestions
     sortableItems.sort((a, b) => {
       switch (sortBy) {
         case 'usage':
