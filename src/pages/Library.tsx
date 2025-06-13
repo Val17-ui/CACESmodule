@@ -9,6 +9,7 @@ import { Plus, FileUp, FileDown, BarChart3 } from 'lucide-react';
 import { exportQuestionsToExcel, parseQuestionsExcel, RawExcelQuestion } from '../utils/excelProcessor';
 import { mockQuestions } from '../data/mockData';
 import { Question, QuestionType, CACESReferential, QuestionTheme, referentials, questionThemes } from '../types';
+import { addQuestion } from '../../db';
 import { saveAs } from 'file-saver';
 
 // Helper for ID generation
@@ -102,10 +103,10 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
     }
   };
 
-  const processImportedQuestions = (rawQuestions: RawExcelQuestion[]) => {
+  const processImportedQuestions = async (rawQuestions: RawExcelQuestion[]) => {
     const newQuestions: Question[] = [];
-    const feedback: string[] = [`${rawQuestions.length} lignes trouvées dans le fichier Excel.`];
-    let importedCount = 0;
+    const parsingFeedback: string[] = [`${rawQuestions.length} lignes trouvées dans le fichier Excel.`];
+    let parsedCount = 0;
 
     rawQuestions.forEach((rawQ, index) => {
       const rowNum = index + 2; // Excel data starts from row 2 (after header)
@@ -154,7 +155,7 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
       }
 
       if (errorsForRow.length > 0) {
-        feedback.push(`Ligne ${rowNum}: Erreurs - ${errorsForRow.join('; ')}`);
+        parsingFeedback.push(`Ligne ${rowNum}: Erreurs - ${errorsForRow.join('; ')}`);
       } else {
         const newQuestion: Question = {
           id: generateQuestionId(),
@@ -173,17 +174,51 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
         };
 
         newQuestions.push(newQuestion);
-        importedCount++;
+        parsedCount++;
       }
     });
 
-    feedback.push(`${importedCount} questions importées avec succès.`);
-    setImportFeedback(feedback);
+    parsingFeedback.push(`${parsedCount} questions parsées avec succès à partir du fichier.`);
 
-    console.log("Questions importées (prêtes à être ajoutées) :", newQuestions);
+    const overallFeedback = [...parsingFeedback];
+    let savedCount = 0;
+    const savingErrors: string[] = [];
+
     if (newQuestions.length > 0) {
-      alert(`Simulation: ${newQuestions.length} questions seraient ajoutées. Consultez la console pour les détails.`);
+      const questionsToSaveDb = newQuestions.map(q => {
+        const { id, ...questionWithoutId } = q; // Omit id
+        return questionWithoutId;
+      });
+
+      overallFeedback.push(`Tentative de sauvegarde de ${questionsToSaveDb.length} question(s) dans la base de données...`);
+
+      for (const questionToSave of questionsToSaveDb) {
+        try {
+          // Assuming QuestionWithId and the object structure for addQuestion are compatible
+          // We are passing an object that should conform to Omit<QuestionWithId, 'id'>
+          await addQuestion(questionToSave as any); // Cast to any if db.ts QuestionWithId expects id but addQuestion handles its absence
+          savedCount++;
+        } catch (error) {
+          console.error("Erreur lors de la sauvegarde de la question:", error);
+          const questionTextSnippet = questionToSave.text.substring(0, 30);
+          savingErrors.push(`Erreur BDD pour question "${questionTextSnippet}...": ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      if (savedCount > 0) {
+        overallFeedback.push(`${savedCount} question(s) sauvegardée(s) avec succès dans la base de données.`);
+      }
+      if (savingErrors.length > 0) {
+        overallFeedback.push("Erreurs lors de la sauvegarde en base de données:");
+        overallFeedback.push(...savingErrors);
+      } else if (newQuestions.length > 0) {
+        overallFeedback.push("Toutes les questions parsées ont été vérifiées pour la sauvegarde.");
+      }
+    } else {
+      overallFeedback.push("Aucune question valide à sauvegarder.");
     }
+
+    setImportFeedback(overallFeedback);
   };
 
   const getHeaderActions = () => {
