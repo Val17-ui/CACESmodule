@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Image as ImageIconLucide, Upload } from 'lucide-react'; // Renamed Image to ImageIconLucide
+import { Plus, Trash2, Save, Image as ImageIconLucide, Upload } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-// Textarea, Checkbox, Fieldset removed
-import Badge from '../ui/Badge'; // Assuming Badge is a custom component
+import Badge from '../ui/Badge';
 import { Question, QuestionType, CACESReferential, QuestionTheme, questionTypes, referentials, questionThemes } from '../../types';
 import { addQuestion, updateQuestion, getQuestionById, QuestionWithId } from '../../db';
 import { logger } from '../../utils/logger';
@@ -13,7 +12,7 @@ import { logger } from '../../utils/logger';
 interface QuestionFormProps {
   onSave: (question: QuestionWithId) => void;
   onCancel: () => void;
-  questionId?: number | null; // For editing existing questions, changed to number
+  questionId?: number | null;
 }
 
 const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionId }) => {
@@ -34,26 +33,18 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
 
   const [question, setQuestion] = useState<QuestionWithId>(initialQuestionState);
   const [hasImage, setHasImage] = useState(false);
-  const [imageFile, setImageFile] = useState<Blob | null>(null); // Changed to Blob | null
+  const [imageFile, setImageFile] = useState<Blob | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    // This is the effect itself.
-    // It will run when imagePreview changes.
-
-    // Return a cleanup function.
-    // This cleanup function will run:
-    // 1. Before the effect runs again (if imagePreview changes).
-    // 2. When the component unmounts.
     return () => {
       if (imagePreview) {
         URL.revokeObjectURL(imagePreview);
-        // console.log('Revoked object URL:', imagePreview); // Optional: for debugging
       }
     };
-  }, [imagePreview]); // Dependency array: effect runs when imagePreview changes
+  }, [imagePreview]);
 
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -74,16 +65,30 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
           if (existingQuestion) {
             setQuestion(existingQuestion);
             if (existingQuestion.image instanceof Blob) {
+              // Ensure previous object URL is revoked before creating a new one
+              if (imagePreview) {
+                URL.revokeObjectURL(imagePreview);
+              }
               setHasImage(true);
               setImageFile(existingQuestion.image);
               setImagePreview(URL.createObjectURL(existingQuestion.image));
             } else {
+              if (imagePreview) {
+                URL.revokeObjectURL(imagePreview);
+              }
               setHasImage(false);
               setImageFile(null);
               setImagePreview(null);
             }
           } else {
             logger.error(`Question with id ${questionId} not found.`);
+            if (imagePreview) {
+              URL.revokeObjectURL(imagePreview);
+            }
+            setQuestion(initialQuestionState); // Reset form
+            setHasImage(false);
+            setImageFile(null);
+            setImagePreview(null);
           }
         } catch (error) {
           logger.error("Error fetching question: ", error);
@@ -92,8 +97,18 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
         }
       };
       fetchQuestion();
+    } else {
+      // Reset form and cleanup preview if navigating to create new question form
+      setQuestion(initialQuestionState);
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+      setHasImage(false);
+      setImageFile(null);
+      setImagePreview(null);
     }
-  }, [questionId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionId]); // imagePreview is intentionally omitted to prevent re-fetch loops; its cleanup is handled by its own useEffect
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -133,9 +148,8 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
     if ((question.options?.length || 0) > 2) {
       const newOptions = (question.options || []).filter((_, i) => i !== index);
       setQuestion(prev => ({ ...prev, options: newOptions }));
-      // Ensure correctAnswer is still valid
       if (Number(question.correctAnswer) === index) {
-        setQuestion(prev => ({...prev, correctAnswer: '0'})); // Default to first option or handle as needed
+        setQuestion(prev => ({...prev, correctAnswer: '0'}));
       } else if (Number(question.correctAnswer) > index) {
          setQuestion(prev => ({...prev, correctAnswer: (Number(prev.correctAnswer) -1).toString()}));
       }
@@ -146,16 +160,17 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (imagePreview) {
-        URL.revokeObjectURL(imagePreview); // Revoke old URL before setting new one
+        URL.revokeObjectURL(imagePreview);
       }
-      setImageFile(file);
+      setImageFile(file); // Store as File object
       setImagePreview(URL.createObjectURL(file));
+      setHasImage(true);
     }
   };
 
   const removeImage = () => {
     if (imagePreview) {
-      URL.revokeObjectURL(imagePreview); // Explicitly revoke before clearing
+      URL.revokeObjectURL(imagePreview);
     }
     setImageFile(null);
     setImagePreview(null);
@@ -173,18 +188,13 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
       if (!question.options || question.options.length < 2 || question.options.some(opt => !(opt || "").trim())) {
         newErrors.options = 'Au moins deux options sont requises et toutes les options doivent être remplies.';
       }
-      if (!question.correctAnswer.trim()) {
-        newErrors.correctAnswer = 'La réponse correcte est requise.';
-      } else if (question.options && !question.options.includes(question.correctAnswer) && !question.options.map((_,idx) => idx.toString()).includes(question.correctAnswer)) {
-         // Check if correctAnswer is an index or the text of an option
-        const correctIndex = parseInt(question.correctAnswer, 10);
-        if (isNaN(correctIndex) || correctIndex < 0 || correctIndex >= (question.options?.length || 0) || !question.options[correctIndex]) {
-           newErrors.correctAnswer = 'La réponse correcte doit être l\'une des options valides.';
-        }
+      // Validate correctAnswer based on it being an index string
+      const correctIndex = parseInt(question.correctAnswer, 10);
+      if (isNaN(correctIndex) || correctIndex < 0 || correctIndex >= (question.options?.length || 0) || !question.options?.[correctIndex]?.trim()) {
+         newErrors.correctAnswer = 'La réponse correcte doit être l\'une des options valides et non vide.';
       }
     }
     if (question.timeLimit <= 0) newErrors.timeLimit = 'Le temps limite doit être positif.';
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -197,30 +207,40 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
 
     let imageToSave: Blob | undefined = undefined;
     if (hasImage && imageFile) {
-      imageToSave = imageFile instanceof File ? new Blob([imageFile], { type: imageFile.type }) : imageFile;
+      if (imageFile instanceof File) {
+        imageToSave = new Blob([imageFile], { type: imageFile.type });
+      } else {
+        imageToSave = imageFile; // Already a Blob
+      }
     }
 
     const questionData: QuestionWithId = {
       ...question,
       image: imageToSave,
-      options: question.options?.map(opt => opt.toString()) || [], // Ensure options are strings
-      createdAt: question.createdAt || new Date().toISOString(),
-      // Ensure correctAnswer is stored as string (option text)
-      correctAnswer: question.options?.[parseInt(question.correctAnswer, 10)] || question.correctAnswer,
+      options: question.options?.map(opt => opt.toString()) || [],
+      createdAt: question.id ? question.createdAt : new Date().toISOString(),
+      // correctAnswer is already an index string from the radio button values
+      correctAnswer: question.correctAnswer,
     };
+
+    if (!questionId) {
+        delete questionData.id; // Let Dexie auto-increment ID for new questions
+    }
 
     try {
       setIsLoading(true);
+      let savedQuestionResult = { ...questionData }; // Initialize with current data
+
       if (questionId) {
         await updateQuestion(questionId, questionData);
         logger.success('Question modifiée avec succès');
+        savedQuestionResult.id = questionId;
       } else {
         const newId = await addQuestion(questionData);
         logger.success(`Question créée avec succès avec l'ID: ${newId}`);
-        // If you need to use the new ID in the parent, include it in questionData
-        if (newId) questionData.id = newId;
+        if (newId !== undefined) savedQuestionResult.id = newId;
       }
-      onSave(questionData);
+      onSave(savedQuestionResult);
     } catch (error) {
       logger.error("Error saving question: ", error);
     } finally {
@@ -228,7 +248,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
     }
   };
 
-  if (isLoading && questionId) { // Only show loading if fetching existing question
+  if (isLoading && questionId) {
     return <div>Chargement de la question...</div>;
   }
 
@@ -257,14 +277,14 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
           <Input
             label="Temps limite (secondes)"
             type="number"
-            name="timeLimit" // Added name for handleInputChange
-            value={question.timeLimit}
+            name="timeLimit"
+            value={question.timeLimit.toString()}
             onChange={handleInputChange}
             min={5}
             max={120}
           />
           <div className="flex items-center space-x-4 mt-6">
-            <label htmlFor="isEliminatoryCheckbox" className="flex items-center">
+            <label htmlFor="isEliminatoryCheckbox" className="flex items-center cursor-pointer">
               <input
                 type="checkbox"
                 id="isEliminatoryCheckbox"
@@ -284,7 +304,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
           <label htmlFor="questionTextarea" className="block text-sm font-medium text-gray-700 mb-2">
             Texte de la question *
           </label>
-          <textarea // Replaced Textarea with textarea
+          <textarea
             id="questionTextarea"
             name="text"
             rows={4}
@@ -302,7 +322,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
             <label className="block text-sm font-medium text-gray-700">
               Image associée (optionnel)
             </label>
-            <label htmlFor="hasImageToggleCheckbox" className="flex items-center">
+            <label htmlFor="hasImageToggleCheckbox" className="flex items-center cursor-pointer">
               <input
                 type="checkbox"
                 id="hasImageToggleCheckbox"
@@ -314,7 +334,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
               <span className="ml-2 text-sm text-gray-700">Ajouter une image</span>
             </label>
           </div>
-          
+
           {hasImage && (
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
               <div className="text-center">
@@ -344,6 +364,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
                       size="sm"
                       className="absolute top-1 right-1 opacity-0 group-hover:opacity-100"
                       onClick={removeImage}
+                      type="button"
                     >
                       <Trash2 size={16}/>
                     </Button>
@@ -362,9 +383,9 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
               <div className="flex-shrink-0">
                 <input
                   type="radio"
-                  name="correctAnswer"
-                  value={index.toString()} // Store index as string for consistency
-                  checked={question.correctAnswer === index.toString() || question.correctAnswer === option}
+                  name="correctAnswer" // This should be consistent for the radio group
+                  value={index.toString()} // Value is the index
+                  checked={question.correctAnswer === index.toString()} // Compare with index string
                   onChange={(e) => setQuestion(prev => ({...prev, correctAnswer: e.target.value}))}
                   className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
@@ -384,6 +405,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
                     size="sm"
                     icon={<Trash2 size={16} />}
                     onClick={() => removeOption(index)}
+                    type="button"
                   />
                 )}
               </div>
@@ -392,26 +414,27 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
            {errors.options && <p className="text-red-500 text-xs mt-1">{errors.options}</p>}
            {errors.correctAnswer && <p className="text-red-500 text-xs mt-1">{errors.correctAnswer}</p>}
         </div>
-        
+
         { (question.options?.length || 0) < 4 && (
           <div className="mt-4">
             <Button
               variant="outline"
               icon={<Plus size={16} />}
               onClick={handleAddOption}
+              type="button"
             >
               Ajouter une option
             </Button>
           </div>
         )}
-        
+
         <div className="mt-4 p-3 bg-blue-50 rounded-lg">
           <p className="text-sm text-blue-800">
-            <strong>Réponse correcte :</strong> Option {String.fromCharCode(65 + parseInt(question.correctAnswer,10))}
+            <strong>Réponse correcte :</strong> Option {question.correctAnswer ? String.fromCharCode(65 + parseInt(question.correctAnswer,10)) : 'N/A'}
           </p>
         </div>
       </Card>
-      
+
       <div className="flex justify-between items-center">
         <Button variant="outline" onClick={onCancel} type="button">
           Annuler
