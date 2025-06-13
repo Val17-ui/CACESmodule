@@ -9,7 +9,7 @@ import { Plus, FileUp, FileDown, BarChart3 } from 'lucide-react';
 import { exportQuestionsToExcel, parseQuestionsExcel, RawExcelQuestion } from '../utils/excelProcessor';
 import { mockQuestions } from '../data/mockData';
 import { Question, QuestionType, CACESReferential, QuestionTheme, referentials, questionThemes } from '../types';
-import { addQuestion } from '../../db';
+import { StorageManager } from '../../services/StorageManager'; // Import StorageManager
 import { saveAs } from 'file-saver';
 
 // Helper for ID generation
@@ -194,12 +194,12 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
 
       for (const questionToSave of questionsToSaveDb) {
         try {
-          // Assuming QuestionWithId and the object structure for addQuestion are compatible
-          // We are passing an object that should conform to Omit<QuestionWithId, 'id'>
-          await addQuestion(questionToSave as any); // Cast to any if db.ts QuestionWithId expects id but addQuestion handles its absence
+          // questionToSave is already Omit<Question, 'id'> which is compatible with Omit<StoredQuestion, 'id'>
+          // as StoredQuestion's id is also omitted and other fields are compatible.
+          await StorageManager.addQuestion(questionToSave);
           savedCount++;
         } catch (error) {
-          console.error("Erreur lors de la sauvegarde de la question:", error);
+          console.error("Erreur lors de la sauvegarde de la question via StorageManager:", error);
           const questionTextSnippet = questionToSave.text.substring(0, 30);
           savingErrors.push(`Erreur BDD pour question "${questionTextSnippet}...": ${error instanceof Error ? error.message : String(error)}`);
         }
