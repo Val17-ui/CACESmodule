@@ -27,17 +27,23 @@ export interface Participant {
   email?: string;
 }
 
+export enum QuestionType {
+  QCM = 'multiple-choice',
+  QCU = 'single-choice',
+  TrueFalse = 'true-false'
+}
+
 export interface Question {
   id: string;
   text: string;
-  type: 'multiple-choice' | 'true-false';
+  type: QuestionType;
   options: string[];
-  correctAnswer: number | number[];
+  correctAnswer: string;
   timeLimit?: number;
   isEliminatory: boolean;
-  referential: string;
+  referential: CACESReferential;
   theme: QuestionTheme;
-  image?: string;
+  image?: Blob;
   createdAt?: string;
   usageCount?: number;
   correctResponseRate?: number;
@@ -77,6 +83,15 @@ export interface GeneralSettings {
   maxDevices: number;
 }
 
+export enum CACESReferential {
+  R482 = 'R482',
+  R484 = 'R484',
+  R485 = 'R485',
+  R486 = 'R486',
+  R489 = 'R489',
+  R490 = 'R490'
+}
+
 export type ReferentialType = 'R482' | 'R484' | 'R485' | 'R486' | 'R489' | 'R490';
 
 export const referentials: Record<ReferentialType, string> = {
@@ -106,6 +121,12 @@ export const questionThemes: Record<QuestionTheme, string> = {
   reglementation: 'Réglementation',
   securite: 'Sécurité',
   technique: 'Technique'
+};
+
+export const questionTypes: Record<QuestionType, string> = {
+  [QuestionType.QCM]: 'Questionnaire à choix multiples',
+  [QuestionType.QCU]: 'Questionnaire à choix unique',
+  [QuestionType.TrueFalse]: 'Vrai/Faux'
 };
 
 export type QuestionCategory = 'theory' | 'practice' | 'eliminatory';

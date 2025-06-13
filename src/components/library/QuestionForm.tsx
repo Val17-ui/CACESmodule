@@ -24,7 +24,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
     timeLimit: 30,
     isEliminatory: false,
     referential: CACESReferential.R489,
-    theme: QuestionTheme.Rules,
+    theme: 'reglementation',
     image: undefined,
     createdAt: new Date().toISOString(),
     usageCount: 0,
@@ -73,7 +73,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
               setHasImage(true);
               setImageFile(existingQuestion.image);
               setImagePreview(URL.createObjectURL(existingQuestion.image));
-
+            } else {
               if (imagePreview) {
                 URL.revokeObjectURL(imagePreview);
               }
@@ -247,6 +247,10 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleAddOption = () => {
+    addOption();
   };
 
   if (isLoading && questionId) {
