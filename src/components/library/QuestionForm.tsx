@@ -12,7 +12,7 @@ import { logger } from '../../utils/logger';
 interface QuestionFormProps {
   onSave: (question: QuestionWithId) => void;
   onCancel: () => void;
-  questionId?: number | null;
+  questionId?: number | null; // For editing existing questions, changed to number
 }
 
 const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionId }) => {
@@ -33,6 +33,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
 
   const [question, setQuestion] = useState<QuestionWithId>(initialQuestionState);
   const [hasImage, setHasImage] = useState(false);
+
   const [imageFile, setImageFile] = useState<Blob | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -72,7 +73,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
               setHasImage(true);
               setImageFile(existingQuestion.image);
               setImagePreview(URL.createObjectURL(existingQuestion.image));
-            } else {
+
               if (imagePreview) {
                 URL.revokeObjectURL(imagePreview);
               }

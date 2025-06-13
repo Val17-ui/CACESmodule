@@ -7,7 +7,6 @@ import Select from '../ui/Select';
 import Input from '../ui/Input';
 import { QuestionTheme, referentials, questionThemes } from '../../types'; // Removed Question, ReferentialType, QuestionType as they are part of QuestionWithId or not used directly
 import { getAllQuestions, QuestionWithId } from '../../db'; // QuestionWithId includes Question fields
-
 type QuestionLibraryProps = {
   onEditQuestion: (id: string) => void;
 };
@@ -38,6 +37,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         setIsLoading(false);
       }
     };
+
     fetchQuestions();
   }, []);
 
