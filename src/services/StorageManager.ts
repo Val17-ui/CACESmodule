@@ -32,7 +32,8 @@ export const StorageManager = {
     try {
       const questions = await db.questions.toArray();
       return questions;
-    } catch (error)      console.error("StorageManager: Error getting all questions", error);
+    } catch (error) { // Added opening curly brace
+      console.error("StorageManager: Error getting all questions", error);
       return []; // Return an empty array in case of error
     }
   },
