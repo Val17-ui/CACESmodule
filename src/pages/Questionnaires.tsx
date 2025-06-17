@@ -216,24 +216,10 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
           />
         )
       ) : (
-        <QuestionnaireForm
-          editingId={editingId}
-          onFormSubmit={(success) => {
-            if (success) {
-              // Refresh the questionnaires list
-              const fetchQuestionnaires = async () => {
-                try {
-                  const data = await StorageManager.getAllQuestionnaires();
-                  setQuestionnaires(data);
-                } catch (err) {
-                  console.error("Failed to refresh questionnaires:", err);
-                }
-              };
-              fetchQuestionnaires();
-            }
-          }}
-          onBackToList={handleBackToList}
-        />
+        // Render the new QuestionnaireForm. It does not take props like editingId, onFormSubmit, onBackToList yet.
+        // The onBackToList for the parent page's "Retour à la liste" button will still work.
+        // We will later integrate props and handlers into the new form.
+        <QuestionnaireForm />
       )}
     </Layout>
   );
