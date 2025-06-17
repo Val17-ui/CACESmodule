@@ -7,6 +7,7 @@ import Select from '../ui/Select'; // Uncommented
 // import ThemeSelector from './ThemeSelector'; // Temporarily commented out
 import PPTXGenerator from './PPTXGenerator'; // Uncommented
 import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential, questionThemes } from '../../types'; // Restored full type imports
+
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
