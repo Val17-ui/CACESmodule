@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Edit, Trash2, Copy } from 'lucide-react';
+import { FileText, Edit, Trash2, Copy, FileDown } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
@@ -8,11 +8,13 @@ import { StoredQuestionnaire } from '../../services/StorageManager'; // Updated 
 type QuestionnairesListProps = {
   questionnaires: StoredQuestionnaire[]; // Updated prop type
   onEditQuestionnaire: (id: string) => void;
+  onExportQuestionnaire: (id: string) => void; // New prop for export
 };
 
 const QuestionnairesList: React.FC<QuestionnairesListProps> = ({
   questionnaires,
   onEditQuestionnaire,
+  onExportQuestionnaire, // Destructure new prop
 }) => {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -93,6 +95,14 @@ const QuestionnairesList: React.FC<QuestionnairesListProps> = ({
                       icon={<Copy size={16} />}
                     >
                       Dupliquer
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<FileDown size={16} />}
+                      onClick={() => onExportQuestionnaire(String(questionnaire.id))} // Call export handler
+                    >
+                      Exporter
                     </Button>
                     <Button
                       variant="ghost"

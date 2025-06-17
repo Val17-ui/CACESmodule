@@ -4,7 +4,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import ThemeSelector from './ThemeSelector';
+// import ThemeSelector from './ThemeSelector'; // Temporarily commented out
 import PPTXGenerator from './PPTXGenerator';
 import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential, questionThemes } from '../../types';
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
@@ -314,13 +314,13 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
         </div>
       </Card>
 
-      {formData.referential && (
-        <ThemeSelector
-          referential={formData.referential}
-          selectedThemes={formData.themes}
-          onThemeChange={handleThemeChange}
-        />
-      )}
+      {/* {formData.referential && (
+        // <ThemeSelector
+        //   referential={formData.referential}
+        //   selectedThemes={formData.themes}
+        //   onThemeChange={handleThemeChange}
+        // />
+      )} */}
 
       <Card>
         <div className="p-6">
