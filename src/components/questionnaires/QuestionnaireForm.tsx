@@ -1,437 +1,370 @@
-import React, { useState, useEffect } from 'react';
-import { Save, AlertTriangle, Shuffle } from 'lucide-react'; // Uncommented
-import Card from '../ui/Card'; // Uncommented
-import Button from '../ui/Button'; // Uncommented
-import Input from '../ui/Input'; // Uncommented
-import Select from '../ui/Select'; // Uncommented
-// import ThemeSelector from './ThemeSelector'; // Temporarily commented out
-import PPTXGenerator from './PPTXGenerator'; // Uncommented
-import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential, questionThemes } from '../../types'; // Restored full type imports
-import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
+import React, { useState } from 'react';
+import { Plus, Trash2, Save, AlertTriangle, Shuffle } from 'lucide-react';
+import Card from '../ui/Card';
+import Button from '../ui/Button';
+import Input from '../ui/Input';
+import Select from '../ui/Select';
+import ThemeSelector from './ThemeSelector';
+import PPTXGenerator from './PPTXGenerator';
+import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits, Question, QuestionType, CACESReferential } from '../../types'; // Added QuestionType, CACESReferential
+import { mockQuestions } from '../../data/mockData';
 import { logger } from '../../utils/logger';
 
-interface QuestionnaireFormProps {
-  editingId: string | null; // Changed to non-optional as per original diff
-  onFormSubmit?: (success: boolean) => void;
-  onBackToList?: () => void;
-}
-
-const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
-  editingId,
-  onFormSubmit,
-  onBackToList,
-}) => {
-  const [formData, setFormData] = useState({
-    name: '', // Renamed from title
-    referential: '' as ReferentialType,
-    questionCount: 40,
-    passingScore: 70,
-    timeLimit: 30,
-    shuffleQuestions: true,
-    shuffleAnswers: true,
-    showCorrectAnswers: true, // Restored as per original diff
-    allowReview: true,
-    themes: [] as QuestionTheme[],
+const QuestionnaireForm: React.FC = () => {
+  const [questionnaireName, setQuestionnaireName] = useState('');
+  const [selectedReferential, setSelectedReferential] = useState<string>('');
+  const [totalQuestions, setTotalQuestions] = useState(40);
+  const [showValidationWarning, setShowValidationWarning] = useState(false);
+  const [isRandomized, setIsRandomized] = useState(false);
+  const [eliminatoryCount, setEliminatoryCount] = useState(3);
+  const [themeDistribution, setThemeDistribution] = useState<Record<QuestionTheme, number>>({
+    reglementation: 15,
+    securite: 15,
+    technique: 10
   });
 
-  // loadQuestionnaire, handlers are kept as they are in the current file (more complete)
-  // ... (useEffect, loadQuestionnaire, handleInputChange, handleThemeChange, generateQuestions, handleSave are unchanged from current file content)
-
-  // Conditional loading for editing - kept commented as per original "Step 2a" diff
-  // if (isLoading && editingId) {
-  //   return (
-  //     <div className="flex items-center justify-center py-12">
-  //       <div className="text-center">
-  //         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-  //         <p className="text-gray-600">Chargement du questionnaire...</p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  // loadQuestionnaire, handlers are kept as they are in the current file (more complete)
-  // ... (useEffect, loadQuestionnaire, handleInputChange, handleThemeChange, generateQuestions, handleSave are unchanged from current file content)
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  useEffect(() => {
-    if (editingId) {
-      loadQuestionnaire(editingId);
-    }
-  }, [editingId]);
-
-  const loadQuestionnaire = async (id: string) => {
-    try {
-      setIsLoading(true);
-      const questionnaire = await StorageManager.getQuestionnaireById(Number(id));
-      if (questionnaire) {
-        setFormData({
-          name: questionnaire.name,
-          referential: questionnaire.referential,
-          questionCount: questionnaire.questionCount,
-          passingScore: questionnaire.passingScore,
-          timeLimit: questionnaire.timeLimit,
-          shuffleQuestions: questionnaire.shuffleQuestions,
-          shuffleAnswers: questionnaire.shuffleAnswers,
-          showCorrectAnswers: questionnaire.showCorrectAnswers,
-          allowReview: questionnaire.allowReview,
-          themes: questionnaire.themes,
-        });
-        setQuestions(questionnaire.questions || []);
-      }
-    } catch (err) {
-      logger.error('Failed to load questionnaire', { error: err, questionnaireId: id });
-      setError('Impossible de charger le questionnaire');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Transform referentials object into an array for the Select component
-  const referentialOptions = Object.entries(referentials).map(([key, value]) => ({
-    value: key as ReferentialType,
-    label: `${key} - ${value}`
+  const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
+    value,
+    label: `${value} - ${label}`,
   }));
-  const handleInputChange = (field: string, value: any) => {
-    setFormData(prev => ({
+
+  const handleReferentialChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const referential = e.target.value as ReferentialType;
+    setSelectedReferential(referential);
+    logger.info(`Référentiel sélectionné: ${referential}`);
+
+    // Update total questions based on referential limits
+    if (referential && referentialLimits[referential]) {
+      const defaultTotal = Math.min(40, referentialLimits[referential].max);
+      setTotalQuestions(defaultTotal);
+    }
+
+    setShowValidationWarning(referential === 'R482');
+  };
+
+  const handleTotalQuestionsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value) || 0;
+    setTotalQuestions(value);
+
+    // Check limits
+    if (selectedReferential && referentialLimits[selectedReferential as ReferentialType]) {
+      const limits = referentialLimits[selectedReferential as ReferentialType];
+      if (value < limits.min || value > limits.max) {
+        logger.warning(`Nombre de questions hors limites pour ${selectedReferential}: ${limits.min}-${limits.max}`);
+      }
+    }
+  };
+
+  const handleThemeDistributionChange = (theme: QuestionTheme, count: number) => {
+    setThemeDistribution(prev => ({
       ...prev,
-      [field]: value,
+      [theme]: count
     }));
   };
 
-  const handleThemeChange = (themes: QuestionTheme[]) => {
-    setFormData(prev => ({
-      ...prev,
-      themes,
-    }));
+  const handleRandomizeToggle = () => {
+    setIsRandomized(!isRandomized);
+    logger.info(`Mode aléatoire ${!isRandomized ? 'activé' : 'désactivé'}`);
   };
 
-  const generateQuestions = async () => {
-    if (!formData.referential || formData.themes.length === 0) {
-      setError('Veuillez sélectionner un référentiel et au moins un thème');
-      return;
-    }
-    try {
-      setIsGenerating(true);
-      setError(null);
-      const generatedQuestions: Question[] = [];
-      const questionsPerTheme = Math.floor(formData.questionCount / formData.themes.length);
-      for (const theme of formData.themes) {
-        for (let i = 0; i < questionsPerTheme; i++) {
-          generatedQuestions.push({
-            id: `q_${Date.now()}_${i}`,
-            type: 'multiple-choice' as QuestionType,
-            theme,
-            question: `Question ${i + 1} pour ${theme}`,
-            answers: [
-              { id: 'a1', text: 'Réponse A', isCorrect: true },
-              { id: 'a2', text: 'Réponse B', isCorrect: false },
-              { id: 'a3', text: 'Réponse C', isCorrect: false },
-              { id: 'a4', text: 'Réponse D', isCorrect: false },
-            ],
-            explanation: 'Explication de la réponse correcte',
-            difficulty: 'medium',
-            points: 1,
-          });
-        }
+  const currentTotal = Object.values(themeDistribution).reduce((sum, count) => sum + count, 0);
+  const isOverTotal = currentTotal > totalQuestions;
+  const isUnderTotal = currentTotal < totalQuestions;
+
+  // Générer les questions pour le PPTX (simulation basée sur la distribution)
+  const generateQuestionsForPPTX = (): Question[] => {
+    if (!selectedReferential) return [];
+
+    // Filtrer les questions par référentiel
+    const availableQuestions = mockQuestions.filter(q => q.referential === selectedReferential);
+
+    if (availableQuestions.length === 0) return [];
+
+    const selectedQuestions: Question[] = [];
+
+    // Pour chaque thème, sélectionner le nombre de questions demandé
+    Object.entries(themeDistribution).forEach(([theme, count]) => {
+      const themeQuestions = availableQuestions.filter(q => q.theme === theme);
+
+      for (let i = 0; i < count && i < themeQuestions.length; i++) {
+        // Convertir en format Vrai/Faux pour OMBEA
+        const originalQuestion = themeQuestions[i % themeQuestions.length];
+        const convertedQuestion: Question = {
+          ...originalQuestion,
+          type: QuestionType.TrueFalse, // Use enum
+          options: ['Vrai', 'Faux'],
+          correctAnswer: Math.random() > 0.5 ? '0' : '1',
+          isEliminatory: originalQuestion.isEliminatory,
+          referential: originalQuestion.referential as CACESReferential, // Cast for now
+          theme: originalQuestion.theme as QuestionTheme, // Cast for now
+          id: originalQuestion.id,
+          text: originalQuestion.text,
+        };
+        selectedQuestions.push(convertedQuestion);
       }
-      setQuestions(generatedQuestions);
-      logger.info('Questions generated successfully', { 
-        count: generatedQuestions.length,
-        referential: formData.referential,
-        themes: formData.themes 
-      });
-    } catch (err) {
-      logger.error('Failed to generate questions', { error: err });
-      setError('Erreur lors de la génération des questions');
-    } finally {
-      setIsGenerating(false);
-    }
+    });
+
+    return selectedQuestions.slice(0, totalQuestions);
   };
 
-  const handleSave = async () => {
-    if (!formData.name.trim()) {
-      setError('Le nom du questionnaire (titre) est obligatoire');
-      return;
+  const getLimitsWarning = () => {
+    if (!selectedReferential || !referentialLimits[selectedReferential as ReferentialType]) {
+      return null;
     }
 
-    if (!formData.referential) {
-      setError('Veuillez sélectionner un référentiel');
-      return;
-    }
-
-    if (questions.length === 0) {
-      setError('Veuillez générer des questions avant de sauvegarder');
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const questionnaireData: Omit<StoredQuestionnaire, 'id' | 'createdAt' | 'updatedAt'> = {
-        name: formData.name,
-        referential: formData.referential,
-        questionCount: formData.questionCount,
-        passingScore: formData.passingScore,
-        timeLimit: formData.timeLimit,
-        shuffleQuestions: formData.shuffleQuestions,
-        shuffleAnswers: formData.shuffleAnswers,
-        showCorrectAnswers: formData.showCorrectAnswers,
-        allowReview: formData.allowReview,
-        themes: formData.themes,
-        questions: questions,
-      };
-
-      if (editingId) {
-        await StorageManager.updateQuestionnaire(Number(editingId), questionnaireData);
-        logger.info('Questionnaire updated successfully', { id: editingId });
-      } else {
-        const id = await StorageManager.addQuestionnaire(questionnaireData);
-        logger.info('Questionnaire created successfully', { id });
-      }
-
-      onFormSubmit?.(true);
-      onBackToList?.();
-    } catch (err) {
-      logger.error('Failed to save questionnaire', { error: err });
-      setError('Erreur lors de la sauvegarde');
-      onFormSubmit?.(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (isLoading && editingId) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement du questionnaire...</p>
+    const limits = referentialLimits[selectedReferential as ReferentialType];
+    if (totalQuestions < limits.min || totalQuestions > limits.max) {
+      return (
+        <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start">
+          <AlertTriangle size={20} className="text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800">
+              Nombre de questions hors limites
+            </p>
+            <p className="text-sm text-red-700 mt-1">
+              Pour le référentiel {selectedReferential}, le nombre de questions doit être entre {limits.min} et {limits.max}.
+            </p>
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
+    return null;
+  };
+
+  const canGeneratePPTX = questionnaireName.trim() && selectedReferential && currentTotal > 0;
+  const generatedQuestions = canGeneratePPTX ? generateQuestionsForPPTX() : [];
 
   return (
-    <div className="space-y-6">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
-          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0" />
-          <p className="text-red-700">{error}</p>
-        </div>
-      )}
+    <div>
+      <Card title="Informations générales" className="mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Input
+            label="Nom du questionnaire"
+            placeholder="Ex: CACES R489 Standard"
+            value={questionnaireName}
+            onChange={(e) => setQuestionnaireName(e.target.value)}
+            required
+          />
 
-      {!(isLoading && editingId) && (
-        <>
-      <Card>
-        <div className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Informations générales
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Select
+            label="Référentiel CACES"
+            options={referentialOptions}
+            value={selectedReferential}
+            onChange={handleReferentialChange}
+            placeholder="Sélectionner un référentiel"
+            required
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <div>
             <Input
-              label="Titre du questionnaire"
-              value={formData.name}
-              onChange={(value) => handleInputChange('name', value)}
-              placeholder="Ex: CACES R489 - Chariots élévateurs"
+              label="Nombre total de questions"
+              type="number"
+              value={totalQuestions}
+              onChange={handleTotalQuestionsChange}
+              min={10}
+              max={60}
               required
             />
-
-            <Select
-              label="Référentiel"
-              value={formData.referential}
-              onChange={(value) => handleInputChange('referential', value)}
-              options={referentialOptions} // Use the transformed array
-              placeholder="Sélectionner un référentiel"
-              required
-            />
-
-            <Input
-              label="Nombre de questions"
-              type="number"
-              value={formData.questionCount}
-              onChange={(value) => handleInputChange('questionCount', parseInt(value) || 40)}
-              min={10}
-              max={100}
-            />
-
-            <Input
-              label="Score de réussite (%)"
-              type="number"
-              value={formData.passingScore}
-              onChange={(value) => handleInputChange('passingScore', parseInt(value) || 70)}
-              min={50}
-              max={100}
-            />
-
-            <Input
-              label="Durée limite (minutes)"
-              type="number"
-              value={formData.timeLimit}
-              onChange={(value) => handleInputChange('timeLimit', parseInt(value) || 30)}
-              min={10}
-              max={180}
-            />
+            {getLimitsWarning()}
           </div>
+
+          <Input
+            label="Seuil de réussite (%)"
+            type="number"
+            placeholder="Ex: 70"
+            min={0}
+            max={100}
+            required
+          />
+
+          <Input
+            label="Nombre de questions éliminatoires"
+            type="number"
+            value={eliminatoryCount}
+            onChange={(e) => setEliminatoryCount(parseInt(e.target.value) || 0)}
+            min={2}
+            max={5}
+            required
+          />
         </div>
-      </Card>
 
-      <Card>
-        <div className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Options d'examen
-          </h3>
-          
-          <div className="space-y-4">
-            <label className="flex items-center space-x-3">
-              <input
-                type="checkbox"
-                checked={formData.shuffleQuestions}
-                onChange={(e) => handleInputChange('shuffleQuestions', e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-gray-700">Mélanger l'ordre des questions</span>
-            </label>
-
-            <label className="flex items-center space-x-3">
-              <input
-                type="checkbox"
-                checked={formData.shuffleAnswers}
-                onChange={(e) => handleInputChange('shuffleAnswers', e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-gray-700">Mélanger l'ordre des réponses</span>
-            </label>
-
-            <label className="flex items-center space-x-3">
-              <input
-                type="checkbox"
-                checked={formData.showCorrectAnswers}
-                onChange={(e) => handleInputChange('showCorrectAnswers', e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-gray-700">Afficher les bonnes réponses à la fin</span>
-            </label>
-
-            <label className="flex items-center space-x-3">
-              <input
-                type="checkbox"
-                checked={formData.allowReview}
-                onChange={(e) => handleInputChange('allowReview', e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-gray-700">Permettre la révision des réponses</span>
-            </label>
-          </div>
+        <div className="mt-4 flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="randomize"
+            checked={isRandomized}
+            onChange={handleRandomizeToggle}
+            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <label htmlFor="randomize" className="text-sm text-gray-700">
+            Génération aléatoire depuis la bibliothèque
+          </label>
         </div>
-      </Card>
 
-      {/* {formData.referential && (
-        <ThemeSelector
-          referential={formData.referential}
-          selectedThemes={formData.themes}
-          onThemeChange={handleThemeChange}
-        />
-      )} */}
-
-      <Card>
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Questions ({questions.length})
-            </h3>
-            <Button
-              variant="outline"
-              icon={<Shuffle size={16} />}
-              onClick={generateQuestions}
-              disabled={isGenerating || !formData.referential || formData.themes.length === 0}
-            >
-              {isGenerating ? 'Génération...' : 'Générer les questions'}
-            </Button>
-          </div>
-
-          {questions.length > 0 && (
-            <div className="space-y-3">
-              {questions.slice(0, 5).map((question, index) => (
-                <div key={question.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">
-                        {index + 1}. {question.question}
-                      </p>
-                      <div className="mt-2 space-y-1">
-                        {question.answers.map((answer) => (
-                          <div
-                            key={answer.id}
-                            className={`text-sm px-2 py-1 rounded ${
-                              answer.isCorrect
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {answer.text}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      {question.theme}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              
-              {questions.length > 5 && (
-                <p className="text-sm text-gray-500 text-center py-2">
-                  ... et {questions.length - 5} autres questions
-                </p>
-              )}
+        {showValidationWarning && (
+          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start">
+            <AlertTriangle size={20} className="text-amber-500 mr-2 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">
+                Attention : Version du référentiel
+              </p>
+              <p className="text-sm text-amber-700 mt-1">
+                Le référentiel R482 a été mis à jour. Certaines questions pourraient ne plus être conformes à la dernière version réglementaire.
+              </p>
             </div>
-          )}
-
-          {questions.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <Shuffle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-              <p>Aucune question générée</p>
-              <p className="text-sm">Sélectionnez un référentiel et des thèmes, puis cliquez sur "Générer les questions"</p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </Card>
 
-      {questions.length > 0 && (
+      <ThemeSelector
+        distribution={themeDistribution}
+        onDistributionChange={handleThemeDistributionChange}
+        totalQuestions={totalQuestions}
+        isRandomized={isRandomized}
+        selectedReferential={selectedReferential}
+      />
+
+      {canGeneratePPTX && (
         <PPTXGenerator
-          questionnaire={{
-            name: formData.name,
-            referential: formData.referential,
-            questions: questions,
-            themes: formData.themes,
-          }}
+          questions={generatedQuestions}
+          questionnaireName={questionnaireName}
+          referential={selectedReferential}
         />
       )}
 
-      <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-        <Button
-          variant="outline"
-          onClick={onBackToList}
-        >
+      {!isRandomized && (
+        <Card title="Questions manuelles" className="mb-6">
+          <div className="mb-4 flex justify-between items-center">
+            <h4 className="text-sm font-medium text-gray-700">
+              Questions sélectionnées ({currentTotal}/{totalQuestions})
+            </h4>
+            {(isOverTotal || isUnderTotal) && (
+              <span className={`text-sm ${isOverTotal ? 'text-red-600' : 'text-amber-600'}`}>
+                {isOverTotal ? 'Trop de questions sélectionnées' : 'Questions manquantes'}
+              </span>
+            )}
+          </div>
+
+          <div className="mb-4 p-4 border border-gray-200 rounded-lg">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex-1">
+                <Input
+                  label="Texte de la question"
+                  placeholder="Entrez le texte de la question..."
+                  required
+                />
+              </div>
+              <div className="ml-4 mt-6">
+                <Button variant="outline" icon={<Trash2 size={16} />} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <Select
+                label="Type de question"
+                options={[
+                  { value: 'multiple-choice', label: 'Choix multiple' },
+                  { value: 'true-false', label: 'Vrai/Faux' },
+                ]}
+                placeholder="Sélectionner"
+                required
+              />
+
+              <Select
+                label="Thème"
+                options={Object.entries(questionThemes).map(([value, label]) => ({
+                  value,
+                  label
+                }))}
+                placeholder="Sélectionner"
+                required
+              />
+
+              <Input
+                label="Temps (secondes)"
+                type="number"
+                placeholder="Ex: 30"
+                min={5}
+                required
+              />
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Options de réponse
+                </label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Plus size={16} />}
+                  className="text-sm"
+                >
+                  Ajouter option
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="flex-shrink-0">
+                      <input
+                        type="radio"
+                        name="correctAnswer"
+                        className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Input
+                        placeholder={`Option ${i}`}
+                        className="mb-0"
+                      />
+                    </div>
+                    <div className="flex-shrink-0">
+                      <Button variant="ghost" size="sm" icon={<Trash2 size={16} />} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="isEliminatoryQuestion"
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="isEliminatoryQuestion" className="ml-2 block text-sm text-gray-700">
+                Question éliminatoire (sécurité critique)
+              </label>
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            icon={<Plus size={16} />}
+            className="w-full"
+          >
+            Ajouter une question
+          </Button>
+        </Card>
+      )}
+
+      <div className="flex justify-between items-center">
+        <Button variant="outline"> {/* This Annuler button might need wiring up */}
           Annuler
         </Button>
-        <Button
-          variant="primary"
-          icon={<Save size={16} />}
-          onClick={handleSave}
-          disabled={isLoading || questions.length === 0}
-        >
-          {isLoading ? 'Sauvegarde...' : editingId ? 'Mettre à jour' : 'Créer le questionnaire'}
-        </Button>
+        <div className="space-x-3">
+          <Button variant="outline" icon={<Save size={16} />}>
+            Enregistrer brouillon
+          </Button>
+          <Button variant="primary" icon={<Save size={16} />}>
+            Valider et enregistrer
+          </Button>
+        </div>
       </div>
-      </>
-      )}
     </div>
   );
 };
