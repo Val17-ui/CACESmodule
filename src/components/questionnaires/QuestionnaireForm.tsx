@@ -7,7 +7,6 @@ import Select from '../ui/Select'; // Uncommented
 // import ThemeSelector from './ThemeSelector'; // Temporarily commented out
 import PPTXGenerator from './PPTXGenerator'; // Uncommented
 import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential, questionThemes } from '../../types'; // Restored full type imports
-
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
@@ -90,6 +89,11 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
     }
   };
 
+  // Transform referentials object into an array for the Select component
+  const referentialOptions = Object.entries(referentials).map(([key, value]) => ({
+    value: key as ReferentialType,
+    label: `${key} - ${value}`
+  }));
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
       ...prev,
@@ -241,10 +245,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
               label="Référentiel"
               value={formData.referential}
               onChange={(value) => handleInputChange('referential', value)}
-              options={referentials.map(ref => ({
-                value: ref.id,
-                label: `${ref.id} - ${ref.name}`
-              }))}
+              options={referentialOptions} // Use the transformed array
               placeholder="Sélectionner un référentiel"
               required
             />
