@@ -51,7 +51,7 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
   const handleExportQuestionnaire = async (id: string) => {
     try {
       logger.info(`Attempting to export questionnaire with ID: ${id}`);
-      const questionnaire = await StorageManager.getQuestionnaire(id);
+      const questionnaire = await StorageManager.getQuestionnaireById(Number(id)); // Corrected method and ensure id is number
       if (!questionnaire) {
         logger.error(`Questionnaire not found for export: ${id}`);
         setError(`Impossible d'exporter: questionnaire non trouvé.`);
@@ -63,9 +63,9 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      // Sanitize title for filename
-      const safeTitle = questionnaire.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      a.download = `questionnaire_${safeTitle}_${id}.json`;
+      // Sanitize title for filename - This will be addressed in the name vs title step
+      const safeName = questionnaire.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      a.download = `questionnaire_${safeName}_${id}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -86,7 +86,7 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
       const target = e.target as HTMLInputElement;
       const file = target.files?.[0];
       if (!file) {
-        logger.warn('No file selected for import.');
+        logger.warning('No file selected for import.'); // Corrected logger method
         setError('Aucun fichier sélectionné.');
         return;
       }
@@ -100,7 +100,7 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
           logger.info('File parsed successfully.');
 
           // Basic validation (can be more thorough)
-          if (!importedData.title || !importedData.referential || !Array.isArray(importedData.questions)) {
+          if (!importedData.name || !importedData.referential || !Array.isArray(importedData.questions)) { // Check for name
             logger.error('Invalid questionnaire structure.', importedData);
             setError('Fichier de questionnaire invalide ou corrompu.');
             return;
@@ -113,8 +113,8 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
           // For example, if StoredQuestionnaire has more fields than just title, referential, questions,
           // ensure they are handled or defaults are provided if not in questionnaireToSave
 
-          await StorageManager.saveQuestionnaire(questionnaireToSave);
-          logger.info(`Questionnaire "${questionnaireToSave.title}" imported successfully.`);
+          await StorageManager.addQuestionnaire(questionnaireToSave);
+          logger.info(`Questionnaire "${questionnaireToSave.name}" imported successfully.`); // Use name
 
           // Refresh list
           const data = await StorageManager.getAllQuestionnaires();

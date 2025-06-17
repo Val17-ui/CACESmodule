@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Save, AlertTriangle, Shuffle } from 'lucide-react';
-import Card from '../ui/Card';
-import Button from '../ui/Button';
-import Input from '../ui/Input';
-import Select from '../ui/Select';
+import { Save, AlertTriangle, Shuffle } from 'lucide-react'; // Uncommented
+import Card from '../ui/Card'; // Uncommented
+import Button from '../ui/Button'; // Uncommented
+import Input from '../ui/Input'; // Uncommented
+import Select from '../ui/Select'; // Uncommented
 // import ThemeSelector from './ThemeSelector'; // Temporarily commented out
-import PPTXGenerator from './PPTXGenerator';
-import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential, questionThemes } from '../../types';
+import PPTXGenerator from './PPTXGenerator'; // Uncommented
+import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential, questionThemes } from '../../types'; // Restored full type imports
+
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
 interface QuestionnaireFormProps {
-  editingId?: string | null;
+  editingId: string | null; // Changed to non-optional as per original diff
   onFormSubmit?: (success: boolean) => void;
   onBackToList?: () => void;
 }
@@ -22,18 +23,35 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   onBackToList,
 }) => {
   const [formData, setFormData] = useState({
-    title: '',
+    name: '', // Renamed from title
     referential: '' as ReferentialType,
     questionCount: 40,
     passingScore: 70,
     timeLimit: 30,
     shuffleQuestions: true,
     shuffleAnswers: true,
-    showCorrectAnswers: false,
+    showCorrectAnswers: true, // Restored as per original diff
     allowReview: true,
     themes: [] as QuestionTheme[],
   });
 
+  // loadQuestionnaire, handlers are kept as they are in the current file (more complete)
+  // ... (useEffect, loadQuestionnaire, handleInputChange, handleThemeChange, generateQuestions, handleSave are unchanged from current file content)
+
+  // Conditional loading for editing - kept commented as per original "Step 2a" diff
+  // if (isLoading && editingId) {
+  //   return (
+  //     <div className="flex items-center justify-center py-12">
+  //       <div className="text-center">
+  //         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+  //         <p className="text-gray-600">Chargement du questionnaire...</p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
+
+  // loadQuestionnaire, handlers are kept as they are in the current file (more complete)
+  // ... (useEffect, loadQuestionnaire, handleInputChange, handleThemeChange, generateQuestions, handleSave are unchanged from current file content)
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,10 +66,10 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   const loadQuestionnaire = async (id: string) => {
     try {
       setIsLoading(true);
-      const questionnaire = await StorageManager.getQuestionnaire(id);
+      const questionnaire = await StorageManager.getQuestionnaireById(Number(id));
       if (questionnaire) {
         setFormData({
-          title: questionnaire.title,
+          name: questionnaire.name,
           referential: questionnaire.referential,
           questionCount: questionnaire.questionCount,
           passingScore: questionnaire.passingScore,
@@ -62,7 +80,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           allowReview: questionnaire.allowReview,
           themes: questionnaire.themes,
         });
-        setQuestions(questionnaire.questions);
+        setQuestions(questionnaire.questions || []);
       }
     } catch (err) {
       logger.error('Failed to load questionnaire', { error: err, questionnaireId: id });
@@ -75,14 +93,14 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
   const handleThemeChange = (themes: QuestionTheme[]) => {
     setFormData(prev => ({
       ...prev,
-      themes
+      themes,
     }));
   };
 
@@ -91,15 +109,11 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       setError('Veuillez sélectionner un référentiel et au moins un thème');
       return;
     }
-
     try {
       setIsGenerating(true);
       setError(null);
-
-      // Simulate question generation
       const generatedQuestions: Question[] = [];
       const questionsPerTheme = Math.floor(formData.questionCount / formData.themes.length);
-      
       for (const theme of formData.themes) {
         for (let i = 0; i < questionsPerTheme; i++) {
           generatedQuestions.push({
@@ -119,7 +133,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           });
         }
       }
-
       setQuestions(generatedQuestions);
       logger.info('Questions generated successfully', { 
         count: generatedQuestions.length,
@@ -135,8 +148,8 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   };
 
   const handleSave = async () => {
-    if (!formData.title.trim()) {
-      setError('Le titre est obligatoire');
+    if (!formData.name.trim()) {
+      setError('Le nom du questionnaire (titre) est obligatoire');
       return;
     }
 
@@ -155,7 +168,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       setError(null);
 
       const questionnaireData: Omit<StoredQuestionnaire, 'id' | 'createdAt' | 'updatedAt'> = {
-        title: formData.title,
+        name: formData.name,
         referential: formData.referential,
         questionCount: formData.questionCount,
         passingScore: formData.passingScore,
@@ -169,10 +182,10 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       };
 
       if (editingId) {
-        await StorageManager.updateQuestionnaire(editingId, questionnaireData);
+        await StorageManager.updateQuestionnaire(Number(editingId), questionnaireData);
         logger.info('Questionnaire updated successfully', { id: editingId });
       } else {
-        const id = await StorageManager.saveQuestionnaire(questionnaireData);
+        const id = await StorageManager.addQuestionnaire(questionnaireData);
         logger.info('Questionnaire created successfully', { id });
       }
 
@@ -207,6 +220,8 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
         </div>
       )}
 
+      {!(isLoading && editingId) && (
+        <>
       <Card>
         <div className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -216,8 +231,8 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Input
               label="Titre du questionnaire"
-              value={formData.title}
-              onChange={(value) => handleInputChange('title', value)}
+              value={formData.name}
+              onChange={(value) => handleInputChange('name', value)}
               placeholder="Ex: CACES R489 - Chariots élévateurs"
               required
             />
@@ -315,11 +330,11 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       </Card>
 
       {/* {formData.referential && (
-        // <ThemeSelector
-        //   referential={formData.referential}
-        //   selectedThemes={formData.themes}
-        //   onThemeChange={handleThemeChange}
-        // />
+        <ThemeSelector
+          referential={formData.referential}
+          selectedThemes={formData.themes}
+          onThemeChange={handleThemeChange}
+        />
       )} */}
 
       <Card>
@@ -390,7 +405,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       {questions.length > 0 && (
         <PPTXGenerator
           questionnaire={{
-            title: formData.title,
+            name: formData.name,
             referential: formData.referential,
             questions: questions,
             themes: formData.themes,
@@ -414,6 +429,8 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           {isLoading ? 'Sauvegarde...' : editingId ? 'Mettre à jour' : 'Créer le questionnaire'}
         </Button>
       </div>
+      </>
+      )}
     </div>
   );
 };
