@@ -6,10 +6,9 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import ThemeSelector from './ThemeSelector';
 import PPTXGenerator from './PPTXGenerator';
-import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential } from '../../types';
+import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential, questionThemes } from '../../types';
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
-import { ReferentialType, referentials, questionThemes, referentialLimits, Question, QuestionType } from '../../types';
 
 interface QuestionnaireFormProps {
   editingId?: string | null; // Changed from string | null to string | undefined for consistency
@@ -53,9 +52,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
     };
     return fullDist;
   };
-  
-  return fullDist;
-};
 
   const handleSave = async (isDraft: boolean) => {
     logger.info(`handleSave called. isDraft: ${isDraft}`);
@@ -301,15 +297,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
     }
   };
 
-
-  // TODO: Rewrite generateQuestionsForPPTX -> prepareQuestionsForPPTX (async)
-  // REMOVE old generateQuestionsForPPTX placeholder
-  // const generateQuestionsForPPTX = (): Question[] => {
-  // logger.warning("generateQuestionsForPPTX is using mock/outdated logic and needs to be updated.");
-  // if (!selectedReferential) return [];
-  // return [];
-  // };
-
   const prepareQuestionsForPPTX = async (currentQuestionIds: number[]): Promise<Question[]> => {
     if (!selectedReferential || currentQuestionIds.length === 0) {
       return [];
@@ -324,27 +311,23 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       const validStoredQuestions = fetchedStoredQuestions.filter(q => q !== undefined) as StoredQuestion[];
       
       const mappedQuestions: Question[] = validStoredQuestions.map(sq => {
-        let correctAnswerValue: number;
+        let correctAnswerValue: string;
         // Use QuestionType enum for comparison
         const questionType = sq.type as QuestionType;
 
         if (questionType === QuestionType.QCM || questionType === QuestionType.QCU) {
-          correctAnswerValue = sq.options.indexOf(sq.correctAnswer);
-          if (correctAnswerValue === -1) {
-            logger.warn(`Correct answer "${sq.correctAnswer}" not found in options for question ID ${sq.id}. Defaulting to 0.`);
-            correctAnswerValue = 0;
-          }
+          // For multiple choice questions, correctAnswer should be the actual answer text
+          correctAnswerValue = sq.correctAnswer;
         } else { // Handles QuestionType.TrueFalse implicitly
-          correctAnswerValue = (sq.correctAnswer.toLowerCase() === 'vrai' || sq.correctAnswer.toLowerCase() === 'true') ? 0 : 1;
+          correctAnswerValue = sq.correctAnswer;
         }
       
         return {
           id: sq.id!.toString(),
           text: sq.text,
           type: questionType, // Use the determined QuestionType
-
           options: sq.options,
-          correctAnswer: /* votre logique existante */,
+          correctAnswer: correctAnswerValue,
           timeLimit: sq.timeLimit,
           isEliminatory: sq.isEliminatory,
           referential: sq.referential as CACESReferential,
@@ -404,7 +387,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   // Vérifier si on peut générer le PPTX
   // Use preparedPptxQuestions.length and selectedReferential for condition
   const canGeneratePPTX = questionnaireName.trim() !== '' && selectedReferential !== '' && preparedPptxQuestions.length > 0;
-  // REMOVE: const generatedQuestions = canGeneratePPTX ? generateQuestionsForPPTX() : [];
 
   return (
     <div>
@@ -640,12 +622,4 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   );
 };
 
-// REMOVE THESE FUNCTIONS FROM HERE - THEY ARE NOW INSIDE THE COMPONENT
-// const ensureFullThemeDistribution = ...
-// const handleSave = ...
-
 export default QuestionnaireForm;
-export type QuestionTheme = 
-  | 'reglementation'
-  | 'securite'
-  | 'technique';
