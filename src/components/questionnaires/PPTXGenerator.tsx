@@ -25,9 +25,11 @@ const PPTXGenerator: React.FC<PPTXGeneratorProps> = ({
   const convertQuestionsForPPTX = (platformQuestions: Question[]) => {
     return platformQuestions.map(q => ({
       question: q.text,
-      correctAnswer: q.type === 'true-false' ? (q.correctAnswer === 0) : true, // Pour Vrai/Faux: 0=Vrai, 1=Faux
+      // For True/False questions: app's Question type has correctAnswer = 0 for True, 1 for False.
+      // The utility expects correctAnswer = true if "Vrai" is the correct answer.
+      correctAnswer: q.type === 'true-false' ? (q.correctAnswer === 0) : true,
       duration: q.timeLimit || 30,
-      imagePath: q.image || undefined
+      // imagePath: q.image || undefined, // Removed as the utility does not currently support images.
     }));
   };
 
