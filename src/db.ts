@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 // Import specific types needed from the project's type definitions
-import { ReferentialType, QuestionTheme } from './types/index.js'; // Adjusted path
+import { ReferentialType, QuestionTheme } from './types'; // Adjusted path
 
 // Define QuestionWithId specifically for Dexie storage.
 // It does not extend project's Question interface directly to allow 'id' to be a number for Dexie.
