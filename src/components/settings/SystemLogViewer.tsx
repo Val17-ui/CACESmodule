@@ -38,7 +38,7 @@ const SystemLogViewer: React.FC = () => {
           <Button variant="outline" onClick={handleRefreshLogs} icon={<RefreshCw size={16} />}>
             Rafraîchir
           </Button>
-          <Button variant="danger" onClick={handleClearLogs} icon={<Trash2 size={16} />}>
+          <Button variant="destructive" onClick={handleClearLogs} icon={<Trash2 size={16} />}>
             Effacer les logs
           </Button>
         </div>
