@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, AlertTriangle, Shuffle, RotateCcw } from 'lucide-react';
+import { Save, AlertTriangle, Shuffle } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import ThemeSelector from './ThemeSelector';
 import PPTXGenerator from './PPTXGenerator';
-import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits, Question } from '../../types';
+import { ReferentialType, referentials, questionThemes, referentialLimits, Question } from '../../types';
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
+import { ReferentialType, referentials, questionThemes, referentialLimits, Question, QuestionType } from '../../types';
 
 interface QuestionnaireFormProps {
   editingId?: string | null; // Changed from string | null to string | undefined for consistency
@@ -43,26 +44,17 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false); // For save operations
   const [preparedPptxQuestions, setPreparedPptxQuestions] = useState<Question[]>([]);
 
-  // Helper function to ensure all theme keys are present
-  const ensureFullThemeDistribution = (dist: Partial<Record<QuestionTheme, number>>): Record<QuestionTheme, number> => {
-    const fullDist: Record<QuestionTheme, number> = {
-      reglementation: 0,
-      securite: 0,
-      technique: 0,
-    };
-    for (const theme in QuestionTheme) { // Iterate over enum keys
-        if (isNaN(Number(theme))) { // Filter out numeric enum reverse mappings if any
-             fullDist[theme as QuestionTheme] = dist[theme as QuestionTheme] || 0;
-        }
-    }
-    // Apply provided distribution
-    for (const theme in dist) {
-      if (Object.prototype.hasOwnProperty.call(dist, theme)) {
-        fullDist[theme as QuestionTheme] = dist[theme as QuestionTheme] || 0;
-      }
-    }
-    return fullDist;
+// Helper function to ensure all theme keys are present
+const ensureFullThemeDistribution = (dist: Partial<Record<QuestionTheme, number>>): Record<QuestionTheme, number> => {
+  // Option 1 : Initialiser directement avec les valeurs par défaut
+  const fullDist: Record<QuestionTheme, number> = {
+    reglementation: dist.reglementation || 0,
+    securite: dist.securite || 0,
+    technique: dist.technique || 0,
   };
+  
+  return fullDist;
+};
 
   const handleSave = async (isDraft: boolean) => {
     logger.info(`handleSave called. isDraft: ${isDraft}`);
@@ -252,7 +244,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
 
   const handleRandomizedSelection = async () => {
     if (!isRandomized || !selectedReferential || !themeDistributionMatchesTotal) {
-      logger.warn("Conditions for randomized selection not met.", { isRandomized, selectedReferential, themeDistributionMatchesTotal });
+      logger.warning("Conditions for randomized selection not met.", { isRandomized, selectedReferential, themeDistributionMatchesTotal });
       setError("Veuillez sélectionner un référentiel et vous assurer que la distribution par thème correspond au total de questions visé.");
       return;
     }
@@ -262,7 +254,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
 
     const questionsOfReferential = allDbQuestions.filter(q => q.referential === selectedReferential);
     if (questionsOfReferential.length === 0) {
-      logger.warn(`No questions found for referential ${selectedReferential}.`);
+      logger.warning(`No questions found for referential ${selectedReferential}.`);
       setError(`Aucune question disponible dans la bibliothèque pour le référentiel ${selectedReferential}.`);
       setSelectedQuestionIds([]);
       return;
@@ -282,7 +274,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       newSelectedIds.push(...selectedForTheme);
 
       if (selectedForTheme.length < count) {
-        logger.warn(`Not enough questions for theme ${theme}. Wanted ${count}, got ${selectedForTheme.length}.`);
+        logger.warning(`Not enough questions for theme ${theme}. Wanted ${count}, got ${selectedForTheme.length}.`);
         unmetThemes.push(`${theme} (demandé: ${count}, trouvé: ${selectedForTheme.length})`);
       }
     }
@@ -312,7 +304,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   // TODO: Rewrite generateQuestionsForPPTX -> prepareQuestionsForPPTX (async)
   // REMOVE old generateQuestionsForPPTX placeholder
   // const generateQuestionsForPPTX = (): Question[] => {
-  // logger.warn("generateQuestionsForPPTX is using mock/outdated logic and needs to be updated.");
+  // logger.warning("generateQuestionsForPPTX is using mock/outdated logic and needs to be updated.");
   // if (!selectedReferential) return [];
   // return [];
   // };
@@ -331,33 +323,30 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       const validStoredQuestions = fetchedStoredQuestions.filter(q => q !== undefined) as StoredQuestion[];
       
       const mappedQuestions: Question[] = validStoredQuestions.map(sq => {
-        let correctAnswerValue: number;
+        // Mapper le type string vers QuestionType
+        let questionType: QuestionType;
         if (sq.type === 'multiple-choice') {
-          correctAnswerValue = sq.options.indexOf(sq.correctAnswer);
-          if (correctAnswerValue === -1) {
-            logger.warn(`Correct answer "${sq.correctAnswer}" not found in options for question ID ${sq.id}. Defaulting to 0.`);
-            correctAnswerValue = 0; // Default or error handling
-          }
-        } else { // true-false
-          // Assuming 0 for "Vrai" (True) and 1 for "Faux" (False) as per existing logic hints
-          correctAnswerValue = (sq.correctAnswer.toLowerCase() === 'vrai' || sq.correctAnswer.toLowerCase() === 'true') ? 0 : 1;
+          questionType = QuestionType.QCM; // ou QCU selon la logique
+        } else if (sq.type === 'true-false') {
+          questionType = QuestionType.TrueFalse;
+        } else {
+          questionType = QuestionType.QCM; // valeur par défaut
         }
-
+      
         return {
-          id: String(sq.id),
+          id: sq.id!.toString(),
           text: sq.text,
-          type: sq.type,
+          type: questionType, // Utiliser le type mappé
           options: sq.options,
-          correctAnswer: correctAnswerValue,
+          correctAnswer: /* votre logique existante */,
           timeLimit: sq.timeLimit,
           isEliminatory: sq.isEliminatory,
           referential: sq.referential,
           theme: sq.theme,
-          image: sq.image instanceof Blob ? URL.createObjectURL(sq.image) : undefined,
-          createdAt: sq.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(), // Placeholder, StoredQuestion does not have updatedAt
+          image: sq.image,
+          createdAt: sq.createdAt,
           usageCount: sq.usageCount,
-          correctResponseRate: sq.correctResponseRate,
+          correctResponseRate: sq.correctResponseRate
         };
       });
 
@@ -450,7 +439,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
               max={isRandomized ? (referentialLimits[selectedReferential as ReferentialType]?.max || 60) : undefined} // No max in manual based on selection
               required
               disabled={!isRandomized}
-              title={!isRandomized ? "Le total est déterminé par les questions manuellement sélectionnées." : "Nombre total de questions à générer aléatoirement."}
             />
             {isRandomized && getLimitsWarning()} {/* Show limits warning only in randomized mode */}
           </div>
@@ -599,7 +587,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
                   </div>
                   <Button
                     size="sm"
-                    variant={selectedQuestionIds.includes(question.id!) ? "destructive" : "outline"}
+                    variant={selectedQuestionIds.includes(question.id!) ? "danger" : "outline"}
                     onClick={() => {
                       setSelectedQuestionIds(prevIds =>
                         prevIds.includes(question.id!)
@@ -653,3 +641,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
 // const handleSave = ...
 
 export default QuestionnaireForm;
+export type QuestionTheme = 
+  | 'reglementation'
+  | 'securite'
+  | 'technique';
