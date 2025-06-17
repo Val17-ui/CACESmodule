@@ -6,7 +6,7 @@ import Button from '../components/ui/Button';
 import { Plus, FileUp, FileDown } from 'lucide-react';
 // Cache bust comment
 
-import { StorageManager, StoredQuestionnaire } from '../../services/StorageManager';
+import { StorageManager, StoredQuestionnaire } from '../services/StorageManager';
 
 type QuestionnairesProps = {
   activePage: string;
@@ -125,7 +125,24 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
           />
         )
       ) : (
-        <QuestionnaireForm />
+        <QuestionnaireForm
+          editingId={editingId}
+          onFormSubmit={(success) => {
+            if (success) {
+              // Refresh the questionnaires list
+              const fetchQuestionnaires = async () => {
+                try {
+                  const data = await StorageManager.getAllQuestionnaires();
+                  setQuestionnaires(data);
+                } catch (err) {
+                  console.error("Failed to refresh questionnaires:", err);
+                }
+              };
+              fetchQuestionnaires();
+            }
+          }}
+          onBackToList={handleBackToList}
+        />
       )}
     </Layout>
   );
