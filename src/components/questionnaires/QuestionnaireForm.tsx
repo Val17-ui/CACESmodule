@@ -6,7 +6,7 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import ThemeSelector from './ThemeSelector';
 import PPTXGenerator from './PPTXGenerator';
-import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits, Question } from '../../types';
+import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential } from '../../types';
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
@@ -46,21 +46,10 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   // Helper function to ensure all theme keys are present
   const ensureFullThemeDistribution = (dist: Partial<Record<QuestionTheme, number>>): Record<QuestionTheme, number> => {
     const fullDist: Record<QuestionTheme, number> = {
-      reglementation: 0,
-      securite: 0,
-      technique: 0,
+      reglementation: dist.reglementation || 0,
+      securite: dist.securite || 0,
+      technique: dist.technique || 0,
     };
-    for (const theme in QuestionTheme) { // Iterate over enum keys
-        if (isNaN(Number(theme))) { // Filter out numeric enum reverse mappings if any
-             fullDist[theme as QuestionTheme] = dist[theme as QuestionTheme] || 0;
-        }
-    }
-    // Apply provided distribution
-    for (const theme in dist) {
-      if (Object.prototype.hasOwnProperty.call(dist, theme)) {
-        fullDist[theme as QuestionTheme] = dist[theme as QuestionTheme] || 0;
-      }
-    }
     return fullDist;
   };
 
@@ -332,28 +321,30 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       
       const mappedQuestions: Question[] = validStoredQuestions.map(sq => {
         let correctAnswerValue: number;
-        if (sq.type === 'multiple-choice') {
+        // Use QuestionType enum for comparison
+        const questionType = sq.type as QuestionType;
+
+        if (questionType === QuestionType.QCM || questionType === QuestionType.QCU) {
           correctAnswerValue = sq.options.indexOf(sq.correctAnswer);
           if (correctAnswerValue === -1) {
             logger.warn(`Correct answer "${sq.correctAnswer}" not found in options for question ID ${sq.id}. Defaulting to 0.`);
-            correctAnswerValue = 0; // Default or error handling
+            correctAnswerValue = 0;
           }
-        } else { // true-false
-          // Assuming 0 for "Vrai" (True) and 1 for "Faux" (False) as per existing logic hints
+        } else { // Handles QuestionType.TrueFalse implicitly
           correctAnswerValue = (sq.correctAnswer.toLowerCase() === 'vrai' || sq.correctAnswer.toLowerCase() === 'true') ? 0 : 1;
         }
 
         return {
           id: String(sq.id),
           text: sq.text,
-          type: sq.type,
+          type: questionType, // Use the determined QuestionType
           options: sq.options,
           correctAnswer: correctAnswerValue,
           timeLimit: sq.timeLimit,
           isEliminatory: sq.isEliminatory,
-          referential: sq.referential,
+          referential: sq.referential as CACESReferential,
           theme: sq.theme,
-          image: sq.image instanceof Blob ? URL.createObjectURL(sq.image) : undefined,
+          image: sq.image || undefined, // Pass Blob or undefined
           createdAt: sq.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(), // Placeholder, StoredQuestion does not have updatedAt
           usageCount: sq.usageCount,
@@ -450,7 +441,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
               max={isRandomized ? (referentialLimits[selectedReferential as ReferentialType]?.max || 60) : undefined} // No max in manual based on selection
               required
               disabled={!isRandomized}
-              title={!isRandomized ? "Le total est déterminé par les questions manuellement sélectionnées." : "Nombre total de questions à générer aléatoirement."}
             />
             {isRandomized && getLimitsWarning()} {/* Show limits warning only in randomized mode */}
           </div>
@@ -543,7 +533,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             className="mt-4"
             onClick={handleRandomizedSelection} // Implement this function
             disabled={!selectedReferential || !themeDistributionMatchesTotal}
-            title={!selectedReferential ? "Sélectionnez d'abord un référentiel" : !themeDistributionMatchesTotal ? "Ajustez la distribution ou le total" : "Générer la sélection"}
           >
             Générer/Rafraîchir la sélection aléatoire ({selectedQuestionIds.length} questions actuellement)
           </Button>
@@ -569,7 +558,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
               className="w-1/4 text-sm"
               disabled={isRandomized} // Only enable if not randomized
               min={0}
-              title={isRandomized ? "Non applicable en mode aléatoire" : "Objectif optionnel pour la sélection manuelle"}
             />
           </div>
           {/* Placeholder for manual question selection UI */}
@@ -633,7 +621,6 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             icon={<Save size={16} />}
             disabled={isSubmitting || isLoading || (isRandomized && !themeDistributionMatchesTotal) || (isRandomized && selectedQuestionIds.length !== totalQuestions) }
             onClick={() => handleSave(false)}
-            title={ (isRandomized && !themeDistributionMatchesTotal) ? "La distribution par thème ne correspond pas au total visé." : (isRandomized && selectedQuestionIds.length !== totalQuestions) ? `La sélection aléatoire (${selectedQuestionIds.length}) ne correspond pas au total visé (${totalQuestions}). Regénérez.` : ""}
           >
             {editingQuestionnaire ? "Mettre à jour" : "Valider et enregistrer"}
           </Button>
