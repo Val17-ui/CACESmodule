@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, AlertTriangle, Shuffle, RotateCcw } from 'lucide-react';
+import { Save, AlertTriangle, Shuffle } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -9,6 +9,7 @@ import PPTXGenerator from './PPTXGenerator';
 import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential } from '../../types';
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
+import { ReferentialType, referentials, questionThemes, referentialLimits, Question, QuestionType } from '../../types';
 
 interface QuestionnaireFormProps {
   editingId?: string | null; // Changed from string | null to string | undefined for consistency
@@ -52,6 +53,9 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
     };
     return fullDist;
   };
+  
+  return fullDist;
+};
 
   const handleSave = async (isDraft: boolean) => {
     logger.info(`handleSave called. isDraft: ${isDraft}`);
@@ -241,7 +245,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
 
   const handleRandomizedSelection = async () => {
     if (!isRandomized || !selectedReferential || !themeDistributionMatchesTotal) {
-      logger.warn("Conditions for randomized selection not met.", { isRandomized, selectedReferential, themeDistributionMatchesTotal });
+      logger.warning("Conditions for randomized selection not met.", { isRandomized, selectedReferential, themeDistributionMatchesTotal });
       setError("Veuillez sélectionner un référentiel et vous assurer que la distribution par thème correspond au total de questions visé.");
       return;
     }
@@ -251,7 +255,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
 
     const questionsOfReferential = allDbQuestions.filter(q => q.referential === selectedReferential);
     if (questionsOfReferential.length === 0) {
-      logger.warn(`No questions found for referential ${selectedReferential}.`);
+      logger.warning(`No questions found for referential ${selectedReferential}.`);
       setError(`Aucune question disponible dans la bibliothèque pour le référentiel ${selectedReferential}.`);
       setSelectedQuestionIds([]);
       return;
@@ -271,7 +275,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       newSelectedIds.push(...selectedForTheme);
 
       if (selectedForTheme.length < count) {
-        logger.warn(`Not enough questions for theme ${theme}. Wanted ${count}, got ${selectedForTheme.length}.`);
+        logger.warning(`Not enough questions for theme ${theme}. Wanted ${count}, got ${selectedForTheme.length}.`);
         unmetThemes.push(`${theme} (demandé: ${count}, trouvé: ${selectedForTheme.length})`);
       }
     }
@@ -301,7 +305,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   // TODO: Rewrite generateQuestionsForPPTX -> prepareQuestionsForPPTX (async)
   // REMOVE old generateQuestionsForPPTX placeholder
   // const generateQuestionsForPPTX = (): Question[] => {
-  // logger.warn("generateQuestionsForPPTX is using mock/outdated logic and needs to be updated.");
+  // logger.warning("generateQuestionsForPPTX is using mock/outdated logic and needs to be updated.");
   // if (!selectedReferential) return [];
   // return [];
   // };
@@ -333,13 +337,14 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
         } else { // Handles QuestionType.TrueFalse implicitly
           correctAnswerValue = (sq.correctAnswer.toLowerCase() === 'vrai' || sq.correctAnswer.toLowerCase() === 'true') ? 0 : 1;
         }
-
+      
         return {
-          id: String(sq.id),
+          id: sq.id!.toString(),
           text: sq.text,
           type: questionType, // Use the determined QuestionType
+
           options: sq.options,
-          correctAnswer: correctAnswerValue,
+          correctAnswer: /* votre logique existante */,
           timeLimit: sq.timeLimit,
           isEliminatory: sq.isEliminatory,
           referential: sq.referential as CACESReferential,
@@ -348,7 +353,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           createdAt: sq.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(), // Placeholder, StoredQuestion does not have updatedAt
           usageCount: sq.usageCount,
-          correctResponseRate: sq.correctResponseRate,
+          correctResponseRate: sq.correctResponseRate
         };
       });
 
@@ -587,7 +592,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
                   </div>
                   <Button
                     size="sm"
-                    variant={selectedQuestionIds.includes(question.id!) ? "destructive" : "outline"}
+                    variant={selectedQuestionIds.includes(question.id!) ? "danger" : "outline"}
                     onClick={() => {
                       setSelectedQuestionIds(prevIds =>
                         prevIds.includes(question.id!)
@@ -640,3 +645,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
 // const handleSave = ...
 
 export default QuestionnaireForm;
+export type QuestionTheme = 
+  | 'reglementation'
+  | 'securite'
+  | 'technique';
