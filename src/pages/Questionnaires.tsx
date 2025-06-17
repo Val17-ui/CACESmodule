@@ -5,8 +5,7 @@ import QuestionnaireForm from '../components/questionnaires/QuestionnaireForm';
 import Button from '../components/ui/Button';
 import { Plus, FileUp, FileDown } from 'lucide-react';
 // Cache bust comment
-
-import { StorageManager, StoredQuestionnaire } from '../../services/StorageManager';
+import { StorageManager, StoredQuestionnaire } from '../services/StorageManager';
 
 type QuestionnairesProps = {
   activePage: string;

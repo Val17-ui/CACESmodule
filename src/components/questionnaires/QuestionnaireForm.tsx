@@ -6,7 +6,7 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import ThemeSelector from './ThemeSelector';
 import PPTXGenerator from './PPTXGenerator';
-import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential } from '../../types';
+import { ReferentialType, referentials, questionThemes, referentialLimits, Question } from '../../types';
 import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 import { ReferentialType, referentials, questionThemes, referentialLimits, Question, QuestionType } from '../../types';
@@ -44,14 +44,13 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false); // For save operations
   const [preparedPptxQuestions, setPreparedPptxQuestions] = useState<Question[]>([]);
 
-  // Helper function to ensure all theme keys are present
-  const ensureFullThemeDistribution = (dist: Partial<Record<QuestionTheme, number>>): Record<QuestionTheme, number> => {
-    const fullDist: Record<QuestionTheme, number> = {
-      reglementation: dist.reglementation || 0,
-      securite: dist.securite || 0,
-      technique: dist.technique || 0,
-    };
-    return fullDist;
+// Helper function to ensure all theme keys are present
+const ensureFullThemeDistribution = (dist: Partial<Record<QuestionTheme, number>>): Record<QuestionTheme, number> => {
+  // Option 1 : Initialiser directement avec les valeurs par défaut
+  const fullDist: Record<QuestionTheme, number> = {
+    reglementation: dist.reglementation || 0,
+    securite: dist.securite || 0,
+    technique: dist.technique || 0,
   };
   
   return fullDist;
@@ -324,34 +323,28 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       const validStoredQuestions = fetchedStoredQuestions.filter(q => q !== undefined) as StoredQuestion[];
       
       const mappedQuestions: Question[] = validStoredQuestions.map(sq => {
-        let correctAnswerValue: number;
-        // Use QuestionType enum for comparison
-        const questionType = sq.type as QuestionType;
-
-        if (questionType === QuestionType.QCM || questionType === QuestionType.QCU) {
-          correctAnswerValue = sq.options.indexOf(sq.correctAnswer);
-          if (correctAnswerValue === -1) {
-            logger.warn(`Correct answer "${sq.correctAnswer}" not found in options for question ID ${sq.id}. Defaulting to 0.`);
-            correctAnswerValue = 0;
-          }
-        } else { // Handles QuestionType.TrueFalse implicitly
-          correctAnswerValue = (sq.correctAnswer.toLowerCase() === 'vrai' || sq.correctAnswer.toLowerCase() === 'true') ? 0 : 1;
+        // Mapper le type string vers QuestionType
+        let questionType: QuestionType;
+        if (sq.type === 'multiple-choice') {
+          questionType = QuestionType.QCM; // ou QCU selon la logique
+        } else if (sq.type === 'true-false') {
+          questionType = QuestionType.TrueFalse;
+        } else {
+          questionType = QuestionType.QCM; // valeur par défaut
         }
       
         return {
           id: sq.id!.toString(),
           text: sq.text,
-          type: questionType, // Use the determined QuestionType
-
+          type: questionType, // Utiliser le type mappé
           options: sq.options,
           correctAnswer: /* votre logique existante */,
           timeLimit: sq.timeLimit,
           isEliminatory: sq.isEliminatory,
-          referential: sq.referential as CACESReferential,
+          referential: sq.referential,
           theme: sq.theme,
-          image: sq.image || undefined, // Pass Blob or undefined
-          createdAt: sq.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(), // Placeholder, StoredQuestion does not have updatedAt
+          image: sq.image,
+          createdAt: sq.createdAt,
           usageCount: sq.usageCount,
           correctResponseRate: sq.correctResponseRate
         };
@@ -538,6 +531,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             className="mt-4"
             onClick={handleRandomizedSelection} // Implement this function
             disabled={!selectedReferential || !themeDistributionMatchesTotal}
+            title={!selectedReferential ? "Sélectionnez d'abord un référentiel" : !themeDistributionMatchesTotal ? "Ajustez la distribution ou le total" : "Générer la sélection"}
           >
             Générer/Rafraîchir la sélection aléatoire ({selectedQuestionIds.length} questions actuellement)
           </Button>
@@ -563,6 +557,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
               className="w-1/4 text-sm"
               disabled={isRandomized} // Only enable if not randomized
               min={0}
+              title={isRandomized ? "Non applicable en mode aléatoire" : "Objectif optionnel pour la sélection manuelle"}
             />
           </div>
           {/* Placeholder for manual question selection UI */}
@@ -626,6 +621,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             icon={<Save size={16} />}
             disabled={isSubmitting || isLoading || (isRandomized && !themeDistributionMatchesTotal) || (isRandomized && selectedQuestionIds.length !== totalQuestions) }
             onClick={() => handleSave(false)}
+            title={ (isRandomized && !themeDistributionMatchesTotal) ? "La distribution par thème ne correspond pas au total visé." : (isRandomized && selectedQuestionIds.length !== totalQuestions) ? `La sélection aléatoire (${selectedQuestionIds.length}) ne correspond pas au total visé (${totalQuestions}). Regénérez.` : ""}
           >
             {editingQuestionnaire ? "Mettre à jour" : "Valider et enregistrer"}
           </Button>
