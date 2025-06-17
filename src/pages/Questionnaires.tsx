@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import QuestionnairesList from '../components/questionnaires/QuestionnairesList';
 import QuestionnaireForm from '../components/questionnaires/QuestionnaireForm';
 import Button from '../components/ui/Button';
 import { Plus, FileUp, FileDown } from 'lucide-react';
-import { mockQuestionnaires } from '../data/mockData';
+import { StorageManager, StoredQuestionnaire } from '../../services/StorageManager';
 
 type QuestionnairesProps = {
   activePage: string;
@@ -15,8 +15,30 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
   activePage,
   onPageChange,
 }) => {
+  const [questionnaires, setQuestionnaires] = useState<StoredQuestionnaire[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchQuestionnaires = async () => {
+      try {
+        setIsLoading(true);
+        const data = await StorageManager.getAllQuestionnaires();
+        setQuestionnaires(data);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to fetch questionnaires:", err);
+        setError("Impossible de charger les questionnaires.");
+        setQuestionnaires([]); // Set to empty array on error
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchQuestionnaires();
+  }, []);
 
   const handleCreateNew = () => {
     setIsCreating(true);
@@ -90,10 +112,16 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
       onPageChange={onPageChange}
     >
       {!isCreating && !editingId ? (
-        <QuestionnairesList
-          questionnaires={mockQuestionnaires}
-          onEditQuestionnaire={handleEditQuestionnaire}
-        />
+        isLoading ? (
+          <p>Chargement des questionnaires...</p>
+        ) : error ? (
+          <p>{error}</p>
+        ) : (
+          <QuestionnairesList
+            questionnaires={questionnaires}
+            onEditQuestionnaire={handleEditQuestionnaire}
+          />
+        )
       ) : (
         <QuestionnaireForm />
       )}

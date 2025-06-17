@@ -20,16 +20,32 @@ export interface QuestionWithId {
   correctResponseRate?: number;
 }
 
+export interface QuestionnaireWithId {
+  id?: number; // auto-incremented primary key
+  name: string;
+  referential: ReferentialType; // Or use `ReferentialType` if appropriate and already defined broadly
+  passingThreshold: number;
+  themeDistribution: Record<QuestionTheme, number>; // Or `Record<QuestionTheme, number>`
+  isRandomized: boolean;
+  eliminatoryCount: number;
+  totalQuestions: number;
+  createdAt: string;
+  updatedAt: string;
+  questionIds: number[]; // array of numbers, referencing IDs in the `questions` table
+}
+
 export class MySubClassedDexie extends Dexie {
   questions!: Table<QuestionWithId, number>; // Second type arg is the primary key type
+  questionnaires!: Table<QuestionnaireWithId, number>;
 
   constructor() {
     super('myDatabase');
     this.version(1).stores({
       // Define schema for QuestionWithId. All fields to be indexed are listed.
       // `image` (Blob) is typically not indexed directly.
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options'
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options',
       // Indexing 'options' as a multiEntry index if searching by options is needed.
+      questionnaires: '++id, name, referential, createdAt, updatedAt, *questionIds'
     });
   }
 }

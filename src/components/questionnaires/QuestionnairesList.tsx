@@ -3,10 +3,10 @@ import { FileText, Edit, Trash2, Copy } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import { Questionnaire } from '../../types';
+import { StoredQuestionnaire } from '../../services/StorageManager'; // Updated import
 
 type QuestionnairesListProps = {
-  questionnaires: Questionnaire[];
+  questionnaires: StoredQuestionnaire[]; // Updated prop type
   onEditQuestionnaire: (id: string) => void;
 };
 
@@ -68,7 +68,7 @@ const QuestionnairesList: React.FC<QuestionnairesListProps> = ({
                   <Badge variant="primary">{questionnaire.referential}</Badge>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {questionnaire.questions.length} questions
+                  {questionnaire.questionIds.length} questions
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {formatDate(questionnaire.updatedAt)}
@@ -82,7 +82,8 @@ const QuestionnairesList: React.FC<QuestionnairesListProps> = ({
                       variant="ghost"
                       size="sm"
                       icon={<Edit size={16} />}
-                      onClick={() => onEditQuestionnaire(questionnaire.id)}
+                      // Ensure id is converted to string if it's a number, as onEditQuestionnaire expects string
+                      onClick={() => onEditQuestionnaire(String(questionnaire.id))}
                     >
                       Modifier
                     </Button>

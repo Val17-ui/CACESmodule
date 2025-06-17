@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Trash2, Save, AlertTriangle, Shuffle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, Save, AlertTriangle, Shuffle, RotateCcw } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -7,21 +7,175 @@ import Select from '../ui/Select';
 import ThemeSelector from './ThemeSelector';
 import PPTXGenerator from './PPTXGenerator';
 import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits, Question } from '../../types';
-import { mockQuestions } from '../../data/mockData';
+import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
-const QuestionnaireForm: React.FC = () => {
+interface QuestionnaireFormProps {
+  editingId?: string | null; // Changed from string | null to string | undefined for consistency
+  onFormSubmit?: (success: boolean) => void; // Callback for when form is submitted
+  onBackToList?: () => void; // Callback to go back to list view
+}
+
+const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
+  editingId,
+  onFormSubmit,
+  onBackToList,
+}) => {
   const [questionnaireName, setQuestionnaireName] = useState('');
-  const [selectedReferential, setSelectedReferential] = useState<string>('');
-  const [totalQuestions, setTotalQuestions] = useState(40);
+  const [selectedReferential, setSelectedReferential] = useState<ReferentialType | ''>('');
+  const [totalQuestions, setTotalQuestions] = useState(40); // Target total for randomized, or sum of selected for manual
+  const [passingThreshold, setPassingThreshold] = useState(70); // New state
   const [showValidationWarning, setShowValidationWarning] = useState(false);
   const [isRandomized, setIsRandomized] = useState(false);
   const [eliminatoryCount, setEliminatoryCount] = useState(3);
   const [themeDistribution, setThemeDistribution] = useState<Record<QuestionTheme, number>>({
     reglementation: 15,
     securite: 15,
-    technique: 10
+    technique: 10,
   });
+
+  const [editingQuestionnaire, setEditingQuestionnaire] = useState<StoredQuestionnaire | null>(null);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<number[]>([]);
+  const [allDbQuestions, setAllDbQuestions] = useState<StoredQuestion[]>([]);
+
+  const [isLoading, setIsLoading] = useState(true); // For initial data loading
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // For save operations
+  const [preparedPptxQuestions, setPreparedPptxQuestions] = useState<Question[]>([]);
+
+  // Helper function to ensure all theme keys are present
+  const ensureFullThemeDistribution = (dist: Partial<Record<QuestionTheme, number>>): Record<QuestionTheme, number> => {
+    const fullDist: Record<QuestionTheme, number> = {
+      reglementation: 0,
+      securite: 0,
+      technique: 0,
+    };
+    for (const theme in QuestionTheme) { // Iterate over enum keys
+        if (isNaN(Number(theme))) { // Filter out numeric enum reverse mappings if any
+             fullDist[theme as QuestionTheme] = dist[theme as QuestionTheme] || 0;
+        }
+    }
+    // Apply provided distribution
+    for (const theme in dist) {
+      if (Object.prototype.hasOwnProperty.call(dist, theme)) {
+        fullDist[theme as QuestionTheme] = dist[theme as QuestionTheme] || 0;
+      }
+    }
+    return fullDist;
+  };
+
+  const handleSave = async (isDraft: boolean) => {
+    logger.info(`handleSave called. isDraft: ${isDraft}`);
+    if (!selectedReferential) {
+      setError("Veuillez sélectionner un référentiel.");
+      return;
+    }
+    if (!questionnaireName.trim()) {
+      setError("Veuillez donner un nom au questionnaire.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    const now = new Date().toISOString();
+
+    const finalTotalQuestions = isRandomized ? totalQuestions : selectedQuestionIds.length;
+    const fullThemeDistribution = ensureFullThemeDistribution(themeDistribution);
+
+    const questionnaireData = {
+      name: questionnaireName,
+      referential: selectedReferential as ReferentialType,
+      passingThreshold,
+      themeDistribution: fullThemeDistribution,
+      isRandomized,
+      eliminatoryCount,
+      totalQuestions: finalTotalQuestions,
+      questionIds: selectedQuestionIds,
+      // status: isDraft ? 'draft' : 'final', // TODO: consider adding a status field to StoredQuestionnaire
+    };
+
+    try {
+      if (editingQuestionnaire && editingQuestionnaire.id !== undefined) {
+        // Ensure 'id' is not part of the payload for an update
+        const updatePayload = { ...questionnaireData, updatedAt: now };
+        await StorageManager.updateQuestionnaire(editingQuestionnaire.id, updatePayload);
+        logger.info(`Questionnaire ${editingQuestionnaire.id} updated.`);
+      } else {
+        const addPayload = { ...questionnaireData, createdAt: now, updatedAt: now };
+        const newId = await StorageManager.addQuestionnaire(addPayload);
+        logger.info(`New questionnaire added with ID: ${newId}`);
+      }
+      if (onFormSubmit) onFormSubmit(true);
+      if (onBackToList) onBackToList();
+    } catch (err) {
+      logger.error("Failed to save questionnaire:", err);
+      setError("Erreur lors de l'enregistrement du questionnaire.");
+      if (onFormSubmit) onFormSubmit(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Fetch all questions from DB on mount
+  useEffect(() => {
+    const fetchAllQuestions = async () => {
+      try {
+        const questions = await StorageManager.getAllQuestions();
+        setAllDbQuestions(questions);
+      } catch (err) {
+        logger.error("Failed to fetch all questions:", err);
+        // This error is not critical for form display, but might affect question selection
+        setError("Erreur lors du chargement de la bibliothèque de questions.");
+      }
+    };
+    fetchAllQuestions();
+  }, []);
+
+  // Load existing questionnaire data if editingId is provided
+  useEffect(() => {
+    if (editingId) {
+      setIsLoading(true);
+      const loadQuestionnaire = async () => {
+        try {
+          const id = parseInt(editingId);
+          const questionnaire = await StorageManager.getQuestionnaireById(id);
+          if (questionnaire) {
+            setEditingQuestionnaire(questionnaire);
+            setQuestionnaireName(questionnaire.name);
+            setSelectedReferential(questionnaire.referential as ReferentialType);
+            setTotalQuestions(questionnaire.totalQuestions);
+            setPassingThreshold(questionnaire.passingThreshold);
+            setEliminatoryCount(questionnaire.eliminatoryCount);
+            setThemeDistribution(ensureFullThemeDistribution(questionnaire.themeDistribution));
+            setIsRandomized(questionnaire.isRandomized);
+            setSelectedQuestionIds(questionnaire.questionIds || []);
+            setError(null);
+          } else {
+            setError(`Questionnaire avec ID ${id} non trouvé.`);
+            if (onBackToList) onBackToList(); // Navigate back if not found
+          }
+        } catch (err) {
+          logger.error("Failed to load questionnaire:", err);
+          setError("Impossible de charger le questionnaire pour modification.");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      loadQuestionnaire();
+    } else {
+      setIsLoading(false); // Not loading anything if no ID
+      // Reset form for new questionnaire
+      setQuestionnaireName('');
+      setSelectedReferential('');
+      setTotalQuestions(40);
+      setPassingThreshold(70);
+      setEliminatoryCount(3);
+      setThemeDistribution(ensureFullThemeDistribution({ reglementation: 15, securite: 15, technique: 10 }));
+      setIsRandomized(false);
+      setSelectedQuestionIds([]);
+      setEditingQuestionnaire(null);
+    }
+  }, [editingId, onBackToList]);
   
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -33,12 +187,13 @@ const QuestionnaireForm: React.FC = () => {
     setSelectedReferential(referential);
     logger.info(`Référentiel sélectionné: ${referential}`);
     
-    // Update total questions based on referential limits
     if (referential && referentialLimits[referential]) {
       const defaultTotal = Math.min(40, referentialLimits[referential].max);
-      setTotalQuestions(defaultTotal);
+      // Only update totalQuestions if it's not already set by an editing questionnaire
+      if (!editingId) {
+        setTotalQuestions(defaultTotal);
+      }
     }
-    
     setShowValidationWarning(referential === 'R482');
   };
 
@@ -46,7 +201,6 @@ const QuestionnaireForm: React.FC = () => {
     const value = parseInt(e.target.value) || 0;
     setTotalQuestions(value);
     
-    // Check limits
     if (selectedReferential && referentialLimits[selectedReferential as ReferentialType]) {
       const limits = referentialLimits[selectedReferential as ReferentialType];
       if (value < limits.min || value > limits.max) {
@@ -56,51 +210,176 @@ const QuestionnaireForm: React.FC = () => {
   };
 
   const handleThemeDistributionChange = (theme: QuestionTheme, count: number) => {
-    setThemeDistribution(prev => ({
+    setThemeDistribution(prev => ensureFullThemeDistribution({ // Ensure it's always complete
       ...prev,
       [theme]: count
     }));
   };
 
   const handleRandomizeToggle = () => {
-    setIsRandomized(!isRandomized);
-    logger.info(`Mode aléatoire ${!isRandomized ? 'activé' : 'désactivé'}`);
+    const newIsRandomized = !isRandomized;
+    setIsRandomized(newIsRandomized);
+    logger.info(`Mode aléatoire ${newIsRandomized ? 'activé' : 'désactivé'}`);
+    if (!newIsRandomized) {
+      // If switching to manual, actual total questions is length of selected IDs
+      setTotalQuestions(selectedQuestionIds.length);
+    } else {
+      // If switching to random, reset totalQuestions to a default or a sum of theme distribution.
+      // For now, let's make it sum of current theme distribution, or a default like 40 if sum is 0.
+      const sumOfThemes = Object.values(themeDistribution).reduce((s, c) => s + c, 0);
+      setTotalQuestions(sumOfThemes > 0 ? sumOfThemes : 40);
+    }
   };
 
-  const currentTotal = Object.values(themeDistribution).reduce((sum, count) => sum + count, 0);
-  const isOverTotal = currentTotal > totalQuestions;
-  const isUnderTotal = currentTotal < totalQuestions;
+  // currentTotalForDisplay is used for UI warnings and info.
+  // If randomized, it's the sum of theme distribution.
+  // If manual, it's the count of selected questions.
+  const currentTotalForDisplay = isRandomized
+    ? Object.values(themeDistribution).reduce((s, c) => s + c, 0)
+    : selectedQuestionIds.length;
 
-  // Générer les questions pour le PPTX (simulation basée sur la distribution)
-  const generateQuestionsForPPTX = (): Question[] => {
-    if (!selectedReferential) return [];
-    
-    // Filtrer les questions par référentiel
-    const availableQuestions = mockQuestions.filter(q => q.referential === selectedReferential);
-    
-    if (availableQuestions.length === 0) return [];
-    
-    const selectedQuestions: Question[] = [];
-    
-    // Pour chaque thème, sélectionner le nombre de questions demandé
-    Object.entries(themeDistribution).forEach(([theme, count]) => {
-      const themeQuestions = availableQuestions.filter(q => q.theme === theme);
-      
-      for (let i = 0; i < count && i < themeQuestions.length; i++) {
-        // Convertir en format Vrai/Faux pour OMBEA
-        const originalQuestion = themeQuestions[i % themeQuestions.length];
-        const convertedQuestion: Question = {
-          ...originalQuestion,
-          type: 'true-false',
-          options: ['Vrai', 'Faux'],
-          correctAnswer: Math.random() > 0.5 ? 0 : 1 // Simulation aléatoire pour la démo
-        };
-        selectedQuestions.push(convertedQuestion);
+  // This state indicates if the sum of theme distribution matches the target totalQuestions in randomized mode.
+  const themeDistributionMatchesTotal = isRandomized ? currentTotalForDisplay === totalQuestions : true;
+
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  };
+
+  const handleRandomizedSelection = async () => {
+    if (!isRandomized || !selectedReferential || !themeDistributionMatchesTotal) {
+      logger.warn("Conditions for randomized selection not met.", { isRandomized, selectedReferential, themeDistributionMatchesTotal });
+      setError("Veuillez sélectionner un référentiel et vous assurer que la distribution par thème correspond au total de questions visé.");
+      return;
+    }
+
+    logger.info("Starting randomized question selection...");
+    setError(null); // Clear previous errors
+
+    const questionsOfReferential = allDbQuestions.filter(q => q.referential === selectedReferential);
+    if (questionsOfReferential.length === 0) {
+      logger.warn(`No questions found for referential ${selectedReferential}.`);
+      setError(`Aucune question disponible dans la bibliothèque pour le référentiel ${selectedReferential}.`);
+      setSelectedQuestionIds([]);
+      return;
+    }
+
+    let newSelectedIds: number[] = [];
+    let unmetThemes: string[] = [];
+
+    for (const [themeStr, count] of Object.entries(themeDistribution)) {
+      const theme = themeStr as QuestionTheme;
+      if (count === 0) continue;
+
+      const questionsOfTheme = questionsOfReferential.filter(q => q.theme === theme);
+      const shuffledThemeQuestions = shuffleArray(questionsOfTheme);
+
+      const selectedForTheme = shuffledThemeQuestions.slice(0, count).map(q => q.id!);
+      newSelectedIds.push(...selectedForTheme);
+
+      if (selectedForTheme.length < count) {
+        logger.warn(`Not enough questions for theme ${theme}. Wanted ${count}, got ${selectedForTheme.length}.`);
+        unmetThemes.push(`${theme} (demandé: ${count}, trouvé: ${selectedForTheme.length})`);
       }
-    });
+    }
     
-    return selectedQuestions.slice(0, totalQuestions);
+    // Remove duplicates that could arise if a question somehow fits multiple specified theme entries (though unlikely with current enum)
+    newSelectedIds = [...new Set(newSelectedIds)];
+
+    // Ensure the total count does not exceed totalQuestions, though themeDistributionMatchesTotal should prevent this.
+    // This is more of a safeguard or if logic changes.
+    if (newSelectedIds.length > totalQuestions) {
+        logger.info(`Random selection exceeded target of ${totalQuestions}, truncating to ${totalQuestions} questions.`);
+        // This truncation should ideally be smart, e.g. proportionally from themes, but simple slice for now.
+        newSelectedIds = shuffleArray(newSelectedIds).slice(0, totalQuestions);
+    }
+    
+    setSelectedQuestionIds(newSelectedIds);
+    logger.info("Randomized selection complete. Selected IDs:", newSelectedIds);
+
+    if (unmetThemes.length > 0) {
+      setError(`Certains thèmes n'ont pas pu être remplis: ${unmetThemes.join(', ')}. Total sélectionné: ${newSelectedIds.length}.`);
+    } else if (newSelectedIds.length < totalQuestions) {
+      setError(`Moins de questions sélectionnées (${newSelectedIds.length}) que le total visé (${totalQuestions}) dû à un manque de questions disponibles.`);
+    }
   };
+
+
+  // TODO: Rewrite generateQuestionsForPPTX -> prepareQuestionsForPPTX (async)
+  // REMOVE old generateQuestionsForPPTX placeholder
+  // const generateQuestionsForPPTX = (): Question[] => {
+  // logger.warn("generateQuestionsForPPTX is using mock/outdated logic and needs to be updated.");
+  // if (!selectedReferential) return [];
+  // return [];
+  // };
+
+  const prepareQuestionsForPPTX = async (currentQuestionIds: number[]): Promise<Question[]> => {
+    if (!selectedReferential || currentQuestionIds.length === 0) {
+      return [];
+    }
+    
+    logger.info("Preparing questions for PPTX generation from IDs:", currentQuestionIds);
+
+    try {
+      const questionPromises = currentQuestionIds.map(id => StorageManager.getQuestionById(id));
+      const fetchedStoredQuestions = await Promise.all(questionPromises);
+
+      const validStoredQuestions = fetchedStoredQuestions.filter(q => q !== undefined) as StoredQuestion[];
+      
+      const mappedQuestions: Question[] = validStoredQuestions.map(sq => {
+        let correctAnswerValue: number;
+        if (sq.type === 'multiple-choice') {
+          correctAnswerValue = sq.options.indexOf(sq.correctAnswer);
+          if (correctAnswerValue === -1) {
+            logger.warn(`Correct answer "${sq.correctAnswer}" not found in options for question ID ${sq.id}. Defaulting to 0.`);
+            correctAnswerValue = 0; // Default or error handling
+          }
+        } else { // true-false
+          // Assuming 0 for "Vrai" (True) and 1 for "Faux" (False) as per existing logic hints
+          correctAnswerValue = (sq.correctAnswer.toLowerCase() === 'vrai' || sq.correctAnswer.toLowerCase() === 'true') ? 0 : 1;
+        }
+
+        return {
+          id: String(sq.id),
+          text: sq.text,
+          type: sq.type,
+          options: sq.options,
+          correctAnswer: correctAnswerValue,
+          timeLimit: sq.timeLimit,
+          isEliminatory: sq.isEliminatory,
+          referential: sq.referential,
+          theme: sq.theme,
+          image: sq.image instanceof Blob ? URL.createObjectURL(sq.image) : undefined,
+          createdAt: sq.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(), // Placeholder, StoredQuestion does not have updatedAt
+          usageCount: sq.usageCount,
+          correctResponseRate: sq.correctResponseRate,
+        };
+      });
+
+      logger.info("Successfully prepared questions for PPTX:", mappedQuestions);
+      return mappedQuestions;
+
+    } catch (err) {
+      logger.error("Error preparing questions for PPTX:", err);
+      setError("Erreur lors de la préparation des questions pour l'export PPTX.");
+      return [];
+    }
+  };
+
+  // Effect to update PPTX questions when selectedQuestionIds changes
+  useEffect(() => {
+    if (selectedQuestionIds.length > 0) {
+      prepareQuestionsForPPTX(selectedQuestionIds).then(setPreparedPptxQuestions);
+    } else {
+      setPreparedPptxQuestions([]);
+    }
+  }, [selectedQuestionIds, selectedReferential]); // Re-run if referential also changes, as it might affect question validity
+
 
   const getLimitsWarning = () => {
     if (!selectedReferential || !referentialLimits[selectedReferential as ReferentialType]) {
@@ -127,11 +406,19 @@ const QuestionnaireForm: React.FC = () => {
   };
 
   // Vérifier si on peut générer le PPTX
-  const canGeneratePPTX = questionnaireName.trim() && selectedReferential && currentTotal > 0;
-  const generatedQuestions = canGeneratePPTX ? generateQuestionsForPPTX() : [];
+  // Use preparedPptxQuestions.length and selectedReferential for condition
+  const canGeneratePPTX = questionnaireName.trim() !== '' && selectedReferential !== '' && preparedPptxQuestions.length > 0;
+  // REMOVE: const generatedQuestions = canGeneratePPTX ? generateQuestionsForPPTX() : [];
 
   return (
     <div>
+      {/* Display loading state for the whole form if initial questionnaire data is loading */}
+      {editingId && isLoading && <p className="text-center my-4">Chargement des données du questionnaire...</p>}
+      {/* Display error if initial loading failed AND not currently submitting */}
+      {error && !isSubmitting && <p className="text-red-500 mb-4 p-3 bg-red-100 border border-red-400 rounded">{error}</p>}
+
+      {!isLoading && (
+      <>
       <Card title="Informations générales" className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Input
@@ -157,19 +444,23 @@ const QuestionnaireForm: React.FC = () => {
             <Input
               label="Nombre total de questions"
               type="number"
-              value={totalQuestions}
+              value={isRandomized ? totalQuestions : selectedQuestionIds.length}
               onChange={handleTotalQuestionsChange}
-              min={10}
-              max={60}
+              min={isRandomized ? (referentialLimits[selectedReferential as ReferentialType]?.min || 10) : 0}
+              max={isRandomized ? (referentialLimits[selectedReferential as ReferentialType]?.max || 60) : undefined} // No max in manual based on selection
               required
+              disabled={!isRandomized}
+              title={!isRandomized ? "Le total est déterminé par les questions manuellement sélectionnées." : "Nombre total de questions à générer aléatoirement."}
             />
-            {getLimitsWarning()}
+            {isRandomized && getLimitsWarning()} {/* Show limits warning only in randomized mode */}
           </div>
           
           <Input
             label="Seuil de réussite (%)"
             type="number"
             placeholder="Ex: 70"
+            value={passingThreshold}
+            onChange={(e) => setPassingThreshold(parseInt(e.target.value) || 0)}
             min={0}
             max={100}
             required
@@ -222,148 +513,143 @@ const QuestionnaireForm: React.FC = () => {
         selectedReferential={selectedReferential}
       />
 
-      {/* Générateur PPTX - Affiché seulement si les conditions sont remplies */}
+      {/* Générateur PPTX - Affiché seulement si conditions are met and questions are prepared */}
       {canGeneratePPTX && (
         <PPTXGenerator
-          questions={generatedQuestions}
+          questions={preparedPptxQuestions} // USE THE NEW STATE HERE
           questionnaireName={questionnaireName}
           referential={selectedReferential}
         />
       )}
       
-      {!isRandomized && (
-        <Card title="Questions manuelles" className="mb-6">
+      {/* Section for selecting questions - UI to be implemented based on isRandomized */}
+      {isRandomized ? (
+        <Card title="Configuration de la randomisation" className="mb-6">
+          <p className="text-sm text-gray-600">
+            Les questions seront sélectionnées aléatoirement depuis la bibliothèque
+            en fonction du référentiel et de la distribution par thème ci-dessus.
+            Le nombre total de questions visé est de {totalQuestions}.
+            Actuellement, la distribution par thème totalise {currentTotalForDisplay}.
+          </p>
+          {!themeDistributionMatchesTotal && (
+            <p className="text-sm text-amber-600 mt-2">
+              Attention : La somme de la distribution par thème ({currentTotalForDisplay})
+              ne correspond pas au nombre total de questions visé ({totalQuestions}). Veuillez ajuster.
+            </p>
+          )}
+          <Button
+            variant="outline"
+            icon={<Shuffle size={16}/>}
+            className="mt-4"
+            onClick={handleRandomizedSelection} // Implement this function
+            disabled={!selectedReferential || !themeDistributionMatchesTotal}
+            title={!selectedReferential ? "Sélectionnez d'abord un référentiel" : !themeDistributionMatchesTotal ? "Ajustez la distribution ou le total" : "Générer la sélection"}
+          >
+            Générer/Rafraîchir la sélection aléatoire ({selectedQuestionIds.length} questions actuellement)
+          </Button>
+           {selectedQuestionIds.length > 0 && isRandomized && (
+              <div className="mt-2 text-xs">
+                IDs générés: {selectedQuestionIds.join(', ')}
+              </div>
+            )}
+        </Card>
+      ) : (
+        // Manual selection section
+        <Card title="Sélection manuelle des questions" className="mb-6">
           <div className="mb-4 flex justify-between items-center">
             <h4 className="text-sm font-medium text-gray-700">
-              Questions sélectionnées ({currentTotal}/{totalQuestions})
+              Questions sélectionnées ({selectedQuestionIds.length})
             </h4>
-            {(isOverTotal || isUnderTotal) && (
-              <span className={`text-sm ${isOverTotal ? 'text-red-600' : 'text-amber-600'}`}>
-                {isOverTotal ? 'Trop de questions sélectionnées' : 'Questions manquantes'}
-              </span>
+            {/* Input for total questions might be disabled or hidden in manual mode */}
+            <Input
+              label="Objectif (optionnel)"
+              type="number"
+              value={totalQuestions} // This is the "target" for manual, distinct from the auto-calculated total
+              onChange={handleTotalQuestionsChange}
+              className="w-1/4 text-sm"
+              disabled={isRandomized} // Only enable if not randomized
+              min={0}
+              title={isRandomized ? "Non applicable en mode aléatoire" : "Objectif optionnel pour la sélection manuelle"}
+            />
+          </div>
+          {/* Placeholder for manual question selection UI */}
+          <div className="p-4 border border-dashed border-gray-300 rounded-lg text-center">
+            <p className="text-sm text-gray-500">
+              Interface de sélection manuelle des questions à implémenter ici.
+              <br />
+              Afficher les questions de `allDbQuestions` (filtrées par référentiel: {selectedReferential || 'aucun'}) et permettre la sélection.
+              <br />
+              Nombre de questions dans la bibliothèque pour ce référentiel: {allDbQuestions.filter(q => q.referential === selectedReferential).length}
+            </p>
+            {/* Example: List selected question IDs */}
+            {selectedQuestionIds.length > 0 && (
+              <div className="mt-2 text-xs text-gray-500">
+                IDs des questions sélectionnées: {selectedQuestionIds.join(', ')}
+              </div>
             )}
-          </div>
-
-          <div className="mb-4 p-4 border border-gray-200 rounded-lg">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex-1">
-                <Input
-                  label="Texte de la question"
-                  placeholder="Entrez le texte de la question..."
-                  required
-                />
-              </div>
-              <div className="ml-4 mt-6">
-                <Button variant="outline" icon={<Trash2 size={16} />} />
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <Select
-                label="Type de question"
-                options={[
-                  { value: 'multiple-choice', label: 'Choix multiple' },
-                  { value: 'true-false', label: 'Vrai/Faux' },
-                ]}
-                placeholder="Sélectionner"
-                required
-              />
-              
-              <Select
-                label="Thème"
-                options={Object.entries(questionThemes).map(([value, label]) => ({
-                  value,
-                  label
-                }))}
-                placeholder="Sélectionner"
-                required
-              />
-              
-              <Input
-                label="Temps (secondes)"
-                type="number"
-                placeholder="Ex: 30"
-                min={5}
-                required
-              />
-            </div>
-            
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Options de réponse
-                </label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  icon={<Plus size={16} />}
-                  className="text-sm"
-                >
-                  Ajouter option
-                </Button>
-              </div>
-              
-              <div className="space-y-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="flex-shrink-0">
-                      <input
-                        type="radio"
-                        name="correctAnswer"
-                        className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <Input
-                        placeholder={`Option ${i}`}
-                        className="mb-0"
-                      />
-                    </div>
-                    <div className="flex-shrink-0">
-                      <Button variant="ghost" size="sm" icon={<Trash2 size={16} />} />
-                    </div>
+            <div className="mt-4 max-h-96 overflow-y-auto border border-gray-200 rounded-md">
+              {allDbQuestions.filter(q => q.referential === selectedReferential).length === 0 && selectedReferential && (
+                <p className="p-4 text-sm text-gray-500">Aucune question disponible pour le référentiel "{selectedReferential}" dans la bibliothèque.</p>
+              )}
+              {allDbQuestions.filter(q => q.referential === selectedReferential).map(question => (
+                <div key={question.id} className="flex items-center justify-between p-3 border-b border-gray-100 hover:bg-gray-50">
+                  <div className="text-sm">
+                    <span className="font-medium text-gray-800">{question.text.substring(0, 100)}{question.text.length > 100 ? '...' : ''}</span>
+                    <span className="ml-2 text-xs text-gray-500">({question.theme} - ID: {question.id})</span>
                   </div>
-                ))}
-              </div>
-            </div>
-            
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="isEliminatoryQuestion"
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="isEliminatoryQuestion" className="ml-2 block text-sm text-gray-700">
-                Question éliminatoire (sécurité critique)
-              </label>
+                  <Button
+                    size="sm"
+                    variant={selectedQuestionIds.includes(question.id!) ? "destructive" : "outline"}
+                    onClick={() => {
+                      setSelectedQuestionIds(prevIds =>
+                        prevIds.includes(question.id!)
+                          ? prevIds.filter(id => id !== question.id!)
+                          : [...prevIds, question.id!]
+                      );
+                    }}
+                  >
+                    {selectedQuestionIds.includes(question.id!) ? "Retirer" : "Ajouter"}
+                  </Button>
+                </div>
+              ))}
+              {!selectedReferential && (
+                 <p className="p-4 text-sm text-gray-500">Veuillez d'abord sélectionner un référentiel pour voir les questions disponibles.</p>
+              )}
             </div>
           </div>
-          
-          <Button 
-            variant="outline" 
-            icon={<Plus size={16} />}
-            className="w-full"
-          >
-            Ajouter une question
-          </Button>
         </Card>
       )}
       
-      <div className="flex justify-between items-center">
-        <Button variant="outline">
-          Annuler
+      <div className="flex justify-between items-center mt-8">
+        <Button variant="outline" onClick={onBackToList} disabled={isSubmitting || isLoading}>
+          {editingId ? "Annuler les modifications" : "Annuler"}
         </Button>
         <div className="space-x-3">
-          <Button variant="outline" icon={<Save size={16} />}>
+          <Button variant="outline" icon={<Save size={16} />} disabled={isSubmitting || isLoading} onClick={() => handleSave(true)} >
             Enregistrer brouillon
           </Button>
-          <Button variant="primary" icon={<Save size={16} />}>
-            Valider et enregistrer
+          <Button
+            variant="primary"
+            icon={<Save size={16} />}
+            disabled={isSubmitting || isLoading || (isRandomized && !themeDistributionMatchesTotal) || (isRandomized && selectedQuestionIds.length !== totalQuestions) }
+            onClick={() => handleSave(false)}
+            title={ (isRandomized && !themeDistributionMatchesTotal) ? "La distribution par thème ne correspond pas au total visé." : (isRandomized && selectedQuestionIds.length !== totalQuestions) ? `La sélection aléatoire (${selectedQuestionIds.length}) ne correspond pas au total visé (${totalQuestions}). Regénérez.` : ""}
+          >
+            {editingQuestionnaire ? "Mettre à jour" : "Valider et enregistrer"}
           </Button>
         </div>
       </div>
+      {/* {isLoading && <p className="text-center my-4">Chargement du formulaire...</p>} */}
+      {isSubmitting && <p className="text-center my-4">Enregistrement en cours...</p>}
+      {/* Error display is now at the top when not submitting */}
+      </>
+      )}
     </div>
   );
 };
+
+// REMOVE THESE FUNCTIONS FROM HERE - THEY ARE NOW INSIDE THE COMPONENT
+// const ensureFullThemeDistribution = ...
+// const handleSave = ...
 
 export default QuestionnaireForm;
