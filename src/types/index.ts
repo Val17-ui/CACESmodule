@@ -45,6 +45,8 @@ export interface Question {
   theme: QuestionTheme;
   image?: Blob;
   createdAt?: string;
+  updatedAt?: string; // Added
+  lastUsedAt?: string; // Added
   usageCount?: number;
   correctResponseRate?: number;
 }
