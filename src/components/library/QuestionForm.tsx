@@ -14,28 +14,69 @@ import { logger } from '../../utils/logger';
 interface QuestionFormProps {
   onSave: (question: StoredQuestion) => void;
   onCancel: () => void;
-  questionId?: number | null; // For editing existing questions, changed to number
+  questionId?: number | null;
+  forcedReferential?: CACESReferential; // New prop
+  initialData?: Partial<Omit<StoredQuestion, 'id'>>; // New prop for pre-filling
 }
 
-const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionId }) => {
-  const initialQuestionState: StoredQuestion = {
-    text: '',
-    type: QuestionType.QCM,
-    options: ['', '', '', ''],
-    correctAnswer: '',
-    timeLimit: 30,
-    isEliminatory: false,
-    referential: CACESReferential.R489,
-    theme: 'reglementation',
-    image: undefined,
-    createdAt: new Date().toISOString(),
-    usageCount: 0,
-    correctResponseRate: 0
+const QuestionForm: React.FC<QuestionFormProps> = ({
+  onSave,
+  onCancel,
+  questionId,
+  forcedReferential, // Destructure new prop
+  initialData // Destructure new prop
+}) => {
+  const getInitialState = (): StoredQuestion => {
+    // Default base state using string literal types as required by StoredQuestion
+    let baseState: StoredQuestion = {
+      text: '',
+      type: 'multiple-choice',
+      options: ['', '', '', ''],
+      correctAnswer: '', // Default for 'multiple-choice' should be an index string e.g. "0"
+      timeLimit: 30,
+      isEliminatory: false,
+      referential: CACESReferential.R489,
+      theme: 'reglementation',
+      image: undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      usageCount: 0,
+      correctResponseRate: 0
+    };
+
+    if (initialData) {
+      const { type: initialDataType, ...restInitialData } = initialData;
+      let mappedType = baseState.type; // Default to baseState's type
+
+      if (initialDataType !== undefined) { // Check if type is actually provided in initialData
+        if (initialDataType === QuestionType.QCM || initialDataType === QuestionType.QCU) {
+          mappedType = 'multiple-choice';
+        } else if (initialDataType === QuestionType.TRUE_FALSE) {
+          mappedType = 'true-false';
+        } else {
+          // This case implies initialData.type is a string but not one of the QuestionType enum members
+          // or it's a QuestionType member not handled above (e.g. TEXT)
+          // If initialDataType is already a valid StoredQuestion['type'] string, it could be used directly
+          // For safety, if it's an unmapped QuestionType enum or unexpected value, log and use default.
+          logger.warn(`Initial data has unmapped or incompatible question type: ${initialDataType}. Using default type '${mappedType}'.`);
+        }
+      }
+      baseState = { ...baseState, ...restInitialData, type: mappedType };
+    }
+
+    if (forcedReferential) { // `forcedReferential` overrides any other referential
+      baseState.referential = forcedReferential;
+    }
+    return baseState;
   };
 
-  const [question, setQuestion] = useState<StoredQuestion>(initialQuestionState); // Changed to StoredQuestion
+  const [question, setQuestion] = useState<StoredQuestion>(getInitialState);
+  // Initialize hasImage, imageFile, imagePreview based on the 'question' state,
+  // which is now correctly initialized by getInitialState().
+  // This will be handled by the useEffect hook that depends on 'questionId' and 'initialData'
+  // or might need a separate useEffect for 'question.image' if 'question' itself is the source of truth.
+  // For now, let's rely on the main useEffect to set these up after 'question' state is stable.
   const [hasImage, setHasImage] = useState(false);
-
   const [imageFile, setImageFile] = useState<Blob | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -111,10 +152,76 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
       setImagePreview(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionId]); // imagePreview is intentionally omitted to prevent re-fetch loops; its cleanup is handled by its own useEffect
+  }, [questionId, forcedReferential]); // Ensure effect runs if forcedReferential changes
+
+  // Effect to initialize/reset form based on questionId, initialData, and forcedReferential
+  useEffect(() => {
+    if (questionId) { // Editing existing question
+      setIsLoading(true);
+      StorageManager.getQuestionById(questionId)
+        .then(existingQuestion => {
+          if (existingQuestion) {
+            let questionToSet = { ...existingQuestion };
+            if (forcedReferential) {
+              questionToSet.referential = forcedReferential;
+            }
+            setQuestion(questionToSet);
+
+            if (questionToSet.image instanceof Blob) {
+              if (imagePreview) URL.revokeObjectURL(imagePreview);
+              setHasImage(true);
+              setImageFile(questionToSet.image);
+              setImagePreview(URL.createObjectURL(questionToSet.image));
+            } else {
+              if (imagePreview) URL.revokeObjectURL(imagePreview);
+              setHasImage(false);
+              setImageFile(null);
+              setImagePreview(null);
+            }
+          } else {
+            logger.error(`Question with id ${questionId} not found. Resetting form.`);
+            setQuestion(getInitialState()); // Uses initialData & forcedReferential from closure
+            if (imagePreview) URL.revokeObjectURL(imagePreview);
+            setHasImage(false); setImageFile(null); setImagePreview(null);
+          }
+        })
+        .catch(error => {
+          logger.error("Error fetching question: ", error);
+          setQuestion(getInitialState()); // Reset on error
+          if (imagePreview) URL.revokeObjectURL(imagePreview);
+          setHasImage(false); setImageFile(null); setImagePreview(null);
+        })
+        .finally(() => setIsLoading(false));
+    } else { // Creating a new question or re-initializing
+      const newInitialState = getInitialState(); // Recalculate initial state
+      setQuestion(newInitialState);
+
+      if (imagePreview) URL.revokeObjectURL(imagePreview); // Clean up previous preview
+
+      if (newInitialState.image instanceof Blob) {
+        setHasImage(true);
+        setImageFile(newInitialState.image);
+        setImagePreview(URL.createObjectURL(newInitialState.image));
+      } else {
+        setHasImage(false);
+        setImageFile(null);
+        setImagePreview(null);
+      }
+    }
+  // Adding initialData to dependencies is tricky as it's an object.
+  // getInitialState is stable due to useCallback or being defined outside if props don't change.
+  // However, getInitialState itself depends on initialData and forcedReferential from the closure.
+  // Keying the component or using a more sophisticated effect dependency management might be needed if initialData could change dynamically for an *open* form for a new question.
+  // For now, assuming initialData is primarily for the *first* setup of a new question form.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionId, forcedReferential]); // Note: initialData is not listed to avoid re-runs if its reference changes but content is same.
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    // Prevent changing referential if it's forced
+    if (name === 'referential' && forcedReferential) {
+      return;
+    }
     setQuestion(prev => ({ ...prev, [name]: name === 'timeLimit' ? parseInt(value, 10) : value }));
   };
 
@@ -276,10 +383,12 @@ const QuestionForm: React.FC<QuestionFormProps> = ({ onSave, onCancel, questionI
           <Select
             label="Recommandation CACES"
             options={referentialOptions}
-            value={question.referential}
-            onChange={(e) => setQuestion(prev => ({...prev, referential: e.target.value as CACESReferential}))}
+            value={question.referential} // This will be correctly set by getInitialState or useEffect
+            onChange={handleInputChange} // Use existing handleInputChange which has protection
+            name="referential" // Ensure name is set for handleInputChange
             placeholder="Sélectionner une recommandation"
             required
+            disabled={!!forcedReferential} // Disable if referential is forced
           />
           <Select
             label="Thème"
