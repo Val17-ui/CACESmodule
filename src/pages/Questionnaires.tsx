@@ -216,12 +216,37 @@ const Questionnaires: React.FC<QuestionnairesProps> = ({
           />
         )
       ) : (
-        // Render the new QuestionnaireForm. It does not take props like editingId, onFormSubmit, onBackToList yet.
-        // The onBackToList for the parent page's "Retour à la liste" button will still work.
-        // We will later integrate props and handlers into the new form.
-        <QuestionnaireForm />
-      )}
-    </Layout>
++        // Restore passing of props to QuestionnaireForm
++        <QuestionnaireForm
++          editingId={editingId}
++          onFormSubmit={(success) => {
++            if (success) {
++              logger.info("Form submission successful, refreshing questionnaire list.");
++              // Refresh the questionnaires list
++              const fetchQuestionnaires = async () => {
++                try {
++                  const data = await StorageManager.getAllQuestionnaires();
++                  setQuestionnaires(data);
++                  setError(null); // Clear any previous page-level errors
++                } catch (err) {
++                  logger.error("Failed to refresh questionnaires after form submission:", { error: err });
++                  setError("Impossible de rafraîchir la liste des questionnaires.");
++                }
++              };
++              fetchQuestionnaires();
++            }
++            // Always navigate back to list after form submission attempt, success or not from form's perspective
++            // The form itself will call onBackToList if it has an "Annuler" button.
++            // This onFormSubmit might also imply navigation back.
++            // For clarity, let handleBackToList be called by the form or explicitly after onFormSubmit.
++            // If onFormSubmit is called, it means the form's internal save was attempted.
++            // We should go back to the list view.
++            handleBackToList();
++          }}
++          onBackToList={handleBackToList}
++        />
++      )}
++    </Layout>
   );
 };
 
