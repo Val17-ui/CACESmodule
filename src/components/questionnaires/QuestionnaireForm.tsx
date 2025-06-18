@@ -6,7 +6,8 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import ThemeSelector from './ThemeSelector';
 import PPTXGenerator from './PPTXGenerator';
-import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits, Question, QuestionType, CACESReferential, Questionnaire } from '../../types';
+import QuestionLibrary from './QuestionLibrary'; // Import QuestionLibrary
+import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits, Question, QuestionType, CACESReferential, Questionnaire, StoredQuestion } from '../../types';
 import { logger } from '../../utils/logger';
 import { StorageManager, StoredQuestionnaire } from '../../services/StorageManager';
 
@@ -41,17 +42,119 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
     options: ['', '', '', ''],
     correctAnswer: '',
     theme: undefined,
-    referential: undefined,
+    referential: selectedReferential as CACESReferential || undefined, // Initialize with parent form's referential
     isEliminatory: false,
   });
+  const [isQuestionLibModalOpen, setIsQuestionLibModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+
+  // Handler for when questions are selected from the library
+  const handleSelectQuestionsFromLib = async (selectedIds: string[]) => {
+    if (selectedIds.length === 0) {
+      setIsQuestionLibModalOpen(false);
+      return;
+    }
+    setIsLoading(true); // Optional: show loading state on main form
+    try {
+      const newQuestions: Question[] = [];
+      const existingManualQuestionIds = new Set(manualQuestions.map(q => q.id));
+
+      for (const idStr of selectedIds) {
+        // Filter out non-numeric IDs (e.g., "custom-xxxx") before fetching
+        // and ensure we only process IDs that came from the database via QuestionLibrary.
+        // The QuestionLibrary now sends stringified numeric IDs.
+        if (!/^\d+$/.test(idStr)) {
+          logger.warn(`Skipping non-numeric ID from selection: ${idStr}`);
+          continue;
+        }
+
+        const numericId = Number(idStr);
+
+        // Check if this DB ID (now as string) is already in manualQuestions
+        // This check is important if a DB question was somehow added manually before
+        // or if the same question is selected multiple times in one go (though Set in QuestionLibrary should prevent latter for a single selection batch)
+        if (existingManualQuestionIds.has(idStr)) {
+          logger.info(`Question with DB ID ${idStr} already in manualQuestions. Skipping.`);
+          continue;
+        }
+
+        const questionFromStore: StoredQuestion | null = await StorageManager.getQuestionById(numericId);
+
+        if (questionFromStore) {
+          // Convert StoredQuestion (with id: number) to Question (with id: string)
+          const questionToAdd: Question = {
+            ...questionFromStore,
+            id: String(questionFromStore.id), // Convert numeric ID back to string for consistency
+            // Ensure any specific fields for 'Question' not in 'StoredQuestion' are added, or defaults used
+            // e.g. usageCount and correctResponseRate might not be on StoredQuestion but are on Question
+            // However, looking at StoredQuestion and Question types, they seem very aligned.
+            // If StoredQuestion has all Question fields (except id type), this spread is fine.
+            // Let's ensure all defined fields in Question are covered:
+            text: questionFromStore.text,
+            type: questionFromStore.type,
+            options: questionFromStore.options,
+            correctAnswer: questionFromStore.correctAnswer,
+            theme: questionFromStore.theme,
+            referential: questionFromStore.referential,
+            isEliminatory: questionFromStore.isEliminatory,
+            // Fields specific to Question type that might not be on StoredQuestion
+            // or need defaulting if not from library question.
+            // For library questions, these should come from questionFromStore:
+            usageCount: questionFromStore.usageCount !== undefined ? questionFromStore.usageCount : 0,
+            correctResponseRate: questionFromStore.correctResponseRate !== undefined ? questionFromStore.correctResponseRate : 0,
+            createdAt: questionFromStore.createdAt || new Date().toISOString(), // Should exist on StoredQuestion
+            updatedAt: questionFromStore.updatedAt || new Date().toISOString(), // Should exist on StoredQuestion
+            lastUsedAt: questionFromStore.lastUsedAt, // Optional field
+          };
+          newQuestions.push(questionToAdd);
+        } else {
+          logger.warn(`Question with ID ${numericId} (string: ${idStr}) not found in storage.`);
+        }
+      }
+      setManualQuestions(prev => [...prev, ...newQuestions].filter((q, index, self) =>
+        index === self.findIndex((t) => t.id === q.id)
+      )); // Additional safeguard for uniqueness, though prior checks should handle most.
+      setError(null); // Clear any previous error
+    } catch (err) {
+      logger.error('Failed to fetch selected questions from library', err);
+      setError('Erreur lors de l’ajout des questions sélectionnées.');
+    } finally {
+      setIsQuestionLibModalOpen(false);
+      setIsLoading(false); // Clear loading state
+    }
+  };
 
   useEffect(() => {
     if (editingId) {
       loadQuestionnaire(editingId);
     }
   }, [editingId]);
+
+  // Effect to handle changes when switching between Automatic and Manual mode
+  useEffect(() => {
+    if (!isRandomized) {
+      // Switched to Manual Mode
+      setTotalQuestions(manualQuestions.length);
+      setEliminatoryCount(manualQuestions.filter(q => q.isEliminatory).length);
+      // ThemeDistribution is not used in manual mode, can be left as is or cleared.
+      // For now, we'll leave it as is, as ThemeSelector is hidden.
+    } else {
+      // Switched to Automatic Mode
+      // Values for totalQuestions and eliminatoryCount are managed by their respective
+      // input handlers or when loading a questionnaire.
+      // We might want to restore previous automatic values if we stored them,
+      // or reset to defaults if that's the desired behavior.
+      // For now, we assume existing logic handles this.
+      // Example: Reset to some default if not loaded from an existing questionnaire
+      // if (!editingId) { // Only reset if it's a new form
+      //   setTotalQuestions(40); // Default total questions
+      //   setEliminatoryCount(3);  // Default eliminatory count
+      //   setThemeDistribution({ reglementation: 15, securite: 15, technique: 10 }); // Default theme distribution
+      // }
+    }
+  }, [isRandomized, manualQuestions]);
 
   const loadQuestionnaire = async (id: string) => {
     try {
@@ -69,15 +172,34 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           setThemeDistribution(questionnaire.themeDistribution || { reglementation: 15, securite: 15, technique: 10 });
           setTotalQuestions(questionnaire.totalQuestions || 40);
           setEliminatoryCount(questionnaire.eliminatoryCount || 3);
-          setManualQuestions([]);
+          setManualQuestions([]); // Clear manual questions if switching to randomized
         } else {
           // Manual mode
-          setManualQuestions([]); // Placeholder: Actual questions will need to be fetched using questionnaire.questionIds
-          logger.info("Manual mode: Questionnaire uses questionIds. Actual questions need to be fetched.", questionnaire.questionIds);
-          setTotalQuestions(questionnaire.questionIds?.length || 0); // Total is based on number of IDs
-          setEliminatoryCount(0); // Placeholder: Cannot determine this without fetching full questions yet.
-          logger.info("Manual mode: Eliminatory count requires fetching full questions based on questionIds.");
-          setThemeDistribution({ reglementation: 0, securite: 0, technique: 0 });
+          // Actual questions will need to be fetched using questionnaire.questionIds
+          // For now, we assume manualQuestions will be populated by a subsequent fetch if needed.
+          // The useEffect hook [isRandomized, manualQuestions] will update totalQuestions and eliminatoryCount.
+          logger.info("Manual mode: Questionnaire uses questionIds. Actual questions need to be fetched or are already loaded.", questionnaire.questionIds);
+          // If manualQuestions are loaded elsewhere, total and eliminatory counts will be set by the useEffect.
+          // If not, and we only have IDs, we can set totalQuestions based on IDs length.
+          // However, eliminatoryCount cannot be determined without full question objects.
+          if (questionnaire.definedQuestions && questionnaire.definedQuestions.length > 0) {
+            const loadedManualQuestions: Question[] = questionnaire.definedQuestions.map(dbQuestion => ({
+              ...dbQuestion, // Spread all fields from QuestionWithId (DB version)
+              id: String(dbQuestion.id), // Convert numeric ID from DB to string for form state
+              // Ensure all Question type fields are present; StoredQuestion/QuestionWithId should be similar to Question
+              // Defaulting fields if they are somehow missing from dbQuestion but required by Question type
+              usageCount: dbQuestion.usageCount !== undefined ? dbQuestion.usageCount : 0,
+              correctResponseRate: dbQuestion.correctResponseRate !== undefined ? dbQuestion.correctResponseRate : 0,
+              createdAt: dbQuestion.createdAt || new Date().toISOString(),
+              updatedAt: dbQuestion.updatedAt || new Date().toISOString(),
+              // lastUsedAt is optional in Question, so it's fine if not present on dbQuestion
+            }));
+            setManualQuestions(loadedManualQuestions);
+          } else {
+            setManualQuestions([]);
+          }
+          // totalQuestions and eliminatoryCount will be set by the useEffect based on manualQuestions.
+          setThemeDistribution({ reglementation: 0, securite: 0, technique: 0 }); // Clear theme distribution for manual
         }
       } else {
         logger.error(`Questionnaire with ID ${id} not found for editing.`);
@@ -130,8 +252,11 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   };
 
   const handleRandomizeToggle = () => {
-    setIsRandomized(!isRandomized);
-    logger.info(`Mode aléatoire ${!isRandomized ? 'activé' : 'désactivé'}`);
+    const newIsRandomized = !isRandomized;
+    setIsRandomized(newIsRandomized);
+    logger.info(`Mode aléatoire ${newIsRandomized ? 'activé' : 'désactivé'}`);
+    // The useEffect hook for [isRandomized, manualQuestions] will handle updating
+    // totalQuestions and eliminatoryCount based on the new mode.
   };
 
   const handleNewManualQuestionChange = (field: keyof Question, value: any) => {
@@ -153,11 +278,28 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   };
 
   const handleSaveNewManualQuestion = () => {
-    if (!newManualQuestion.text?.trim() || !newManualQuestion.theme || !newManualQuestion.referential) {
+    const { text, type, options, correctAnswer, theme, referential: questionReferential } = newManualQuestion;
+
+    if (!text?.trim() || !theme || !questionReferential) {
       logger.error("Validation failed for new manual question: text, theme, or referential missing.");
       setError("Veuillez remplir le texte, le thème et le référentiel de la question.");
       return;
     }
+
+    if (type === QuestionType.QCM || type === QuestionType.QCU) {
+      if (!options || options.length === 0 || options.some(opt => opt.trim() === '')) {
+        logger.error("Validation failed: Options cannot be empty for QCM/QCU.");
+        setError("Pour les questions QCM/QCU, veuillez fournir toutes les options de réponse non vides.");
+        return;
+      }
+      if (!correctAnswer?.trim()) {
+        logger.error("Validation failed: Correct answer is required for QCM/QCU.");
+        setError("Pour les questions QCM/QCU, la bonne réponse est requise.");
+        return;
+      }
+      // Optional: Check if correctAnswer is one of the options if it's index-based or exact match
+    }
+
 
     const questionToAdd: Question = {
       id: `custom-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -166,7 +308,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       options: newManualQuestion.options?.filter(opt => opt.trim() !== '') || [],
       correctAnswer: newManualQuestion.correctAnswer || '',
       theme: newManualQuestion.theme as QuestionTheme,
-      referential: newManualQuestion.referential as CACESReferential,
+      referential: questionReferential as CACESReferential,
       isEliminatory: newManualQuestion.isEliminatory || false,
       usageCount: 0,
       correctResponseRate: 0,
@@ -180,7 +322,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       options: ['', '', '', ''],
       correctAnswer: '',
       theme: undefined,
-      referential: selectedReferential as CACESReferential || undefined,
+      referential: selectedReferential as CACESReferential || undefined, // Reset with main form's referential
       isEliminatory: false,
     });
     setShowAddManualQuestionForm(false);
@@ -238,37 +380,98 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
     const now = new Date().toISOString();
     let questionnaireDataToSave: Omit<StoredQuestionnaire, 'id'>;
 
-    if (isRandomized) {
-      questionnaireDataToSave = {
-        name: questionnaireName,
-        referential: selectedReferential as CACESReferential,
-        isRandomized: true,
-        passingThreshold: passingThreshold,
-        themeDistribution: themeDistribution,
-        totalQuestions: totalQuestions,
-        eliminatoryCount: eliminatoryCount,
-        questionIds: [], // ADDED/MODIFIED
-        createdAt: now,    // ADDED
-        updatedAt: now,    // ADDED
-      };
-    } else {
-      questionnaireDataToSave = {
-        name: questionnaireName,
-        referential: selectedReferential as CACESReferential,
-        isRandomized: false,
-        passingThreshold: passingThreshold,
-        themeDistribution: { reglementation: 0, securite: 0, technique: 0 },
-        totalQuestions: manualQuestions.length,
-        eliminatoryCount: manualQuestions.filter(q => q.isEliminatory).length,
-        questionIds: [], // ADDED/MODIFIED
-        createdAt: now,    // ADDED
-        updatedAt: now,    // ADDED
-      };
-    }
+    setIsLoading(true);
+    setError(null);
 
     try {
-      setIsLoading(true);
-      setError(null);
+      if (isRandomized) {
+        questionnaireDataToSave = {
+          name: questionnaireName,
+          referential: selectedReferential as CACESReferential,
+          isRandomized: true,
+          passingThreshold: passingThreshold,
+          themeDistribution: themeDistribution,
+          totalQuestions: totalQuestions,
+          eliminatoryCount: eliminatoryCount,
+          questionIds: [], // No specific question IDs for automatic template
+          definedQuestions: [], // No defined questions for automatic template
+          createdAt: now,
+          updatedAt: now,
+        };
+      } else {
+        // Manual mode:
+        // 1. Save any new custom questions from manualQuestions to the main questions table
+        const processedManualQuestions = [...manualQuestions]; // Clone to modify IDs after saving
+
+        for (let i = 0; i < processedManualQuestions.length; i++) {
+          const question = processedManualQuestions[i];
+          if (question.id.startsWith('custom-')) {
+            // This is a new custom question, save it to the main library
+            const { id, createdAt, updatedAt, usageCount, correctResponseRate, lastUsedAt, ...questionDataForDb } = question; // Omit form-specific or runtime fields not in StoredQuestion's Omit<X, 'id'>
+
+            // Ensure questionDataForDb matches Omit<StoredQuestion, 'id'>
+            // StoredQuestion (QuestionWithId) has id?: number.
+            // StorageManager.addQuestion expects Omit<StoredQuestion, 'id'>
+            // The 'type' field in QuestionWithId is more restrictive ('multiple-choice' | 'true-false')
+            // than QuestionType (string enum). This needs careful mapping if they differ significantly.
+            // Assuming QuestionType values (QCM, QCU, Text) map to ('multiple-choice', 'true-false', or other if schema was updated)
+            // For now, let's assume types are compatible or Question's type fits QuestionWithId's expectations.
+            // A direct cast might be too optimistic if types diverge.
+            // Example: if QuestionType.QCM needs to become "multiple-choice"
+            // let dbQuestionType = questionDataForDb.type as QuestionWithId['type']; // This is risky
+            // A safer mapping function might be needed if QuestionType and QuestionWithId['type'] are not interchangeable.
+            // For this step, we'll assume direct compatibility of type field for simplicity.
+            // REVISED: Implement type mapping
+            const { type: formQuestionType, ...otherQuestionData } = questionDataForDb;
+
+            let dbQuestionType: StoredQuestion['type']; // StoredQuestion['type'] is QuestionWithId['type']
+            if (formQuestionType === QuestionType.QCM || formQuestionType === QuestionType.QCU) {
+              dbQuestionType = 'multiple-choice';
+            } else if (formQuestionType === QuestionType.TRUE_FALSE) { // Assuming QuestionType has TRUE_FALSE
+              dbQuestionType = 'true-false';
+            } else {
+              // If QuestionType.TEXT or others are present and unmappable to DB 'multiple-choice' | 'true-false'
+              logger.error(`Unsupported question type for DB storage: ${formQuestionType}. Question text: ${question.text}`);
+              throw new Error(`Type de question "${formQuestionType}" non supporté pour l'enregistrement centralisé.`);
+            }
+
+            const questionPayloadForDb = { ...otherQuestionData, type: dbQuestionType };
+
+            const newDbQuestionId = await StorageManager.addQuestion(questionPayloadForDb as Omit<StoredQuestion, 'id'>);
+            if (newDbQuestionId) {
+              processedManualQuestions[i] = { ...question, id: String(newDbQuestionId) }; // Update with new stringified DB ID
+            } else {
+              throw new Error(`Échec de la sauvegarde de la nouvelle question personnalisée: ${question.text}`);
+            }
+          }
+        }
+
+        // 2. Prepare definedQuestions for the questionnaire
+        const definedQuestionsForDb: StoredQuestion[] = processedManualQuestions.map(q => {
+          const { id, ...rest } = q;
+          // All IDs in processedManualQuestions should now be string versions of numeric DB IDs
+          return {
+            ...rest,
+            id: Number(id), // Convert string ID back to number for DB foreign key
+          } as StoredQuestion; // StoredQuestion is QuestionWithId, which has id: number
+        });
+
+        questionnaireDataToSave = {
+          name: questionnaireName,
+          referential: selectedReferential as CACESReferential,
+          isRandomized: false,
+          passingThreshold: passingThreshold,
+          themeDistribution: { reglementation: 0, securite: 0, technique: 0 }, // Or specific if needed
+          totalQuestions: processedManualQuestions.length,
+          eliminatoryCount: processedManualQuestions.filter(q => q.isEliminatory).length,
+          definedQuestions: definedQuestionsForDb,
+          questionIds: [], // Not used for manual questionnaires with definedQuestions
+          createdAt: now,
+          updatedAt: now,
+        };
+      }
+
+      // Proceed with saving the questionnaire (either new or update)
       if (editingId) {
         await StorageManager.updateQuestionnaire(Number(editingId), questionnaireDataToSave);
         logger.info('Questionnaire updated successfully', { id: editingId, data: questionnaireDataToSave });
@@ -277,10 +480,12 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
         logger.info('Questionnaire created successfully', { data: questionnaireDataToSave });
       }
       onFormSubmit?.(true);
-      onBackToList?.();
+      if (onBackToList) onBackToList(); // Ensure onBackToList is called only if it exists
     } catch (err) {
-      logger.error('Failed to save questionnaire', { error: err, data: questionnaireDataToSave });
-      setError('Échec de l’enregistrement du questionnaire.');
+      logger.error('Failed to save questionnaire', { error: err, savedDataAttempt: questionnaireDataToSave });
+      // Check if err is an instance of Error to satisfy TypeScript
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Échec de l’enregistrement du questionnaire: ${errorMessage}`);
       onFormSubmit?.(false);
     } finally {
       setIsLoading(false);
@@ -331,13 +536,18 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
               type="number"
               value={totalQuestions}
               onChange={handleTotalQuestionsChange}
-              min={10}
-              max={60}
+              min={isRandomized ? (referentialLimits[selectedReferential as ReferentialType]?.min || 10) : 0}
+              max={isRandomized ? (referentialLimits[selectedReferential as ReferentialType]?.max || 60) : undefined}
               required
-              disabled={!isRandomized} // Disable in manual mode as it's informational
+              disabled={!isRandomized}
             />
+            {!isRandomized && (
+              <p className="mt-1 text-xs text-gray-500">
+                Automatiquement calculé d'après le nombre de questions manuelles ajoutées.
+              </p>
+            )}
             {/* Show limits warning only in randomized mode */}
-            {getLimitsWarning()}
+            {isRandomized && getLimitsWarning()}
           </div>
           <Input
             label="Seuil de réussite (%)"
@@ -354,11 +564,16 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             type="number"
             value={eliminatoryCount}
             onChange={(e) => setEliminatoryCount(parseInt(e.target.value) || 0)}
-            min={2}
-            max={5}
+            min={isRandomized ? 2 : 0} // Min can be 0 in manual if no eliminatory questions
+            max={isRandomized ? 5 : undefined} // No specific max in manual from form perspective
             required
-            disabled={!isRandomized} // Disable in manual mode as it's informational
+            disabled={!isRandomized}
           />
+          {!isRandomized && (
+            <p className="mt-1 text-xs text-gray-500">
+              Automatiquement calculé d'après les questions manuelles marquées comme éliminatoires.
+            </p>
+          )}
         </div>
         <div className="mt-4 flex items-center space-x-2">
           <input
@@ -418,7 +633,11 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
               >
                 Ajouter question personnalisée
               </Button>
-              <Button variant="outline" size="sm" disabled>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsQuestionLibModalOpen(true)} // Open modal
+              >
                 Ajouter depuis la bibliothèque
               </Button>
             </div>
@@ -541,6 +760,42 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             </div>
           )}
         </Card>
+      )}
+
+      {/* Modal for Question Library - Part B */}
+      {isQuestionLibModalOpen && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+          <div className="relative p-8 border w-full max-w-4xl shadow-lg rounded-md bg-white">
+            <div className="absolute top-0 right-0 pt-4 pr-4">
+              <button
+                onClick={() => setIsQuestionLibModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Close modal"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+              Sélectionner des questions depuis la bibliothèque
+            </h3>
+            <QuestionLibrary
+              isSelectionMode={true}
+              onQuestionsSelected={handleSelectQuestionsFromLib}
+            />
+            {/* The QuestionLibrary component now has its own "Add Selected" button */}
+            {/* We might want a general "Cancel" or "Close" button for the modal itself, handled by the X icon or an explicit button if needed */}
+            {/* The current modal structure has a close X icon. A "Fermer" button is also good UX. */}
+            {/* The QuestionLibrary's "Add..." button calls onQuestionsSelected which then closes the modal.*/}
+            {/* Adding an explicit close button to the modal footer for clarity: */}
+            <div className="mt-6 flex justify-end">
+              <Button variant="outline" onClick={() => setIsQuestionLibModalOpen(false)}>
+                Fermer
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex justify-between items-center">
