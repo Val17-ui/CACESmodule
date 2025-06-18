@@ -59,7 +59,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
       const existingManualQuestionIds = new Set(manualQuestions.map(q => q.id));
       for (const idStr of selectedIds) {
         if (!/^\d+$/.test(idStr)) {
-          logger.warn(`Skipping non-numeric ID from selection: ${idStr}`);
+          logger.info(`WARN: Skipping non-numeric ID from selection: ${idStr}`); // logger.warn -> logger.info
           continue;
         }
         const numericId = Number(idStr);
@@ -67,7 +67,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           logger.info(`Question with DB ID ${idStr} already in manualQuestions. Skipping.`);
           continue;
         }
-        const questionFromStore: StoredQuestion | null = await StorageManager.getQuestionById(numericId);
+        const questionFromStore: StoredQuestion | undefined = await StorageManager.getQuestionById(numericId); // Changed type from | null to | undefined
         if (questionFromStore) {
           let formQuestionType = QuestionType.QCM;
            if (questionFromStore.type === 'multiple-choice') {
@@ -148,6 +148,8 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
                 correctResponseRate: dbQuestion.correctResponseRate !== undefined ? dbQuestion.correctResponseRate : 0,
                 createdAt: dbQuestion.createdAt || new Date().toISOString(),
                 updatedAt: dbQuestion.updatedAt || new Date().toISOString(),
+            lastUsedAt: dbQuestion.lastUsedAt, // Added lastUsedAt
+            image: dbQuestion.image || undefined, // Added image mapping for null
               });
             });
             setManualQuestions(loadedManualQuestions);
