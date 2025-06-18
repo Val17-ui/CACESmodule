@@ -12,10 +12,11 @@ export interface QuestionWithId {
   correctAnswer: string; // Storing the answer text or a key that maps to it
   timeLimit?: number;
   isEliminatory: boolean;
-  referential: ReferentialType; // Using imported ReferentialType
+  referential: CACESReferential; // Standardize to CACESReferential enum
   theme: QuestionTheme;         // Using imported QuestionTheme
   image?: Blob | null; // Allow null for easier clearing, Blob for storage
   createdAt?: string;
+  updatedAt?: string; // Add missing field
   usageCount?: number;
   correctResponseRate?: number;
 }
@@ -23,7 +24,7 @@ export interface QuestionWithId {
 export interface QuestionnaireWithId {
   id?: number; // auto-incremented primary key
   name: string;
-  referential: ReferentialType; // Or use `ReferentialType` if appropriate and already defined broadly
+  referential: CACESReferential; // Standardize to CACESReferential enum
   passingThreshold: number;
   themeDistribution: Record<QuestionTheme, number>; // Or `Record<QuestionTheme, number>`
   isRandomized: boolean;
