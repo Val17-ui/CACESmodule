@@ -31,7 +31,8 @@ export interface QuestionnaireWithId {
   totalQuestions: number;
   createdAt: string;
   updatedAt: string;
-  questionIds: number[]; // array of numbers, referencing IDs in the `questions` table
+  questionIds: number[]; // For pre-generated sets of question IDs in automatic mode (future use)
+  definedQuestions?: QuestionWithId[]; // For storing actual question objects in manual mode
 }
 
 export class MySubClassedDexie extends Dexie {
@@ -45,7 +46,9 @@ export class MySubClassedDexie extends Dexie {
       // `image` (Blob) is typically not indexed directly.
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options',
       // Indexing 'options' as a multiEntry index if searching by options is needed.
-      questionnaires: '++id, name, referential, createdAt, updatedAt, *questionIds'
+      // 'definedQuestions' will be stored as part of the object, no special indexing for its content for now.
+      // 'questionIds' is kept for potential future use with automatic questionnaires.
+      questionnaires: '++id, name, referential, createdAt, updatedAt, isRandomized, questionIds'
     });
   }
 }
