@@ -120,7 +120,7 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({
         )}
 
         <div className="bg-blue-50 p-4 rounded-lg mt-4">
-          <p className="text-sm text-blue-800">
+          <div className="text-sm text-blue-800"> {/* Changed p to div */}
             <strong>Recommandations Cnam :</strong>
             <ul className="mt-2 list-disc list-inside">
               <li>20-50 questions au total selon le référentiel</li>
@@ -128,7 +128,7 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({
               <li>≥70% pour réussir l'examen</li>
               <li>≥50% par thème</li>
             </ul>
-          </p>
+          </div> {/* Changed p to div */}
         </div>
       </div>
     </Card>

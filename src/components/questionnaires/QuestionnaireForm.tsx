@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, AlertTriangle, Edit2 } from 'lucide-react';
+// Removed Plus, Edit2 is used, others are used.
+import { Trash2, Save, AlertTriangle, Edit2 } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -7,12 +8,12 @@ import Select from '../ui/Select';
 import ThemeSelector from './ThemeSelector';
 import PPTXGenerator from './PPTXGenerator';
 import QuestionLibrary from './QuestionLibrary';
-import { ReferentialType, referentials, QuestionTheme, questionThemes, referentialLimits, Question, QuestionType, CACESReferential, Questionnaire, StoredQuestion } from '../../types';
+// Removed questionThemes, Questionnaire, StoredQuestion from types import
+import { ReferentialType, referentials, QuestionTheme, referentialLimits, Question, QuestionType, CACESReferential } from '../../types';
 import { logger } from '../../utils/logger';
-import { StorageManager, StoredQuestionnaire } from '../../services/StorageManager';
-
-// Assuming QuestionForm is exported from QuestionLibrary module. Adjust if it's a direct import.
-const SharedQuestionForm = QuestionLibrary.QuestionForm;
+// Added StoredQuestion to import from StorageManager
+import { StorageManager, StoredQuestionnaire, StoredQuestion } from '../../services/StorageManager';
+import SharedQuestionForm from '../library/QuestionForm';
 
 
 interface QuestionnaireFormProps {
@@ -27,7 +28,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   onBackToList,
 }) => {
   const [questionnaireName, setQuestionnaireName] = useState('');
-  const [selectedReferential, setSelectedReferential] = useState<string>('');
+  const [selectedReferential, setSelectedReferential] = useState<CACESReferential | ''>(''); // Type changed
   const [totalQuestions, setTotalQuestions] = useState(40);
   const [passingThreshold, setPassingThreshold] = useState(70);
   const [showValidationWarning, setShowValidationWarning] = useState(false);
@@ -72,9 +73,9 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
            if (questionFromStore.type === 'multiple-choice') {
              formQuestionType = QuestionType.QCM;
            } else if (questionFromStore.type === 'true-false') {
-             formQuestionType = QuestionType.TRUE_FALSE;
+             formQuestionType = QuestionType.TrueFalse; // Corrected enum member
            } else {
-             logger.warn(`Unmappable StoredQuestion type ${questionFromStore.type} during library import. Defaulting to QCM.`);
+             logger.info(`WARN: Unmappable StoredQuestion type ${questionFromStore.type} during library import. Defaulting to QCM.`); // Changed to logger.info
            }
           const questionToAdd: Question = {
             ...questionFromStore,
@@ -88,7 +89,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           };
           newQuestions.push(questionToAdd);
         } else {
-          logger.warn(`Question with ID ${numericId} (string: ${idStr}) not found in storage.`);
+          logger.info(`WARN: Question with ID ${numericId} (string: ${idStr}) not found in storage.`); // Changed to logger.info
         }
       }
       setManualQuestions(prev => [...prev, ...newQuestions].filter((q, index, self) =>
@@ -137,8 +138,8 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             const loadedManualQuestions: Question[] = questionnaire.definedQuestions.map(dbQuestion => {
               let formQuestionType = QuestionType.QCM;
               if (dbQuestion.type === 'multiple-choice') formQuestionType = QuestionType.QCM;
-              else if (dbQuestion.type === 'true-false') formQuestionType = QuestionType.TRUE_FALSE;
-              else logger.warn(`Unmappable StoredQuestion type ${dbQuestion.type} during questionnaire load. Defaulting to QCM.`);
+              else if (dbQuestion.type === 'true-false') formQuestionType = QuestionType.TrueFalse; // Corrected enum member
+              else logger.info(`WARN: Unmappable StoredQuestion type ${dbQuestion.type} during questionnaire load. Defaulting to QCM.`); // Changed to logger.info
               return ({
                 ...dbQuestion,
                 id: String(dbQuestion.id),
@@ -169,7 +170,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({ value, label: `${value} - ${label}` }));
 
   const handleReferentialChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const referential = e.target.value as ReferentialType;
+    const referential = e.target.value as CACESReferential; // Type changed
     setSelectedReferential(referential);
     if (referential && referentialLimits[referential] && isRandomized) {
       setTotalQuestions(Math.min(40, referentialLimits[referential].max));
@@ -194,9 +195,9 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
     logger.info("Question saved/updated via shared form (DB representation):", savedDbQuestion);
     let formQuestionType: QuestionType;
     if (savedDbQuestion.type === 'multiple-choice') formQuestionType = QuestionType.QCM;
-    else if (savedDbQuestion.type === 'true-false') formQuestionType = QuestionType.TRUE_FALSE;
+    else if (savedDbQuestion.type === 'true-false') formQuestionType = QuestionType.TrueFalse; // Corrected enum member
     else {
-      logger.warn(`Received unmappable question type from DB: "${savedDbQuestion.type}". Defaulting to QCM.`);
+      logger.info(`WARN: Received unmappable question type from DB: "${savedDbQuestion.type}". Defaulting to QCM.`); // Changed to logger.info
       formQuestionType = QuestionType.QCM;
     }
 
@@ -249,7 +250,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
     if (!isRandomized && manualQuestions.length === 0) { setError("Ajoutez au moins une question en mode manuel."); return; }
 
     const now = new Date().toISOString();
-    let questionnaireDataToSave: Omit<StoredQuestionnaire, 'id'>;
+    let questionnaireDataToSave: Omit<StoredQuestionnaire, 'id'> | undefined = undefined; // Initialized
     setIsLoading(true); setError(null);
 
     try {
@@ -267,12 +268,12 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
           const { id, type: formQuestionType, ...rest } = q;
           let dbQuestionType: StoredQuestion['type'];
           if (formQuestionType === QuestionType.QCM || formQuestionType === QuestionType.QCU) dbQuestionType = 'multiple-choice';
-          else if (formQuestionType === QuestionType.TRUE_FALSE) dbQuestionType = 'true-false';
+          else if (formQuestionType === QuestionType.TrueFalse) dbQuestionType = 'true-false'; // Corrected enum member
           else {
             logger.error(`Unsupported QuestionType in manualQuestions during save: ${formQuestionType} for QID ${id}`);
             throw new Error("Type de question manuel non supporté pour la sauvegarde du questionnaire.");
           }
-          return { ...rest, id: Number(id), type: dbQuestionType } as StoredQuestion; // Ensure StoredQuestion structure
+          return { ...rest, id: Number(id), type: dbQuestionType } as StoredQuestion;
         });
         questionnaireDataToSave = {
           name: questionnaireName, referential: selectedReferential as CACESReferential, isRandomized: false,

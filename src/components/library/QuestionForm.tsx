@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Image as ImageIconLucide, Upload } from 'lucide-react';
+import { Plus, Trash2, Save, Image as ImageIconLucide } from 'lucide-react'; // Removed Upload
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import Badge from '../ui/Badge';
-import { Question, QuestionType, CACESReferential, QuestionTheme, questionTypes, referentials, questionThemes } from '../../types';
-import { StorageManager, StoredQuestion } from '../../services/StorageManager'; // Import StorageManager
-// QuestionWithId from '../../db' might not be needed if StoredQuestion is used for initialQuestionState directly
-// For now, let's assume StoredQuestion (which is QuestionWithId) is sufficient.
+// import Badge from '../ui/Badge'; // Removed Badge
+// Removed Question, questionTypes
+import { QuestionType, CACESReferential, QuestionTheme, referentials, questionThemes } from '../../types';
+import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
 interface QuestionFormProps {
@@ -51,14 +50,10 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
       if (initialDataType !== undefined) { // Check if type is actually provided in initialData
         if (initialDataType === QuestionType.QCM || initialDataType === QuestionType.QCU) {
           mappedType = 'multiple-choice';
-        } else if (initialDataType === QuestionType.TRUE_FALSE) {
+        } else if (initialDataType === QuestionType.TrueFalse) { // Corrected enum member
           mappedType = 'true-false';
         } else {
-          // This case implies initialData.type is a string but not one of the QuestionType enum members
-          // or it's a QuestionType member not handled above (e.g. TEXT)
-          // If initialDataType is already a valid StoredQuestion['type'] string, it could be used directly
-          // For safety, if it's an unmapped QuestionType enum or unexpected value, log and use default.
-          logger.warn(`Initial data has unmapped or incompatible question type: ${initialDataType}. Using default type '${mappedType}'.`);
+          logger.info(`WARN: Initial data has unmapped or incompatible question type: ${initialDataType}. Using default type '${mappedType}'.`); // Changed logger
         }
       }
       baseState = { ...baseState, ...restInitialData, type: mappedType };
@@ -100,59 +95,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     label
   }));
 
-  useEffect(() => {
-    if (questionId) {
-      setIsLoading(true);
-      const fetchQuestion = async () => {
-        try {
-          const existingQuestion = await StorageManager.getQuestionById(questionId); // Use StorageManager
-          if (existingQuestion) {
-            setQuestion(existingQuestion);
-            if (existingQuestion.image instanceof Blob) {
-              // Ensure previous object URL is revoked before creating a new one
-              if (imagePreview) {
-                URL.revokeObjectURL(imagePreview);
-              }
-              setHasImage(true);
-              setImageFile(existingQuestion.image);
-              setImagePreview(URL.createObjectURL(existingQuestion.image));
-            } else {
-              if (imagePreview) {
-                URL.revokeObjectURL(imagePreview);
-              }
-              setHasImage(false);
-              setImageFile(null);
-              setImagePreview(null);
-            }
-          } else {
-            logger.error(`Question with id ${questionId} not found.`);
-            if (imagePreview) {
-              URL.revokeObjectURL(imagePreview);
-            }
-            setQuestion(initialQuestionState); // Reset form
-            setHasImage(false);
-            setImageFile(null);
-            setImagePreview(null);
-          }
-        } catch (error) {
-          logger.error("Error fetching question: ", error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchQuestion();
-    } else {
-      // Reset form and cleanup preview if navigating to create new question form
-      setQuestion(initialQuestionState);
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-      }
-      setHasImage(false);
-      setImageFile(null);
-      setImagePreview(null);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionId, forcedReferential]); // Ensure effect runs if forcedReferential changes
+  // Removed the first, older useEffect that was causing issues with 'initialQuestionState'
 
   // Effect to initialize/reset form based on questionId, initialData, and forcedReferential
   useEffect(() => {
@@ -161,7 +104,8 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
       StorageManager.getQuestionById(questionId)
         .then(existingQuestion => {
           if (existingQuestion) {
-            let questionToSet = { ...existingQuestion };
+            // Ensure all fields from getInitialState() are present as defaults if not in existingQuestion
+            let questionToSet = { ...getInitialState(), ...existingQuestion };
             if (forcedReferential) {
               questionToSet.referential = forcedReferential;
             }
@@ -180,14 +124,14 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             }
           } else {
             logger.error(`Question with id ${questionId} not found. Resetting form.`);
-            setQuestion(getInitialState()); // Uses initialData & forcedReferential from closure
+            setQuestion(getInitialState());
             if (imagePreview) URL.revokeObjectURL(imagePreview);
             setHasImage(false); setImageFile(null); setImagePreview(null);
           }
         })
         .catch(error => {
           logger.error("Error fetching question: ", error);
-          setQuestion(getInitialState()); // Reset on error
+          setQuestion(getInitialState());
           if (imagePreview) URL.revokeObjectURL(imagePreview);
           setHasImage(false); setImageFile(null); setImagePreview(null);
         })
@@ -294,24 +238,32 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!question.text.trim()) newErrors.text = 'Le texte de la question est requis.';
-    if (question.type === QuestionType.QCM || question.type === QuestionType.QCU) {
+    // question.type is now 'multiple-choice' or 'true-false'
+    if (question.type === 'multiple-choice') {
       if (!question.options || question.options.length < 2 || question.options.some(opt => !(opt || "").trim())) {
         newErrors.options = 'Au moins deux options sont requises et toutes les options doivent être remplies.';
       }
-      // Validate correctAnswer based on it being an index string
       const correctIndex = parseInt(question.correctAnswer, 10);
       if (isNaN(correctIndex) || correctIndex < 0 || correctIndex >= (question.options?.length || 0) || !question.options?.[correctIndex]?.trim()) {
          newErrors.correctAnswer = 'La réponse correcte doit être l\'une des options valides et non vide.';
       }
     }
-    if (question.timeLimit <= 0) newErrors.timeLimit = 'Le temps limite doit être positif.';
+    // For 'true-false', correctAnswer might be "true" or "false" string, or "0" / "1". Validation might be needed if specific.
+    // Current validation for correctAnswer is tied to options index, so it's implicitly for 'multiple-choice'.
+
+    // timeLimit is guaranteed to be a number by getInitialState and handleInputChange (though it might become NaN if input is bad before blur)
+    // parseInt(value, 10) in handleInputChange can result in NaN.
+    // Let's ensure timeLimit is always a valid number for this check.
+    if (typeof question.timeLimit !== 'number' || isNaN(question.timeLimit) || question.timeLimit <= 0) {
+        newErrors.timeLimit = 'Le temps limite doit être un nombre positif.';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = async () => {
     if (!validateForm()) {
-      logger.warning('Validation échouée', errors);
+      logger.info('WARN: Validation échouée', errors); // Changed logger
       return;
     }
 
