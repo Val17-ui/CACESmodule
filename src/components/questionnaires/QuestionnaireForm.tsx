@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Save, AlertTriangle, Shuffle } from 'lucide-react';
+import { Plus, Trash2, Save, AlertTriangle } from 'lucide-react'; // Removed Shuffle
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -155,6 +155,7 @@ const QuestionnaireForm: React.FC = () => {
             required
           />
         </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
           <div>
             <Input

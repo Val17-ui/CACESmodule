@@ -1,7 +1,7 @@
 import React from 'react';
 
 type ButtonProps = {
-  children: React.ReactNode;
+  children?: React.ReactNode; // Make children optional
   variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -50,7 +50,8 @@ const Button: React.FC<ButtonProps> = ({
       onClick={onClick}
       disabled={disabled}
     >
-      {icon && <span className="mr-2">{icon}</span>}
+      {/* Add margin to icon only if children are present */}
+      {icon && <span className={children ? "mr-2" : ""}>{icon}</span>}
       {children}
     </button>
   );
