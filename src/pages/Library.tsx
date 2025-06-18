@@ -8,7 +8,7 @@ import Card from '../components/ui/Card';
 import { Plus, FileUp, FileDown, BarChart3 } from 'lucide-react';
 import { exportQuestionsToExcel, parseQuestionsExcel, RawExcelQuestion } from '../utils/excelProcessor';
 import { mockQuestions } from '../data/mockData';
-import { Question, QuestionType, CACESReferential, QuestionTheme, referentials, questionThemes } from '../types';
+import { Question, QuestionType, CACESReferential, QuestionTheme, questionThemes } from '../types'; // Removed referentials
 import { StorageManager } from '../services/StorageManager'; // Import StorageManager
 import { saveAs } from 'file-saver';
 
