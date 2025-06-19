@@ -81,6 +81,7 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             ...questionFromStore,
             id: String(questionFromStore.id),
             type: formQuestionType,
+            image: questionFromStore.image || undefined, // Ensure null from DB becomes undefined for Question type
             usageCount: questionFromStore.usageCount !== undefined ? questionFromStore.usageCount : 0,
             correctResponseRate: questionFromStore.correctResponseRate !== undefined ? questionFromStore.correctResponseRate : 0,
             createdAt: questionFromStore.createdAt || new Date().toISOString(),
@@ -172,12 +173,13 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({ value, label: `${value} - ${label}` }));
 
   const handleReferentialChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const referential = e.target.value as CACESReferential; // Type changed
-    setSelectedReferential(referential);
-    if (referential && referentialLimits[referential] && isRandomized) {
-      setTotalQuestions(Math.min(40, referentialLimits[referential].max));
+    const value = e.target.value;
+    // Allow setting to empty string or a valid CACESReferential enum value
+    setSelectedReferential(value as (CACESReferential | ''));
+    if (value && value !== '' && referentialLimits[value as CACESReferential] && isRandomized) {
+      setTotalQuestions(Math.min(40, referentialLimits[value as CACESReferential].max));
     }
-    setShowValidationWarning(referential === 'R482');
+    setShowValidationWarning(value === 'R482');
   };
 
   const handleTotalQuestionsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -389,7 +391,30 @@ const QuestionnaireForm: React.FC<QuestionnaireFormProps> = ({
             <SharedQuestionForm
               key={editingQuestionData?.id || 'new-manual-q'}
               questionId={(editingQuestionData && /^\d+$/.test(editingQuestionData.id)) ? Number(editingQuestionData.id) : undefined}
-              initialData={editingQuestionData ? { ...editingQuestionData, type: editingQuestionData.type, } : { referential: selectedReferential as CACESReferential, type: QuestionType.QCM }}
+              initialData={
+                editingQuestionData
+                  ? {
+                      ...editingQuestionData, // Spread other compatible properties
+                      // Map QuestionType enum to StoredQuestion['type'] string literal
+                      type: ((): StoredQuestion['type'] | undefined => {
+                        if (editingQuestionData.type === QuestionType.QCM || editingQuestionData.type === QuestionType.QCU) {
+                          return 'multiple-choice';
+                        } else if (editingQuestionData.type === QuestionType.TrueFalse) {
+                          return 'true-false';
+                        }
+                        // Add other mappings if QuestionType enum has more values that map to StoredQuestion['type']
+                        // If no mapping, it can be undefined, and library/QuestionForm will use its default.
+                        logger.info(`WARN: Unmapped QuestionType enum member ${editingQuestionData.type} when preparing initialData for SharedQuestionForm.`);
+                        return undefined;
+                      })(),
+                      // Ensure referential is CACESReferential if editingQuestionData has it
+                      referential: editingQuestionData.referential as CACESReferential,
+                    }
+                  : {
+                      referential: selectedReferential as CACESReferential,
+                      type: 'multiple-choice' // Default for new question is string literal
+                    }
+              }
               forcedReferential={selectedReferential as CACESReferential}
               onSave={handleSaveManualQuestionFromSharedForm}
               onCancel={() => { setIsQuestionDetailModalOpen(false); setEditingQuestionData(null); }}

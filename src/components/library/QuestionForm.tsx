@@ -45,17 +45,19 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
     if (initialData) {
       const { type: initialDataType, ...restInitialData } = initialData;
-      let mappedType = baseState.type; // Default to baseState's type
+      let mappedType = baseState.type; // Default to baseState's type (e.g., 'multiple-choice')
 
-      if (initialDataType !== undefined) { // Check if type is actually provided in initialData
-        if (initialDataType === QuestionType.QCM || initialDataType === QuestionType.QCU) {
+      if (initialDataType !== undefined) { // initialDataType is 'multiple-choice', 'true-false', or undefined
+        if (initialDataType === 'multiple-choice') {
           mappedType = 'multiple-choice';
-        } else if (initialDataType === QuestionType.TrueFalse) { // Corrected enum member
+        } else if (initialDataType === 'true-false') {
           mappedType = 'true-false';
         } else {
-          logger.info(`WARN: Initial data has unmapped or incompatible question type: ${initialDataType}. Using default type '${mappedType}'.`); // Changed logger
+          // This case should ideally not be reached if QuestionnaireForm passes correct string literals.
+          logger.info(`WARN: Initial data has an unexpected question type string: '${initialDataType}'. Using default type '${mappedType}'.`);
         }
       }
+      // If initialDataType was undefined, mappedType remains baseState.type.
       baseState = { ...baseState, ...restInitialData, type: mappedType };
     }
 
@@ -356,7 +358,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             label="Temps limite (secondes)"
             type="number"
             name="timeLimit"
-            value={question.timeLimit.toString()}
+            value={String(question.timeLimit)} // Ensure conversion from number, handles potential strict undefined check
             onChange={handleInputChange}
             min={5}
             max={120}

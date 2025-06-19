@@ -16,7 +16,8 @@ export interface QuestionWithId {
   theme: QuestionTheme;         // Using imported QuestionTheme
   image?: Blob | null; // Allow null for easier clearing, Blob for storage
   createdAt?: string;
-  updatedAt?: string; // Add missing field
+  updatedAt?: string;
+  lastUsedAt?: string; // Added lastUsedAt
   usageCount?: number;
   correctResponseRate?: number;
 }
