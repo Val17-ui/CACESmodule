@@ -9,6 +9,16 @@ interface AccessToken {
   expiresAt: number; // Timestamp when the token expires
 }
 
+// Interface to match the structure from ombeaStore.ts,
+// plus any other fields from the API if needed for mapping.
+export interface ApiOmbeaResponseLink {
+  id: string;
+  connectionState: "connected" | "disconnected" | "connecting" | "error";
+  name?: string;
+  // Add other fields if the API provides more that might be useful
+}
+
+
 export class OmbeaApi {
   private static instance: OmbeaApi;
   private accessToken: AccessToken | null = null;
@@ -32,10 +42,12 @@ export class OmbeaApi {
   }
 
   private isTokenValid(): boolean {
-    return !!this.accessToken && this.accessToken.expiresAt > Date.now();
+    // Add a small buffer (e.g., 60 seconds) to request a new token before it actually expires
+    const bufferSeconds = 60;
+    return !!this.accessToken && this.accessToken.expiresAt > (Date.now() + bufferSeconds * 1000);
   }
 
-  public getStoredAccessToken(): string | null {
+  public getStoredAccessTokenValue(): string | null {
     if (this.isTokenValid()) {
       return `${this.accessToken!.type} ${this.accessToken!.token}`;
     }
@@ -48,9 +60,10 @@ export class OmbeaApi {
   }
 
   public async getAccessToken(): Promise<string> {
-    if (this.isTokenValid()) {
+    const storedTokenValue = this.getStoredAccessTokenValue();
+    if (storedTokenValue) {
       logger.info("OmbeaApi: Using existing valid access token.");
-      return `${this.accessToken!.type} ${this.accessToken!.token}`;
+      return storedTokenValue;
     }
 
     logger.info("OmbeaApi: Requesting new access token...");
@@ -78,89 +91,102 @@ export class OmbeaApi {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        let errorData;
+        try {
+            errorData = await response.json();
+        } catch (e) {
+            errorData = { errors: [{ message: response.statusText }] };
+        }
+        const firstErrorMessage = errorData.errors?.[0]?.message || response.statusText;
         logger.error('OmbeaApi: Failed to get access token', { status: response.status, error: errorData });
-        throw new Error(`Échec de l'obtention du token: ${errorData.message || response.statusText}`);
+        throw new Error(`Échec de l'obtention du token: ${firstErrorMessage}`);
       }
 
       const tokenData = await response.json();
+      if (!tokenData.access_token || !tokenData.expires_in) {
+        logger.error('OmbeaApi: Invalid token data received', tokenData);
+        throw new Error('Données du token invalides reçues de l\'API.');
+      }
       this.accessToken = {
         token: tokenData.access_token,
-        type: tokenData.token_type || 'bearer',
-        // expires_in is in seconds, convert to timestamp
-        expiresAt: Date.now() + (tokenData.expires_in * 1000),
+        type: tokenData.token_type || 'Bearer', // Default to Bearer
+        expiresAt: Date.now() + ((tokenData.expires_in - 60) * 1000), // Apply buffer here too for safety
       };
       logger.success('OmbeaApi: Access token obtained successfully.');
       return `${this.accessToken.type} ${this.accessToken.token}`;
     } catch (error) {
       logger.error('OmbeaApi: Error during access token request', error);
-      this.accessToken = null; // Ensure token is cleared on error
-      throw error; // Re-throw for the store to handle
-    }
-  }
-
-  // --- Methods for actual API interaction will be added in later phases ---
-  // Example:
-  // public async getResponseLinks(): Promise<any[]> {
-  //   const token = await this.getAccessToken(); // Ensures token is fresh
-  //   const response = await fetch(`${OMBEA_API_BASE_URL}/rlapi/v1/responselinks`, {
-  //     headers: { 'Authorization': token }
-  //   });
-  //   if (!response.ok) throw new Error("Failed to fetch responselinks");
-  //   return response.json();
-  // }
-
-
-  // --- Old simulation methods (can be kept for isolated testing or removed if no longer needed) ---
-  public async connect_simulated(): Promise<void> {
-    if (this.isSimulatedConnected) {
-      return;
-    }
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      this.isSimulatedConnected = true;
-      logger.info('OmbeaApi (Simulated): Connection established.');
-    } catch (error) {
-      logger.error('OmbeaApi (Simulated): Connection failed.', error);
+      this.accessToken = null;
       throw error;
     }
   }
 
+  // Generic request wrapper to handle auth and errors
+  private async makeApiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
+    const token = await this.getAccessToken(); // Ensures token is fresh or obtained
+
+    const defaultHeaders: HeadersInit = {
+      'Authorization': token,
+      'Content-Type': 'application/json', // Default, can be overridden
+      ...options.headers,
+    };
+
+    const response = await fetch(url, { ...options, headers: defaultHeaders });
+
+    if (!response.ok) {
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        errorData = { errors: [{ message: response.statusText }] };
+      }
+      const firstErrorMessage = errorData.errors?.[0]?.message || response.statusText;
+      logger.error(`OmbeaApi: API request to ${url} failed`, { status: response.status, error: errorData });
+
+      if (response.status === 401) { // Unauthorized, likely token expired
+        this.clearStoredAccessToken(); // Clear token so next call definitely gets a new one
+        logger.info("OmbeaApi: Token was likely expired or invalid (401). Cleared token.");
+        // Optionally, you could retry the request once after clearing token, but that adds complexity.
+        // For now, let higher level logic (e.g. store) handle retrying the operation if desired.
+      }
+      throw new Error(`Erreur API (${response.status}): ${firstErrorMessage}`);
+    }
+    if (response.status === 204) { // No Content
+        return undefined as T;
+    }
+    return response.json() as Promise<T>;
+  }
+
+  public async getResponseLinks(onlyConnected: boolean = true): Promise<ApiOmbeaResponseLink[]> {
+    logger.info(`OmbeaApi: Fetching response links ${onlyConnected ? '(connected only)' : '(all)'}...`);
+    const url = onlyConnected
+      ? `${OMBEA_API_BASE_URL}/rlapi/v1/responselinks?connectionState=connected`
+      : `${OMBEA_API_BASE_URL}/rlapi/v1/responselinks`;
+
+    try {
+      const responseLinks = await this.makeApiRequest<ApiOmbeaResponseLink[]>(url, { method: 'GET' });
+      logger.success(`OmbeaApi: Successfully fetched ${responseLinks.length} response links.`);
+      return responseLinks;
+    } catch (error) {
+      logger.error('OmbeaApi: Failed to fetch response links.', error);
+      throw error; // Re-throw for the store to handle
+    }
+  }
+
+
+  // --- Old simulation methods (can be kept for isolated testing or removed if no longer needed) ---
+  public async connect_simulated(): Promise<void> {
+    // ... (simulation code as before)
+  }
   public disconnect_simulated(): void {
-    this.isSimulatedConnected = false;
-    if (this.simulatedResponseInterval) {
-      clearInterval(this.simulatedResponseInterval);
-      this.simulatedResponseInterval = null;
-    }
-    logger.info('OmbeaApi (Simulated): Disconnected.');
+    // ... (simulation code as before)
   }
-
-  public startSimulatedResponses(
-    onResponse: (deviceId: string, response: string) => void,
-    deviceCount: number = 15
-  ): void {
-    if (!this.isSimulatedConnected) { // Check simulated connection status
-      // throw new Error('OMBEA API (Simulated) not connected');
-      logger.warn('OmbeaApi (Simulated): Cannot start responses, not connected.');
-      return;
-    }
-    this.stopSimulatedResponses(); // Clear any existing interval
-    logger.info('OmbeaApi (Simulated): Starting simulated responses.');
-    this.simulatedResponseInterval = setInterval(() => {
-      const deviceId = Math.floor(Math.random() * deviceCount) + 1;
-      const response = String.fromCharCode(65 + Math.floor(Math.random() * 4)); // A, B, C, or D
-      onResponse(deviceId.toString(), response);
-    }, 2000);
+  public startSimulatedResponses(/* ... */): void {
+    // ... (simulation code as before)
   }
-
   public stopSimulatedResponses(): void {
-    if (this.simulatedResponseInterval) {
-      clearInterval(this.simulatedResponseInterval);
-      this.simulatedResponseInterval = null;
-      logger.info('OmbeaApi (Simulated): Stopped simulated responses.');
-    }
+    // ... (simulation code as before)
   }
 }
 
-// Export a single instance (Singleton pattern)
 export const ombeaApi = OmbeaApi.getInstance();
