@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
-import { Play, Pause, SkipForward, StopCircle, Usb, AlertTriangle, MonitorPlay } from 'lucide-react';
+import { Play, Pause, SkipForward, StopCircle, Usb, AlertTriangle, MonitorPlay, ZapOff, Loader2 } from 'lucide-react';
 import { logger } from '../../utils/logger';
 import { useOmbeaStore } from '../../stores/ombeaStore';
-import { ombeaApi } from '../../utils/ombeaApi';
 
 interface ExamControlPanelProps {
   onStartExam: () => void;
-  onPauseExam: () => void;
+  onPauseExam: () => void; // Note: "Pause" functionality might need more definition with Ombea direct voting
   onNextQuestion: () => void;
   onStopExam: () => void;
   onToggleFullScreen: () => void;
-  isRunning: boolean;
-  currentQuestion: number;
+  isRunning: boolean; // True if votingSession.isActive
+  currentQuestionNumber: number;
   totalQuestions: number;
   isTestMode: boolean;
   onToggleTestMode: () => void;
@@ -26,94 +25,123 @@ const ExamControlPanel: React.FC<ExamControlPanelProps> = ({
   onStopExam,
   onToggleFullScreen,
   isRunning,
-  currentQuestion,
+  currentQuestionNumber,
   totalQuestions,
   isTestMode,
   onToggleTestMode,
 }) => {
   const [showConfirmStop, setShowConfirmStop] = useState(false);
-  const { isConnected, connect, disconnect } = useOmbeaStore();
+  const {
+    isConnected: isOmbeaConnected,
+    isConnecting: isOmbeaConnecting,
+    connectionError: ombeaConnectionError,
+    connect: connectOmbeaStore, // Renamed to avoid conflict if we had local connect
+    disconnect: disconnectOmbeaStore // Renamed
+  } = useOmbeaStore();
 
-  const handleConnectDevice = async () => {
-    try {
-      logger.info('Tentative de connexion des boîtiers OMBEA');
-      await ombeaApi.connect();
-      await connect();
-    } catch (error) {
-      logger.error('Échec de la connexion des boîtiers', error);
+  const handleConnectDisconnectDevice = async () => {
+    if (isOmbeaConnected) {
+      logger.info('ExamControlPanel: User initiated Ombea disconnection from store.');
+      disconnectOmbeaStore();
+    } else if (!isOmbeaConnecting) {
+      logger.info('ExamControlPanel: User initiated Ombea connection via store.');
+      await connectOmbeaStore();
     }
   };
 
-  const handleStopExam = () => {
+  const handleStopExamWithConfirm = () => {
     if (showConfirmStop) {
-      logger.warning('Arrêt de l\'examen demandé');
-      onStopExam();
+      logger.warning('ExamControlPanel: Arrêt de l\'examen confirmé.');
+      onStopExam(); // This will call endVotingSession from Exams.tsx
       setShowConfirmStop(false);
     } else {
       setShowConfirmStop(true);
+      logger.info('ExamControlPanel: Confirmation d\'arrêt demandée.');
     }
   };
 
   useEffect(() => {
-    return () => {
-      if (isConnected) {
-        disconnect();
-        ombeaApi.disconnect();
-      }
-    };
-  }, [isConnected, disconnect]);
+    if (!isRunning && showConfirmStop) {
+      setShowConfirmStop(false);
+    }
+  }, [isRunning, showConfirmStop]);
+
+  // Timer display state (visual only, logic is in VoteDisplay component)
+  // This is a placeholder, the actual timer will be managed by the voting display component.
+  const [displayTime, setDisplayTime] = useState("--:--");
+  const currentQuestionDetails = useOmbeaStore(state => state.votingSession.currentQuestion);
+  useEffect(() => {
+    if (isRunning && currentQuestionDetails?.timeLimit) {
+        // This is just for a mock display, real timer is elsewhere
+        // setDisplayTime(`00:${String(currentQuestionDetails.timeLimit).padStart(2, '0')}`);
+    } else if (!isRunning) {
+        // setDisplayTime("--:--");
+    }
+  }, [isRunning, currentQuestionDetails]);
+
 
   return (
-    <Card title="Panneau de contrôle" className="mb-6">
+    <Card title="Panneau de Contrôle de l'Examen" className="mb-6">
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
           <div>
             <h3 className="text-lg font-medium text-gray-900">
-              Question {currentQuestion} / {totalQuestions}
+              {totalQuestions > 0 ? `Question ${currentQuestionNumber} / ${totalQuestions}` : "Aucun questionnaire chargé"}
             </h3>
             <p className="text-sm text-gray-500">
-              {isRunning ? 'Examen en cours' : 'Examen en pause'}
+              {isRunning ? 'Examen en cours (Vote Actif)' :
+               (isOmbeaConnected ? 'Prêt à démarrer' :
+               (isOmbeaConnecting ? 'Connexion OMBEA...' : 'OMBEA déconnecté'))}
             </p>
           </div>
-          
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 mt-2 sm:mt-0">
             <Button
-              variant={isConnected ? 'success' : 'outline'}
-              icon={<Usb size={16} />}
-              onClick={handleConnectDevice}
-              disabled={isConnected}
+              variant={isOmbeaConnected ? 'successOutline' : (isOmbeaConnecting ? 'secondary' : 'outline')}
+              icon={isOmbeaConnected ? <ZapOff size={16} /> : (isOmbeaConnecting ? <Loader2 size={16} className="animate-spin" /> : <Usb size={16} />)}
+              onClick={handleConnectDisconnectDevice}
+              disabled={isOmbeaConnecting}
+              tooltip={isOmbeaConnected ? "Déconnecter OMBEA" : (isOmbeaConnecting ? "Connexion en cours..." : "Connecter OMBEA")}
             >
-              {isConnected ? 'Boîtier connecté' : 'Connecter boîtier'}
+              {isOmbeaConnected ? 'OMBEA Connecté' : (isOmbeaConnecting ? 'Connexion...' : 'Connecter OMBEA')}
             </Button>
-            
             <Button
               variant="outline"
               icon={<MonitorPlay size={16} />}
               onClick={onToggleFullScreen}
+              tooltip="Passer en mode présentation"
             >
-              Mode présentation
+              Présentation
             </Button>
           </div>
         </div>
-        
-        <div className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg">
+
+        <div className="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border">
           <input
             type="checkbox"
-            id="testMode"
+            id="examTestModeCtrl" // Unique ID
             checked={isTestMode}
             onChange={onToggleTestMode}
-            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+            disabled={isRunning && isOmbeaConnected}
           />
-          <label htmlFor="testMode" className="text-sm text-gray-700">
-            Mode test (réponses anonymes, pas de rapport)
+          <label htmlFor="examTestModeCtrl" className="text-sm text-gray-700 cursor-pointer">
+            Mode Test (simulation des réponses)
           </label>
         </div>
 
-        {!isConnected && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start">
-            <AlertTriangle size={20} className="text-amber-500 mr-2 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-700">
-              Veuillez connecter le boîtier OMBEA ResponseLink pour démarrer l'examen.
+        {ombeaConnectionError && !isOmbeaConnected && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start text-red-700">
+            <AlertTriangle size={20} className="mr-2 flex-shrink-0 mt-0.5" />
+            <p className="text-sm">
+              <strong>Erreur OMBEA:</strong> {ombeaConnectionError}.
+            </p>
+          </div>
+        )}
+        {!isOmbeaConnected && !isOmbeaConnecting && !ombeaConnectionError && totalQuestions > 0 && (
+           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start text-amber-700">
+            <AlertTriangle size={20} className="mr-2 flex-shrink-0 mt-0.5" />
+            <p className="text-sm">
+              Connectez le système OMBEA pour démarrer.
             </p>
           </div>
         )}
@@ -121,45 +149,49 @@ const ExamControlPanel: React.FC<ExamControlPanelProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Button
             variant={isRunning ? 'warning' : 'primary'}
-            icon={isRunning ? <Pause size={16} /> : <Play size={16} />}
+            icon={isRunning ? <Pause size={18} /> : <Play size={18} />}
             onClick={isRunning ? onPauseExam : onStartExam}
-            disabled={!isConnected}
-            className="w-full"
+            disabled={!isOmbeaConnected || isOmbeaConnecting || totalQuestions === 0}
+            className="w-full py-3 text-base"
+            tooltip={isRunning ? "Mettre en pause le déroulement (fonction à définir)" : (totalQuestions === 0 ? "Chargez un questionnaire" : "Démarrer l'examen")}
           >
-            {isRunning ? 'Pause' : 'Démarrer'}
+            {isRunning ? 'Pause Examen' : 'Démarrer Examen'}
           </Button>
           
           <Button
-            variant="outline"
-            icon={<SkipForward size={16} />}
+            variant="secondary"
+            icon={<SkipForward size={18} />}
             onClick={onNextQuestion}
-            disabled={!isRunning || currentQuestion >= totalQuestions}
-            className="w-full"
+            disabled={!isRunning || currentQuestionNumber >= totalQuestions}
+            className="w-full py-3 text-base"
+            tooltip={!isRunning ? "Démarrez l'examen pour naviguer" : (currentQuestionNumber >= totalQuestions ? "Dernière question atteinte" : "Passer à la question suivante")}
           >
-            Question suivante
+            Question Suivante
           </Button>
           
           <Button
-            variant="danger"
-            icon={<StopCircle size={16} />}
-            onClick={handleStopExam}
-            disabled={!isRunning}
-            className="w-full"
+            variant={showConfirmStop ? "danger" : "dangerOutline"}
+            icon={<StopCircle size={18} />}
+            onClick={handleStopExamWithConfirm}
+            disabled={!isRunning && !showConfirmStop}
+            className="w-full py-3 text-base"
+            tooltip={showConfirmStop ? "Confirmer l'arrêt de l'examen" : "Terminer l'examen en cours"}
           >
-            {showConfirmStop ? 'Confirmer l\'arrêt' : 'Terminer l\'examen'}
+            {showConfirmStop ? 'Confirmer Arrêt' : 'Terminer Examen'}
           </Button>
         </div>
         
         <div className="pt-3 border-t border-gray-200">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">Chronomètre</h4>
-          <div className="bg-gray-100 rounded-lg p-4 text-center">
-            <span className="text-2xl font-semibold text-gray-900">
-              00:30
+          <h4 className="text-sm font-medium text-gray-700 mb-1">Chronomètre (Question)</h4>
+          <div className="bg-gray-100 rounded-lg p-3 text-center">
+            <span className="text-3xl font-semibold text-gray-800">
+              {displayTime} {/* This is a mock display */}
             </span>
-            <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+            {/* Real progress bar will be in OmbeaExamVoteDisplay */}
+             <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
               <div 
-                className="bg-blue-600 h-2.5 rounded-full" 
-                style={{ width: '60%' }}
+                className="bg-blue-500 h-1.5 rounded-full"
+                style={{ width: isRunning ? '50%' : '0%' }} // Mock progress
               ></div>
             </div>
           </div>
