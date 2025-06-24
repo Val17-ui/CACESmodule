@@ -58,95 +58,16 @@ export async function generatePresentation(
 ): Promise<void> {
 
   console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
-  const pptx = new PptxGenJS();
+  // pptxgenjs instance is not used here for loading the template,
+  // as val17PptxGenerator handles the template File object directly.
 
-  try {
-    const templateArrayBuffer = await templateFileFromUser.arrayBuffer();
-    await pptx.load(templateArrayBuffer);
-    console.log(`User template "${templateFileFromUser.name}" loaded. Existing slides in template: ${pptx.slides.length}`);
-  } catch (error) {
-    console.error("Error loading user template:", error);
-    alert("Erreur lors du chargement du modèle PPTX. Un PPTX avec un thème par défaut sera utilisé, et les styles du modèle pourraient ne pas être appliqués aux premières slides.");
-    // pptx remains a new empty presentation if load fails.
-  }
-
-  const commonProps = { x: 0.5, w: '90%', align: 'center' as PptxGenJS.AlignH };
-  const titleY = 0.5, titleH = 1.0, subtitleY = 1.5, subtitleH = 0.75;
-
-  let introMasterName: string | undefined = undefined;
-  // Correctly try to get a master slide layout name
-  const masterKeys = Object.keys(pptx.masterSlides);
-  if (masterKeys.length > 0) {
-    const firstMaster = pptx.masterSlides[masterKeys[0]];
-    if (firstMaster && firstMaster.layouts && firstMaster.layouts.length > 0) {
-      introMasterName = firstMaster.layouts[0].name;
-    }
-  }
-  // Fallback if no master layouts found in the loaded template (e.g. very basic template or load failed)
-  if (!introMasterName && pptx.LAYOUTS && Object.keys(pptx.LAYOUTS).length > 0) {
-     const layoutKeys = Object.keys(pptx.LAYOUTS);
-     if (layoutKeys.length > 0) {
-        introMasterName = pptx.LAYOUTS[layoutKeys[0]].name;
-     }
-  }
-  console.log(`Using master slide layout for intro slides (if available): ${introMasterName}`);
-
-  let titleSlide = pptx.addSlide(introMasterName ? { masterName: introMasterName } : undefined);
-  titleSlide.addText(sessionInfo.name, {
-    ...commonProps, y: titleY, h: titleH, fontSize: 40, bold: true, valign: 'middle', color: '003366'
-  });
-  titleSlide.addText(`Référentiel: ${sessionInfo.referential}\nDate: ${sessionInfo.date}`, {
-    ...commonProps, y: subtitleY + titleH, h: subtitleH, fontSize: 24, color: '333333'
-  });
-
-  let participantsSlide = pptx.addSlide(introMasterName ? { masterName: introMasterName } : undefined);
-  participantsSlide.addText("Liste des Participants", {
-    ...commonProps, y: 0.25, h: 0.7, fontSize: 32, bold: true, align: 'center', color: '003366'
-  });
-  const participantRows: PptxGenJS.TableRow[] = [
-    [
-      { text: "Boîtier", options: { bold: true, fill: 'E0E0E0', fontSize: 10, border: { pt: 1, color: '666666' }, color: '000000', align: 'center', valign: 'middle' } },
-      { text: "Nom", options: { bold: true, fill: 'E0E0E0', fontSize: 10, border: { pt: 1, color: '666666' }, color: '000000', valign: 'middle' } },
-      { text: "Prénom", options: { bold: true, fill: 'E0E0E0', fontSize: 10, border: { pt: 1, color: '666666' }, color: '000000', valign: 'middle' } },
-      { text: "Code ID", options: { bold: true, fill: 'E0E0E0', fontSize: 10, border: { pt: 1, color: '666666' }, color: '000000', valign: 'middle' } }
-    ]
-  ];
-  participants.forEach(p => {
-    participantRows.push([
-      { text: p.deviceId?.toString() || 'N/A', options: { fontSize: 9, border: { pt: 1, color: 'BFBFBF' }, align: 'center', valign: 'middle' } },
-      { text: p.lastName, options: { fontSize: 9, border: { pt: 1, color: 'BFBFBF' }, valign: 'middle' } },
-      { text: p.firstName, options: { fontSize: 9, border: { pt: 1, color: 'BFBFBF' }, valign: 'middle' } },
-      { text: p.identificationCode || 'N/A', options: { fontSize: 9, border: { pt: 1, color: 'BFBFBF' }, valign: 'middle' } }
-    ]);
-  });
-  participantsSlide.addTable(participantRows, { x: 0.5, y: 1.2, w: 9, colW: [1.5, 2.5, 2.5, 2.5] });
-
-  let instructionSlide = pptx.addSlide(introMasterName ? { masterName: introMasterName } : undefined);
-  instructionSlide.addText("Instructions de Vote", {
-    ...commonProps, y: 0.25, h: 0.7, fontSize: 32, bold: true, align: 'center', color: '003366'
-  });
-  instructionSlide.addText(
-    "1. Utilisez les boîtiers de vote pour répondre aux questions.\n" +
-    "2. Sélectionnez la lettre correspondant à votre réponse et validez.\n" +
-    "3. Le temps pour répondre à chaque question est limité.\n" +
-    "4. Une question test suivra pour vous familiariser avec le système.",
-    { x: 0.5, y: 1.5, w: '90%', h: 4, fontSize: 18, bullet: {type: 'number', style:'arabicPeriod'}, paraSpc: 10, align: 'left', color: '333333' }
-  );
-
-  console.log(`Intro slides added. Total slides in pptx object now: ${pptx.slides.length}`);
-
-  const modifiedTemplateArrayBuffer = await pptx.write({ outputType: 'arraybuffer' });
-  const modifiedTemplateFileForVal17 = new File(
-    [modifiedTemplateArrayBuffer],
-    `template_with_intro_${templateFileFromUser.name}`,
-    { type: templateFileFromUser.type }
-  );
-  console.log(`Modified template "${modifiedTemplateFileForVal17.name}" (with intro slides) prepared for Val17 generator.`);
-
+  // Step 1: Transform StoredQuestions to Val17Question format
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
 
+  // Step 2: Prepare GenerationOptions for Val17's generator
+  // These settings would ideally come from an Admin configuration page later.
   const generationOptions: Val17GenerationOptions = {
-    fileName: `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}_OMBEA.pptx`,
+    fileName: `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}_OMBEA.pptx`, // Filename for saveAs
     defaultDuration: adminSettings.defaultDuration || 30,
     ombeaConfig: {
       pollStartMode: adminSettings.pollStartMode,
