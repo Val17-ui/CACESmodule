@@ -1,8 +1,7 @@
-// Timestamp: 2024-06-24T17:05:00Z (forcing a change for cache invalidation, new filename)
-import PptxGenJS from 'pptxgenjs';
-import { StoredQuestion } from '../db';
-import { Session, Participant } from '../types';
-// Assuming val17PptxGenerator.ts and val17PptxTypes.ts are correctly placed and exported
+// Timestamp: 2024-06-24T18:30:00Z (Correcting import and ensuring no modifiedTemplateFileForVal17)
+import PptxGenJS from 'pptxgenjs'; // Not actively used for slide creation in this version, but kept for potential future use for intro slides
+import { QuestionWithId as StoredQuestion } from '../db'; // Corrected import
+import { Session, Participant } from '../types'; // Session might be unused if sessionInfo is typed inline
 import { Val17Question, GenerationOptions as Val17GenerationOptions, ConfigOptions as Val17ConfigOptions, generatePPTXVal17 } from '../lib/val17-pptx-generator/val17PptxGenerator';
 
 export interface AdminPPTXSettings extends Val17ConfigOptions {
@@ -51,23 +50,18 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
 
 export async function generatePresentation(
   sessionInfo: { name: string; date: string; referential: string },
-  participants: Participant[],
+  _participants: Participant[], // Marked as unused for now in this simplified version
   storedQuestions: StoredQuestion[],
   templateFileFromUser: File,
   adminSettings: AdminPPTXSettings
 ): Promise<void> {
 
-  console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
-  // pptxgenjs instance is not used here for loading the template,
-  // as val17PptxGenerator handles the template File object directly.
+  console.log(`generatePresentation (simplified for direct call) called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
 
-  // Step 1: Transform StoredQuestions to Val17Question format
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
 
-  // Step 2: Prepare GenerationOptions for Val17's generator
-  // These settings would ideally come from an Admin configuration page later.
   const generationOptions: Val17GenerationOptions = {
-    fileName: `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}_OMBEA.pptx`, // Filename for saveAs
+    fileName: `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}_OMBEA.pptx`,
     defaultDuration: adminSettings.defaultDuration || 30,
     ombeaConfig: {
       pollStartMode: adminSettings.pollStartMode,
@@ -80,16 +74,18 @@ export async function generatePresentation(
   };
 
   try {
-    await generatePPTXVal17(modifiedTemplateFileForVal17, transformedQuestions, generationOptions);
-    console.log("PPTX generation (including OMBEA slides) initiated by val17PptxGenerator.");
+    await generatePPTXVal17(templateFileFromUser, transformedQuestions, generationOptions);
+    console.log("Call to val17PptxGenerator.generatePPTXVal17 completed successfully.");
   } catch (error) {
-    console.error("Error calling val17PptxGenerator:", error);
-    alert("Erreur lors de la génération du PPTX interactif des questions OMBEA.");
+    console.error("Error reported from val17PptxGenerator.generatePPTXVal17:", error);
+    if (!(error instanceof Error && error.message.includes("OMBEA"))) {
+        alert("Une erreur inattendue est survenue lors de la tentative de génération du PPTX.");
+    }
   } finally {
     tempImageUrls.forEach(url => {
-      try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for generatePresentation:", url, e); }
+      try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for generatePresentation (direct call):", url, e); }
     });
-    console.log("Revoked temporary object URLs for images in generatePresentation.");
+    console.log("Revoked temporary object URLs for images in generatePresentation (direct call).");
     tempImageUrls = [];
   }
 }
