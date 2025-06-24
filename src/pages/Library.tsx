@@ -125,9 +125,10 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
       if (rawQ.referential && !Object.values(CACESReferential).includes(rawQ.referential as CACESReferential)) {
         errorsForRow.push(`Référentiel '${rawQ.referential}' invalide.`);
       }
-      if (rawQ.theme && !Object.keys(questionThemes).includes(rawQ.theme as QuestionTheme)) {
-        errorsForRow.push(`Thème '${rawQ.theme}' invalide.`);
-      }
+      // Validation du thème supprimée pour autoriser les thèmes composites comme 'securite_A'
+      // if (rawQ.theme && !Object.keys(questionThemes).includes(rawQ.theme as QuestionTheme)) {
+      //   errorsForRow.push(`Thème '${rawQ.theme}' invalide.`);
+      // }
 
       const options: string[] = [];
       if (rawQ.optionA) options.push(rawQ.optionA);
@@ -161,7 +162,7 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
           id: generateQuestionId(),
           text: rawQ.text!,
           referential: rawQ.referential as CACESReferential,
-          theme: rawQ.theme as QuestionTheme,
+          theme: rawQ.theme!, // No longer casting to QuestionTheme, as Question.theme is now string. rawQ.theme is checked for existence before this block.
           options: definedOptions,
           correctAnswer: correctAnswerText,
           isEliminatory: isEliminatoryBool!,

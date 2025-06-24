@@ -42,7 +42,7 @@ export interface Question {
   timeLimit?: number;
   isEliminatory: boolean;
   referential: CACESReferential;
-  theme: QuestionTheme;
+  theme: string; // Changed from QuestionTheme to string for composite themes
   image?: Blob;
   createdAt?: string;
   updatedAt?: string; // Added
