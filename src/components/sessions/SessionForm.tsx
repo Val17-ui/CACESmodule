@@ -3,10 +3,11 @@ import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
-import { Save, FileUp, UserPlus, Trash2, PackagePlus } from 'lucide-react'; // Added PackagePlus for new button
-import { CACESReferential, referentials, Participant } from '../../types'; // ReferentialType changed to CACESReferential for clarity
-import { StorageManager } from '../../services/StorageManager'; // To be used in step 2
-import { StoredQuestion } from '../../db'; // To be used in step 2
+import { Save, FileUp, UserPlus, Trash2, PackagePlus } from 'lucide-react';
+import { CACESReferential, referentials, Participant } from '../../types';
+import { StorageManager } from '../../services/StorageManager';
+import { StoredQuestion } from '../../db';
+import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxProcessor';
 
 
 const SessionForm: React.FC = () => {
@@ -17,6 +18,7 @@ const SessionForm: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [generatedQuestions, setGeneratedQuestions] = useState<StoredQuestion[]>([]); // For debug/display
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
 
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -58,14 +60,41 @@ const SessionForm: React.FC = () => {
       alert("Veuillez sélectionner un référentiel CACES.");
       return;
     }
-    console.log(`Génération du questionnaire pour le référentiel : ${selectedReferential}`);
+    if (!templateFile) {
+      console.warn("Veuillez sélectionner un fichier modèle PPTX.");
+      alert("Veuillez sélectionner un fichier modèle PPTX.");
+      return;
+    }
+    console.log(`Génération du questionnaire pour le référentiel : ${selectedReferential} avec le modèle ${templateFile.name}`);
     setGeneratedQuestions([]); // Clear previous results
+
+    console.log(`Génération du questionnaire pour le référentiel : ${selectedReferential} avec le modèle ${templateFile.name}`);
+    setGeneratedQuestions([]);
+
+    // Rassembler les informations de session
+    const sessionInfo = {
+      name: sessionName || "Session CACES", // Fournir une valeur par défaut si vide
+      date: sessionDate || new Date().toISOString().slice(0,10),
+      referential: selectedReferential
+    };
+
+    // Définir des AdminPPTXSettings par défaut (seront configurables plus tard)
+    const adminSettings: AdminPPTXSettings = {
+      defaultDuration: 30, // secondes
+      pollTimeLimit: 30, // secondes pour les tags OMBEA
+      answersBulletStyle: 'ppBulletAlphaUCPeriod', // A. B. C.
+      // autres settings par défaut pour Val17ConfigOptions...
+      pollStartMode: 'Automatic',
+      chartValueLabelFormat: 'Response_Count',
+      pollCountdownStartMode: 'Automatic',
+      pollMultipleResponse: '1',
+    };
 
     try {
       const baseThemes = await StorageManager.getAllBaseThemesForReferential(selectedReferential);
       if (baseThemes.length === 0) {
         console.warn(`Aucun thème trouvé pour le référentiel ${selectedReferential}. Vérifiez les données de la bibliothèque.`);
-        alert(`Aucun thème trouvé pour le référentiel ${selectedReferential}. Vérifiez les données de la bibliothèque.`);
+        alert(`Aucun thème trouvé pour le référentiel ${selectedReferential}.`);
         return;
       }
       console.log(`Thèmes de base trouvés pour ${selectedReferential}:`, baseThemes);
@@ -86,7 +115,6 @@ const SessionForm: React.FC = () => {
         const randomIndex = Math.floor(Math.random() * blockIdentifiers.length);
         const chosenBlockIdentifier = blockIdentifiers[randomIndex];
         selectedBlocksSummary[baseTheme] = chosenBlockIdentifier;
-        console.log(`Pour ${selectedReferential}/${baseTheme}, bloc choisi aléatoirement: ${chosenBlockIdentifier}`);
 
         const questionsFromBlock = await StorageManager.getQuestionsForBlock(selectedReferential, baseTheme, chosenBlockIdentifier);
         if (questionsFromBlock.length > 0) {
@@ -98,19 +126,27 @@ const SessionForm: React.FC = () => {
 
       setGeneratedQuestions(allSelectedQuestions);
       console.log("Résumé des blocs sélectionnés:", selectedBlocksSummary);
-      console.log(`Questionnaire généré avec ${allSelectedQuestions.length} questions.`);
+      console.log(`Questionnaire à générer avec ${allSelectedQuestions.length} questions.`);
 
-      if (allSelectedQuestions.length > 0) {
-        // Pour l'instant, juste un log. Plus tard, on passera ces questions au générateur PPTX/ORS.
-        console.log("Questions finales:", allSelectedQuestions.map(q => ({id: q.id, text: q.text, theme: q.theme}) ));
-        alert(`Questionnaire généré avec ${allSelectedQuestions.length} questions ! Voir la console pour les détails.`);
-      } else {
-        alert("Aucune question n'a pu être générée. Vérifiez la console et la configuration des blocs de questions.");
+      if (allSelectedQuestions.length === 0) {
+        alert("Aucune question n'a pu être sélectionnée pour le questionnaire. Vérifiez la configuration des blocs.");
+        return;
       }
 
+      // Appel à la fonction principale de génération de présentation
+      await generatePresentation(
+        sessionInfo,
+        participants,
+        allSelectedQuestions,
+        templateFile, // Le fichier modèle uploadé
+        adminSettings
+      );
+      // generatePresentation gère le saveAs, donc pas besoin ici.
+      // alert(`Génération du PPTX demandée avec ${allSelectedQuestions.length} questions.`);
+
     } catch (error) {
-      console.error("Erreur lors de la génération du questionnaire:", error);
-      alert("Une erreur est survenue lors de la génération du questionnaire. Vérifiez la console.");
+      console.error("Erreur lors de la préparation ou génération du questionnaire/PPTX:", error);
+      alert("Une erreur est survenue. Vérifiez la console.");
     }
   };
 
@@ -170,6 +206,20 @@ const SessionForm: React.FC = () => {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
+        </div>
+
+        <div className="mt-6">
+          <label htmlFor="templateFileInput" className="block text-sm font-medium text-gray-700 mb-1">
+            Modèle PPTX (template)
+          </label>
+          <Input
+            id="templateFileInput"
+            type="file"
+            accept=".pptx"
+            onChange={(e) => setTemplateFile(e.target.files ? e.target.files[0] : null)}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+          />
+          {templateFile && <p className="mt-1 text-xs text-green-600">Fichier sélectionné : {templateFile.name}</p>}
         </div>
       </Card>
       
