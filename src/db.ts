@@ -13,7 +13,7 @@ export interface QuestionWithId {
   timeLimit?: number;
   isEliminatory: boolean;
   referential: CACESReferential; // Standardize to CACESReferential enum
-  theme: QuestionTheme;         // Using imported QuestionTheme
+  theme: string;         // Changed from QuestionTheme to string to allow composite themes like 'securite_A'
   image?: Blob | null; // Allow null for easier clearing, Blob for storage
   createdAt?: string;
   updatedAt?: string; // Add missing field

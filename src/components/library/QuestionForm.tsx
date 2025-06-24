@@ -35,7 +35,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
       timeLimit: 30,
       isEliminatory: false,
       referential: CACESReferential.R489,
-      theme: 'reglementation',
+      theme: '', // Default to empty string for free text input
       image: undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -90,10 +90,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     label: `${value} - ${label}`,
   }));
 
-  const themeOptions = Object.entries(questionThemes).map(([value, label]) => ({
-    value,
-    label
-  }));
+  // themeOptions removed as theme is now a free text input
 
   // Removed the first, older useEffect that was causing issues with 'initialQuestionState'
 
@@ -342,12 +339,12 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             required
             disabled={!!forcedReferential} // Disable if referential is forced
           />
-          <Select
+          <Input
             label="Thème"
-            options={themeOptions}
+            name="theme" // Ensure name is set for handleInputChange
             value={question.theme}
-            onChange={(e) => setQuestion(prev => ({...prev, theme: e.target.value as QuestionTheme}))}
-            placeholder="Sélectionner un thème"
+            onChange={handleInputChange} // Use existing handleInputChange
+            placeholder="Ex: securite_A, technique_B"
             required
           />
         </div>
