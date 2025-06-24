@@ -7,7 +7,7 @@ import { Save, FileUp, UserPlus, Trash2, PackagePlus } from 'lucide-react';
 import { CACESReferential, referentials, Participant } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import { StoredQuestion } from '../../db';
-import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxProcessor';
+import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator'; // Changed import path
 
 
 const SessionForm: React.FC = () => {

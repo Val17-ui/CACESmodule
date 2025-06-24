@@ -1,3 +1,4 @@
+// Timestamp: 2024-06-24T17:05:00Z (forcing a change for cache invalidation, new filename)
 import PptxGenJS from 'pptxgenjs';
 import { StoredQuestion } from '../db';
 import { Session, Participant } from '../types';
@@ -12,7 +13,7 @@ let tempImageUrls: string[] = [];
 
 export function transformQuestionsForVal17Generator(storedQuestions: StoredQuestion[]): Val17Question[] {
   tempImageUrls.forEach(url => {
-    try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL:", url, e); }
+    try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for transformQuestionsForVal17Generator:", url, e); }
   });
   tempImageUrls = [];
 
@@ -35,7 +36,7 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
         imageUrl = URL.createObjectURL(sq.image);
         tempImageUrls.push(imageUrl);
       } catch (e) {
-        console.error("Error creating object URL for image:", e);
+        console.error("Error creating object URL for image in transformQuestionsForVal17Generator:", e);
       }
     }
 
@@ -65,19 +66,32 @@ export async function generatePresentation(
     console.log(`User template "${templateFileFromUser.name}" loaded. Existing slides in template: ${pptx.slides.length}`);
   } catch (error) {
     console.error("Error loading user template:", error);
-    alert("Erreur lors du chargement du modèle PPTX. Un PPTX avec un thème par défaut sera utilisé.");
+    alert("Erreur lors du chargement du modèle PPTX. Un PPTX avec un thème par défaut sera utilisé, et les styles du modèle pourraient ne pas être appliqués aux premières slides.");
+    // pptx remains a new empty presentation if load fails.
   }
 
   const commonProps = { x: 0.5, w: '90%', align: 'center' as PptxGenJS.AlignH };
   const titleY = 0.5, titleH = 1.0, subtitleY = 1.5, subtitleH = 0.75;
 
   let introMasterName: string | undefined = undefined;
-  if (pptx.masterSlide layouts && pptx.masterSlide layouts.length > 0) {
-    introMasterName = pptx.masterSlide layouts[0].name;
+  // Correctly try to get a master slide layout name
+  const masterKeys = Object.keys(pptx.masterSlides);
+  if (masterKeys.length > 0) {
+    const firstMaster = pptx.masterSlides[masterKeys[0]];
+    if (firstMaster && firstMaster.layouts && firstMaster.layouts.length > 0) {
+      introMasterName = firstMaster.layouts[0].name;
+    }
   }
-  console.log(`Using master slide for intro slides (if available from template): ${introMasterName}`);
+  // Fallback if no master layouts found in the loaded template (e.g. very basic template or load failed)
+  if (!introMasterName && pptx.LAYOUTS && Object.keys(pptx.LAYOUTS).length > 0) {
+     const layoutKeys = Object.keys(pptx.LAYOUTS);
+     if (layoutKeys.length > 0) {
+        introMasterName = pptx.LAYOUTS[layoutKeys[0]].name;
+     }
+  }
+  console.log(`Using master slide layout for intro slides (if available): ${introMasterName}`);
 
-  let titleSlide = pptx.addSlide({ masterName: introMasterName });
+  let titleSlide = pptx.addSlide(introMasterName ? { masterName: introMasterName } : undefined);
   titleSlide.addText(sessionInfo.name, {
     ...commonProps, y: titleY, h: titleH, fontSize: 40, bold: true, valign: 'middle', color: '003366'
   });
@@ -85,7 +99,7 @@ export async function generatePresentation(
     ...commonProps, y: subtitleY + titleH, h: subtitleH, fontSize: 24, color: '333333'
   });
 
-  let participantsSlide = pptx.addSlide({ masterName: introMasterName });
+  let participantsSlide = pptx.addSlide(introMasterName ? { masterName: introMasterName } : undefined);
   participantsSlide.addText("Liste des Participants", {
     ...commonProps, y: 0.25, h: 0.7, fontSize: 32, bold: true, align: 'center', color: '003366'
   });
@@ -107,7 +121,7 @@ export async function generatePresentation(
   });
   participantsSlide.addTable(participantRows, { x: 0.5, y: 1.2, w: 9, colW: [1.5, 2.5, 2.5, 2.5] });
 
-  let instructionSlide = pptx.addSlide({ masterName: introMasterName });
+  let instructionSlide = pptx.addSlide(introMasterName ? { masterName: introMasterName } : undefined);
   instructionSlide.addText("Instructions de Vote", {
     ...commonProps, y: 0.25, h: 0.7, fontSize: 32, bold: true, align: 'center', color: '003366'
   });
@@ -152,9 +166,9 @@ export async function generatePresentation(
     alert("Erreur lors de la génération du PPTX interactif des questions OMBEA.");
   } finally {
     tempImageUrls.forEach(url => {
-      try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL:", url, e); }
+      try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for generatePresentation:", url, e); }
     });
-    console.log("Revoked temporary object URLs for images.");
+    console.log("Revoked temporary object URLs for images in generatePresentation.");
     tempImageUrls = [];
   }
 }
