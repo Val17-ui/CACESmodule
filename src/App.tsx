@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import Library from './pages/Library';
-import Questionnaires from './pages/Questionnaires';
+// import Questionnaires from './pages/Questionnaires'; // Supprimé
 import Sessions from './pages/Sessions';
 import Exams from './pages/Exams';
 import Reports from './pages/Reports';
@@ -22,8 +22,8 @@ function App() {
         return <Dashboard activePage={activePage} onPageChange={handlePageChange} />;
       case 'library':
         return <Library activePage={activePage} onPageChange={handlePageChange} />;
-      case 'questionnaires':
-        return <Questionnaires activePage={activePage} onPageChange={handlePageChange} />;
+      // case 'questionnaires': // Supprimé
+      //   return <Questionnaires activePage={activePage} onPageChange={handlePageChange} />; // Supprimé
       case 'sessions':
         return <Sessions activePage={activePage} onPageChange={handlePageChange} />;
       case 'exams':

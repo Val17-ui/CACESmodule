@@ -68,15 +68,8 @@ const SessionForm: React.FC = () => {
             required
           />
           
-          <Select
-            label="Questionnaire associé"
-            options={[
-              { value: '1', label: 'CACES R489 - Questionnaire standard' },
-              { value: '2', label: 'CACES R486 - PEMP' },
-            ]}
-            placeholder="Sélectionner un questionnaire"
-            required
-          />
+          {/* Le champ "Questionnaire associé" a été supprimé car la création de session
+              implique maintenant la génération dynamique d'un questionnaire. */}
         </div>
         
         <div className="mt-4">

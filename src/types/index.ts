@@ -60,19 +60,9 @@ export interface QuestionStatistics {
   lastUsed?: string;
 }
 
-export interface Questionnaire {
-  id: string;
-  name: string;
-  referential: string;
-  questions: Question[];
-  passingThreshold: number;
-  themeDistribution: Record<QuestionTheme, number>;
-  eliminatoryCount: number;
-  isRandomized: boolean;
-  totalQuestions: number;
-  createdAt: string;
-  updatedAt: string;
-}
+// L'interface Questionnaire a été supprimée car les questionnaires sont maintenant
+// générés dynamiquement au moment de la création d'une session et ne sont plus
+// une entité stockée séparément.
 
 export interface DeviceMapping {
   deviceId: number;
