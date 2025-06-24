@@ -1,9 +1,8 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-// Placeholder types, assuming val17PptxTypes.ts will be created or types defined here
-// import { ConfigOptions, GenerationOptions } from './val17PptxTypes';
 
-// Placeholder types until we get the actual definitions from your types.ts
+// Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.
+// These should ideally come from a './val17PptxTypes' import if that file is created with your type definitions.
 export interface ConfigOptions {
   pollStartMode?: string;
   chartValueLabelFormat?: string;
@@ -11,20 +10,23 @@ export interface ConfigOptions {
   pollTimeLimit?: number;
   pollCountdownStartMode?: string;
   pollMultipleResponse?: string;
+  // Add other fields as necessary based on your original types.ts
 }
 
 export interface GenerationOptions {
   fileName?: string;
   defaultDuration?: number;
   ombeaConfig?: ConfigOptions;
+  // Add other fields as necessary
 }
 
-// Interface Question for this generator
+// Interface Question for this generator, adapted from your description
 export interface Val17Question {
   question: string;
   options: string[];
-  correctAnswerIndex?: number;
+  correctAnswerIndex?: number; // 0-based index
   imageUrl?: string;
+  points?: number; // Corresponds to timeLimit from StoredQuestion, used for duration
 }
 
 interface TagInfo {
@@ -62,7 +64,10 @@ function generateGUID(): string {
 }
 
 function escapeXml(unsafe: string): string {
-  if (!unsafe) return '';
+  if (typeof unsafe !== 'string') { // Ensure input is a string
+    if (unsafe === null || unsafe === undefined) return '';
+    unsafe = String(unsafe);
+  }
   let cleaned = unsafe.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
   return cleaned
     .replace(/&/g, '&amp;')
@@ -152,14 +157,14 @@ function processCloudUrl(url: string): string {
 function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
     const img = new Image();
-    const objectUrl = URL.createObjectURL(blob); // Renamed for clarity
+    const objectUrl = URL.createObjectURL(blob);
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
       resolve({ width: img.width, height: img.height });
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      resolve({ width: 1920, height: 1080 }); // Default on error
+      resolve({ width: 1920, height: 1080 });
     };
     img.src = objectUrl;
   });
@@ -173,24 +178,24 @@ async function downloadImageFromCloudWithDimensions(
   url: string
 ): Promise<{ data: ArrayBuffer; extension: string; width: number; height: number } | null> {
   try {
-    console.log(`[IMAGE] Début téléchargement: ${url}`);
-    let finalUrl = url; // For blob URLs, it's already direct
-    if (url.includes('dropbox.com')) { // Example of specific cloud provider handling
+    // console.log(`[IMAGE] Début téléchargement: ${url}`); // Verbose
+    let finalUrl = url;
+    if (url.includes('dropbox.com')) {
       finalUrl = processCloudUrl(url);
-      console.log(`[IMAGE] URL Dropbox transformée: ${finalUrl}`);
+      // console.log(`[IMAGE] URL Dropbox transformée: ${finalUrl}`); // Verbose
     }
-    console.log(`[IMAGE] Tentative de fetch: ${finalUrl}`);
+    // console.log(`[IMAGE] Tentative de fetch: ${finalUrl}`); // Verbose
     const response = await fetch(finalUrl);
-    console.log(`[IMAGE] Réponse reçue: ${response.status} ${response.statusText}`);
-    console.log(`[IMAGE] Content-Type: ${response.headers.get('content-type')}`);
+    // console.log(`[IMAGE] Réponse reçue: ${response.status} ${response.statusText}`); // Verbose
+    // console.log(`[IMAGE] Content-Type: ${response.headers.get('content-type')}`); // Verbose
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(`HTTP ${response.status}: ${response.statusText} for ${finalUrl}`);
     }
     const blob = await response.blob();
-    console.log(`[IMAGE] Blob reçu: ${blob.size} octets, type: ${blob.type}`);
+    // console.log(`[IMAGE] Blob reçu: ${blob.size} octets, type: ${blob.type}`); // Verbose
     if (!blob.type.startsWith('image/')) {
-      console.warn(`[IMAGE] Type MIME non-image détecté: ${blob.type}, on continue quand même`);
+      console.warn(`[IMAGE] Type MIME non-image détecté: ${blob.type} pour ${finalUrl}, on continue quand même`);
     }
     const arrayBuffer = await blob.arrayBuffer();
     let extension = 'jpg';
@@ -202,14 +207,10 @@ async function downloadImageFromCloudWithDimensions(
       extension = mimeToExt[blob.type] || 'jpg';
     }
     const dimensions = await getImageDimensions(blob);
-    console.log(`[IMAGE] ✓ Succès: ${(arrayBuffer.byteLength / 1024).toFixed(2)} KB, ${dimensions.width}x${dimensions.height}, ${extension}`);
+    // console.log(`[IMAGE] ✓ Succès: ${(arrayBuffer.byteLength / 1024).toFixed(2)} KB, ${dimensions.width}x${dimensions.height}, ${extension}`); // Verbose
     return { data: arrayBuffer, extension, width: dimensions.width, height: dimensions.height };
   } catch (error) {
     console.error(`[IMAGE] ✗ Échec pour ${url}:`, error);
-    if (error instanceof Error) {
-      console.error(`[IMAGE] Message: ${error.message}`);
-      // console.error(`[IMAGE] Stack: ${error.stack}`); // Stack might be too verbose for default log
-    }
     return null;
   }
 }
@@ -218,19 +219,18 @@ function updateContentTypesForImages(content: string, imageExtensions: Set<strin
   let updated = content;
   imageExtensions.forEach(ext => {
     if (!updated.includes(`Extension="${ext}"`)) {
-      let contentType = 'image/jpeg';
-      switch(ext) {
-        case 'png': contentType = 'image/png'; break;
-        case 'gif': contentType = 'image/gif'; break;
-        case 'bmp': contentType = 'image/bmp'; break;
-        case 'svg': contentType = 'image/svg+xml'; break;
-        case 'webp': contentType = 'image/webp'; break;
-      }
-      const insertPoint = updated.indexOf('<Override'); // Simplified insertion point
+      let contentType = 'image/jpeg'; // Default
+      if (ext === 'png') contentType = 'image/png';
+      else if (ext === 'gif') contentType = 'image/gif';
+      else if (ext === 'bmp') contentType = 'image/bmp';
+      else if (ext === 'svg') contentType = 'image/svg+xml';
+      else if (ext === 'webp') contentType = 'image/webp';
+
+      const insertPoint = updated.indexOf('<Override');
       if (insertPoint > -1) {
         const newDefault = `\n<Default Extension="${ext}" ContentType="${contentType}"/>`;
         updated = updated.slice(0, insertPoint) + newDefault + updated.slice(insertPoint);
-      } else { // Fallback if no <Override> tag is found (highly unlikely for a valid PPTX)
+      } else {
         const typesEnd = updated.lastIndexOf("</Types>");
         if (typesEnd > -1) {
             const newDefault = `\n<Default Extension="${ext}" ContentType="${contentType}"/>`;
@@ -244,9 +244,8 @@ function updateContentTypesForImages(content: string, imageExtensions: Set<strin
 
 async function findNextAvailableSlideLayoutId(zip: JSZip): Promise<{ layoutId: number, layoutFileName: string, rId: string }> {
   const masterRelsFile = zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels');
-  if (!masterRelsFile) {
-    throw new Error('slideMaster1.xml.rels non trouvé');
-  }
+  if (!masterRelsFile) throw new Error('slideMaster1.xml.rels non trouvé');
+
   const masterRelsContent = await masterRelsFile.async('string');
   const layoutMatches = masterRelsContent.match(/slideLayout(\d+)\.xml/g) || [];
   let maxLayoutNum = 0;
@@ -259,13 +258,12 @@ async function findNextAvailableSlideLayoutId(zip: JSZip): Promise<{ layoutId: n
   const allRIds = extractExistingRIds(masterRelsContent);
   const existingRIds = allRIds.map(m => m.rId);
   let nextRId = getNextAvailableRId(existingRIds);
-  console.log(`Prochain layout: slideLayout${nextLayoutNum}, rId: ${nextRId}`);
-  // console.log(`rIds existants dans slideMaster1.xml.rels:`, existingRIds); // Verbose
+  // console.log(`Prochain layout: slideLayout${nextLayoutNum}, rId: ${nextRId}`); // Verbose
   return { layoutId: nextLayoutNum, layoutFileName: `slideLayout${nextLayoutNum}.xml`, rId: nextRId };
 }
 
 async function ensureOmbeaSlideLayoutExists(zip: JSZip): Promise<{ layoutFileName: string, layoutRId: string }> {
-  console.log('Création d\'un layout OMBEA dédié...');
+  // console.log('Création d\'un layout OMBEA dédié...'); // Verbose
   const { layoutId, layoutFileName, rId } = await findNextAvailableSlideLayoutId(zip);
   const slideLayoutContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="tx" preserve="1"><p:cSld name="Titre et texte"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Titre 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez le style du titre</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Espace réservé du texte 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="0"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez les styles du texte du masque</a:t></a:r></a:p><a:p><a:pPr lvl="1"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Deuxième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="2"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Troisième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="3"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Quatrième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="4"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Cinquième niveau</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Espace réservé de la date 3"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="dt" sz="half" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{ABB4FD2C-0372-488A-B992-EB1BD753A34A}" type="datetimeFigureOut"><a:rPr lang="fr-FR" smtClean="0"/><a:t>28/05/2025</a:t></a:fld><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="5" name="Espace réservé du pied de page 4"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="ftr" sz="quarter" idx="11"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="6" name="Espace réservé du numéro de diapositive 5"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldNum" sz="quarter" idx="12"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{CD42254F-ACD2-467B-9045-5226EEC3B6AB}" type="slidenum"><a:rPr lang="fr-FR" smtClean="0"/><a:t>‹N°›</a:t></a:fld><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp></p:spTree><p:extLst><p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}"><p14:creationId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="${Math.floor(Math.random() * 2147483647) + 1}"/></p:ext></p:extLst></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
   zip.file(`ppt/slideLayouts/${layoutFileName}`, slideLayoutContent);
@@ -274,7 +272,7 @@ async function ensureOmbeaSlideLayoutExists(zip: JSZip): Promise<{ layoutFileNam
   await updateSlideMasterRelsForNewLayout(zip, layoutFileName, rId);
   await updateSlideMasterForNewLayout(zip, layoutId, rId);
   await updateContentTypesForNewLayout(zip, layoutFileName);
-  console.log(`Layout OMBEA créé : ${layoutFileName} avec ${rId}`);
+  // console.log(`Layout OMBEA créé : ${layoutFileName} avec ${rId}`); // Verbose
   return { layoutFileName: layoutFileName, layoutRId: rId };
 }
 
@@ -295,7 +293,7 @@ async function updateSlideMasterForNewLayout(zip: JSZip, layoutId: number, rId: 
     let content = await masterFile.async('string');
     const layoutIdLstEnd = content.indexOf('</p:sldLayoutIdLst>');
     if (layoutIdLstEnd > -1) {
-      const layoutIdValue = 2147483648 + layoutId; // Ensure unique ID for layout
+      const layoutIdValue = 2147483648 + layoutId;
       const newLayoutId = `\n    <p:sldLayoutId id="${layoutIdValue}" r:id="${rId}"/>`;
       content = content.slice(0, layoutIdLstEnd) + newLayoutId + '\n  ' + content.slice(layoutIdLstEnd);
       zip.file('ppt/slideMasters/slideMaster1.xml', content);
@@ -310,11 +308,9 @@ async function updateContentTypesForNewLayout(zip: JSZip, layoutFileName: string
     if (!content.includes(layoutFileName)) {
       const lastLayoutIndex = content.lastIndexOf('slideLayout');
       let insertPoint = -1;
-      if (lastLayoutIndex > -1) {
-        insertPoint = content.indexOf('/>', lastLayoutIndex) + 2;
-      } else { // Fallback if no slideLayouts exist, insert before </Types>
-        insertPoint = content.lastIndexOf('</Types>');
-      }
+      if (lastLayoutIndex > -1) insertPoint = content.indexOf('/>', lastLayoutIndex) + 2;
+      else insertPoint = content.lastIndexOf('</Types>');
+
       if (insertPoint > -1) {
         const newOverride = `\n  <Override PartName="/ppt/slideLayouts/${layoutFileName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>`;
         content = content.slice(0, insertPoint) + newOverride + content.slice(insertPoint);
@@ -327,21 +323,21 @@ async function updateContentTypesForNewLayout(zip: JSZip, layoutFileName: string
 function createSlideXml(
   question: string,
   options: string[],
-  slideNumber: number,
+  slideNumber: number, // Absolute slide number in the final PPTX
   duration: number = 30,
   imageDimensions?: ImageDimensions,
   ombeaConfig?: ConfigOptions
 ): string {
   const slideComment = `<!-- Slide ${slideNumber} -->`;
-  const baseId = slideNumber * 10; // Ensure unique base ID for each slide
+  const baseId = slideNumber * 100; // Increased multiplier for more unique IDs
   const grpId = baseId + 1;
   const titleId = baseId + 2;
   const bodyId = baseId + 3;
   const countdownId = baseId + 4;
-  const imageId = baseId + 5; // For the image placeholder if present
+  const imageId = baseId + 5;
   let countdownDisplayText = ombeaConfig?.pollTimeLimit !== undefined ? ombeaConfig.pollTimeLimit : duration;
 
-  let bulletTypeForXml = 'arabicPeriod';
+  let bulletTypeForXml = 'arabicPeriod'; // Default
   if (ombeaConfig?.answersBulletStyle) {
     const styleMap: Record<string, string> = {
       'ppBulletAlphaUCParenRight': 'alphaUcParenR', 'ppBulletAlphaUCPeriod': 'alphaUcPeriod',
@@ -362,8 +358,8 @@ function createSlideXml(
   return xmlContent;
 }
 
-function calculateBaseTagNumber(slideNumber: number, tagOffset: number = 0): number {
-  return tagOffset + 1 + (slideNumber - 1) * 4;
+function calculateBaseTagNumber(slideNumberInBatch: number, tagOffset: number = 0): number {
+  return tagOffset + 1 + (slideNumberInBatch - 1) * 4;
 }
 
 function findHighestExistingTagNumber(zip: JSZip): number {
@@ -372,13 +368,13 @@ function findHighestExistingTagNumber(zip: JSZip): number {
   if (tagsFolder) {
     tagsFolder.forEach((relativePath) => {
       const match = relativePath.match(/tag(\d+)\.xml$/);
-      if (match) {
+      if (match && match[1]) {
         const tagNum = parseInt(match[1],10);
         if (tagNum > maxTagNumber) maxTagNumber = tagNum;
       }
     });
   }
-  console.log(`Plus grand tag OMBEA existant: tag${maxTagNumber}.xml`);
+  // console.log(`Plus grand tag OMBEA existant: tag${maxTagNumber}.xml`); // Verbose
   return maxTagNumber;
 }
 
@@ -402,6 +398,7 @@ async function isOmbeaSlide(zip: JSZip, slideNumber: number): Promise<boolean> {
   } catch { return false; }
 }
 
+/* // countExistingOmbeaSlides is declared but its value is never read.
 async function countExistingOmbeaSlides(zip: JSZip): Promise<number> {
   let count = 0;
   const totalSlides = countExistingSlides(zip);
@@ -411,16 +408,17 @@ async function countExistingOmbeaSlides(zip: JSZip): Promise<number> {
   console.log(`Slides OMBEA existantes détectées: ${count}`);
   return count;
 }
+*/
 
 function createSlideTagFiles(
-  questionIndex: number, // This is 1-based index for new questions
+  questionIndexInBatch: number,
   options: string[],
   correctAnswerIndex: number | undefined,
   duration: number,
   ombeaConfig?: ConfigOptions,
-  tagOffset: number = 0 // Number of existing tags
+  tagOffset: number = 0
 ): TagInfo[] {
-  const baseTagNumber = calculateBaseTagNumber(questionIndex, tagOffset);
+  const baseTagNumber = calculateBaseTagNumber(questionIndexInBatch, tagOffset);
   const slideGuid = generateGUID();
   let points = options.map((_, index) => (correctAnswerIndex !== undefined && index === correctAnswerIndex) ? "1.00" : "0.00").join(',');
 
@@ -464,7 +462,7 @@ function getNextAvailableRId(existingRIds: string[]): string {
   let maxId = 0;
   existingRIds.forEach(rId => {
     const match = rId.match(/rId(\d+)/);
-    if (match) {
+    if (match && match[1]) {
       const num = parseInt(match[1],10);
       if (num > maxId) maxId = num;
     }
@@ -474,84 +472,122 @@ function getNextAvailableRId(existingRIds: string[]): string {
 
 async function rebuildPresentationXml(
   zip: JSZip,
-  slideRIdMappings: { slideNumber: number; rId: string }[],
-  existingSlideCount: number
+  slideRIdMappings: { slideNumber: number; rId: string }[], // slideNumber is absolute slide number
+  existingSlideCountInTemplate: number
 ): Promise<void> {
   const presentationFile = zip.file('ppt/presentation.xml');
-  if (!presentationFile) return;
+  if (!presentationFile) {
+    console.error("ppt/presentation.xml not found in template ZIP.");
+    return;
+  }
   let content = await presentationFile.async('string');
   const defaultTextStyleMatch = content.match(/<p:defaultTextStyle>[\s\S]*?<\/p:defaultTextStyle>/);
-  const slideMasterRId = 'rId1'; // Standard assumption
-  let newContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="${slideMasterRId}"/></p:sldMasterIdLst><p:sldIdLst>`;
-  for (let i = 1; i <= existingSlideCount; i++) { // This loop should correctly reference existing slides rIds
-     const existingSlideRel = (await extractExistingRIds(await zip.file('ppt/_rels/presentation.xml.rels')!.async('string'))).find(r => r.target === `slides/slide${i}.xml`);
-     if(existingSlideRel) newContent += `\n    <p:sldId id="${255 + i}" r:id="${existingSlideRel.rId}"/>`;
+  const slideMasterRId = 'rId1'; // Standard assumption for the first (usually only) slide master
+
+  let newSldIdLstContent = `<p:sldIdLst>`;
+  // Add existing slides from template, ensuring their rIds are correctly referenced from presentation.xml.rels
+  const presentationRelsContent = await zip.file('ppt/_rels/presentation.xml.rels')?.async('string') || '';
+  const existingSlideRels = extractExistingRIds(presentationRelsContent).filter(r => r.target.startsWith('slides/slide'));
+
+  for (let i = 1; i <= existingSlideCountInTemplate; i++) {
+     const relForSlideI = existingSlideRels.find(r => r.target === `slides/slide${i}.xml`);
+     if(relForSlideI) {
+        newSldIdLstContent += `\n    <p:sldId id="${255 + i}" r:id="${relForSlideI.rId}"/>`;
+     } else {
+        // This case should ideally not happen if the template is well-formed
+        console.warn(`No rId found in presentation.xml.rels for template slide ${i}`);
+        // Fallback: try to guess or use a placeholder - this is risky
+        // newSldIdLstContent += `\n    <p:sldId id="${255 + i}" r:id="rId${i+1}"/>`; // Common pattern, but not guaranteed
+     }
   }
-  slideRIdMappings.forEach(mapping => { // These are new slides
-    const slideId = 255 + mapping.slideNumber; // slideNumber here is the absolute number (existing + new_index)
-    newContent += `\n    <p:sldId id="${slideId}" r:id="${mapping.rId}"/>`;
+  // Add new OMBEA slides (their rIds are in slideRIdMappings)
+  slideRIdMappings.forEach(mapping => {
+    // slideNumber in mapping is already absolute
+    newSldIdLstContent += `\n    <p:sldId id="${255 + mapping.slideNumber}" r:id="${mapping.rId}"/>`;
   });
-  newContent += `\n  </p:sldIdLst><p:sldSz cx="9144000" cy="6858000" type="screen4x3"/><p:notesSz cx="6858000" cy="9144000"/>`;
-  if (defaultTextStyleMatch) {
-    newContent += '\n  ' + defaultTextStyleMatch[0];
+  newSldIdLstContent += `\n  </p:sldIdLst>`;
+
+  // Replace the old sldIdLst with the new one
+  content = content.replace(/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/, newSldIdLstContent);
+
+  // Ensure sldMasterIdLst points to a valid rId (usually rId1)
+  if (!content.includes(`<p:sldMasterId id="2147483648" r:id="${slideMasterRId}"/>`)) {
+      content = content.replace(/<p:sldMasterIdLst>[\s\S]*?<\/p:sldMasterIdLst>/, `<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="${slideMasterRId}"/></p:sldMasterIdLst>`);
   }
-  newContent += `\n</p:presentation>`;
-  zip.file('ppt/presentation.xml', newContent);
+
+  zip.file('ppt/presentation.xml', content);
 }
+
 
 function updatePresentationRelsWithMappings(
   originalContent: string,
-  newSlideCount: number, // Number of newly added OMBEA slides
-  existingSlideCount: number // Number of slides in the template BEFORE OMBEA slides
+  newOmbeaSlideCount: number,
+  existingSlideCountInTemplate: number
 ): { updatedContent: string; slideRIdMappings: { slideNumber: number; rId: string }[] } {
+
   const existingMappings = extractExistingRIds(originalContent);
+  let rIdCounter = 1; // rIds start from 1
+
+  const newRelsOrder: RIdMapping[] = [];
+
+  // 1. Slide Master (should be rId1)
   const slideMasterRel = existingMappings.find(m => m.type.includes('slideMaster'));
-  // Filter for actual slide relations, excluding slide master itself if it was caught by '/slide'
-  const slideRelations = existingMappings.filter(m => m.type.endsWith('/relationships/slide') && m.target.startsWith('slides/slide'));
-  const presPropsRel = existingMappings.find(m => m.type.includes('presProps'));
-  const viewPropsRel = existingMappings.find(m => m.type.includes('viewProps'));
-  const themeRel = existingMappings.find(m => m.type.includes('theme'));
-  const tableStylesRel = existingMappings.find(m => m.type.includes('tableStyles'));
+  if (slideMasterRel) newRelsOrder.push({ ...slideMasterRel, rId: `rId${rIdCounter++}` });
+  else console.warn("Slide Master relation not found in presentation.xml.rels!");
 
-  let newContent = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  // 2. Existing Slides from template
+  const existingSlideRels = existingMappings.filter(m => m.target.startsWith('slides/slide'));
+  existingSlideRels.sort((a,b) => { // Sort by target slide number to maintain order
+      const numA = parseInt(a.target.match(/slide(\d+)\.xml/)?.[1] || '0');
+      const numB = parseInt(b.target.match(/slide(\d+)\.xml/)?.[1] || '0');
+      return numA - numB;
+  });
+  existingSlideRels.forEach(rel => newRelsOrder.push({ ...rel, rId: `rId${rIdCounter++}` }));
+
+  // 3. New OMBEA Slides
   const slideRIdMappings: { slideNumber: number; rId: string }[] = [];
-  let rIdCounter = 1; // Start rId counter
-
-  if (slideMasterRel) {
-    newContent += `<Relationship Id="rId${rIdCounter++}" Type="${slideMasterRel.type}" Target="${slideMasterRel.target}"/>`;
+  for (let i = 0; i < newOmbeaSlideCount; i++) {
+    const absoluteSlideNumber = existingSlideCountInTemplate + 1 + i;
+    const newSlideRId = `rId${rIdCounter++}`;
+    slideRIdMappings.push({ slideNumber: absoluteSlideNumber, rId: newSlideRId });
+    newRelsOrder.push({
+        rId: newSlideRId,
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
+        target: `slides/slide${absoluteSlideNumber}.xml`
+    });
   }
-  // Add existing slide relations from the template
-  slideRelations.forEach(() => { // Iterate for the number of existing slides
-    const originalRel = slideRelations.shift(); // take the first one
-    if (originalRel) {
-        newContent += `<Relationship Id="rId${rIdCounter++}" Type="${originalRel.type}" Target="${originalRel.target}"/>`;
+
+  // 4. Other relations (presProps, viewProps, theme, tableStyles)
+  ['presProps', 'viewProps', 'theme', 'tableStyles'].forEach(typePart => {
+    const rel = existingMappings.find(m => m.type.includes(typePart) && !newRelsOrder.find(nr => nr.target === m.target)); // ensure not already added
+    if (rel) newRelsOrder.push({ ...rel, rId: `rId${rIdCounter++}` });
+  });
+
+  // Add any other remaining unique relations from original
+  existingMappings.forEach(origRel => {
+    if (!newRelsOrder.find(nr => nr.target === origRel.target && nr.type === origRel.type)) {
+        newRelsOrder.push({ ...origRel, rId: `rId${rIdCounter++}`});
     }
   });
 
-  // Add new OMBEA slides
-  for (let i = 0; i < newSlideCount; i++) {
-    const absoluteSlideNumber = existingSlideCount + 1 + i; // Correct absolute slide number
-    const rId = `rId${rIdCounter++}`;
-    slideRIdMappings.push({ slideNumber: absoluteSlideNumber, rId: rId });
-    newContent += `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${absoluteSlideNumber}.xml"/>`;
-  }
 
-  // Add other properties
-  if (presPropsRel) { newContent += `<Relationship Id="rId${rIdCounter++}" Type="${presPropsRel.type}" Target="${presPropsRel.target}"/>`;}
-  if (viewPropsRel) { newContent += `<Relationship Id="rId${rIdCounter++}" Type="${viewPropsRel.type}" Target="${viewPropsRel.target}"/>`;}
-  if (themeRel) { newContent += `<Relationship Id="rId${rIdCounter++}" Type="${themeRel.type}" Target="${themeRel.target}"/>`;}
-  if (tableStylesRel) { newContent += `<Relationship Id="rId${rIdCounter++}" Type="${tableStylesRel.type}" Target="${tableStylesRel.target}"/>`;}
-  newContent += '</Relationships>';
-  // console.log('Nouvelle organisation des rId dans presentation.xml.rels générée.');
-  return { updatedContent: newContent, slideRIdMappings };
+  let updatedContent = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  newRelsOrder.forEach(rel => {
+    updatedContent += `\n  <Relationship Id="${rel.rId}" Type="${rel.type}" Target="${rel.target}"/>`;
+  });
+  updatedContent += '\n</Relationships>';
+
+  // console.log('Updated presentation.xml.rels content structure generated.'); // Verbose
+  return { updatedContent, slideRIdMappings };
 }
+
 
 function updateContentTypesComplete(
   originalContent: string,
-  newOmbeaSlideCount: number, // Number of new OMBEA slides
-  totalSlidesInFinalPptx: number, // Total slides (template + ombea)
-  layoutFileName: string, // The OMBEA layout we ensured/created
-  totalTags: number // Total number of tagX.xml files
+  newOmbeaSlideCount: number,
+  totalSlidesInFinalPptx: number,
+  layoutFileName: string,
+  totalTagsUsed: number
 ): string {
   let updatedContent = originalContent;
   if (!updatedContent.includes(layoutFileName)) {
@@ -566,17 +602,14 @@ function updateContentTypesComplete(
     }
   }
   let newOverrides = '';
-  // Add new OMBEA slides - their numbers start *after* existing template slides
-  // existingSlideCount is total slides in template *before* OMBEA slides are added.
-  const existingSlideCountOriginal = totalSlidesInFinalPptx - newOmbeaSlideCount;
-
+  const existingSlidesInTemplate = totalSlidesInFinalPptx - newOmbeaSlideCount;
   for (let i = 1; i <= newOmbeaSlideCount; i++) {
-    const slideNum = existingSlideCountOriginal + i;
-    if (!updatedContent.includes(`slide${slideNum}.xml`)) {
+    const slideNum = existingSlidesInTemplate + i;
+    if (!updatedContent.includes(`PartName="/ppt/slides/slide${slideNum}.xml"`)) {
       newOverrides += `\n  <Override PartName="/ppt/slides/slide${slideNum}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
     }
   }
-  for (let i = 1; i <= totalTags; i++) {
+  for (let i = 1; i <= totalTagsUsed; i++) {
     const tagPath = `/ppt/tags/tag${i}.xml`;
     if (!updatedContent.includes(`PartName="${tagPath}"`)) {
       newOverrides += `\n  <Override PartName="${tagPath}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.tags+xml"/>`;
@@ -590,62 +623,63 @@ function updateContentTypesComplete(
 }
 
 function calculateAppXmlMetadata(
-  totalFinalSlides: number, // Total slides in the final PPTX
-  questions: Val17Question[]
+  totalFinalSlides: number,
+  newOmbeaQuestions: Val17Question[]
 ): AppXmlMetadata {
   let totalWords = 0;
   let totalParagraphs = 0;
-  const slideTitles: string[] = []; // Only for new OMBEA questions
-  questions.forEach(q => {
-    const questionWords = q.question.trim().split(/\s+/).filter(word => word.length > 0).length;
-    totalWords += questionWords + (q.options.map(opt => opt.trim().split(/\s+/).filter(w => w.length > 0).length).reduce((a,b) => a+b, 0)) + 1; // +1 for timer
-    totalParagraphs += 1 + q.options.length + 1; // Title, each option, timer
-    slideTitles.push(q.question);
+  const newSlideTitles: string[] = [];
+  newOmbeaQuestions.forEach(q => {
+    const questionWords = q.question.trim().split(/\s+/).filter(Boolean).length;
+    const optionsWords = q.options.map(opt => opt.trim().split(/\s+/).filter(Boolean).length).reduce((a,b) => a+b, 0);
+    totalWords += questionWords + optionsWords + 1; // +1 for timer placeholder
+    totalParagraphs += 1 + q.options.length + 1; // Title, each option, timer placeholder
+    newSlideTitles.push(q.question);
   });
-  return { totalSlides: totalFinalSlides, totalWords, totalParagraphs, slideTitles };
+  // totalSlides is the grand total including template slides
+  return { totalSlides: totalFinalSlides, totalWords, totalParagraphs, slideTitles: newSlideTitles };
 }
 
 async function updateAppXml(zip: JSZip, metadata: AppXmlMetadata): Promise<void> {
   const appFile = zip.file('docProps/app.xml');
   if (!appFile) {
     console.warn('app.xml non trouvé, création d\'un nouveau fichier');
-    createNewAppXml(zip, metadata); // metadata.slideTitles here are only for new slides
+    createNewAppXml(zip, metadata);
     return;
   }
   let content = await appFile.async('string');
-  content = updateSimpleFields(content, metadata); // metadata.totalSlides is the final count
-  // For HeadingPairs and TitlesOfParts, we need to preserve existing titles from template
-  // This part is complex if we want to perfectly merge.
-  // A simpler approach for now: update counts, but don't try to merge TitlesOfParts perfectly.
-  // The metadata.slideTitles are for the *newly added* slides.
-  // This might need refinement if app.xml structure is critical for template styles.
-  // For now, let's assume PowerPoint can handle some inconsistencies here if we just update counts.
-  // Or, we can try to append new titles to existing ones.
+  content = updateSimpleFields(content, metadata);
+  // updateHeadingPairsAndTitles needs to be robust for merging.
+  // For now, it might be safer to update counts and not aggressively merge titles if it causes issues.
+  content = updateHeadingPairsAndTitles(content, metadata.slideTitles); // Pass only new titles
   zip.file('docProps/app.xml', content);
 }
 
 function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
   let updated = content;
   updated = updated.replace(/<Slides>\d+<\/Slides>/, `<Slides>${metadata.totalSlides}</Slides>`);
-  // For Words and Paragraphs, we should ideally ADD to existing counts, not replace.
-  // This requires parsing existing values. For simplicity, current code replaces.
+
   const wordsMatch = updated.match(/<Words>(\d+)<\/Words>/);
-  const existingWords = wordsMatch ? parseInt(wordsMatch[1], 10) : 0;
-  updated = updated.replace(/<Words>\d+<\/Words>/, `<Words>${existingWords + metadata.totalWords}</Words>`);
+  const existingWords = wordsMatch && wordsMatch[1] ? parseInt(wordsMatch[1], 10) : 0;
+  updated = updated.replace(/<Words>\d*<\/Words>/, `<Words>${existingWords + metadata.totalWords}</Words>`);
 
   const paragraphsMatch = updated.match(/<Paragraphs>(\d+)<\/Paragraphs>/);
-  const existingParagraphs = paragraphsMatch ? parseInt(paragraphsMatch[1], 10) : 0;
-  updated = updated.replace(/<Paragraphs>\d+<\/Paragraphs>/, `<Paragraphs>${existingParagraphs + metadata.totalParagraphs}</Paragraphs>`);
+  const existingParagraphs = paragraphsMatch && paragraphsMatch[1] ? parseInt(paragraphsMatch[1], 10) : 0;
+  updated = updated.replace(/<Paragraphs>\d*<\/Paragraphs>/, `<Paragraphs>${existingParagraphs + metadata.totalParagraphs}</Paragraphs>`);
 
   if (!updated.includes('<TotalTime>')) {
     const propertiesEnd = updated.indexOf('</Properties>');
     if (propertiesEnd > -1) {
-        const totalTimeTag = '\n  <TotalTime>2</TotalTime>'; // Default value
+        const totalTimeTag = '\n  <TotalTime>2</TotalTime>';
         updated = updated.slice(0, propertiesEnd) + totalTimeTag + updated.slice(propertiesEnd);
     }
   }
-  if (!updated.includes('<Company')) { // Ensure Company tag exists
-    const insertPoint = updated.indexOf('</TitlesOfParts>') > -1 ? updated.indexOf('</TitlesOfParts>') + '</TitlesOfParts>'.length : updated.indexOf('</Properties>');
+  if (!updated.includes('<Company')) {
+    const insertAfter = '</TitlesOfParts>'
+    let insertPoint = updated.indexOf(insertAfter);
+    if (insertPoint > -1) insertPoint += insertAfter.length;
+    else insertPoint = updated.indexOf('</Properties>');
+
     if (insertPoint > -1) {
         const companyTag = '\n  <Company/>';
         updated = updated.slice(0, insertPoint) + companyTag + updated.slice(insertPoint);
@@ -654,42 +688,32 @@ function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
   return updated;
 }
 
-function updateHeadingPairsAndTitles(content: string, newSlideTitles: string[]): string {
-    // This function needs to be more robust:
-    // 1. Parse existing HeadingPairs and TitlesOfParts from `content`.
-    // 2. Append newSlideTitles to the existing list of slide titles.
-    // 3. Reconstruct HeadingPairs and TitlesOfParts XML with updated counts and lists.
-    // For now, this is a placeholder for a complex operation.
-    // A simple approach might be to just update the count in HeadingPairs if "Titres des diapositives" exists.
-    console.warn("updateHeadingPairsAndTitles is simplified and may not perfectly merge titles from template with new titles.");
-
+// updateHeadingPairsAndTitles simplified to avoid complex merge, focuses on counts
+function updateHeadingPairsAndTitles(content: string, newOmbeaSlideTitles: string[]): string {
     let updated = content;
-    const titlesToAddCount = newSlideTitles.length;
+    const titlesToAddCount = newOmbeaSlideTitles.length;
 
-    // Try to update "Titres des diapositives" count in HeadingPairs
-    const headingPairsMatch = updated.match(/<vt:lpstr>Titres des diapositives<\/vt:lpstr>\s*<vt:variant>\s*<vt:i4>(\d+)<\/vt:i4>\s*<\/vt:variant>/);
-    if (headingPairsMatch && headingPairsMatch[1]) {
-        const existingTitleCount = parseInt(headingPairsMatch[1], 10);
-        const newTitleCount = existingTitleCount + titlesToAddCount;
-        updated = updated.replace(headingPairsMatch[0], `<vt:lpstr>Titres des diapositives</vt:lpstr></vt:variant><vt:variant><vt:i4>${newTitleCount}</vt:i4></vt:variant>`);
-    }
+    // Update "Titres des diapositives" count in HeadingPairs
+    const headingPairsRegex = /<vt:lpstr>Titres des diapositives<\/vt:lpstr>\s*<\/vt:variant>\s*<vt:variant>\s*<vt:i4>(\d+)<\/vt:i4>/;
+    updated = updated.replace(headingPairsRegex, (match, p1) => {
+        const existingCount = parseInt(p1, 10);
+        return `<vt:lpstr>Titres des diapositives</vt:lpstr></vt:variant><vt:variant><vt:i4>${existingCount + titlesToAddCount}</vt:i4>`;
+    });
 
-    // Try to append to TitlesOfParts
-    const titlesOfPartsEndMatch = updated.lastIndexOf('</vt:vector>', updated.indexOf('</TitlesOfParts>'));
-    if (titlesOfPartsEndMatch > -1) {
+    // Append new slide titles to TitlesOfParts
+    const titlesOfPartsEndIndex = updated.indexOf('</vt:vector>', updated.indexOf('<TitlesOfParts>'));
+    if (titlesOfPartsEndIndex !== -1) {
         let titlesXmlToAdd = "";
-        newSlideTitles.forEach(title => {
-            titlesXmlToAdd += `\n      <vt:lpstr>${escapeXml(title.substring(0,100))}</vt:lpstr>`;
+        newOmbeaSlideTitles.forEach(title => {
+            titlesXmlToAdd += `\n      <vt:lpstr>${escapeXml(title.substring(0, 250))}</vt:lpstr>`; // Max length for lpstr
         });
-        updated = updated.slice(0, titlesOfPartsEndMatch) + titlesXmlToAdd + updated.slice(titlesOfPartsEndMatch);
+        updated = updated.slice(0, titlesOfPartsEndIndex) + titlesXmlToAdd + updated.slice(titlesOfPartsEndIndex);
 
         // Update TitlesOfParts vector size
-        const titlesOfPartsStartMatch = updated.match(/<TitlesOfParts>\s*<vt:vector size="(\d+)"/);
-        if (titlesOfPartsStartMatch && titlesOfPartsStartMatch[1]) {
-            const existingSize = parseInt(titlesOfPartsStartMatch[1], 10);
-            const newSize = existingSize + titlesToAddCount;
-            updated = updated.replace(titlesOfPartsStartMatch[0], `<TitlesOfParts><vt:vector size="${newSize}"`);
-        }
+        updated = updated.replace(/<TitlesOfParts>\s*<vt:vector size="(\d+)"/, (match, p1) => {
+            const existingSize = parseInt(p1, 10);
+            return `<TitlesOfParts><vt:vector size="${existingSize + titlesToAddCount}"`;
+        });
     }
     return updated;
 }
@@ -708,7 +732,7 @@ function buildHeadingPairs(nonSlideTitles: string[], allSlideTitles: string[]): 
   if (allSlideTitles.length > 0) {
     pairs.push(`\n      <vt:variant><vt:lpstr>Titres des diapositives</vt:lpstr></vt:variant>\n      <vt:variant><vt:i4>${allSlideTitles.length}</vt:i4></vt:variant>`);
   }
-  const vectorSize = pairs.length > 0 ? (pairs.map(p => p.split('\n').filter(Boolean).length).reduce((a,b)=>a+b,0)) : 0;
+  const vectorSize = pairs.reduce((acc, curr) => acc + curr.split('<vt:variant>').length -1, 0);
   return `<HeadingPairs><vt:vector size="${vectorSize}" baseType="variant">${pairs.join('')}\n    </vt:vector></HeadingPairs>`;
 }
 
@@ -719,11 +743,11 @@ function buildTitlesOfParts(
   newSlideTitles: string[]
 ): string {
   const allTitles: string[] = [];
-  fonts.forEach(font => allTitles.push(font));
-  themes.forEach(theme => allTitles.push(theme));
-  existingSlideTitles.forEach(title => allTitles.push(title));
+  fonts.forEach(font => allTitles.push(escapeXml(font))); // Escape all titles
+  themes.forEach(theme => allTitles.push(escapeXml(theme)));
+  existingSlideTitles.forEach(title => allTitles.push(escapeXml(title)));
   newSlideTitles.forEach(title => {
-    const truncatedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
+    const truncatedTitle = title.length > 250 ? title.substring(0, 247) + '...' : title; // Ensure not too long
     allTitles.push(escapeXml(truncatedTitle));
   });
   const vectorContent = allTitles.map(title => `\n      <vt:lpstr>${title}</vt:lpstr>`).join('');
@@ -731,12 +755,9 @@ function buildTitlesOfParts(
 }
 
 function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata): void {
-  const defaultFonts = ['Arial', 'Calibri']; // Default fonts if creating app.xml from scratch
-  const defaultThemes = ['Thème Office'];  // Default theme
-
-  // In a new app.xml, there are no "existing slide titles" from a template.
-  // metadata.slideTitles contains titles of the new slides being added.
-  const headingPairs = buildHeadingPairs([...defaultFonts, ...defaultThemes], metadata.slideTitles);
+  const defaultFonts = ['Arial', 'Calibri'];
+  const defaultThemes = ['Thème Office'];
+  const headingPairs = buildHeadingPairs([...defaultFonts, ...defaultThemes], metadata.slideTitles); // slideTitles are for new slides
   const titlesOfParts = buildTitlesOfParts(defaultFonts, defaultThemes, [], metadata.slideTitles);
 
   const appXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -749,20 +770,25 @@ function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata): void {
   zip.file('docProps/app.xml', appXmlContent);
 }
 
-async function updateCoreXml(zip: JSZip, newQuestionCount: number): Promise<void> { // Parameter changed to reflect new questions
+async function updateCoreXml(zip: JSZip, newQuestionCount: number): Promise<void> {
   const coreFile = zip.file('docProps/core.xml');
   if (coreFile) {
     let content = await coreFile.async('string');
-    // Title should reflect the nature of the generated content
     const title = `Quiz OMBEA ${newQuestionCount} question${newQuestionCount > 1 ? 's' : ''}`;
     content = content.replace(/<dc:title>.*?<\/dc:title>/, `<dc:title>${escapeXml(title)}</dc:title>`);
     const now = new Date().toISOString();
     content = content.replace(/<dcterms:modified.*?>.*?<\/dcterms:modified>/, `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>`);
-    // Ensure dcterms:created exists, add if not
      if (!content.includes('<dcterms:created')) {
         const lastModifiedEnd = content.indexOf('</dcterms:modified>') + '</dcterms:modified>'.length;
         const createdTag = `\n  <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>`;
-        content = content.slice(0, lastModifiedEnd) + createdTag + content.slice(lastModifiedEnd);
+        if (lastModifiedEnd > -1 && lastModifiedEnd <= content.length) {
+            content = content.slice(0, lastModifiedEnd) + createdTag + content.slice(lastModifiedEnd);
+        } else { // Fallback if </dcterms:modified> not found, append before </cp:coreProperties>
+            const corePropsEnd = content.lastIndexOf("</cp:coreProperties>");
+            if (corePropsEnd > -1) {
+                 content = content.slice(0, corePropsEnd) + createdTag + "\n" + content.slice(corePropsEnd);
+            }
+        }
     }
     zip.file('docProps/core.xml', content);
   }
@@ -775,75 +801,65 @@ export async function generatePPTXVal17(
 ): Promise<void> {
   try {
     const executionId = Date.now();
-    console.log(`\n=== DÉBUT GÉNÉRATION VAL17 ${executionId} ===`);
+    // console.log(`\n=== DÉBUT GÉNÉRATION VAL17 ${executionId} ===`); // Verbose
     validateQuestions(questions);
     let currentTemplateFile: File;
     if (templateFile) {
       currentTemplateFile = templateFile;
     } else {
-      console.warn("Aucun fichier modèle fourni, tentative de création d'un modèle par défaut (peut échouer ou être basique).");
-      currentTemplateFile = await createDefaultTemplate(); // This throws error, as intended by original code
+      console.warn("Aucun fichier modèle fourni.");
+      throw new Error('Template file is required by generatePPTXVal17.');
     }
-    console.log(`Chargement du modèle: ${currentTemplateFile.name}`);
+    // console.log(`Chargement du modèle: ${currentTemplateFile.name}`); // Verbose
     const templateZip = await JSZip.loadAsync(currentTemplateFile);
 
-    let initialFileCount = 0;
-    templateZip.forEach(() => initialFileCount++);
-    console.log(`Fichiers dans le template chargé: ${initialFileCount}`);
+    // let initialFileCount = 0; // Verbose
+    // templateZip.forEach(() => initialFileCount++); // Verbose
+    // console.log(`Fichiers dans le template chargé: ${initialFileCount}`); // Verbose
 
     const existingSlideCount = countExistingSlides(templateZip);
-    console.log(`Slides existantes dans le modèle: ${existingSlideCount}`);
-    console.log(`Nouvelles slides OMBEA à créer: ${questions.length}`);
+    // console.log(`Slides existantes dans le modèle: ${existingSlideCount}`); // Verbose
+    // console.log(`Nouvelles slides OMBEA à créer: ${questions.length}`); // Verbose
 
     const existingTagsCount = findHighestExistingTagNumber(templateZip);
-    // console.log(`Tags OMBEA existants (max index): ${existingTagsCount}`); // Verbose
+    let maxTagNumberUsed = existingTagsCount;
 
-    // const existingOmbeaSlides = await countExistingOmbeaSlides(templateZip); // Can be verbose
-    // if (existingOmbeaSlides > 0) {
-    //   console.log(`⚠️ Template OMBEA détecté avec ${existingOmbeaSlides} slides OMBEA existantes. Les nouvelles questions seront ajoutées après.`);
-    // }
-
-    let maxTagNumberUsed = existingTagsCount; // Keep track of the highest tag number created
-
-    const outputZip = new JSZip(); // Create a new JSZip instance for the output
+    const outputZip = new JSZip();
     const copyPromises: Promise<void>[] = [];
     templateZip.forEach((relativePath, file) => {
       if (!file.dir) {
-        const copyPromise: Promise<void> = file.async('blob').then(content => {
+        const copyPromise: Promise<void> = file.async('blob').then(content => { // Corrected type
           outputZip.file(relativePath, content);
-          // No explicit return, so this resolves to void
         });
         copyPromises.push(copyPromise);
       } else {
-        // Ensure directories are also created in the output zip
         outputZip.folder(relativePath);
       }
     });
     await Promise.all(copyPromises);
-    console.log('Modèle copié dans outputZip.');
+    // console.log('Modèle copié dans outputZip.'); // Verbose
 
-    const { layoutFileName /*, layoutRId */ } = await ensureOmbeaSlideLayoutExists(outputZip);
-    // console.log(`Layout OMBEA assuré/créé: ${layoutFileName} (${layoutRId})`); // Verbose
+    const { layoutFileName } = await ensureOmbeaSlideLayoutExists(outputZip);
 
-    outputZip.folder('ppt/tags'); // Ensure tags folder exists
-    if (!outputZip.file('ppt/media')) { // Ensure media folder exists
+    outputZip.folder('ppt/tags');
+    if (!outputZip.file('ppt/media')) {
         outputZip.folder('ppt/media');
     }
 
-    console.log('Préparation des slides de questions OMBEA...');
+    // console.log('Préparation des slides de questions OMBEA...'); // Verbose
     const imageExtensions = new Set<string>();
     interface DownloadedImage { fileName: string; data: ArrayBuffer; width: number; height: number; dimensions: ImageDimensions; extension: string; }
     const downloadedImages = new Map<number, DownloadedImage>();
 
     if (questions.some(q => q.imageUrl)) {
-      console.log('Téléchargement des images pour les questions...');
+      // console.log('Téléchargement des images pour les questions...'); // Verbose
       const imagePromises = questions.map(async (question, index) => {
         if (question.imageUrl) {
           try {
             const imageData = await downloadImageFromCloudWithDimensions(question.imageUrl);
             if (imageData) {
-              const absoluteSlideNumberForImage = existingSlideCount + index + 1; // Slide number in the final PPTX
-              const imgFileName = `image_q${index + 1}.${imageData.extension}`; // More specific name
+              const absoluteSlideNumberForImage = existingSlideCount + index + 1;
+              const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
               const dimensions = calculateImageDimensions(imageData.width, imageData.height);
               return { slideNumberContext: absoluteSlideNumberForImage, image: { fileName: imgFileName, data: imageData.data, width: imageData.width, height: imageData.height, dimensions, extension: imageData.extension } };
             }
@@ -859,11 +875,11 @@ export async function generatePPTXVal17(
           outputZip.folder('ppt/media')?.file(result.image.fileName, result.image.data);
         }
       });
-      console.log(`${downloadedImages.size} images traitées.`);
+      // console.log(`${downloadedImages.size} images traitées.`); // Verbose
     }
 
     for (let i = 0; i < questions.length; i++) {
-      const absoluteSlideNumber = existingSlideCount + i + 1; // Slide number in the final PPTX
+      const absoluteSlideNumber = existingSlideCount + i + 1;
       const questionData = questions[i];
       const duration = questionData.points || options.ombeaConfig?.pollTimeLimit || options.defaultDuration || 30;
 
@@ -871,7 +887,7 @@ export async function generatePPTXVal17(
       const slideXml = createSlideXml(questionData.question, questionData.options, absoluteSlideNumber, duration, downloadedImage?.dimensions, options.ombeaConfig);
       outputZip.file(`ppt/slides/slide${absoluteSlideNumber}.xml`, slideXml);
 
-      const baseTagNumberForSlide = calculateBaseTagNumber(i + 1, existingTagsCount); // i+1 for 1-based index of new questions
+      const baseTagNumberForSlide = calculateBaseTagNumber(i + 1, existingTagsCount);
 
       let slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
       slideRelsXml += `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide}.xml"/>`;
@@ -890,10 +906,8 @@ export async function generatePPTXVal17(
         outputZip.file(`ppt/tags/${tag.fileName}`, tag.content);
         if (tag.tagNumber > maxTagNumberUsed) maxTagNumberUsed = tag.tagNumber;
       });
-      // console.log(`Slide OMBEA ${absoluteSlideNumber} créée pour question: ${questionData.question.substring(0,30)}...`); // Verbose
     }
-    // console.log(`Max tag number utilisé: ${maxTagNumberUsed}`); // Verbose
-    if (existingTagsCount > 0 && questions.length > 0) { // Only check continuity if new tags were added to existing ones
+    if (existingTagsCount > 0 && questions.length > 0) {
       const warnings = ensureTagContinuity(outputZip, 1, maxTagNumberUsed);
       if (warnings.length > 0) console.warn('⚠️ Problèmes de continuité des tags détectés:', warnings);
     }
@@ -916,33 +930,29 @@ export async function generatePPTXVal17(
       await rebuildPresentationXml(outputZip, slideRIdMappings, existingSlideCount);
     }
 
-    await updateCoreXml(outputZip, questions.length); // Pass new question count for title
-    const appMetadata = calculateAppXmlMetadata(totalFinalSlideCount, questions); // Pass total slides and new questions
-    await updateAppXml(outputZip, appMetadata); // app.xml update logic might need review for merging vs replacing counts
+    await updateCoreXml(outputZip, questions.length);
+    const appMetadata = calculateAppXmlMetadata(totalFinalSlideCount, questions);
+    await updateAppXml(outputZip, appMetadata);
 
-    console.log('Génération du fichier PPTX final...');
+    // console.log('Génération du fichier PPTX final...'); // Verbose
     const outputBlob = await outputZip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', compression: 'DEFLATE', compressionOptions: { level: 3 } });
     const finalFileName = options.fileName || `Questions_OMBEA_${new Date().toISOString().slice(0, 10)}.pptx`;
     saveAs(outputBlob, finalFileName);
     console.log(`Fichier OMBEA "${finalFileName}" généré avec succès.`);
-    console.log(`Total des slides: ${totalFinalSlideCount}`);
-    // console.log(`Total des tags (max index): ${maxTagNumberUsed}`); // Verbose
-    console.log(`=== FIN GÉNÉRATION VAL17 ${executionId} - SUCCÈS ===`);
+    // console.log(`Total des slides: ${totalFinalSlideCount}`); // Verbose
+    // console.log(`=== FIN GÉNÉRATION VAL17 ${executionId} - SUCCÈS ===`); // Verbose
   } catch (error: any) {
     console.error(`=== ERREUR GÉNÉRATION VAL17 ===`);
     console.error(error.message);
-    // console.error('Stack trace complet:', error.stack); // Can be very verbose
     alert(`Erreur lors de la génération du PPTX interactif des questions OMBEA: ${error.message}`);
-    throw error; // Re-throw pour que l'appelant puisse aussi gérer
+    throw error;
   }
 }
 
-// testConsistency and handleGeneratePPTX are example usage from original file, can be removed or adapted for our testing.
-// For now, they are kept but Val17Question type is updated.
 export async function testConsistency(templateFile: File, questions: Val17Question[]): Promise<void> {
   console.log('=== TEST DE COHÉRENCE (val17PptxGenerator) ===');
   const results = [];
-  for (let i = 0; i < 1; i++) { // Reduced to 1 for quicker test
+  for (let i = 0; i < 1; i++) {
     console.log(`\nTest de cohérence ${i + 1}...`);
     try {
       const templateCopy = new File([await templateFile.arrayBuffer()], templateFile.name, { type: templateFile.type });
@@ -967,5 +977,4 @@ export type {
   TagInfo,
   RIdMapping,
   AppXmlMetadata
-  // GenerationOptions, ConfigOptions are defined or imported at the top
 };

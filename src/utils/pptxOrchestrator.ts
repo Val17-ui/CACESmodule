@@ -44,6 +44,7 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
       options: sq.options,
       correctAnswerIndex: correctAnswerIndex,
       imageUrl: imageUrl,
+      points: sq.timeLimit, // Map timeLimit to points
     };
   });
 }
