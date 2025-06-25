@@ -1,7 +1,7 @@
-// Timestamp: 2024-06-24T18:30:00Z (Correcting import and ensuring no modifiedTemplateFileForVal17)
-import PptxGenJS from 'pptxgenjs'; // Not actively used for slide creation in this version, but kept for potential future use for intro slides
-import { QuestionWithId as StoredQuestion } from '../db'; // Corrected import
-import { Session, Participant } from '../types'; // Session might be unused if sessionInfo is typed inline
+// Timestamp: 2024-06-24T18:50:00Z (Adding debug log before calling Val17 generator)
+import PptxGenJS from 'pptxgenjs';
+import { QuestionWithId as StoredQuestion } from '../db';
+import { Session, Participant } from '../types';
 import { Val17Question, GenerationOptions as Val17GenerationOptions, ConfigOptions as Val17ConfigOptions, generatePPTXVal17 } from '../lib/val17-pptx-generator/val17PptxGenerator';
 
 export interface AdminPPTXSettings extends Val17ConfigOptions {
@@ -44,14 +44,14 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
       options: sq.options,
       correctAnswerIndex: correctAnswerIndex,
       imageUrl: imageUrl,
-      points: sq.timeLimit, // Map timeLimit to points
+      points: sq.timeLimit, // Mapped from StoredQuestion.timeLimit
     };
   });
 }
 
 export async function generatePresentation(
   sessionInfo: { name: string; date: string; referential: string },
-  _participants: Participant[], // Marked as unused for now in this simplified version
+  _participants: Participant[],
   storedQuestions: StoredQuestion[],
   templateFileFromUser: File,
   adminSettings: AdminPPTXSettings
@@ -75,11 +75,26 @@ export async function generatePresentation(
   };
 
   try {
+    // Log data being passed to the generator for debugging
+    console.log("Data being passed to generatePPTXVal17:", JSON.stringify({
+      templateName: templateFileFromUser.name,
+      questionsCount: transformedQuestions.length,
+      // Log first 2 questions to check structure, especially correctAnswerIndex and points
+      questionsSample: transformedQuestions.slice(0, 2).map(q => ({
+          text: q.question.substring(0,30) + "...", // Keep log concise
+          optionsCount: q.options.length,
+          correctAnswerIndex: q.correctAnswerIndex,
+          points: q.points,
+          hasImageUrl: !!q.imageUrl
+      })),
+      options: generationOptions
+    }, null, 2));
+
     await generatePPTXVal17(templateFileFromUser, transformedQuestions, generationOptions);
     console.log("Call to val17PptxGenerator.generatePPTXVal17 completed successfully.");
   } catch (error) {
     console.error("Error reported from val17PptxGenerator.generatePPTXVal17:", error);
-    if (!(error instanceof Error && error.message.includes("OMBEA"))) {
+    if (!(error instanceof Error && error.message.includes("OMBEA"))) { // Avoid double alert
         alert("Une erreur inattendue est survenue lors de la tentative de génération du PPTX.");
     }
   } finally {
