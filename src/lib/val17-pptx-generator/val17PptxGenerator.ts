@@ -1120,7 +1120,7 @@ export async function generatePPTXVal17(
   options: GenerationOptions = {},
   sessionInfo?: SessionInfo, // Added for intro slides
   participants?: Participant[] // Added for intro slides
-): Promise<void> {
+): Promise<GeneratedPptxData | null> { // MODIFIED RETURN TYPE
   try {
     const executionId = Date.now();
     // console.log(`\n=== DÉBUT GÉNÉRATION VAL17 ${executionId} ===`); // Verbose
@@ -1283,6 +1283,7 @@ export async function generatePPTXVal17(
     const imageExtensions = new Set<string>();
     interface DownloadedImage { fileName: string; data: ArrayBuffer; width: number; height: number; dimensions: ImageDimensions; extension: string; }
     const downloadedImages = new Map<number, DownloadedImage>();
+    const finalQuestionDataList: FinalQuestionData[] = []; // Initialize list to store question data
 
     if (questions.some(q => q.imageUrl)) {
       // console.log('Téléchargement des images pour les questions...'); // Verbose
@@ -1342,6 +1343,26 @@ export async function generatePPTXVal17(
         outputZip.file(`ppt/tags/${tag.fileName}`, tag.content);
         if (tag.tagNumber > maxTagNumberUsed) maxTagNumberUsed = tag.tagNumber;
       });
+
+      // Populate finalQuestionDataList
+      const slideGuidTag = tags.find(t => t.fileName === `tag${baseTagNumberForSlide}.xml`);
+      let slideGuid: string | null = null;
+      if (slideGuidTag) {
+        const guidMatch = slideGuidTag.content.match(/<p:tag name="OR_SLIDE_GUID" val="([^"]+)"\/>/);
+        if (guidMatch && guidMatch[1]) {
+          slideGuid = guidMatch[1];
+        }
+      }
+      finalQuestionDataList.push({
+        originalQuestionIndex: i,
+        slideGuid: slideGuid,
+        questionIdInSession: i + 1, // 1-based sequential ID for this session
+        title: questionData.question,
+        options: questionData.options,
+        correctAnswerIndex: questionData.correctAnswerIndex,
+        duration: duration,
+        absoluteSlideNumber: absoluteSlideNumber
+      });
     }
     if (existingTagsCount > 0 && questions.length > 0) {
       const warnings = ensureTagContinuity(outputZip, 1, maxTagNumberUsed);
@@ -1389,16 +1410,22 @@ export async function generatePPTXVal17(
 
     // console.log('Génération du fichier PPTX final...'); // Verbose
     const outputBlob = await outputZip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', compression: 'DEFLATE', compressionOptions: { level: 3 } });
-    const finalFileName = options.fileName || `Questions_OMBEA_${new Date().toISOString().slice(0, 10)}.pptx`;
-    saveAs(outputBlob, finalFileName);
-    console.log(`Fichier OMBEA "${finalFileName}" généré avec succès.`);
+
+    // const finalFileName = options.fileName || `Questions_OMBEA_${new Date().toISOString().slice(0, 10)}.pptx`;
+    // saveAs(outputBlob, finalFileName); // REMOVED - Orchestrator will handle saving the .ors file
+    // console.log(`Fichier OMBEA PPTX Blob généré avec succès pour inclusion dans .ors.`);
+
+    console.log(`PPTX Blob et données des questions générés.`);
     // console.log(`Total des slides: ${totalFinalSlideCount}`); // Verbose
     // console.log(`=== FIN GÉNÉRATION VAL17 ${executionId} - SUCCÈS ===`); // Verbose
+    return { pptxBlob: outputBlob, questionsData: finalQuestionDataList }; // RETURN BLOB AND DATA
+
   } catch (error: any) {
     console.error(`=== ERREUR GÉNÉRATION VAL17 ===`);
     console.error(error.message);
     alert(`Erreur lors de la génération du PPTX interactif des questions OMBEA: ${error.message}`);
-    throw error;
+    // throw error; // Ne plus propager l'erreur ici si on veut que l'orchestrateur gère le null
+    return null; // Return null on error
   }
 }
 
@@ -1409,8 +1436,13 @@ export async function testConsistency(templateFile: File, questions: Val17Questi
     console.log(`\nTest de cohérence ${i + 1}...`);
     try {
       const templateCopy = new File([await templateFile.arrayBuffer()], templateFile.name, { type: templateFile.type });
-      await generatePPTXVal17(templateCopy, questions, { fileName: `Test_Coherence_${i + 1}.pptx` }, undefined, undefined);
-      results.push('SUCCÈS');
+      const result = await generatePPTXVal17(templateCopy, questions, { fileName: `Test_Coherence_${i + 1}.pptx` }, undefined, undefined);
+      if (result && result.pptxBlob) {
+        results.push('SUCCÈS - Blob PPTX généré');
+        // Pourrait sauvegarder ici si nécessaire pour le test : saveAs(result.pptxBlob, `Test_Coherence_${i + 1}.pptx`);
+      } else {
+        results.push('ÉCHEC - Le générateur n\'a pas retourné de blob PPTX');
+      }
     } catch (error: any) { results.push(`ÉCHEC: ${error.message}`); }
   }
   console.log('\n=== RÉSULTATS TEST DE COHÉRENCE ===');
@@ -1420,7 +1452,14 @@ export async function testConsistency(templateFile: File, questions: Val17Questi
 export const handleGeneratePPTXFromVal17Tool = async (templateFile: File, questions: Val17Question[]) => {
   try {
     // Appel simple pour l'outil de test, sans sessionInfo ni participants pour l'instant
-    await generatePPTXVal17(templateFile, questions, { fileName: 'Quiz_OMBEA_Interactif_Val17.pptx' }, undefined, undefined);
+    const result = await generatePPTXVal17(templateFile, questions, { fileName: 'Quiz_OMBEA_Interactif_Val17.pptx' }, undefined, undefined);
+    if (result && result.pptxBlob) {
+      console.log('handleGeneratePPTXFromVal17Tool: PPTX Blob généré, sauvegarde...');
+      saveAs(result.pptxBlob, 'Quiz_OMBEA_Interactif_Val17_Tool.pptx'); // Sauvegarde pour cet outil de test spécifique
+    } else {
+      console.error('handleGeneratePPTXFromVal17Tool: Échec de la génération du Blob PPTX.');
+      alert('handleGeneratePPTXFromVal17Tool: N\'a pas pu générer le fichier PPTX.');
+    }
   } catch (error: any) {
     console.error('Erreur dans handleGeneratePPTXFromVal17Tool:', error);
     alert(`Erreur lors de la génération (handleGeneratePPTXFromVal17Tool): ${error.message}`);
@@ -1432,3 +1471,20 @@ export type {
   RIdMapping,
   AppXmlMetadata
 };
+
+// Data structure for information about each generated question slide, to be returned
+export interface FinalQuestionData {
+  originalQuestionIndex: number; // Index de la question dans le tableau d'entrée 'questions'
+  slideGuid: string | null;      // GUID de la slide OMBEA
+  questionIdInSession: number;   // Numéro séquentiel de la question OMBEA (1-based)
+  title: string;                 // Texte de la question (pour référence)
+  options: string[];             // Options de la question (pour référence)
+  correctAnswerIndex?: number;    // Index de la bonne réponse (pour référence)
+  duration: number;              // Durée de la question (pour référence)
+  absoluteSlideNumber: number;   // Numéro de la slide dans le PPTX final
+}
+
+export interface GeneratedPptxData {
+  pptxBlob: Blob;
+  questionsData: FinalQuestionData[];
+}
