@@ -14,47 +14,81 @@ import {
 } from '../lib/val17-pptx-generator/val17PptxGenerator';
 
 
-// Placeholder for ORSession.xml generation function
-// This will need to be implemented based on the actual structure of ORSession.xml
 function generateOmbeaSessionXml(
-  sessionInfo: Val17SessionInfo, // Use the one from val17PptxGenerator for consistency
-  participants: Participant[],
-  finalQuestions: FinalQuestionData[]
+  sessionInfo: Val17SessionInfo,
+  participants: Participant[], // Using the type from src/types/index.ts
+  _finalQuestions: FinalQuestionData[] // Renaming as questions are not part of ORSession.xml for now
 ): string {
-  // Basic XML structure - THIS IS A VERY SIMPLIFIED PLACEHOLDER
-  // TODO: Replace with actual ORSession.xml structure based on example if provided
+  // Using a helper for escaping XML attribute/text values
+  const esc = (unsafe: string | undefined | null): string => {
+    if (unsafe === undefined || unsafe === null) return '';
+    return String(unsafe)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  };
+
+  // Format device ID (e.g., 1 -> "DEVICE001")
+  const formatDeviceId = (participantIndex: number): string => {
+    // Placeholder until actual device mapping is implemented in Phase C
+    return `DEVICE${String(participantIndex + 1).padStart(3, '0')}`;
+  };
+
   let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n`;
-  xml += `<ORSession>\n`;
-  xml += `  <SessionInfo>\n`;
-  xml += `    <Title>${sessionInfo.title}</Title>\n`;
-  xml += `    <Date>${sessionInfo.date || new Date().toISOString().slice(0,10)}</Date>\n`;
-  // Add other sessionInfo fields as needed
-  xml += `  </SessionInfo>\n`;
+  xml += `<ors:ORSession xmlns:rl="http://www.ombea.com/response/respondentlist" xmlns:ors="http://www.ombea.com/response/session" ORVersion="0" SessionVersion="4">\n`;
 
-  xml += `  <Attendees>\n`;
-  participants.forEach(p => {
-    xml += `    <Attendee Name="${p.name}" />\n`; // Assuming name is the primary field
+  // Placeholder for session-specific info if needed in ORSession.xml root or a dedicated section
+  // For now, the example only shows Questions and RespondentList at the root.
+  // xml += `  <ors:SessionDetails>\n`;
+  // xml += `    <ors:Title>${esc(sessionInfo.title)}</ors:Title>\n`;
+  // xml += `    <ors:Date>${esc(sessionInfo.date || new Date().toISOString().slice(0,10))}</ors:Date>\n`;
+  // xml += `  </ors:SessionDetails>\n`;
+
+  xml += `  <ors:Questions/>\n`; // Empty as per example, questions are in PPTX tags
+
+  xml += `  <ors:RespondentList RespondentListVersion="3">\n`;
+  xml += `    <rl:RespondentHeaders>\n`;
+  xml += `      <rl:DeviceIDHeader Index="1"/>\n`;
+  xml += `      <rl:LastNameHeader Index="2"/>\n`; // Swapped Index with FirstName to match example
+  xml += `      <rl:FirstNameHeader Index="3"/>\n`;
+  // Assuming 'Organisation' is a fixed custom field for now. This could be made dynamic.
+  const customHeaders: { name: string; index: number }[] = [];
+  if (participants.some(p => p.organization)) {
+    customHeaders.push({ name: "Organisation", index: 4 });
+  }
+  // Add other custom headers if necessary by inspecting participants data.
+
+  customHeaders.forEach(ch => {
+    xml += `      <rl:CustomHeader Index="${ch.index}">${esc(ch.name)}</rl:CustomHeader>\n`;
   });
-  xml += `  </Attendees>\n`;
+  xml += `    </rl:RespondentHeaders>\n`;
 
-  xml += `  <QuestionList>\n`;
-  finalQuestions.forEach(q => {
-    xml += `    <QuestionItem>\n`;
-    xml += `      <QuestionID>${q.questionIdInSession}</QuestionID>\n`; // Sequential ID in this session
-    xml += `      <SlideUID>${q.slideGuid || ''}</SlideUID>\n`; // GUID from PPTX tag
-    xml += `      <Text>${q.title}</Text>\n`;
-    xml += `      <Duration>${q.duration}</Duration>\n`;
-    xml += `      <Options>\n`;
-    q.options.forEach((opt, index) => {
-      xml += `        <Option Correct="${index === q.correctAnswerIndex ? 'true' : 'false'}">${opt}</Option>\n`;
-    });
-    xml += `      </Options>\n`;
-    // Add other question details as needed by ORSession.xml
-    xml += `    </QuestionItem>\n`;
+  xml += `    <rl:Respondents>\n`;
+  participants.forEach((p, index) => {
+    xml += `      <rl:Respondent ID="${index + 1}">\n`; // Sequential 1-based ID
+    xml += `        <rl:Devices>\n`;
+    // Use the participant's index for the placeholder Device ID for now
+    xml += `          <rl:Device>${formatDeviceId(index)}</rl:Device>\n`;
+    xml += `        </rl:Devices>\n`;
+    xml += `        <rl:FirstName>${esc(p.firstName)}</rl:FirstName>\n`;
+    xml += `        <rl:LastName>${esc(p.lastName)}</rl:LastName>\n`;
+
+    if (p.organization && customHeaders.find(h => h.name === "Organisation")) {
+      xml += `        <rl:CustomProperty>\n`;
+      xml += `          <rl:ID>Organisation</rl:ID>\n`;
+      xml += `          <rl:Text>${esc(p.organization)}</rl:Text>\n`;
+      xml += `        </rl:CustomProperty>\n`;
+    }
+    // Add other custom properties based on detected headers
+    xml += `        <rl:GroupReferences/>\n`;
+    xml += `      </rl:Respondent>\n`;
   });
-  xml += `  </QuestionList>\n`;
-
-  xml += `</ORSession>`;
+  xml += `    </rl:Respondents>\n`;
+  xml += `    <rl:Groups/>\n`;
+  xml += `  </ors:RespondentList>\n`;
+  xml += `</ors:ORSession>`;
   return xml;
 }
 
