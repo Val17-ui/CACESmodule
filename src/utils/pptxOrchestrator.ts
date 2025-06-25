@@ -90,7 +90,20 @@ export async function generatePresentation(
       options: generationOptions
     }, null, 2));
 
-    await generatePPTXVal17(templateFileFromUser, transformedQuestions, generationOptions);
+    // Map sessionInfo to the SessionInfo type expected by val17PptxGenerator
+    const val17SessionInfo = {
+      title: sessionInfo.name, // Assuming 'name' from orchestrator's sessionInfo maps to 'title'
+      date: sessionInfo.date,
+      // referential is not in val17PptxGenerator's SessionInfo, so it's omitted here
+    };
+
+    await generatePPTXVal17(
+      templateFileFromUser,
+      transformedQuestions,
+      generationOptions,
+      val17SessionInfo, // Pass mapped sessionInfo
+      _participants      // Pass participants
+    );
     console.log("Call to val17PptxGenerator.generatePPTXVal17 completed successfully.");
   } catch (error) {
     console.error("Error reported from val17PptxGenerator.generatePPTXVal17:", error);
