@@ -30,10 +30,10 @@ function generateOmbeaSessionXml(
       .replace(/'/g, '&apos;');
   };
 
-  // Format device ID (e.g., 1 -> "000001")
-  const formatDeviceId = (id: number | undefined): string => {
-    if (id === undefined) return "";
-    return String(id).padStart(6, '0');
+  // Format device ID (e.g., 1 -> "DEVICE001")
+  const formatDeviceId = (participantIndex: number): string => {
+    // Placeholder until actual device mapping is implemented in Phase C
+    return `DEVICE${String(participantIndex + 1).padStart(3, '0')}`;
   };
 
   let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n`;
@@ -69,7 +69,8 @@ function generateOmbeaSessionXml(
   participants.forEach((p, index) => {
     xml += `      <rl:Respondent ID="${index + 1}">\n`; // Sequential 1-based ID
     xml += `        <rl:Devices>\n`;
-    xml += `          <rl:Device>${formatDeviceId(p.deviceId)}</rl:Device>\n`;
+    // Use the participant's index for the placeholder Device ID for now
+    xml += `          <rl:Device>${formatDeviceId(index)}</rl:Device>\n`;
     xml += `        </rl:Devices>\n`;
     xml += `        <rl:FirstName>${esc(p.firstName)}</rl:FirstName>\n`;
     xml += `        <rl:LastName>${esc(p.lastName)}</rl:LastName>\n`;
