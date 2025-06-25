@@ -370,11 +370,12 @@ function findHighestExistingTagNumber(zip: JSZip): number {
       const match = relativePath.match(/tag(\d+)\.xml$/);
       if (match && match[1]) {
         const tagNum = parseInt(match[1],10);
+        console.log(`[TAG_DEBUG] Found existing tag: ${relativePath}, number: ${tagNum}`);
         if (tagNum > maxTagNumber) maxTagNumber = tagNum;
       }
     });
   }
-  // console.log(`Plus grand tag OMBEA existant: tag${maxTagNumber}.xml`); // Verbose
+  console.log(`[TAG_DEBUG] findHighestExistingTagNumber returning: ${maxTagNumber}`);
   return maxTagNumber;
 }
 
@@ -822,6 +823,7 @@ export async function generatePPTXVal17(
     // console.log(`Nouvelles slides OMBEA à créer: ${questions.length}`); // Verbose
 
     const existingTagsCount = findHighestExistingTagNumber(templateZip);
+    console.log(`[TAG_DEBUG] existingTagsCount in generatePPTXVal17: ${existingTagsCount}`);
     let maxTagNumberUsed = existingTagsCount;
 
     const outputZip = new JSZip();
@@ -888,6 +890,9 @@ export async function generatePPTXVal17(
       outputZip.file(`ppt/slides/slide${absoluteSlideNumber}.xml`, slideXml);
 
       const baseTagNumberForSlide = calculateBaseTagNumber(i + 1, existingTagsCount);
+      if (i === 0) { // Log only for the first new question being processed
+        console.log(`[TAG_DEBUG] First new question (index ${i+1}), baseTagNumberForSlide: ${baseTagNumberForSlide} (calculated with offset: ${existingTagsCount})`);
+      }
 
       let slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
       slideRelsXml += `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide}.xml"/>`;
