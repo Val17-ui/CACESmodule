@@ -30,10 +30,11 @@ function generateOmbeaSessionXml(
       .replace(/'/g, '&apos;');
   };
 
-  // Format device ID (e.g., 1 -> "DEVICE001")
+  // Format device ID (e.g., 1 -> "000001")
   const formatDeviceId = (participantIndex: number): string => {
-    // Placeholder until actual device mapping is implemented in Phase C
-    return `DEVICE${String(participantIndex + 1).padStart(3, '0')}`;
+    // Placeholder until actual device mapping is implemented in Phase C.
+    // Generates IDs like "000001", "000002", etc.
+    return String(participantIndex + 1).padStart(6, '0');
   };
 
   let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n`;
