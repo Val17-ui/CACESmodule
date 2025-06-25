@@ -785,70 +785,79 @@ function updatePresentationRelsWithMappings(
   const existingMappings = extractExistingRIds(originalContent);
   let rIdCounter = 1;
   const newRelsOrder: RIdMapping[] = [];
-  const allSlideRIdMappings: { slideNumber: number; rId: string }[] = []; // For rebuilding presentation.xml sldIdLst
+  const allSlideRIdMappings: { slideNumber: number; rId: string }[] = [];
+  let rIdCounter = 1;
 
-  // 1. Slide Master
-  const slideMasterRel = existingMappings.find(m => m.type.includes('slideMaster'));
-  if (slideMasterRel) newRelsOrder.push({ ...slideMasterRel, rId: `rId${rIdCounter++}` });
-  else console.warn("Slide Master relation not found in presentation.xml.rels!");
+  const slideType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+  const slideMasterType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 
-  // 2. Existing Slides from template (up to initialExistingSlideCount)
-  const templateSlideRels = existingMappings.filter(m => {
-    const targetMatch = m.target.match(/^slides\/slide(\d+)\.xml$/);
-    return targetMatch && parseInt(targetMatch[1], 10) <= initialExistingSlideCount;
-  });
-  templateSlideRels.sort((a,b) => {
-      const numA = parseInt(a.target.match(/slide(\d+)\.xml/)![1]);
-      const numB = parseInt(b.target.match(/slide(\d+)\.xml/)![1]);
-      return numA - numB;
-  });
-  templateSlideRels.forEach(rel => {
-    const newRId = `rId${rIdCounter++}`;
-    newRelsOrder.push({ ...rel, rId: newRId });
-    const slideNumMatch = rel.target.match(/slide(\d+)\.xml/);
-    if (slideNumMatch) {
-        allSlideRIdMappings.push({ slideNumber: parseInt(slideNumMatch[1],10), rId: newRId });
-    }
-  });
-
-  // 3. New Introductory Slides
-  introSlideDetails.forEach(introDetail => {
-    const newSlideRId = `rId${rIdCounter++}`;
-    allSlideRIdMappings.push({ slideNumber: introDetail.slideNumber, rId: newSlideRId });
-    newRelsOrder.push({
-      rId: newSlideRId,
-      type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-      target: `slides/slide${introDetail.slideNumber}.xml`
-    });
-  });
-
-  // 4. New OMBEA Question Slides
-  for (let i = 0; i < newOmbeaQuestionCount; i++) {
-    const absoluteSlideNumber = initialExistingSlideCount + introSlideDetails.length + 1 + i;
-    const newSlideRId = `rId${rIdCounter++}`;
-    allSlideRIdMappings.push({ slideNumber: absoluteSlideNumber, rId: newSlideRId });
-    newRelsOrder.push({
-        rId: newSlideRId,
-        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-        target: `slides/slide${absoluteSlideNumber}.xml`
-    });
+  // 1. Preserve Slide Master relation first (usually rId1)
+  const slideMasterRel = existingMappings.find(m => m.type === slideMasterType);
+  if (slideMasterRel) {
+    newRelsOrder.push({ ...slideMasterRel, rId: `rId${rIdCounter++}` });
+  } else {
+    console.warn("Slide Master relation not found in template's presentation.xml.rels! This is unusual.");
+    // Potentially add a default one if critical, though a valid template should have it.
+    // newRelsOrder.push({ rId: `rId${rIdCounter++}`, type: slideMasterType, target: "slideMasters/slideMaster1.xml" });
   }
 
-  // 5. Other relations (presProps, viewProps, theme, tableStyles)
-  ['presProps', 'viewProps', 'theme', 'tableStyles'].forEach(typePart => {
-    const rel = existingMappings.find(m => m.type.includes(typePart) && !newRelsOrder.find(nr => nr.target === m.target)); // ensure not already added
-    if (rel) newRelsOrder.push({ ...rel, rId: `rId${rIdCounter++}` });
+  // 2. Preserve relations for existing template slides that are being kept
+  const templateSlideRels = existingMappings.filter(m =>
+    m.type === slideType &&
+    parseInt(m.target.match(/slide(\d+)\.xml/)![1]) <= initialExistingSlideCount
+  );
+  templateSlideRels.sort((a,b) => parseInt(a.target.match(/slide(\d+)\.xml/)![1]) - parseInt(b.target.match(/slide(\d+)\.xml/)![1]));
+
+  templateSlideRels.forEach(rel => {
+    const slideNum = parseInt(rel.target.match(/slide(\d+)\.xml/)![1]);
+    const newRId = `rId${rIdCounter++}`;
+    newRelsOrder.push({ ...rel, rId: newRId }); // Keep original target, update rId
+    allSlideRIdMappings.push({ slideNumber: slideNum, rId: newRId });
   });
 
-  // Add any other remaining unique relations from original
+  // 3. Add relations for new introductory slides
+  introSlideDetails.forEach(introDetail => {
+    const newSlideRId = `rId${rIdCounter++}`;
+    newRelsOrder.push({
+      rId: newSlideRId,
+      type: slideType,
+      target: `slides/slide${introDetail.slideNumber}.xml`
+    });
+    allSlideRIdMappings.push({ slideNumber: introDetail.slideNumber, rId: newSlideRId });
+  });
+
+  // 4. Add relations for new OMBEA question slides
+  for (let i = 0; i < newOmbeaQuestionCount; i++) {
+    const ombeaSlideNumber = initialExistingSlideCount + introSlideDetails.length + 1 + i;
+    const newSlideRId = `rId${rIdCounter++}`;
+    newRelsOrder.push({
+      rId: newSlideRId,
+      type: slideType,
+      target: `slides/slide${ombeaSlideNumber}.xml`
+    });
+    allSlideRIdMappings.push({ slideNumber: ombeaSlideNumber, rId: newSlideRId });
+  }
+
+  // 5. Preserve all other existing relations from the template (theme, viewProps, presProps, customXml, tags, etc.)
+  // by ensuring they are not already processed (like slideMaster or template slides whose rIds might have changed)
+  const processedTargets = new Set(newRelsOrder.map(r => r.target));
   existingMappings.forEach(origRel => {
-    if (!newRelsOrder.find(nr => nr.target === origRel.target && nr.type === origRel.type)) {
-        newRelsOrder.push({ ...origRel, rId: `rId${rIdCounter++}`});
+    if (origRel.type !== slideType && origRel.type !== slideMasterType && !processedTargets.has(origRel.target)) {
+       // If it's a type we haven't explicitly handled and its target hasn't been added, preserve it.
+       // This should cover presProps, viewProps, theme, tableStyles, and any presentation-level tags.
+      newRelsOrder.push({ ...origRel, rId: `rId${rIdCounter++}` });
+      processedTargets.add(origRel.target); // Add to processed to avoid duplicates if any logic changes
+    } else if (origRel.type !== slideType && origRel.type !== slideMasterType &&
+               !newRelsOrder.some(nr => nr.target === origRel.target && nr.type === origRel.type)) {
+      // Fallback for types like slideMaster if it wasn't found by the specific check but is present
+      // Or other specific known types if necessary
+      console.warn(`Re-adding relation for target: ${origRel.target} of type ${origRel.type} that might have been missed`);
+      newRelsOrder.push({ ...origRel, rId: `rId${rIdCounter++}` });
     }
   });
 
-
-  let updatedContent = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  // Ensure a clean build of the XML content
+  let updatedContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
   newRelsOrder.forEach(rel => {
     updatedContent += `\n  <Relationship Id="${rel.rId}" Type="${rel.type}" Target="${rel.target}"/>`;
   });
