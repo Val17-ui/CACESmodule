@@ -30,10 +30,15 @@ function generateOmbeaSessionXml(
       .replace(/'/g, '&apos;');
   };
 
-  // Format device ID (e.g., 1 -> "000001")
+  // Predefined list of known working Device IDs
+  const knownDeviceIDs = ["102494", "1017ED", "0FFB1C", "1027AC"];
+
   const formatDeviceId = (participantIndex: number): string => {
-    // Placeholder until actual device mapping is implemented in Phase C.
-    // Generates IDs like "000001", "000002", etc.
+    if (participantIndex < knownDeviceIDs.length) {
+      return knownDeviceIDs[participantIndex];
+    }
+    // Fallback for participants exceeding the knownDeviceIDs list
+    console.warn(`Nombre de participants (${participants.length}) supérieur au nombre d'ID boîtiers pré-définis (${knownDeviceIDs.length}). Utilisation d'un ID numérique formaté pour le participant ${participantIndex + 1}.`);
     return String(participantIndex + 1).padStart(6, '0');
   };
 
