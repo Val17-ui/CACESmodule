@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Tests</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        pre { background-color: #f4f4f4; padding: 10px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; }
+        .log-success { color: green; }
+        .log-failure { color: red; font-weight: bold; }
+        .log-info { color: blue; }
+        .log-error { color: orange; }
+    </style>
+</head>
+<body>
+    <h1>Application Tests</h1>
+    <p>Open the browser console to see detailed test logs.</p>
+    <button onclick="runTests()">Run All Tests</button>
+    <h2>Test Output:</h2>
+    <pre id="test-output"></pre>
+
+    <script type="module">
+        // Redirect console.log to display on page and in console
+        const outputElement = document.getElementById('test-output');
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+        const originalConsoleInfo = console.info;
+
+        const logToPage = (message, type = 'log') => {
+            const span = document.createElement('span');
+            let textContent = '';
+            if (typeof message === 'string') {
+                textContent = message;
+            } else {
+                try {
+                    textContent = JSON.stringify(message, null, 2);
+                } catch (e) {
+                    textContent = message.toString();
+                }
+            }
+
+            span.textContent = textContent + '\\n';
+
+            if (textContent.startsWith('SUCCESS:')) {
+                span.className = 'log-success';
+            } else if (textContent.startsWith('FAILURE:') || textContent.startsWith('ERROR:')) {
+                span.className = 'log-failure';
+            } else if (textContent.startsWith('INFO:')) {
+                span.className = 'log-info';
+            }
+             else if (type === 'error') span.className = 'log-error';
+
+
+            outputElement.appendChild(span);
+            outputElement.scrollTop = outputElement.scrollHeight; // Scroll to bottom
+        };
+
+        console.log = (...args) => {
+            originalConsoleLog(...args);
+            logToPage(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' '));
+        };
+        console.error = (...args) => {
+            originalConsoleError(...args);
+            logToPage(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' '), 'error');
+        };
+        console.warn = (...args) => {
+            originalConsoleWarn(...args);
+            logToPage(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' '), 'warn');
+        };
+        console.info = (...args) => {
+            originalConsoleInfo(...args);
+            logToPage(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' '), 'info');
+        };
+
+        // Import and run tests
+        async function runTestsAndLog() {
+            try {
+                // Dynamically import to catch import errors if any
+                const testModule = await import('/src/services/StorageManager.test.ts');
+                if (testModule && typeof testModule.runStorageManagerTests === 'function') {
+                    await testModule.runStorageManagerTests();
+                    console.log("--- All tests completed ---");
+                } else {
+                    console.error("Could not find runStorageManagerTests function in the test module.");
+                }
+            } catch (e) {
+                console.error("Error during test execution:", e);
+            }
+        }
+
+        window.runTests = runTestsAndLog; // Expose to button
+
+        // Automatically run tests on load
+        // runTestsAndLog(); // You can uncomment this to run tests automatically when the page loads
+        console.log("Test page loaded. Click 'Run All Tests' to start.");
+    </script>
+</body>
+</html>

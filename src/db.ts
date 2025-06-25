@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 // Import specific types needed from the project's type definitions
-import { ReferentialType, QuestionTheme } from './types'; // Adjusted path
+import { CACESReferential, QuestionTheme } from './types'; // Adjusted path, ensured CACESReferential is imported
 
 // Define QuestionWithId specifically for Dexie storage.
 // It does not extend project's Question interface directly to allow 'id' to be a number for Dexie.
@@ -13,7 +13,7 @@ export interface QuestionWithId {
   timeLimit?: number;
   isEliminatory: boolean;
   referential: CACESReferential; // Standardize to CACESReferential enum
-  theme: QuestionTheme;         // Using imported QuestionTheme
+  theme: string;         // Changed from QuestionTheme to string to allow composite themes like 'securite_A'
   image?: Blob | null; // Allow null for easier clearing, Blob for storage
   createdAt?: string;
   updatedAt?: string; // Add missing field
@@ -21,35 +21,20 @@ export interface QuestionWithId {
   correctResponseRate?: number;
 }
 
-export interface QuestionnaireWithId {
-  id?: number; // auto-incremented primary key
-  name: string;
-  referential: CACESReferential; // Standardize to CACESReferential enum
-  passingThreshold: number;
-  themeDistribution: Record<QuestionTheme, number>; // Or `Record<QuestionTheme, number>`
-  isRandomized: boolean;
-  eliminatoryCount: number;
-  totalQuestions: number;
-  createdAt: string;
-  updatedAt: string;
-  questionIds: number[]; // For pre-generated sets of question IDs in automatic mode (future use)
-  definedQuestions?: QuestionWithId[]; // For storing actual question objects in manual mode
-}
+// QuestionnaireWithId interface removed as Questionnaire entity is no longer stored.
 
 export class MySubClassedDexie extends Dexie {
   questions!: Table<QuestionWithId, number>; // Second type arg is the primary key type
-  questionnaires!: Table<QuestionnaireWithId, number>;
+  // questionnaires table removed.
 
   constructor() {
     super('myDatabase');
     this.version(1).stores({
       // Define schema for QuestionWithId. All fields to be indexed are listed.
       // `image` (Blob) is typically not indexed directly.
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options',
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options'
       // Indexing 'options' as a multiEntry index if searching by options is needed.
-      // 'definedQuestions' will be stored as part of the object, no special indexing for its content for now.
-      // 'questionIds' is kept for potential future use with automatic questionnaires.
-      questionnaires: '++id, name, referential, createdAt, updatedAt, isRandomized, questionIds'
+      // questionnaires table definition removed.
     });
   }
 }

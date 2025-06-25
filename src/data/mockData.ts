@@ -1,4 +1,4 @@
-import { Session, Participant, Question, Questionnaire } from '../types';
+import { Session, Participant, Question } from '../types'; // Questionnaire supprimé
 
 export const mockSessions: Session[] = [
   {
@@ -150,31 +150,4 @@ export const mockQuestions: Question[] = [
   }
 ];
 
-export const mockQuestionnaires: Questionnaire[] = [
-  {
-    id: '1',
-    name: 'CACES R489 - Questionnaire standard',
-    referential: 'R489',
-    questions: mockQuestions.filter(q => q.referential === 'R489'),
-    passingThreshold: 70,
-    themeDistribution: { reglementation: 15, securite: 15, technique: 10 },
-    eliminatoryCount: 3,
-    isRandomized: false,
-    totalQuestions: 40,
-    createdAt: '2025-05-10',
-    updatedAt: '2025-06-01'
-  },
-  {
-    id: '2',
-    name: 'CACES R486 - PEMP',
-    referential: 'R486',
-    questions: mockQuestions.filter(q => q.referential === 'R486'),
-    passingThreshold: 80,
-    themeDistribution: { reglementation: 12, securite: 18, technique: 10 },
-    eliminatoryCount: 4,
-    isRandomized: true,
-    totalQuestions: 40,
-    createdAt: '2025-04-20',
-    updatedAt: '2025-05-15'
-  }
-];
+// mockQuestionnaires a été supprimé car l'entité Questionnaire n'est plus stockée.
