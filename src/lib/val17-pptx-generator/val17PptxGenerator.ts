@@ -1662,22 +1662,32 @@ export async function generatePPTXVal17(
         );
       }
 
+      // Construction de slideRelsXml en respectant l'ordre observé chez OMBEA
+      // Les Id (rId1, rId2, etc.) sont ceux utilisés par slideX.xml pour référencer les targets.
       let slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
+
+      // Ordre OMBEA (basé sur l'exemple fourni pour un slideX.xml.rels) :
+      // 1. Tag Réponses (référencé par r:id="rId3" dans slideX.xml)
+      slideRelsXml += `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide + 2}.xml"/>`;
+
+      // 2. Tag Titre (référencé par r:id="rId2" dans slideX.xml)
+      slideRelsXml += `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide + 1}.xml"/>`;
+
+      // 3. Tag Principal de la diapositive (référencé par r:id="rId1" dans slideX.xml)
       slideRelsXml += `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide}.xml"/>`;
-      slideRelsXml += `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${
-        baseTagNumberForSlide + 1
-      }.xml"/>`;
-      slideRelsXml += `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${
-        baseTagNumberForSlide + 2
-      }.xml"/>`;
-      slideRelsXml += `<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${
-        baseTagNumberForSlide + 3
-      }.xml"/>`;
+
+      // 4. Layout (référencé par r:id="rId5" dans slideX.xml)
       slideRelsXml += `<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${ombeaLayoutFileName}"/>`;
+
+      // 5. Tag Countdown (référencé par r:id="rId4" dans slideX.xml)
+      slideRelsXml += `<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide + 3}.xml"/>`;
+
+      // 6. Image (si présente, référencée par r:id="rId6" dans slideX.xml)
       if (downloadedImage) {
         slideRelsXml += `<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${downloadedImage.fileName}"/>`;
       }
       slideRelsXml += `</Relationships>`;
+
       outputZip.file(
         `ppt/slides/_rels/slide${absoluteSlideNumber}.xml.rels`,
         slideRelsXml
