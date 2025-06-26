@@ -57,18 +57,23 @@ function generateOmbeaSessionXml(
   xml += `  <ors:RespondentList RespondentListVersion="3">\n`;
   xml += `    <rl:RespondentHeaders>\n`;
   xml += `      <rl:DeviceIDHeader Index="1"/>\n`;
-  xml += `      <rl:LastNameHeader Index="2"/>\n`; // Swapped Index with FirstName to match example
-  xml += `      <rl:FirstNameHeader Index="3"/>\n`;
-  // Assuming 'Organisation' is a fixed custom field for now. This could be made dynamic.
-  const customHeaders: { name: string; index: number }[] = [];
-  if (participants.some(p => p.organization)) {
-    customHeaders.push({ name: "Organisation", index: 4 });
-  }
-  // Add other custom headers if necessary by inspecting participants data.
 
-  customHeaders.forEach(ch => {
+  // Traiter FirstName et LastName comme des CustomHeaders
+  // Garder une trace des index pour les propriétés personnalisées
+  let currentHeaderIndex = 2; // DeviceIDHeader est à l'index 1
+
+  xml += `      <rl:CustomHeader Index="${currentHeaderIndex++}">FirstName</rl:CustomHeader>\n`;
+  xml += `      <rl:CustomHeader Index="${currentHeaderIndex++}">LastName</rl:CustomHeader>\n`;
+
+  // Gérer 'Organisation' comme avant, s'il existe
+  const customHeadersForOrganization: { name: string; index: number }[] = [];
+  if (participants.some(p => p.organization)) {
+    customHeadersForOrganization.push({ name: "Organisation", index: currentHeaderIndex++ });
+  }
+  customHeadersForOrganization.forEach(ch => {
     xml += `      <rl:CustomHeader Index="${ch.index}">${esc(ch.name)}</rl:CustomHeader>\n`;
   });
+
   xml += `    </rl:RespondentHeaders>\n`;
 
   xml += `    <rl:Respondents>\n`;
@@ -78,10 +83,20 @@ function generateOmbeaSessionXml(
     // Use the participant's index for the placeholder Device ID for now
     xml += `          <rl:Device>${formatDeviceId(index)}</rl:Device>\n`;
     xml += `        </rl:Devices>\n`;
-    xml += `        <rl:FirstName>${esc(p.firstName)}</rl:FirstName>\n`;
-    xml += `        <rl:LastName>${esc(p.lastName)}</rl:LastName>\n`;
 
-    if (p.organization && customHeaders.find(h => h.name === "Organisation")) {
+    // Ajouter FirstName comme CustomProperty
+    xml += `        <rl:CustomProperty>\n`;
+    xml += `          <rl:ID>FirstName</rl:ID>\n`; // L'ID doit correspondre au nom du CustomHeader
+    xml += `          <rl:Text>${esc(p.firstName)}</rl:Text>\n`;
+    xml += `        </rl:CustomProperty>\n`;
+
+    // Ajouter LastName comme CustomProperty
+    xml += `        <rl:CustomProperty>\n`;
+    xml += `          <rl:ID>LastName</rl:ID>\n`; // L'ID doit correspondre au nom du CustomHeader
+    xml += `          <rl:Text>${esc(p.lastName)}</rl:Text>\n`;
+    xml += `        </rl:CustomProperty>\n`;
+
+    if (p.organization && customHeadersForOrganization.find(h => h.name === "Organisation")) {
       xml += `        <rl:CustomProperty>\n`;
       xml += `          <rl:ID>Organisation</rl:ID>\n`;
       xml += `          <rl:Text>${esc(p.organization)}</rl:Text>\n`;
