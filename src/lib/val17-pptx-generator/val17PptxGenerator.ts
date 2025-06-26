@@ -783,10 +783,10 @@ function updatePresentationRelsWithMappings(
 ): { updatedContent: string; slideRIdMappings: { slideNumber: number; rId: string }[] } {
 
   const existingMappings = extractExistingRIds(originalContent);
-  let rIdCounter = 1;
+  let rIdCounter = 1; // Garder cette première déclaration
   const newRelsOrder: RIdMapping[] = [];
   const allSlideRIdMappings: { slideNumber: number; rId: string }[] = [];
-  let rIdCounter = 1; // This is the correct declaration
+  // La ligne suivante "let rIdCounter = 1;" est supprimée.
 
   const slideType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
   const slideMasterType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
