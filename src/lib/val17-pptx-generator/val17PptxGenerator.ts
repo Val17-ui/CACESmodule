@@ -207,9 +207,7 @@ function getImageDimensions(blob: Blob): Promise<{ width: number; height: number
   });
 }
 
-async function createDefaultTemplate(): Promise<File> {
-  throw new Error('Aucun template fourni. Veuillez sélectionner un fichier PowerPoint template.');
-}
+// Removed unused function createDefaultTemplate
 
 async function downloadImageFromCloudWithDimensions(
   url: string
@@ -595,15 +593,7 @@ function ensureTagContinuity(zip: JSZip, startingTag: number, endingTag: number)
   return warnings;
 }
 
-async function isOmbeaSlide(zip: JSZip, slideNumber: number): Promise<boolean> {
-  const slideRelsPath = `ppt/slides/_rels/slide${slideNumber}.xml.rels`;
-  const slideRelsFile = zip.file(slideRelsPath);
-  if (!slideRelsFile) return false;
-  try {
-    const content = await slideRelsFile.async('string');
-    return content.includes('relationships/tags');
-  } catch { return false; }
-}
+// Removed unused function isOmbeaSlide
 
 function createSlideTagFiles(
   questionIndexInBatch: number,
@@ -674,95 +664,63 @@ function updatePresentationRelsWithMappings(
 ): { updatedContent: string; slideRIdMappings: { slideNumber: number; rId: string }[], oldToNewRIdMap: { [oldRId: string]: string } } {
 
   const existingRels = extractExistingRIds(originalContent);
-  const finalRels: RIdMapping[] = [];
-  const finalSlideMappings: { slideNumber: number; rId: string }[] = [];
+  const finalRelsOutput: RIdMapping[] = []; // For constructing the final XML content
+  const slideRIdMappings: { slideNumber: number; rId: string }[] = []; // For presentation.xml sldIdLst
   const oldToNewRIdMap: { [oldRId: string]: string } = {};
-  let nextAvailableRIdNum = 1;
+  let rIdCounter = 1;
 
-  function generateNewRId(): string {
-    let newRId;
-    const allCurrentlyUsedRds = new Set([...finalRels.map(r => r.rId), ...existingRels.map(r => r.rId)]);
-    do {
-      newRId = `rId${nextAvailableRIdNum++}`;
-    } while (allCurrentlyUsedRds.has(newRId));
-    return newRId;
+  const slideType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+  const slideMasterType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
+
+  // 1. SlideMaster is rId1
+  const originalSlideMaster = existingRels.find(r => r.type === slideMasterType);
+  if (originalSlideMaster) {
+    finalRelsOutput.push({ ...originalSlideMaster, rId: "rId1" });
+    oldToNewRIdMap[originalSlideMaster.rId] = "rId1";
+  } else {
+    console.warn("No Slide Master found. Adding a default as rId1.");
+    finalRelsOutput.push({ rId: "rId1", type: slideMasterType, target: "slideMasters/slideMaster1.xml", originalRId: "rId1_placeholder" });
   }
+  rIdCounter = 2; // Next rIds start from 2
 
-  // Preserve all non-slide relations from the original template, keeping their original rIds.
-  existingRels.forEach(rel => {
-    if (!rel.type.endsWith("/slide")) {
-      finalRels.push({ ...rel });
-      oldToNewRIdMap[rel.rId] = rel.rId;
-      const numMatch = rel.rId.match(/^rId(\d+)$/);
-      if (numMatch) {
-        nextAvailableRIdNum = Math.max(nextAvailableRIdNum, parseInt(numMatch[1]) + 1);
-      }
-    }
-  });
-
-  // Add/update slide relations for template slides
+  // 2. All Slides (template -> intro -> new questions)
+  // Template slides
   for (let i = 1; i <= initialExistingSlideCount; i++) {
     const slideTarget = `slides/slide${i}.xml`;
-    const existingRel = existingRels.find(m => m.target === slideTarget && m.type.endsWith("/slide"));
-    let rIdToUse: string;
-
-    if (existingRel) {
-        rIdToUse = existingRel.rId;
-        if (finalRels.some(r => r.rId === rIdToUse && r.target !== slideTarget)) {
-            console.warn(`rId clash for template slide ${slideTarget} (original rId ${rIdToUse}) with a non-slide element. Generating new rId.`);
-            rIdToUse = generateNewRId();
-        }
-        oldToNewRIdMap[existingRel.rId] = rIdToUse;
-    } else {
-        console.warn(`No existing .rels entry found for template slide ${slideTarget}. Generating new rId.`);
-        rIdToUse = generateNewRId();
-    }
-
-    if (!finalRels.some(r => r.rId === rIdToUse)) {
-      finalRels.push({ rId: rIdToUse, type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide", target: slideTarget });
-    }
-    finalSlideMappings.push({ slideNumber: i, rId: rIdToUse });
+    const originalRel = existingRels.find(m => m.target === slideTarget && m.type === slideType);
+    const newRId = `rId${rIdCounter++}`;
+    finalRelsOutput.push({ rId: newRId, type: slideType, target: slideTarget, originalRId: originalRel?.rId });
+    slideRIdMappings.push({ slideNumber: i, rId: newRId });
+    if (originalRel) oldToNewRIdMap[originalRel.rId] = newRId;
   }
-
-  // Add relations for new introductory slides
+  // Intro slides
   introSlideDetails.forEach(detail => {
-    const rId = generateNewRId();
-    finalRels.push({ rId, type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide", target: `slides/slide${detail.slideNumber}.xml` });
-    finalSlideMappings.push({ slideNumber: detail.slideNumber, rId });
+    const newRId = `rId${rIdCounter++}`;
+    finalRelsOutput.push({ rId: newRId, type: slideType, target: `slides/slide${detail.slideNumber}.xml` });
+    slideRIdMappings.push({ slideNumber: detail.slideNumber, rId: newRId });
   });
-
-  // Add relations for new OMBEA question slides
+  // OMBEA question slides
   for (let i = 0; i < newOmbeaQuestionCount; i++) {
     const slideNum = initialExistingSlideCount + introSlideDetails.length + 1 + i;
-    const rId = generateNewRId();
-    finalRels.push({ rId, type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide", target: `slides/slide${slideNum}.xml` });
-    finalSlideMappings.push({ slideNumber: slideNum, rId });
+    const newRId = `rId${rIdCounter++}`;
+    finalRelsOutput.push({ rId: newRId, type: slideType, target: `slides/slide${slideNum}.xml` });
+    slideRIdMappings.push({ slideNumber: slideNum, rId: newRId });
   }
 
-  const uniqueFinalRels = finalRels.reduce((acc, current) => {
-    if (!acc.find(item => item.rId === current.rId)) { // Check for rId uniqueness primarily
-      if (!acc.find(item => item.target === current.target && item.type === current.type)) { // Then check for target/type uniqueness
-         acc.push(current);
-      } else if (current.type.endsWith("/slide")) { // If it's a slide, it should have been handled to have a unique rId
-         acc.push(current);
-      }
-    } else if (current.type.endsWith("/slide") && !acc.find(item => item.target === current.target && item.type === current.type)){
-        // If rId is duplicate, but it's a slide and its target is unique, it's an error in rId generation for slides.
-        // This case should ideally be prevented by generateNewRId and careful handling of existing slide rIds.
-        // For now, we might allow it if the target is different, but this indicates a deeper issue.
-        // To be safe, let's ensure target+type is the key for uniqueness.
-        const existingWithSameTargetAndType = acc.find(item => item.target === current.target && item.type === current.type);
-        if(!existingWithSameTargetAndType){
-            acc.push(current);
-        }
+  // 3. All other existing relationships (theme, props, tags, masters other than slideMaster, etc.)
+  existingRels.forEach(origRel => {
+    if (origRel.type !== slideMasterType && origRel.type !== slideType) {
+      const newRId = `rId${rIdCounter++}`;
+      finalRelsOutput.push({ ...origRel, rId: newRId });
+      oldToNewRIdMap[origRel.rId] = newRId;
     }
-    return acc;
-  }, [] as RIdMapping[]);
+  });
 
-  uniqueFinalRels.sort((a,b) => parseInt(a.rId.substring(3)) - parseInt(b.rId.substring(3)) );
+  slideRIdMappings.sort((a, b) => a.slideNumber - b.slideNumber);
 
   let updatedContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
-  uniqueFinalRels.forEach(rel => {
+  // Sort finalRels by the numeric part of rId for a consistent output
+  finalRelsOutput.sort((a,b)=> parseInt(a.rId.substring(3)) - parseInt(b.rId.substring(3))).forEach(rel => {
     updatedContent += `\n  <Relationship Id="${rel.rId}" Type="${rel.type}" Target="${rel.target}"/>`;
   });
   updatedContent += '\n</Relationships>';
@@ -776,7 +734,7 @@ async function rebuildPresentationXml(
   zip: JSZip,
   slideRIdMappings: { slideNumber: number; rId: string }[],
   slideSizeAttrs: SlideSizeAttributes | null,
-  oldToNewRIdMap?: { [oldRId: string]: string }
+  oldToNewRIdMap: { [oldRId: string]: string }
 ): Promise<void> {
   const presentationFile = zip.file('ppt/presentation.xml');
   if (!presentationFile) {
@@ -785,20 +743,18 @@ async function rebuildPresentationXml(
   }
   let content = await presentationFile.async('string');
 
-  if (oldToNewRIdMap) {
-    const rIdAttributeRegex = /(<(?:p:sldMasterId|p:notesMasterId|p:handoutMasterId|p:tags|p:font|a:regular|a:bold|a:italic|a:boldItalic)\b[^>]*\s+r:id=")(rId\d+)(")/g;
-    content = content.replace(rIdAttributeRegex, (match, prefix, oldRId, suffix) => {
-      const newRId = oldToNewRIdMap[oldRId];
-      if (newRId) {
-        return `${prefix}${newRId}${suffix}`;
-      }
-      return match;
-    });
-  } else {
-    console.warn("rebuildPresentationXml: oldToNewRIdMap was not provided. r:id attributes for non-slide elements may be incorrect if they were changed in .rels.");
-  }
+  // Update all r:id attributes in presentation.xml using the oldToNewRIdMap
+  content = content.replace(/r:id="(rId\d+)"/g, (match, oldRId) => {
+    const newRId = oldToNewRIdMap[oldRId];
+    if (newRId) {
+      return `r:id="${newRId}"`;
+    }
+    console.warn(`presentation.xml: No new r:id mapping found for old r:id="${oldRId}". Keeping original. Match: ${match}`);
+    return match;
+  });
 
   let newSldIdLstContent = `<p:sldIdLst>`;
+  // slideRIdMappings should already be sorted by slideNumber from updatePresentationRelsWithMappings
   slideRIdMappings.forEach((mapping, index) => {
     const sldIdValue = 256 + index;
     newSldIdLstContent += `\n    <p:sldId id="${sldIdValue}" r:id="${mapping.rId}"/>`;
