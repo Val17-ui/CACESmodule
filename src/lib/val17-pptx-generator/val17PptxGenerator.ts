@@ -70,6 +70,7 @@ interface RIdMapping {
   rId: string;
   type: string;
   target: string;
+  originalRId?: string; // Added originalRId for mapping
 }
 
 interface AppXmlMetadata {
