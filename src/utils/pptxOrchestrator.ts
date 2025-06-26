@@ -17,7 +17,7 @@ import {
 function generateOmbeaSessionXml(
   sessionInfo: Val17SessionInfo,
   participants: Participant[], // Using the type from src/types/index.ts
-  finalQuestions: FinalQuestionData[] // Utiliser ce paramètre
+  _finalQuestions: FinalQuestionData[] // Renaming as questions are not part of ORSession.xml for now
 ): string {
   // Using a helper for escaping XML attribute/text values
   const esc = (unsafe: string | undefined | null): string => {
@@ -52,27 +52,7 @@ function generateOmbeaSessionXml(
   // xml += `    <ors:Date>${esc(sessionInfo.date || new Date().toISOString().slice(0,10))}</ors:Date>\n`;
   // xml += `  </ors:SessionDetails>\n`;
 
-  xml += `  <ors:Questions>\n`;
-  if (finalQuestions && finalQuestions.length > 0) {
-    finalQuestions.forEach(q => {
-      // L'élément <ors:Question> pourrait nécessiter plus d'attributs ou de sous-éléments
-      // selon les spécifications d'OMBEA. Au minimum, un identifiant unique est probable.
-      // Utilisons slideGuid ici, car il est unique et lie au PPTX.
-      // On pourrait aussi utiliser q.questionIdInSession si c'est plus pertinent pour ORSession.xml
-      if (q.slideGuid) { // S'assurer que le slideGuid existe
-        xml += `    <ors:Question GUID="${esc(q.slideGuid)}" Title="${esc(q.title.substring(0,100))}">\n`; // Exemple avec GUID et Titre tronqué
-        // Potentiellement d'autres informations sur la question ici si requis par OMBEA
-        // Par exemple, le nombre de choix, le type de question, etc.
-        // Pour l'instant, on le garde simple.
-        xml += `    </ors:Question>\n`;
-      } else {
-        // Gérer le cas où slideGuid est null, peut-être logguer un avertissement
-        // ou utiliser un autre identifiant comme q.questionIdInSession
-        console.warn(`Question (index ${q.originalQuestionIndex}, titre: "${q.title.substring(0,30)}...") n'a pas de slideGuid. Elle ne sera pas incluse dans ORSession.xml <Questions>.`);
-      }
-    });
-  }
-  xml += `  </ors:Questions>\n`;
+  xml += `  <ors:Questions/>\n`; // Empty as per example, questions are in PPTX tags
 
   xml += `  <ors:RespondentList RespondentListVersion="3">\n`;
   xml += `    <rl:RespondentHeaders>\n`;
@@ -228,12 +208,11 @@ export async function generatePresentation(
 
     if (generatedData && generatedData.pptxBlob) {
       console.log("PPTX Blob et données des questions reçus de generatePPTXVal17.");
-      console.log("Questions Data sample:", generatedData.questionsData.slice(0, 2)); // Log pour vérifier
 
       const orSessionXmlContent = generateOmbeaSessionXml(
         val17SessionInfo, // Pass the same sessionInfo used for PPTX generation
         _participants,
-        generatedData.questionsData // S'assurer que c'est bien passé ici
+        generatedData.questionsData // Use data returned from generator
       );
 
       const outputOrsZip = new JSZip();
