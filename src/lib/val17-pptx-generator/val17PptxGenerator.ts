@@ -219,9 +219,7 @@ async function createDefaultTemplate(): Promise<File> {
   );
 }
 
-async function downloadImageFromCloudWithDimensions(
-  url: string
-): Promise<{
+async function downloadImageFromCloudWithDimensions(url: string): Promise<{
   data: ArrayBuffer;
   extension: string;
   width: number;
