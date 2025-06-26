@@ -619,12 +619,18 @@ function createSlideXml(
   ombeaConfig?: ConfigOptions
 ): string {
   const slideComment = `<!-- Slide ${slideNumber} -->`;
-  const baseId = slideNumber * 100;
-  const grpId = baseId + 1;
-  const titleId = baseId + 2;
-  const bodyId = baseId + 3;
-  const countdownId = baseId + 4;
-  const imageId = baseId + 5;
+  // slideNumber est le numéro de la diapositive dans le lot de questions (1ère q, 2ème q)
+  // et non le numéro absolu de la diapositive dans la présentation finale.
+
+  const grpId = 1; // ID fixe pour le p:nvGrpSpPr principal de la diapositive de question
+  const titleId = 2; // ID pour la forme du titre
+  const bodyId = 3;  // ID pour la forme des réponses/options
+  const countdownId = 4; // ID pour la forme du compte-à-rebours
+  const imageId = 5; // ID pour la forme de l'image (si présente)
+
+  // L'ancienne méthode de calcul des IDs basée sur slideNumber * 100 est supprimée
+  // pour ces éléments spécifiques dans les diapositives de questions OMBEA.
+
   let countdownDisplayText =
     ombeaConfig?.pollTimeLimit !== undefined
       ? ombeaConfig.pollTimeLimit
