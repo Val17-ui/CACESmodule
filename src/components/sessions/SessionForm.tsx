@@ -18,7 +18,8 @@ import { StorageManager } from '../../services/StorageManager';
 // Nous utiliserons QuestionWithId directement pour clarifier que c'est l'objet DB.
 import { QuestionWithId as StoredQuestion, addSession, updateSession, getSessionById } from '../../db';
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
-import { parseOmbeaResultsXml, ParsedResponse } from '../../utils/resultsParser'; // Importer le parser
+import { parseOmbeaResultsXml, ExtractedResultFromXml } from '../../utils/resultsParser'; // Importer le parser et ExtractedResultFromXml
+import JSZip from 'jszip'; // Importer JSZip
 
 
 // Interface pour les props du composant, si on veut charger une session existante
@@ -299,30 +300,40 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1',
       };
 
-      // Supposons que generatePresentation retourne le Blob du .ors
-      const orsBlob = await generatePresentation(
+      // generatePresentation retourne maintenant { orsBlob, questionMappings }
+      const generationOutput = await generatePresentation(
         sessionInfoForPptx,
-        participants, // Utilise FormParticipant, ajuster si generatePresentation attend DBParticipant
+        participants,
         allSelectedQuestionsForPptx,
         templateFile,
         adminSettings
       );
 
-      console.log("Type de orsBlob reçu:", typeof orsBlob, "Est-ce une instance de Blob ?", orsBlob instanceof Blob);
-      if (orsBlob instanceof Blob) {
+      console.log("Retour de generatePresentation:", generationOutput);
+
+      if (generationOutput && generationOutput.orsBlob instanceof Blob && generationOutput.questionMappings) {
+        const { orsBlob, questionMappings } = generationOutput;
         console.log("Blob .ors reçu, taille:", orsBlob.size, "type:", orsBlob.type);
+        console.log("QuestionMappings reçus:", questionMappings);
         try {
-          await updateSession(savedSessionId, { donneesOrs: orsBlob, updatedAt: new Date().toISOString(), status: 'ready' }); // Changement de statut optionnel
-          console.log(`Session (ID: ${savedSessionId}) mise à jour avec le Blob .ors.`);
-          alert(`Questionnaire, .ors générés et session (ID: ${savedSessionId}) mise à jour avec le fichier .ors! Statut mis à Prête.`);
-          // Peut-être forcer un rechargement ou une mise à jour de l'état ici si on ne quitte pas le formulaire
+          await updateSession(savedSessionId, {
+            donneesOrs: orsBlob,
+            questionMappings: questionMappings, // Sauvegarder les mappings
+            updatedAt: new Date().toISOString(),
+            status: 'ready'
+          });
+          console.log(`Session (ID: ${savedSessionId}) mise à jour avec le Blob .ors et les questionMappings.`);
+          alert(`Questionnaire, .ors générés et session (ID: ${savedSessionId}) mise à jour avec le fichier .ors et les mappages de questions! Statut mis à Prête.`);
         } catch (e) {
-          console.error("Erreur lors de updateSession avec le Blob .ors:", e);
-          alert("Erreur lors de la sauvegarde du fichier .ors dans la session. Vérifiez la console.");
+          console.error("Erreur lors de updateSession avec le Blob .ors et questionMappings:", e);
+          alert("Erreur lors de la sauvegarde du fichier .ors ou des mappages dans la session. Vérifiez la console.");
         }
       } else {
-        console.warn("generatePresentation n'a pas retourné un Blob valide. Le .ors n'est pas en DB. Type reçu:", typeof orsBlob);
-        alert("Génération PPTX terminée, mais le fichier .ors n'a pas pu être sauvegardé dans la base de données de session.");
+        let errorMsg = "generatePresentation n'a pas retourné toutes les données nécessaires.";
+        if (!generationOutput?.orsBlob) errorMsg += " Le Blob .ors est manquant.";
+        if (!generationOutput?.questionMappings) errorMsg += " Les questionMappings sont manquants.";
+        console.warn(errorMsg, "Type de orsBlob reçu:", typeof generationOutput?.orsBlob, "QuestionMappings:", generationOutput?.questionMappings);
+        alert("Génération PPTX terminée, mais le fichier .ors ou les données de mappage n'ont pas pu être sauvegardés dans la base de données de session.");
       }
 
     } catch (error) {
@@ -353,37 +364,58 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       return;
     }
 
-    console.log(`Importation des résultats depuis ${resultsFile.name} pour la session ID: ${currentSessionDbId}`);
-
-    const fileContent = await resultsFile.text();
-    console.log("Contenu brut du fichier de résultats:", fileContent.substring(0, 500) + "..."); // Log partiel
+    console.log(`Importation des résultats depuis le fichier .ors: ${resultsFile.name} pour la session ID: ${currentSessionDbId}`);
+    setImportSummary("Lecture du fichier .ors en cours...");
 
     try {
-      const parsedResponses: ParsedResponse[] = parseOmbeaResultsXml(fileContent);
+      const arrayBuffer = await resultsFile.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      const orSessionXmlFile = zip.file("ORSession.xml"); // Nom exact du fichier XML dans l'archive .ors
 
-      if (parsedResponses.length === 0) {
-        alert("Aucune réponse brute n'a pu être extraite du fichier XML. Vérifiez le contenu du fichier ou les logs console.");
+      if (!orSessionXmlFile) {
+        setImportSummary("Erreur : Le fichier 'ORSession.xml' est introuvable dans l'archive .ors fournie.");
         return;
       }
-      console.log("Réponses brutes parsées:", parsedResponses);
 
-      // Récupérer les détails de la session actuelle pour obtenir selectionBlocs
+      const xmlString = await orSessionXmlFile.async("string");
+      console.log("Contenu de ORSession.xml extrait:", xmlString.substring(0, 1000) + "...");
+      setImportSummary("ORSession.xml extrait, parsing des réponses...");
+
+      const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
+
+      if (extractedResults.length === 0) {
+        setImportSummary("Aucune réponse brute n'a pu être extraite du fichier ORSession.xml. Vérifiez le contenu du fichier ou les logs console.");
+        return;
+      }
+      console.log("Résultats bruts extraits du XML:", extractedResults);
+      setImportSummary(`${extractedResults.length} réponses brutes extraites. Transformation en cours...`);
+
+      // Récupérer les détails de la session actuelle pour obtenir questionMappings
       const currentSessionData = await getSessionById(currentSessionDbId);
-      if (!currentSessionData || !currentSessionData.selectionBlocs) {
-        alert("Impossible de récupérer les informations des blocs pour la session actuelle.");
+      if (!currentSessionData || !currentSessionData.questionMappings) {
+        setImportSummary("Erreur : Impossible de récupérer les mappages de questions pour la session actuelle. L'import ne peut continuer.");
+        console.error("currentSessionData ou currentSessionData.questionMappings est manquant/vide", currentSessionData);
         return;
       }
 
-      // Récupérer les questions QuestionWithId correspondant à ces blocs
-      const questionsForThisSession = await getQuestionsForSessionBlocks(currentSessionData.selectionBlocs);
-      if (questionsForThisSession.length === 0) {
-        console.warn("Aucune question correspondante trouvée en DB pour les blocs de cette session. Assurez-vous que les questions sont correctement chargées et que la logique de getQuestionsForSessionBlocks est adéquate.");
-        // On peut continuer, transformParsedResponsesToSessionResults gérera le cas où questionsInSession est vide.
+      // Récupérer les QuestionWithId correspondant aux dbQuestionId dans les questionMappings
+      // Cela est nécessaire pour avoir les détails complets des questions (ex: texte, options, etc.) si besoin pour la transformation,
+      // bien que transformParsedResponsesToSessionResults utilise principalement les IDs pour le mappage.
+      // On pourrait optimiser cela si seuls les IDs sont nécessaires pour la transformation.
+      const questionIdsFromMappings = currentSessionData.questionMappings.map(qm => qm.dbQuestionId);
+      const questionsInSession: StoredQuestion[] = [];
+      for (const id of questionIdsFromMappings) {
+        const q = await getQuestionById(id); // Assurez-vous que getQuestionById existe et fonctionne
+        if (q) questionsInSession.push(q);
       }
+       if (questionsInSession.length !== questionIdsFromMappings.length) {
+        console.warn("Certaines questions mappées n'ont pas pu être récupérées de la DB.");
+      }
+
 
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
-        parsedResponses,
-        questionsForThisSession,
+        extractedResults,
+        questionsInSession, // questionsInSession contient maintenant les QuestionWithId complètes
         currentSessionDbId
       );
 

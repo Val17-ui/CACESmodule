@@ -1,23 +1,25 @@
 // Timestamp: 2024-06-24T18:50:00Z (Adding debug log before calling Val17 generator)
 // import PptxGenJS from 'pptxgenjs'; // Not directly used now
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
+// import { saveAs } from 'file-saver'; // saveAs n'est plus utilisé ici directement
 import { QuestionWithId as StoredQuestion } from '../db';
 import { Session, Participant } from '../types'; // Assuming these are the correct local types
+// Importer QuestionMapping et ajuster les autres imports si FinalQuestionData a été supprimé
 import {
   Val17Question,
   GenerationOptions as Val17GenerationOptions,
   ConfigOptions as Val17ConfigOptions,
   generatePPTXVal17,
-  FinalQuestionData, // Import this type
-  SessionInfo as Val17SessionInfo // Import this type if different from local Session
+  // FinalQuestionData, // Supprimé ou remplacé par QuestionMapping dans le type de retour de generatePPTXVal17
+  QuestionMapping, // Nouvelle interface importée
+  SessionInfo as Val17SessionInfo
 } from '../lib/val17-pptx-generator/val17PptxGenerator';
 
 
 function generateOmbeaSessionXml(
   sessionInfo: Val17SessionInfo,
-  participants: Participant[], // Using the type from src/types/index.ts
-  _finalQuestions: FinalQuestionData[] // Renaming as questions are not part of ORSession.xml for now
+  participants: Participant[],
+  _questionMappings: QuestionMapping[] // Utiliser QuestionMapping ici, même si non utilisé dans ce XML particulier
 ): string {
   // Using a helper for escaping XML attribute/text values
   const esc = (unsafe: string | undefined | null): string => {
@@ -157,24 +159,25 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
     }
 
     return {
+      dbQuestionId: sq.id as number, // Assurer que l'ID est bien passé
       question: sq.text,
       options: sq.options,
       correctAnswerIndex: correctAnswerIndex,
       imageUrl: imageUrl,
-      points: sq.timeLimit, // Mapped from StoredQuestion.timeLimit
+      points: sq.timeLimit,
     };
   });
 }
 
 export async function generatePresentation(
   sessionInfo: { name: string; date: string; referential: string },
-  _participants: Participant[],
-  storedQuestions: StoredQuestion[],
+  _participants: Participant[], // Ce sont les FormParticipant
+  storedQuestions: StoredQuestion[], // Ce sont les QuestionWithId (de la DB)
   templateFileFromUser: File,
   adminSettings: AdminPPTXSettings
-): Promise<Blob | null> { // MODIFIED: Return type is now Promise<Blob | null>
+): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null }> {
 
-  console.log(`generatePresentation (simplified for direct call) called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
+  console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
 
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
 
@@ -218,36 +221,35 @@ export async function generatePresentation(
       transformedQuestions,
       generationOptions,
       val17SessionInfo,
-      _participants
+      _participants // _participants ici sont les FormParticipant, generatePPTXVal17 les utilise pour l'instant
     );
 
-    if (generatedData && generatedData.pptxBlob) {
-      console.log("PPTX Blob et données des questions reçus de generatePPTXVal17.");
+    if (generationResult && generationResult.pptxBlob && generationResult.questionMappings) {
+      console.log("PPTX Blob et mappings de questions reçus de generatePPTXVal17.");
 
       const orSessionXmlContent = generateOmbeaSessionXml(
-        val17SessionInfo, // Pass the same sessionInfo used for PPTX generation
-        _participants,
-        generatedData.questionsData // Use data returned from generator
+        val17SessionInfo,
+        _participants, // Passer les participants (FormParticipant) pour le XML
+        generationResult.questionMappings // Passer les mappings pour info, même si non utilisés dans ce XML
       );
 
       const outputOrsZip = new JSZip();
-      const pptxFileNameInZip = generationOptions.fileName || `presentation.pptx`; // Use fileName from options if available
-      outputOrsZip.file(pptxFileNameInZip, generatedData.pptxBlob);
-      outputOrsZip.file("ORSession.xml", orSessionXmlContent); // CORRECTED FILENAME
+      const pptxFileNameInZip = generationOptions.fileName || `presentation.pptx`;
+      outputOrsZip.file(pptxFileNameInZip, generationResult.pptxBlob);
+      outputOrsZip.file("ORSession.xml", orSessionXmlContent);
 
-      const orsBlob = await outputOrsZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' }); // Standard MIME for .ors might be this or application/zip
+      const orsBlob = await outputOrsZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
 
       const orsFileName = `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}.ors`;
-      // saveAs(orsBlob, orsFileName); // MODIFIED: Supprimé, sera géré par le composant appelant
-      console.log(`Fichier .ors "${orsFileName}" généré et prêt à être retourné.`);
-      return orsBlob; // MODIFIED: Retourne le Blob
+      console.log(`Fichier .ors "${orsFileName}" (Blob) et questionMappings générés.`);
+      return { orsBlob: orsBlob, questionMappings: generationResult.questionMappings };
 
     } else {
-      console.error("Échec de la génération des données PPTX ou du Blob.");
-      if (!alertAlreadyShown(new Error("PPTX generation returned null."))) {
-         alert("La génération du fichier PPTX a échoué, le fichier .ors ne peut pas être créé.");
+      console.error("Échec de la génération des données PPTX, du Blob ou des questionMappings.");
+      if (!alertAlreadyShown(new Error("generatePPTXVal17 returned null or incomplete data."))) {
+         alert("La génération du fichier PPTX ou des données de mappage a échoué. Le fichier .ors ne peut pas être créé.");
       }
-      return null; // MODIFIED: Retourne null en cas d'échec
+      return { orsBlob: null, questionMappings: null };
     }
 
   } catch (error) {
@@ -255,7 +257,7 @@ export async function generatePresentation(
     if (!alertAlreadyShown(error as Error)) {
         alert("Une erreur est survenue lors de la création du fichier .ors.");
     }
-    return null; // MODIFIED: Retourne null en cas d'erreur
+    return { orsBlob: null, questionMappings: null };
   } finally {
     tempImageUrls.forEach(url => {
       try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for generatePresentation (direct call):", url, e); }

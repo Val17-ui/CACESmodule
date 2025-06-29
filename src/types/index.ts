@@ -15,8 +15,9 @@ export interface Session {
   participants: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
   selectionBlocs: SelectedBlock[]; // Blocs thématiques sélectionnés pour cette session
   donneesOrs?: Blob | null; // Stockage du fichier .ors généré
-  status?: 'planned' | 'in-progress' | 'completed' | 'cancelled'; // Statut optionnel
+  status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
+  questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>; // Mappages question DB <-> SlideGUID PPTX
   createdAt?: string; // ISO string date
   updatedAt?: string; // ISO string date
 }

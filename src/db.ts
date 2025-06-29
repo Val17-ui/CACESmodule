@@ -53,11 +53,19 @@ export class MySubClassedDexie extends Dexie {
 
     // Nouvelle version pour ajouter slideGuid à questions
     this.version(3).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options', // Ajout de slideGuid, potentiellement indexé
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location', // Repris de v2
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp' // Repris de v2
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
-    // Note: Dexie gère les migrations additives. Les questions existantes auront slideGuid: undefined.
+
+    // Nouvelle version pour ajouter questionMappings à sessions
+    this.version(4).stores({
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options', // Repris de v3
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings', // Ajout de status et questionMappings (questionMappings non indexé)
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp' // Repris de v3
+    });
+    // Note: Dexie gère les migrations additives. Les sessions existantes auront questionMappings: undefined.
+    // Le champ status est aussi explicitement listé ici, bien qu'il ait pu être implicitement stocké avant.
   }
 }
 
