@@ -146,20 +146,44 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }));
 
     const sessionToSave: DBSession = {
-      id: currentSessionDbId || undefined, // Utiliser l'ID existant si mise à jour
+      id: currentSessionDbId || undefined,
       nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
       dateSession: sessionDate || new Date().toISOString().split('T')[0],
       referentiel: selectedReferential as DBCACESReferential,
       participants: dbParticipants,
       selectionBlocs: dbSelectedBlocks,
       donneesOrs: includeOrsBlob,
-      location: location, // Inclure location
-      // notes: notes, // A ajouter à DBSession si besoin
-      createdAt: currentSessionDbId ? undefined : new Date().toISOString(), // Seulement à la création
+      location: location,
+      status: currentSessionDbId ? (sessionDataFromDb?.status || 'planned') : 'planned', // Statut par défaut à 'planned' pour nouvelle session
+      // notes: notes,
+      createdAt: currentSessionDbId ? undefined : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    // Si on met à jour, on ne veut pas écraser le statut existant avec 'planned' sauf si non défini
+    if (currentSessionDbId && sessionDataFromDb?.status) {
+      sessionToSave.status = sessionDataFromDb.status;
+    }
+    // Si includeOrsBlob est présent et qu'on n'a pas déjà un statut final, on peut le mettre à 'ready'
+    if (includeOrsBlob && sessionToSave.status !== 'completed' && sessionToSave.status !== 'in-progress' && sessionToSave.status !== 'cancelled') {
+        // This logic is now primarily in handleGenerateQuestionnaireAndOrs
+        // but if prepareSessionDataForDb is called directly with a blob, it could apply here.
+        // For now, 'ready' status is set explicitly after successful ORS update.
+    }
+
     return sessionToSave;
   };
+
+  // Variable pour stocker les données de la session chargée pour la modification du statut
+  let sessionDataFromDb: DBSession | null = null;
+  useEffect(() => {
+    if (sessionIdToLoad) {
+      const loadSessionData = async () => {
+        sessionDataFromDb = await getSessionById(sessionIdToLoad);
+      }
+      loadSessionData();
+    }
+  }, [sessionIdToLoad]);
+
 
   const handleSaveSession = async (sessionData: DBSession | null) => {
     if (!sessionData) return null;
@@ -281,17 +305,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         adminSettings
       );
 
+      console.log("Type de orsBlob reçu:", typeof orsBlob, "Est-ce une instance de Blob ?", orsBlob instanceof Blob);
       if (orsBlob instanceof Blob) {
-        // Mettre à jour la session existante avec le Blob
-        const finalSessionData = await prepareSessionDataForDb(orsBlob);
-        if (finalSessionData && savedSessionId) {
-            finalSessionData.id = savedSessionId; // Assurer que l'ID est bien celui de la session qu'on update
-            await updateSession(savedSessionId, { donneesOrs: orsBlob, updatedAt: new Date().toISOString() });
-            alert(`Questionnaire, .ors générés et session (ID: ${savedSessionId}) mise à jour avec le fichier .ors!`);
+        console.log("Blob .ors reçu, taille:", orsBlob.size, "type:", orsBlob.type);
+        try {
+          await updateSession(savedSessionId, { donneesOrs: orsBlob, updatedAt: new Date().toISOString(), status: 'ready' }); // Changement de statut optionnel
+          console.log(`Session (ID: ${savedSessionId}) mise à jour avec le Blob .ors.`);
+          alert(`Questionnaire, .ors générés et session (ID: ${savedSessionId}) mise à jour avec le fichier .ors! Statut mis à Prête.`);
+          // Peut-être forcer un rechargement ou une mise à jour de l'état ici si on ne quitte pas le formulaire
+        } catch (e) {
+          console.error("Erreur lors de updateSession avec le Blob .ors:", e);
+          alert("Erreur lors de la sauvegarde du fichier .ors dans la session. Vérifiez la console.");
         }
       } else {
-        console.warn("generatePresentation n'a pas retourné un Blob. Le .ors n'est pas en DB.");
-        alert("Génération PPTX terminée, mais le .ors n'a pas été sauvegardé en DB.");
+        console.warn("generatePresentation n'a pas retourné un Blob valide. Le .ors n'est pas en DB. Type reçu:", typeof orsBlob);
+        alert("Génération PPTX terminée, mais le fichier .ors n'a pas pu être sauvegardé dans la base de données de session.");
       }
 
     } catch (error) {
@@ -371,6 +399,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           />
           {templateFile && <p className="mt-1 text-xs text-green-600">Fichier sélectionné : {templateFile.name}</p>}
         </div>
+
+        {currentSessionDbId && selectedBlocksSummary && Object.keys(selectedBlocksSummary).length > 0 && (
+          <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés pour cette session :</h4>
+            <ul className="list-disc list-inside pl-2 space-y-1">
+              {Object.entries(selectedBlocksSummary).map(([theme, blockId]) => (
+                <li key={theme} className="text-sm text-gray-600">
+                  <span className="font-medium">{theme}:</span> Bloc {blockId}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Card>
       
       <Card title="Participants" className="mb-6">
