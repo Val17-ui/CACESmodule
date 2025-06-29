@@ -53,11 +53,20 @@ export interface GenerationOptions {
 
 // Interface Question for this generator, adapted from your description
 export interface Val17Question {
+  dbQuestionId: number; // ID de la question depuis la base de données
   question: string;
   options: string[];
   correctAnswerIndex?: number; // 0-based index
   imageUrl?: string;
   points?: number; // Corresponds to timeLimit from StoredQuestion, used for duration
+}
+
+// Structure pour le mappage retourné - Assurer l'export
+export interface QuestionMapping { // Déjà exporté, c'est bien.
+  dbQuestionId: number;
+  slideGuid: string | null;
+  orderInPptx: number;
+  // title?: string;
 }
 
 interface TagInfo {
@@ -1360,7 +1369,7 @@ export async function generatePPTXVal17(
   options: GenerationOptions = {},
   sessionInfo?: SessionInfo,
   participants?: Participant[]
-): Promise<GeneratedPptxData | null> {
+): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[] } | null> {
   try {
     const executionId = Date.now();
     validateQuestions(questions);
@@ -1579,7 +1588,8 @@ export async function generatePPTXVal17(
       extension: string;
     }
     const downloadedImages = new Map<number, DownloadedImage>();
-    const finalQuestionDataList: FinalQuestionData[] = [];
+    // Renommer finalQuestionDataList en questionMappingsInternal pour mieux refléter son rôle
+    const questionMappingsInternal: QuestionMapping[] = [];
 
     if (questions.some((q) => q.imageUrl)) {
       const imagePromises = questions.map(async (question, index) => {
@@ -1718,15 +1728,12 @@ export async function generatePPTXVal17(
           slideGuid = guidMatch[1];
         }
       }
-      finalQuestionDataList.push({
-        originalQuestionIndex: i,
+      // Utiliser questionData.dbQuestionId ici
+      questionMappingsInternal.push({
+        dbQuestionId: questionData.dbQuestionId, // Assurez-vous que Val17Question a dbQuestionId
         slideGuid: slideGuid,
-        questionIdInSession: i + 1,
-        title: questionData.question,
-        options: questionData.options,
-        correctAnswerIndex: questionData.correctAnswerIndex,
-        duration: duration,
-        absoluteSlideNumber: absoluteSlideNumber,
+        orderInPptx: i + 1, // Ordre basé sur l'itération des questions pour cette session
+        // title: questionData.question, // Optionnel pour debug
       });
     }
     if (existingTagsCount > 0 && questions.length > 0) {
@@ -1803,8 +1810,8 @@ export async function generatePPTXVal17(
       compressionOptions: { level: 3 },
     });
 
-    console.log(`PPTX Blob et données des questions générés.`);
-    return { pptxBlob: outputBlob, questionsData: finalQuestionDataList };
+    console.log(`PPTX Blob et mappings de questions générés.`);
+    return { pptxBlob: outputBlob, questionMappings: questionMappingsInternal };
   } catch (error: any) {
     console.error(`=== ERREUR GÉNÉRATION VAL17 ===`);
     console.error(error.message);
@@ -1884,18 +1891,5 @@ export const handleGeneratePPTXFromVal17Tool = async (
 
 export type { TagInfo, RIdMapping, AppXmlMetadata };
 
-export interface FinalQuestionData {
-  originalQuestionIndex: number;
-  slideGuid: string | null;
-  questionIdInSession: number;
-  title: string;
-  options: string[];
-  correctAnswerIndex?: number;
-  duration: number;
-  absoluteSlideNumber: number;
-}
-
-export interface GeneratedPptxData {
-  pptxBlob: Blob;
-  questionsData: FinalQuestionData[];
-}
+// Les interfaces FinalQuestionData et GeneratedPptxData sont maintenant remplacées
+// par QuestionMapping et le type de retour direct de generatePPTXVal17.

@@ -15,10 +15,19 @@ export interface Session {
   participants: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
   selectionBlocs: SelectedBlock[]; // Blocs thématiques sélectionnés pour cette session
   donneesOrs?: Blob | null; // Stockage du fichier .ors généré
-  status?: 'planned' | 'in-progress' | 'completed' | 'cancelled'; // Statut optionnel
+  status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
-  createdAt?: string; // ISO string date
-  updatedAt?: string; // ISO string date
+  questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>;
+  notes?: string; // Notes pour la session
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Interface pour le mappage Question DB <-> Slide PPTX (par session)
+export interface QuestionMapping {
+  dbQuestionId: number;
+  slideGuid: string | null;
+  orderInPptx: number;
 }
 
 // Nouvelle interface Participant pour les listes dans une Session
@@ -27,6 +36,8 @@ export interface Participant {
   nom: string;
   prenom: string;
   identificationCode?: string; // Code d'identification optionnel
+  score?: number; // Score total du participant pour cette session
+  reussite?: boolean; // Statut de réussite du participant pour cette session
 }
 
 // Nouvelle interface pour décrire un bloc thématique sélectionné
@@ -42,8 +53,9 @@ export interface SessionResult {
   // Doit correspondre à l'ID de la question DANS LA DB (QuestionWithId.id)
   questionId: number;
   participantIdBoitier: string; // Identifiant du boîtier du participant
-  answer: string; // Réponse donnée
+  answer: string; // Réponse donnée (ID de l'option de réponse pour QCM/QCU)
   isCorrect: boolean; // Si la réponse était correcte
+  pointsObtained: number; // Points obtenus pour cette réponse spécifique
   timestamp: string; // ISO string date de la réponse
 }
 
@@ -71,6 +83,7 @@ export interface Question {
   lastUsedAt?: string;
   usageCount?: number;
   correctResponseRate?: number;
+  slideGuid?: string; // Ajout du SlideGUID
 }
 
 export interface QuestionStatistics {
@@ -122,7 +135,7 @@ export const referentialLimits: Record<ReferentialType, { min: number; max: numb
   'R490': { min: 30, max: 55 }
 };
 
-export type QuestionTheme = 
+export type QuestionTheme =
   | 'reglementation'
   | 'securite'
   | 'technique';
