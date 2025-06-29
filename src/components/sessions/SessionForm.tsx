@@ -16,7 +16,7 @@ import {
 import { StorageManager } from '../../services/StorageManager';
 // StoredQuestion est l'équivalent de QuestionWithId dans db.ts
 // Nous utiliserons QuestionWithId directement pour clarifier que c'est l'objet DB.
-import { QuestionWithId as StoredQuestion, addSession, updateSession, getSessionById } from '../../db';
+import { QuestionWithId as StoredQuestion, addSession, updateSession, getSessionById, getQuestionsForSessionBlocks, addBulkSessionResults, getQuestionById } from '../../db';
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml } from '../../utils/resultsParser'; // Importer le parser et ExtractedResultFromXml
 import JSZip from 'jszip'; // Importer JSZip
