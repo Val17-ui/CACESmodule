@@ -9,13 +9,25 @@ type UpcomingSessionsProps = {
 };
 
 const UpcomingSessions: React.FC<UpcomingSessionsProps> = ({ sessions }) => {
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    }).format(date);
+  const formatDate = (dateString: string | undefined | null): string => {
+    if (!dateString) {
+      return 'Date non spécifiée';
+    }
+    try {
+      const date = new Date(dateString);
+      // Vérifier si la date est valide après la conversion
+      if (isNaN(date.getTime())) {
+        return 'Date invalide';
+      }
+      return new Intl.DateTimeFormat('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      }).format(date);
+    } catch (e) {
+      console.error("Erreur de formatage de date pour:", dateString, e);
+      return 'Date erronée';
+    }
   };
 
   const getStatusBadge = (status: Session['status']) => {
