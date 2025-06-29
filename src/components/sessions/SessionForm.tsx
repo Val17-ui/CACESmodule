@@ -18,6 +18,7 @@ import { StorageManager } from '../../services/StorageManager';
 // Nous utiliserons QuestionWithId directement pour clarifier que c'est l'objet DB.
 import { QuestionWithId as StoredQuestion, addSession, updateSession, getSessionById } from '../../db';
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
+import { parseOmbeaResultsXml, ParsedResponse } from '../../utils/resultsParser'; // Importer le parser
 
 
 // Interface pour les props du composant, si on veut charger une session existante
@@ -37,6 +38,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [generatedQuestions, setGeneratedQuestions] = useState<StoredQuestion[]>([]);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [selectedBlocksSummary, setSelectedBlocksSummary] = useState<Record<string, string>>({});
+  const [resultsFile, setResultsFile] = useState<File | null>(null);
+  const [importSummary, setImportSummary] = useState<string | null>(null); // État pour le résumé de l'import
 
 
   useEffect(() => {
@@ -328,6 +331,99 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
+  const handleResultsFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setResultsFile(file);
+      setImportSummary(null); // Réinitialiser le résumé si un nouveau fichier est sélectionné
+      console.log("Fichier de résultats sélectionné:", file.name);
+    } else {
+      setResultsFile(null);
+      setImportSummary(null);
+    }
+  };
+
+  const handleImportResults = async () => {
+    if (!resultsFile) {
+      alert("Veuillez d'abord sélectionner un fichier de résultats.");
+      return;
+    }
+    if (!currentSessionDbId) {
+      alert("Aucune session active pour associer les résultats. Ceci ne devrait pas arriver.");
+      return;
+    }
+
+    console.log(`Importation des résultats depuis ${resultsFile.name} pour la session ID: ${currentSessionDbId}`);
+
+    const fileContent = await resultsFile.text();
+    console.log("Contenu brut du fichier de résultats:", fileContent.substring(0, 500) + "..."); // Log partiel
+
+    try {
+      const parsedResponses: ParsedResponse[] = parseOmbeaResultsXml(fileContent);
+
+      if (parsedResponses.length === 0) {
+        alert("Aucune réponse brute n'a pu être extraite du fichier XML. Vérifiez le contenu du fichier ou les logs console.");
+        return;
+      }
+      console.log("Réponses brutes parsées:", parsedResponses);
+
+      // Récupérer les détails de la session actuelle pour obtenir selectionBlocs
+      const currentSessionData = await getSessionById(currentSessionDbId);
+      if (!currentSessionData || !currentSessionData.selectionBlocs) {
+        alert("Impossible de récupérer les informations des blocs pour la session actuelle.");
+        return;
+      }
+
+      // Récupérer les questions QuestionWithId correspondant à ces blocs
+      const questionsForThisSession = await getQuestionsForSessionBlocks(currentSessionData.selectionBlocs);
+      if (questionsForThisSession.length === 0) {
+        console.warn("Aucune question correspondante trouvée en DB pour les blocs de cette session. Assurez-vous que les questions sont correctement chargées et que la logique de getQuestionsForSessionBlocks est adéquate.");
+        // On peut continuer, transformParsedResponsesToSessionResults gérera le cas où questionsInSession est vide.
+      }
+
+      const sessionResultsToSave = transformParsedResponsesToSessionResults(
+        parsedResponses,
+        questionsForThisSession,
+        currentSessionDbId
+      );
+
+      if (sessionResultsToSave.length > 0) {
+        console.log("SessionResults à sauvegarder:", sessionResultsToSave);
+        try {
+          const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+          if (savedResultIds && savedResultIds.length > 0) {
+            let message = `${savedResultIds.length} résultats de session ont été sauvegardés avec succès !`;
+            try {
+              if (currentSessionDbId) { // S'assurer que currentSessionDbId est bien disponible
+                await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+                message += "\nLe statut de la session a été mis à jour à 'Terminée'.";
+                // Mettre à jour l'état local si nécessaire pour refléter immédiatement le changement de statut si le form reste affiché
+                // ou si sessionDataFromDb est utilisé pour afficher le statut dans ce composant.
+              }
+            } catch (statusUpdateError) {
+              console.error("Erreur lors de la mise à jour du statut de la session:", statusUpdateError);
+              message += "\nErreur lors de la mise à jour du statut de la session.";
+            }
+            setImportSummary(message); // Afficher le message de succès/erreur
+            setResultsFile(null); // Réinitialiser le champ fichier après import
+          } else {
+            setImportSummary("La sauvegarde des résultats de session semble avoir échoué (aucun ID retourné).");
+          }
+        } catch (dbError: any) {
+          console.error("Erreur lors de la sauvegarde des résultats en base de données:", dbError);
+          setImportSummary(`Une erreur est survenue lors de la sauvegarde des résultats en base de données: ${dbError.message}`);
+        }
+      } else {
+        setImportSummary("Aucun résultat de session n'a pu être transformé ou n'était disponible pour la sauvegarde. Vérifiez les logs pour les erreurs de mappage de question.");
+      }
+
+    } catch (error: any) {
+      console.error("Erreur lors du traitement du fichier de résultats:", error);
+      setImportSummary(`Erreur lors du traitement du fichier: ${error.message}`);
+    }
+  };
+
+
   return (
     <div>
       <Card title={currentSessionDbId ? `Modification de la session (ID: ${currentSessionDbId})` : "Nouvelle session"} className="mb-6">
@@ -401,7 +497,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         </div>
 
         {currentSessionDbId && selectedBlocksSummary && Object.keys(selectedBlocksSummary).length > 0 && (
-          <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50 mb-6"> {/* Ajout de mb-6 */}
             <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés pour cette session :</h4>
             <ul className="list-disc list-inside pl-2 space-y-1">
               {Object.entries(selectedBlocksSummary).map(([theme, blockId]) => (
@@ -414,6 +510,43 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         )}
       </Card>
       
+      {/* Section d'import des résultats - visible uniquement si currentSessionDbId existe */}
+      {currentSessionDbId && (
+        <Card title="Résultats de la Session (Import)" className="mb-6">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">
+                Fichier de résultats (.xml, .json)
+              </label>
+              <Input
+                id="resultsFileInput"
+                type="file"
+                accept=".xml,.json"
+                onChange={handleResultsFileSelect}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+              />
+              {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier sélectionné : {resultsFile.name}</p>}
+            </div>
+            <Button
+              variant="secondary"
+              icon={<FileUp size={16} />}
+              onClick={handleImportResults}
+              disabled={!resultsFile}
+            >
+              Importer les Résultats
+            </Button>
+            <p className="text-xs text-gray-500">
+              Importez le fichier de résultats fourni par le système de boîtiers de vote OMBEA pour cette session.
+            </p>
+            {importSummary && (
+              <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
       <Card title="Participants" className="mb-6">
         <div className="mb-4 flex items-center justify-between">
           <p className="text-sm text-gray-500">

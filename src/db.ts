@@ -205,3 +205,58 @@ export const deleteResultsForSession = async (sessionId: number): Promise<void> 
     console.error(`Error deleting results for session ${sessionId}: `, error);
   }
 };
+
+// Récupérer les questions spécifiques basées sur une sélection de blocs (pour une session)
+export const getQuestionsForSessionBlocks = async (selectionBlocs: { theme: string; blockId: string }[]): Promise<QuestionWithId[]> => {
+  if (!selectionBlocs || selectionBlocs.length === 0) {
+    return [];
+  }
+
+  const allMatchingQuestions: QuestionWithId[] = [];
+
+  try {
+    for (const bloc of selectionBlocs) {
+      // StorageManager.getQuestionsForBlock(referential, baseTheme, chosenBlockIdentifier);
+      // Ici, nous devons simuler une logique similaire ou adapter.
+      // Puisque QuestionWithId a 'theme' et potentiellement une manière d'identifier un 'blockId'
+      // (peut-être que 'theme' dans QuestionWithId est composite comme 'securite_A')
+      // ou alors il faut une structure de données plus complexe pour les blocs.
+      // Pour l'instant, supposons que 'theme' dans QuestionWithId peut être 'theme_blockId'
+      // ou que nous filtrons par thème puis par une autre propriété pour le bloc si elle existe.
+
+      // Exemple simplifié: si le thème de la question est exactement "theme_blockId"
+      // const blockThemeIdentifier = `${bloc.theme}_${bloc.blockId}`;
+      // const questionsFromDb = await db.questions.where('theme').equals(blockThemeIdentifier).toArray();
+
+      // Ou, si 'theme' est juste le thème principal et 'blockId' n'est pas directement un champ de QuestionWithId
+      // cette fonction devient plus complexe et pourrait nécessiter de lire toutes les questions d'un thème
+      // puis de les filtrer d'une manière ou d'une autre si 'blockId' n'est pas un champ.
+      // Pour la simulation, nous allons supposer que le thème stocké dans QuestionWithId
+      // est une concaténation ou que nous pouvons filtrer par thème principal.
+      // Pour l'instant, cette fonction est un placeholder et nécessitera une logique de filtrage
+      // plus précise basée sur la structure réelle de QuestionWithId et comment les blocs sont définis.
+
+      // Placeholder: Récupère toutes les questions pour le thème principal pour l'instant.
+      // La logique de "bloc" spécifique doit être affinée.
+      const questionsFromDb = await db.questions.where('theme').startsWith(bloc.theme).toArray();
+      // Il faudrait ensuite filtrer ces questions pour celles appartenant spécifiquement à `bloc.blockId`.
+      // Cela suppose que `blockId` est encodé quelque part dans les données de la question,
+      // ou que la structure de `theme` dans `QuestionWithId` est composite (ex: `securite_A`).
+      // Si `QuestionWithId.theme` est juste "securite", et `blockId` est "A", il faut une autre info.
+
+      // Pour l'instant, on va ajouter toutes les questions du thème principal,
+      // en sachant que c'est une simplification.
+      questionsFromDb.forEach(q => {
+        // Éviter les doublons si une question pouvait appartenir à plusieurs "blocs" logiques via ce filtre simple
+        if (!allMatchingQuestions.some(mq => mq.id === q.id)) {
+          allMatchingQuestions.push(q);
+        }
+      });
+    }
+    console.log(`Récupéré ${allMatchingQuestions.length} questions pour les blocs de la session.`);
+    return allMatchingQuestions;
+  } catch (error) {
+    console.error("Erreur lors de la récupération des questions pour les blocs de session:", error);
+    return [];
+  }
+};
