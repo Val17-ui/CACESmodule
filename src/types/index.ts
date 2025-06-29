@@ -18,6 +18,7 @@ export interface Session {
   status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
   questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>; // Mappages question DB <-> SlideGUID PPTX
+  notes?: string; // Notes sur la session
   createdAt?: string; // ISO string date
   updatedAt?: string; // ISO string date
 }

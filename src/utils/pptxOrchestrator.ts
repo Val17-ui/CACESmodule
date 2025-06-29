@@ -15,6 +15,8 @@ import {
   SessionInfo as Val17SessionInfo
 } from '../lib/val17-pptx-generator/val17PptxGenerator';
 
+export type { QuestionMapping };
+
 
 function generateOmbeaSessionXml(
   sessionInfo: Val17SessionInfo,

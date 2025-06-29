@@ -288,7 +288,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
       const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referential: sessionDataForDb.referentiel as CACESReferential };
       const adminSettings: AdminPPTXSettings = { defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod', pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1' };
-      const participantsForGenerator = participants.map(p => ({ id: p.idBoitier, firstName: p.firstName, lastName: p.lastName, organization: p.organization, identificationCode: p.identificationCode }));
+      const participantsForGenerator: DBParticipantType[] = participants.map(p_form => ({
+        idBoitier: p_form.idBoitier || p_form.deviceId.toString(),
+        nom: p_form.lastName,
+        prenom: p_form.firstName,
+        identificationCode: p_form.identificationCode,
+        // score et reussite ne sont pas attendus par generatePresentation, donc on ne les inclut pas ici
+        // s'ils étaient nécessaires, il faudrait les ajouter :
+        // score: p_form.score,
+        // reussite: p_form.reussite,
+      }));
 
       const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, templateFile, adminSettings);
 
@@ -296,7 +305,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const { orsBlob, questionMappings } = generationOutput;
         try {
           await updateSession(savedSessionId, {  donneesOrs: orsBlob, questionMappings: questionMappings, updatedAt: new Date().toISOString(), status: 'ready' });
-          setEditingSessionData(await getSessionById(savedSessionId));
+          setEditingSessionData((await getSessionById(savedSessionId)) || null);
           setImportSummary(`Session (ID: ${savedSessionId}) .ors et mappings générés. Statut: Prête.`);
         } catch (e: any) { setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`); }
       } else { setImportSummary("Erreur génération .ors/mappings. Données manquantes."); }
@@ -417,7 +426,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     <div>
       <Card title={currentSessionDbId ? `Modification Session (ID: ${currentSessionDbId}) - Statut: ${editingSessionData?.status || 'N/A'}` : "Nouvelle session"} className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* @ts-ignore */}
+
           <Input
             label="Nom de la session"
             placeholder="Ex: Formation CACES R489 - Groupe A"
@@ -426,7 +435,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             required
             {...commonInputProps(editingSessionData?.status === 'completed')}
           />
-          {/* @ts-ignore */}
+
           <Input
             label="Date de la session"
             type="date"
@@ -448,7 +457,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           />
         </div>
         <div className="mt-4">
-          {/* @ts-ignore */}
+
           <Input
             label="Lieu de formation"
             placeholder="Ex: Centre de formation Paris Nord"
@@ -470,7 +479,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         </div>
         <div className="mt-6">
           <label htmlFor="templateFileInput" className="block text-sm font-medium text-gray-700 mb-1">Modèle PPTX</label>
-          {/* @ts-ignore */}
+
           <Input
             id="templateFileInput"
             type="file"
@@ -503,7 +512,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           <div className="space-y-4">
             <div>
               <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
-              {/* @ts-ignore */}
+
               <Input
                 id="resultsFileInput"
                 type="file"
@@ -566,7 +575,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 participants.map((participant) => (
                   <tr key={participant.id}>
                     <td className="px-4 py-2 whitespace-nowrap">
-                      {/* @ts-ignore */}
+
                       <Input
                         type="number"
                         value={participant.deviceId?.toString() || ''}
@@ -576,19 +585,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       />
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
-                      {/* @ts-ignore */}
+
                       <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0" {...commonInputProps(editingSessionData?.status === 'completed')} />
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
-                      {/* @ts-ignore */}
+
                       <Input value={participant.lastName} onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)} placeholder="Nom" className="mb-0" {...commonInputProps(editingSessionData?.status === 'completed')} />
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
-                      {/* @ts-ignore */}
+
                       <Input value={participant.organization || ''} onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)} placeholder="Organisation" className="mb-0" {...commonInputProps(editingSessionData?.status === 'completed')} />
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
-                      {/* @ts-ignore */}
+
                       <Input value={participant.identificationCode || ''} onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)} placeholder="Code" className="mb-0" {...commonInputProps(editingSessionData?.status === 'completed')} />
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">
@@ -597,7 +606,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     <td className="px-4 py-2 whitespace-nowrap text-center">
                       {participant.reussite === true && <Badge variant="success">Réussi</Badge>}
                       {participant.reussite === false && <Badge variant="danger">Échec</Badge>}
-                      {participant.reussite === undefined && <Badge variant="neutral">-</Badge>}
+                      {participant.reussite === undefined && <Badge variant="default">-</Badge>}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
                       <Button variant="ghost" disabled={editingSessionData?.status === 'completed'} size="sm" icon={<Trash2 size={16} />} onClick={() => handleRemoveParticipant(participant.id)} />

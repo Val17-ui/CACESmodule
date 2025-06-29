@@ -133,7 +133,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     {session.donneesOrs instanceof Blob ?
                       <Badge variant="success" className="cursor-default" title={`Taille: ${Math.round(session.donneesOrs.size / 1024)} Ko`}>Oui</Badge> :
-                      <Badge variant="neutral">Non</Badge>}
+                      <Badge variant="default">Non</Badge>}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end space-x-2">

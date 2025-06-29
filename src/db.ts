@@ -68,10 +68,10 @@ export class MySubClassedDexie extends Dexie {
     // Nouvelle version pour ajouter pointsObtained à sessionResults
     this.version(5).stores({
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options', // Repris de v4
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings', // Repris de v4
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes', // Ajout de notes
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp' // Ajout de pointsObtained
     });
-    // Note: Dexie gère les migrations additives. Les sessionResults existants auront pointsObtained: undefined.
+    // Note: Dexie gère les migrations additives. Les sessionResults existants auront pointsObtained: undefined. Les sessions existantes auront notes: undefined.
   }
 }
 
