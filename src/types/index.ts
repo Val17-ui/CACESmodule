@@ -16,6 +16,7 @@ export interface Session {
   selectionBlocs: SelectedBlock[]; // Blocs thématiques sélectionnés pour cette session
   donneesOrs?: Blob | null; // Stockage du fichier .ors généré
   status?: 'planned' | 'in-progress' | 'completed' | 'cancelled'; // Statut optionnel
+  location?: string; // Lieu de la session
   createdAt?: string; // ISO string date
   updatedAt?: string; // ISO string date
 }

@@ -47,7 +47,7 @@ export class MySubClassedDexie extends Dexie {
     // et pour mettre à jour la table questions si nécessaire (ici, on la redéclare telle quelle)
     this.version(2).stores({
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options', // Redéclarer même si inchangée
-      sessions: '++id, nomSession, dateSession, referential, createdAt', // Champs indexés pour sessions
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location', // Ajout de location (non indexé ici, mais présent)
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp' // Champs indexés pour sessionResults
     });
     // Note: Si des migrations de données sont nécessaires (upgrade), elles seraient ajoutées ici.

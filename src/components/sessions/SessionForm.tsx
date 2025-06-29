@@ -48,7 +48,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setSessionName(sessionData.nomSession);
           setSessionDate(sessionData.dateSession.split('T')[0]); // Format YYYY-MM-DD pour input date
           setSelectedReferential((sessionData.referentiel as CACESReferential) || '');
-          // setLocation(sessionData.location || ''); // Si location est ajoutée à DBSession
+          setLocation(sessionData.location || ''); // Charger location
           // setNotes(sessionData.notes || ''); // Si notes est ajoutée à DBSession
 
           // Mapper DBParticipant vers FormParticipant
@@ -153,7 +153,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       participants: dbParticipants,
       selectionBlocs: dbSelectedBlocks,
       donneesOrs: includeOrsBlob,
-      // location: location, // A ajouter à DBSession si besoin
+      location: location, // Inclure location
       // notes: notes, // A ajouter à DBSession si besoin
       createdAt: currentSessionDbId ? undefined : new Date().toISOString(), // Seulement à la création
       updatedAt: new Date().toISOString(),
