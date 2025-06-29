@@ -71,6 +71,7 @@ export interface Question {
   lastUsedAt?: string;
   usageCount?: number;
   correctResponseRate?: number;
+  slideGuid?: string; // Ajout du SlideGUID
 }
 
 export interface QuestionStatistics {

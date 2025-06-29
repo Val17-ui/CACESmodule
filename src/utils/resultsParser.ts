@@ -1,27 +1,135 @@
 // src/utils/resultsParser.ts
 
-import { QuestionWithId } from '../db'; // Supposant que QuestionWithId est exportée de db.ts
-import { SessionResult } from '../types'; // Importer SessionResult
+import { QuestionWithId } from '../db';
+import { SessionResult } from '../types';
 
-// Interface temporaire pour ce que l'on s'attend à extraire du XML pour chaque réponse
-export interface ParsedResponse {
-  participantIdBoitier: string;
-  questionIdentifierInXml: string; // L'identifiant de la question tel qu'il est dans le XML (ex: GUID, ordre, etc.)
-  answerGiven: string;
-  // timestamp?: string; // Optionnel, si fourni par le XML
+// Nouvelle interface pour les données extraites et prétraitées du XML
+export interface ExtractedResultFromXml {
+  participantDeviceID: string; // Le DeviceID physique du boîtier
+  questionSlideGuid: string;   // Le SlideGUID de la question
+  answerGivenID: string;       // L'ID de l' <ors:Answer> choisie par le participant (contenu de ors:IntVal)
+  pointsObtained: number;      // Points calculés à partir du barème de la question dans le XML
+  // timestamp?: string;      // Optionnel: timestamp de la réponse si disponible et utile
 }
+
+/**
+ * Parse le contenu XML d'un fichier de résultats OMBEA (`ORSession.xml`).
+ * Extrait les réponses, les associe aux participants et calcule les points obtenus.
+ *
+ * @param xmlString La chaîne de caractères contenant le XML.
+ * @returns Un tableau de ExtractedResultFromXml.
+ * @throws Error si le fichier XML est mal formé.
+ */
+export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[] => {
+  console.log("Début du parsing du fichier ORSession.xml...");
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlString, "application/xml");
+
+  const parserErrorNode = xmlDoc.querySelector("parsererror");
+  if (parserErrorNode) {
+    console.error("Erreur de parsing XML:", parserErrorNode.textContent || "Erreur inconnue du parser");
+    throw new Error("Le fichier de résultats XML est mal formé ou invalide.");
+  }
+
+  const extractedResults: ExtractedResultFromXml[] = [];
+
+  // 1. Créer un map RespondentID -> DeviceID
+  const respondentToDeviceMap = new Map<string, string>();
+  const respondentNodes = xmlDoc.querySelectorAll("RespondentList > Respondents > Respondent");
+  respondentNodes.forEach(respNode => {
+    const respondentIdAttr = respNode.getAttribute("ID"); // Ceci est l'ID séquentiel (1, 2, 3...)
+    const deviceNode = respNode.querySelector("Devices > Device");
+    const deviceId = deviceNode?.textContent?.trim(); // Ceci est l'ID physique du boîtier (ex: "102494")
+
+    if (respondentIdAttr && deviceId) {
+      respondentToDeviceMap.set(respondentIdAttr, deviceId);
+    } else {
+      console.warn("Respondent ID séquentiel ou DeviceID physique manquant dans RespondentList pour un noeud:", respNode.innerHTML);
+    }
+  });
+  if(respondentToDeviceMap.size === 0) {
+    console.warn("Aucun mappage RespondentID vers DeviceID n'a pu être créé à partir de RespondentList. Le parsing des réponses pourrait échouer à trouver les DeviceID.");
+  } else {
+    console.log("Map RespondentID vers DeviceID créé:", respondentToDeviceMap);
+  }
+
+
+  // 2. Itérer sur chaque <ors:Question>
+  const questionNodes = xmlDoc.querySelectorAll("ORSession > Questions > Question");
+  console.log(`Nombre de <Question> trouvées dans le XML: ${questionNodes.length}`);
+
+  questionNodes.forEach((qNode, qIndex) => {
+    const slideGuid = qNode.getAttribute("SlideGUID");
+    const questionXMLId = qNode.getAttribute("ID"); // ID numérique simple (1, 2, ...) de la question dans le XML
+
+    if (!slideGuid) {
+      console.warn(`Question (ID XML: ${questionXMLId || qIndex + 1}) n'a pas de SlideGUID. Ses réponses seront ignorées.`);
+      return; // Passe à la question suivante
+    }
+
+    // 2a. Parser les barèmes (Answers) pour cette question
+    const answerScores = new Map<string, number>(); // Map AnswerID -> Points
+    qNode.querySelectorAll("Answers > Answer").forEach(ansNode => {
+      const answerId = ansNode.getAttribute("ID"); // ID de l'option de réponse (ex: "1", "2")
+      const pointsStr = ansNode.getAttribute("Points");
+      if (answerId && pointsStr) {
+        const points = parseInt(pointsStr, 10);
+        if (!isNaN(points)) {
+          answerScores.set(answerId, points);
+        } else {
+          console.warn(`Points invalides pour Answer ID ${answerId} dans Question SlideGUID ${slideGuid}`);
+        }
+      } else {
+         console.warn(`ID ou Points manquant pour une Answer dans Question SlideGUID ${slideGuid}`);
+      }
+    });
+
+    // 2b. Itérer sur chaque <ors:Response> pour cette question
+    qNode.querySelectorAll("Responses > Response").forEach(responseNode => {
+      // RespondentID dans <ors:Response> est l'ID séquentiel (1, 2, 3...)
+      const respondentIdSequential = responseNode.getAttribute("RespondentID");
+      const participantDeviceID = respondentIdSequential ? respondentToDeviceMap.get(respondentIdSequential) : undefined;
+
+      const intValNode = responseNode.querySelector("Part > IntVal");
+      const answerGivenID = intValNode?.textContent?.trim(); // ID de l'option de réponse choisie par le participant
+      // const responseTimestamp = responseNode.getAttribute("Time"); // Peut être utile
+
+      if (participantDeviceID && slideGuid && answerGivenID) {
+        const pointsObtained = answerScores.get(answerGivenID) ?? 0;
+
+        extractedResults.push({
+          participantDeviceID,
+          questionSlideGuid: slideGuid,
+          answerGivenID, // C'est l'ID de l'option de réponse (ex: "1", "2", "3", "4")
+          pointsObtained,
+          // timestamp: responseTimestamp || undefined
+        });
+      } else {
+        if (!participantDeviceID) console.warn(`DeviceID non trouvé pour RespondentID séquentiel: ${respondentIdSequential} (Question SlideGUID ${slideGuid}). Réponse ignorée.`);
+        if (!answerGivenID) console.warn(`Réponse (IntVal) manquante pour RespondentID séquentiel: ${respondentIdSequential}, Question SlideGUID ${slideGuid}. Réponse ignorée.`);
+      }
+    });
+  });
+
+  if (extractedResults.length === 0) {
+    console.warn("Aucune réponse exploitable n'a été extraite du fichier XML. Vérifiez la structure du fichier ou son contenu.");
+  }
+
+  console.log(`Parsing XML terminé. ${extractedResults.length} réponses valides extraites et prétraitées.`);
+  return extractedResults;
+};
 
 
 /**
- * Transforme les réponses parsées brutes en objets SessionResult prêts pour la DB.
+ * Transforme les ExtractedResultFromXml en objets SessionResult prêts pour la DB.
  *
- * @param parsedResponses Tableau des réponses extraites du fichier XML/JSON.
- * @param questionsInSession Liste des questions (QuestionWithId) effectivement utilisées dans cette session.
+ * @param extractedResults Tableau des réponses extraites et prétraitées du XML.
+ * @param questionsInSession Liste des questions (QuestionWithId) effectivement utilisées dans cette session (doivent avoir un champ slideGuid).
  * @param currentSessionId ID numérique de la session en cours.
  * @returns Un tableau d'objets SessionResult.
  */
 export const transformParsedResponsesToSessionResults = (
-  parsedResponses: ParsedResponse[],
+  extractedResults: ExtractedResultFromXml[],
   questionsInSession: QuestionWithId[],
   currentSessionId: number
 ): SessionResult[] => {
@@ -32,171 +140,49 @@ export const transformParsedResponsesToSessionResults = (
     return [];
   }
   if (!questionsInSession || questionsInSession.length === 0) {
-    console.warn("Aucune question fournie pour la session, impossible de mapper les résultats.");
+    console.warn("Aucune question correspondante à la session (depuis la DB) n'a été fournie. Impossible de mapper les résultats XML aux IDs de questions de la DB.");
     return [];
   }
 
-  parsedResponses.forEach(parsedResp => {
-    // --- DÉBUT DE LA LOGIQUE DE MAPPAGE DE QUESTION (À ADAPTER FORTEMENT) ---
-    // Stratégie de mappage placeholder : on suppose que questionIdentifierInXml
-    // correspond à un ID unique (ex: un GUID qui serait un champ de QuestionWithId ou son ancien ID texte)
-    // ou, plus simplement pour ce placeholder, à l'index+1 ou un ID spécifique.
-    // Pour cet exemple, cherchons par un champ `text` (peu robuste) ou un `id` original si on l'avait.
-    // Idéalement, QuestionWithId aurait un `originalQuestionId: string` ou `guid: string`
-    // que `questionIdentifierInXml` pourrait matcher.
+  // Créer un Map pour un accès rapide aux questions par slideGuid
+  const questionsBySlideGuid = new Map<string, QuestionWithId>();
+  questionsInSession.forEach(q => {
+    if (q.slideGuid) { // Vérifier que slideGuid existe et n'est pas vide
+      questionsBySlideGuid.set(q.slideGuid, q);
+    } else {
+      console.warn(`Question ID ${q.id} (texte: "${q.text.substring(0,30)}...") n'a pas de slideGuid stocké en DB, elle ne pourra pas être mappée avec les résultats du XML.`);
+    }
+  });
 
-    // Simulation: si questionIdentifierInXml est "Q1_GUID", on cherche la première question, etc.
-    // Ceci est très dépendant de ce que contient questionIdentifierInXml.
-    let questionInDb: QuestionWithId | undefined = undefined;
-    // Exemple de recherche (à remplacer par une vraie logique de mappage):
-    // Si questionIdentifierInXml est un index (1-based) dans l'ordre des questions de la session
-    // const qIndex = parseInt(parsedResp.questionIdentifierInXml, 10) - 1;
-    // if (qIndex >= 0 && qIndex < questionsInSession.length) {
-    //   questionInDb = questionsInSession[qIndex];
-    // }
+  if(questionsBySlideGuid.size === 0) {
+    console.warn("Aucune question de la session en DB n'a de slideGuid. Impossible de procéder au mappage des résultats.");
+    return [];
+  }
 
-    // Autre simulation: on cherche une question dont le texte commence pareil (MAUVAIS pour la prod)
-    // questionInDb = questionsInSession.find(q => q.text.startsWith(parsedResp.questionIdentifierInXml));
-
-    // **STRATÉGIE LA PLUS PROBABLE ET ROBUSTE (si implémentée lors de la génération ORS/PPTX):**
-    // Le `questionIdentifierInXml` est un GUID unique que vous avez assigné à chaque question
-    // lors de la génération du PPTX (via les tags OMBEA, par exemple) et que vous avez aussi
-    // stocké dans un champ de votre objet `QuestionWithId` (ex: `QuestionWithId.ombeaGuid`).
-    // Exemple: questionInDb = questionsInSession.find(q => q.ombeaGuid === parsedResp.questionIdentifierInXml);
-
-    // Pour l'instant, on prend la première question pour chaque réponse, juste pour faire avancer.
-    // CELA DOIT ÊTRE REMPLACÉ.
-    questionInDb = questionsInSession.find(q => q.id?.toString() === parsedResp.questionIdentifierInXml);
-    // Ou si questionIdentifierInXml est un index (0-based pour cet exemple):
-    // const tempQIndex = parseInt(parsedResp.questionIdentifierInXml);
-    // if(!isNaN(tempQIndex) && tempQIndex < questionsInSession.length) questionInDb = questionsInSession[tempQIndex];
-
+  extractedResults.forEach(extResult => {
+    const questionInDb = questionsBySlideGuid.get(extResult.questionSlideGuid);
 
     if (!questionInDb || !questionInDb.id) {
-      console.warn(`Impossible de mapper la question avec l'identifiant XML "${parsedResp.questionIdentifierInXml}" à une question de la DB. Réponse ignorée.`);
-      return; // Passe à la prochaine parsedResp
+      console.warn(`Impossible de mapper la question XML avec SlideGUID "${extResult.questionSlideGuid}" à une question de la DB (non trouvée ou ID manquant). Résultat ignoré pour le participant ${extResult.participantDeviceID}.`);
+      return;
     }
 
-    // --- FIN DE LA LOGIQUE DE MAPPAGE DE QUESTION ---
-
-    // Déterminer si la réponse est correcte.
-    // Cela dépend du type de question et du format de `correctAnswer` et `answerGiven`.
-    // Exemple pour QCM où `correctAnswer` est l'index (0-based) et `answerGiven` est la lettre (A, B, C...)
-    // ou l'index+1.
-    let isCorrect = false;
-    // Supposons pour l'instant que `correctAnswer` dans `QuestionWithId` est l'option textuelle correcte.
-    // Et `answerGiven` est aussi l'option textuelle.
-    // Il faudra adapter cela finement.
-    // Exemple simple:
-    // if (questionInDb.type === 'true-false') {
-    //   isCorrect = (questionInDb.correctAnswer === '0' && parsedResp.answerGiven === 'Vrai') || // ou 'True', ou '0'
-    //               (questionInDb.correctAnswer === '1' && parsedResp.answerGiven === 'Faux'); // ou 'False', ou '1'
-    // } else if (questionInDb.type === 'multiple-choice') {
-    //    // Si correctAnswer est l'index de l'option correcte (ex: "0", "1", ...)
-    //    // Et si answerGiven est la lettre de l'option (ex: "A", "B", ...)
-    //    const correctIndex = parseInt(questionInDb.correctAnswer, 10);
-    //    if (!isNaN(correctIndex) && questionInDb.options && correctIndex < questionInDb.options.length) {
-    //       // Convertir answerGiven (ex: "A") en index (0)
-    //       const givenIndex = parsedResp.answerGiven.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
-    //       isCorrect = givenIndex === correctIndex;
-    //    }
-    // }
-    // Pour ce placeholder, mettons isCorrect à false par défaut.
-    // Une logique réelle est nécessaire ici.
-    // Si `questionInDb.correctAnswer` est directement comparable à `parsedResp.answerGiven`
-    if (questionInDb.correctAnswer && parsedResp.answerGiven) {
-        isCorrect = questionInDb.correctAnswer.trim().toLowerCase() === parsedResp.answerGiven.trim().toLowerCase();
-    }
-
+    // Déterminer isCorrect en fonction des points.
+    // Une réponse est correcte si elle rapporte des points.
+    const isCorrect = extResult.pointsObtained > 0;
 
     const sessionResult: SessionResult = {
       sessionId: currentSessionId,
-      questionId: questionInDb.id, // ID numérique de la question en DB
-      participantIdBoitier: parsedResp.participantIdBoitier,
-      answer: parsedResp.answerGiven,
+      questionId: questionInDb.id,
+      participantIdBoitier: extResult.participantDeviceID,
+      answer: extResult.answerGivenID, // Stocke l'ID de l'option de réponse (ex: "1", "2")
       isCorrect: isCorrect,
-      timestamp: new Date().toISOString(), // Utiliser le timestamp du XML si disponible, sinon maintenant.
+      // points: extResult.pointsObtained, // Pourrait être ajouté à SessionResult si besoin de stocker les points par réponse
+      timestamp: new Date().toISOString(),
     };
     sessionResults.push(sessionResult);
   });
 
-  console.log(`${sessionResults.length} réponses transformées en SessionResult.`);
+  console.log(`${sessionResults.length} résultats transformés en SessionResult.`);
   return sessionResults;
 };
-
-/**
- * Parse le contenu XML d'un fichier de résultats OMBEA.
- *
- * @param xmlString La chaîne de caractères contenant le XML.
- * @returns Un tableau de ParsedResponse ou lance une erreur si le parsing échoue.
- *          Pour l'instant, la logique de parsing réelle est un placeholder.
- */
-export const parseOmbeaResultsXml = (
-  xmlString: string,
-  // questionsInSession: QuestionWithId[] // Sera nécessaire pour le mappage à l'étape de transformation
-): ParsedResponse[] => {
-  console.log("Début du parsing XML...");
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlString, "application/xml");
-
-  // Vérifier les erreurs de parsing XML standard
-  const parserErrorNode = xmlDoc.querySelector("parsererror");
-  if (parserErrorNode) {
-    console.error("Erreur de parsing XML:", parserErrorNode.textContent || "Erreur inconnue du parser");
-    // Tenter de donner plus d'infos si possible (ex: source du fragment erroné)
-    // const errorSourceText = parserErrorNode.querySelector('sourcetext')?.textContent;
-    // if(errorSourceText) console.error("Fragment source de l'erreur:", errorSourceText);
-    throw new Error("Le fichier de résultats XML est mal formé ou invalide. Vérifiez la console pour les détails.");
-  }
-
-  const parsedResponses: ParsedResponse[] = [];
-
-  // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  // !!! LOGIQUE DE PARSING SPÉCIFIQUE À OMBEA À IMPLÉMENTER ICI              !!!
-  // !!! CECI EST UN EXEMPLE HYPOTHÉTIQUE ET DOIT ÊTRE ADAPTÉ AU FORMAT RÉEL  !!!
-  // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  // Exemple:
-  // Supposons que chaque réponse est dans un élément <Vote>
-  // avec un attribut "respondentID", un élément <QuestionID>, et un élément <Answer>
-  // const voteNodes = xmlDoc.getElementsByTagName("Vote");
-  // console.log(`Nombre de noeuds <Vote> trouvés: ${voteNodes.length}`);
-
-  // for (let i = 0; i < voteNodes.length; i++) {
-  //   const voteNode = voteNodes[i];
-  //   const participantId = voteNode.getAttribute("respondentID");
-  //   const questionIdXml = voteNode.querySelector("QuestionID")?.textContent?.trim();
-  //   const answer = voteNode.querySelector("Answer")?.textContent?.trim();
-
-  //   if (participantId && questionIdXml && answer) {
-  //     parsedResponses.push({
-  //       participantIdBoitier: participantId,
-  //       questionIdentifierInXml: questionIdXml,
-  //       answerGiven: answer,
-  //     });
-  //   } else {
-  //     console.warn("Vote XML incomplet ou mal formé ignoré. ParticipantID:", participantId, "QuestionID:", questionIdXml, "Answer:", answer);
-  //   }
-  // }
-
-  // Placeholder pour simuler des données extraites si le XML réel n'est pas encore connu
-  // À RETIRER LORSQUE LE PARSING RÉEL EST IMPLÉMENTÉ
-  if (xmlString.includes("<placeholder_test_results>")) { // Simuler un test
-     console.warn("Utilisation de données de parsing placeholder pour le test !");
-     parsedResponses.push({ participantIdBoitier: "102494", questionIdentifierInXml: "Q1_GUID", answerGiven: "A" });
-     parsedResponses.push({ participantIdBoitier: "1017ED", questionIdentifierInXml: "Q1_GUID", answerGiven: "B" });
-     parsedResponses.push({ participantIdBoitier: "102494", questionIdentifierInXml: "Q2_GUID", answerGiven: "C" });
-  }
-
-
-  if (parsedResponses.length === 0 && !xmlString.includes("<placeholder_test_results>")) {
-    console.warn("Aucune réponse n'a pu être extraite du fichier XML. La structure XML est peut-être inattendue ou le fichier est vide de réponses pertinentes.");
-    // Ne pas lancer d'erreur ici permet de gérer un fichier valide mais sans réponses.
-    // Une erreur sera levée si le fichier XML lui-même est malformé (parsererror).
-  }
-
-  console.log(`Parsing XML terminé. ${parsedResponses.length} réponses brutes extraites (ou simulées).`);
-  return parsedResponses;
-};
-
-// Optionnellement, une fonction similaire pour JSON si nécessaire plus tard
-// export const parseOmbeaResultsJson = (jsonString: string): ParsedResponse[] => { ... }

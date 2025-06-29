@@ -29,6 +29,7 @@ export interface QuestionWithId {
   correctResponseRate?: number;
   // Il faut s'assurer que cette interface est cohérente avec la table 'questions' existante
   // et l'interface `Question` dans `types/index.ts` pour les champs non-ID.
+  slideGuid?: string; // Ajout du SlideGUID
 }
 
 export class MySubClassedDexie extends Dexie {
@@ -39,19 +40,24 @@ export class MySubClassedDexie extends Dexie {
   constructor() {
     super('myDatabase');
     this.version(1).stores({
-      // Schéma existant pour la table questions
+      // Schéma existant pour la table questions (sans slideGuid)
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options'
     });
 
-    // Nouvelle version pour ajouter les tables sessions et sessionResults
-    // et pour mettre à jour la table questions si nécessaire (ici, on la redéclare telle quelle)
     this.version(2).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options', // Redéclarer même si inchangée
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location', // Ajout de location (non indexé ici, mais présent)
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp' // Champs indexés pour sessionResults
+      // Schéma de la v1 reconduit pour questions
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
-    // Note: Si des migrations de données sont nécessaires (upgrade), elles seraient ajoutées ici.
-    // Pour l'ajout de nouvelles tables, ce n'est pas strictement requis si les anciennes ne changent pas.
+
+    // Nouvelle version pour ajouter slideGuid à questions
+    this.version(3).stores({
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options', // Ajout de slideGuid, potentiellement indexé
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location', // Repris de v2
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp' // Repris de v2
+    });
+    // Note: Dexie gère les migrations additives. Les questions existantes auront slideGuid: undefined.
   }
 }
 
