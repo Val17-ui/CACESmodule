@@ -61,12 +61,12 @@ export interface Val17Question {
   points?: number; // Corresponds to timeLimit from StoredQuestion, used for duration
 }
 
-// Structure pour le mappage retourné
-export interface QuestionMapping {
+// Structure pour le mappage retourné - Assurer l'export
+export interface QuestionMapping { // Déjà exporté, c'est bien.
   dbQuestionId: number;
   slideGuid: string | null;
-  orderInPptx: number; // L'index de la question dans le PPTX généré (1-based)
-  // title?: string; // Optionnel, pour debug
+  orderInPptx: number;
+  // title?: string;
 }
 
 interface TagInfo {

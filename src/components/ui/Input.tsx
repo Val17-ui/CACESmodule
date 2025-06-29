@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 type InputProps = {
   label?: string;
@@ -14,26 +14,22 @@ type InputProps = {
   disabled?: boolean;
   min?: number;
   max?: number;
-  accept?: string; // Ajouté
-  readOnly?: boolean; // Ajouté
 };
 
 const Input: React.FC<InputProps> = ({
   label,
-  type = "text",
+  type = 'text',
   placeholder,
   value,
   onChange,
   name,
   id,
   error,
-  className = "",
+  className = '',
   required = false,
   disabled = false,
   min,
   max,
-  accept, // Ajouté
-  readOnly, // Ajouté
 }) => {
   const inputId = id || name;
 
@@ -58,16 +54,13 @@ const Input: React.FC<InputProps> = ({
         className={`
           block w-full rounded-xl border-gray-300 shadow-sm 
           focus:border-blue-500 focus:ring-blue-500 sm:text-sm
-          ${error ? "border-red-300" : "border-gray-300"}
-          ${disabled ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}
-          ${readOnly ? "bg-gray-100 text-gray-700" : ""}
+          ${error ? 'border-red-300' : 'border-gray-300'}
+          ${disabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}
         `}
         required={required}
         disabled={disabled}
         min={min}
         max={max}
-        accept={accept} // Ajouté
-        readOnly={readOnly} // Ajouté
       />
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
     </div>
