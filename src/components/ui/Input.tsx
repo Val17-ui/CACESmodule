@@ -32,12 +32,12 @@ const Input: React.FC<InputProps> = ({
   max,
 }) => {
   const inputId = id || name;
-  
+
   return (
     <div className={`mb-4 ${className}`}>
       {label && (
-        <label 
-          htmlFor={inputId} 
+        <label
+          htmlFor={inputId}
           className="block text-sm font-medium text-gray-700 mb-1"
         >
           {label}

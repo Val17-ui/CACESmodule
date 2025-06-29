@@ -6,7 +6,8 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 // import Badge from '../ui/Badge'; // Removed Badge
 // Removed Question, questionTypes
-import { QuestionType, CACESReferential, QuestionTheme, referentials, questionThemes } from '../../types';
+// QuestionTheme and questionThemes removed to ensure no validation is based on them here
+import { QuestionType, CACESReferential, referentials } from '../../types';
 import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
@@ -35,7 +36,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
       timeLimit: 30,
       isEliminatory: false,
       referential: CACESReferential.R489,
-      theme: 'reglementation',
+      theme: '', // Default to empty string for free text input
       image: undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -90,10 +91,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     label: `${value} - ${label}`,
   }));
 
-  const themeOptions = Object.entries(questionThemes).map(([value, label]) => ({
-    value,
-    label
-  }));
+  // themeOptions removed as theme is now a free text input
 
   // Removed the first, older useEffect that was causing issues with 'initialQuestionState'
 
@@ -166,6 +164,9 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     if (name === 'referential' && forcedReferential) {
       return;
     }
+    if (name === 'theme') {
+      logger.info(`handleInputChange - theme changed to: "${value}"`);
+    }
     setQuestion(prev => ({ ...prev, [name]: name === 'timeLimit' ? parseInt(value, 10) : value }));
   };
 
@@ -236,6 +237,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   };
 
   const validateForm = (): boolean => {
+    logger.info('validateForm called. Current theme value:', question.theme);
     const newErrors: Record<string, string> = {};
     if (!question.text.trim()) newErrors.text = 'Le texte de la question est requis.';
     // question.type is now 'multiple-choice' or 'true-false'
@@ -289,23 +291,20 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
       correctAnswer: question.correctAnswer,
     };
 
+    logger.info("Data prepared for saving in handleSave:", questionData);
+
     try {
       setIsLoading(true);
       let savedQuestionResult: StoredQuestion;
 
-      if (questionId) { // Corresponds to editing an existing question
-        // StorageManager.updateQuestion expects the ID and the partial data.
-        // questionData here already has the full structure, which is fine for Dexie's update.
-        // We must ensure 'id' is not in the 'updates' object itself if StorageManager.updateQuestion strictly forbids it.
-        // However, our StorageManager.updateQuestion is implemented to handle this.
+      if (questionId) {
+        logger.info(`Calling StorageManager.updateQuestion for ID ${questionId} with theme: "${questionData.theme}"`);
         await StorageManager.updateQuestion(questionId, questionData);
         logger.success('Question modifiée avec succès');
-        // For onSave, we need the full question object, including the ID.
         savedQuestionResult = { ...questionData, id: questionId };
       } else {
-        // For new questions, StorageManager.addQuestion expects data without an 'id'.
-        // The 'questionData' object as constructed above (if currentId was undefined) will not have an 'id' property.
-        const newId = await StorageManager.addQuestion(questionData); // questionData is Omit<StoredQuestion, 'id'> here
+        logger.info(`Calling StorageManager.addQuestion with theme: "${questionData.theme}"`);
+        const newId = await StorageManager.addQuestion(questionData);
         logger.success(`Question créée avec succès avec l'ID: ${newId}`);
         if (newId === undefined) {
           throw new Error("Failed to create question, new ID is undefined.");
@@ -314,7 +313,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
       }
       onSave(savedQuestionResult);
     } catch (error) {
-      logger.error("Error saving question: ", error);
+      logger.error("Error saving question in handleSave: ", error);
     } finally {
       setIsLoading(false);
     }
@@ -342,12 +341,12 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             required
             disabled={!!forcedReferential} // Disable if referential is forced
           />
-          <Select
+          <Input
             label="Thème"
-            options={themeOptions}
+            name="theme" // Ensure name is set for handleInputChange
             value={question.theme}
-            onChange={(e) => setQuestion(prev => ({...prev, theme: e.target.value as QuestionTheme}))}
-            placeholder="Sélectionner un thème"
+            onChange={handleInputChange} // Use existing handleInputChange
+            placeholder="Ex: securite_A, technique_B"
             required
           />
         </div>

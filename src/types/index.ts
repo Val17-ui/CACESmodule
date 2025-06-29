@@ -1,30 +1,62 @@
+// src/types/index.ts
+
 export interface User {
   id: string;
   name: string;
   role: 'admin' | 'instructor' | 'viewer';
 }
 
+// Nouvelle interface Session pour le stockage Dexie
 export interface Session {
-  id: string;
-  name: string;
-  date: string;
-  referential: string;
-  status: 'planned' | 'in-progress' | 'completed' | 'cancelled';
-  participantsCount: number;
+  id?: number; // Auto-incremented primary key par Dexie
+  nomSession: string;
+  dateSession: string; // ISO string date
+  referentiel: CACESReferential | string; // Utiliser CACESReferential, ou string pour flexibilité
+  participants: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
+  selectionBlocs: SelectedBlock[]; // Blocs thématiques sélectionnés pour cette session
+  donneesOrs?: Blob | null; // Stockage du fichier .ors généré
+  status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
+  location?: string; // Lieu de la session
+  questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>;
+  notes?: string; // Notes pour la session
+  createdAt?: string;
+  updatedAt?: string;
 }
 
+// Interface pour le mappage Question DB <-> Slide PPTX (par session)
+export interface QuestionMapping {
+  dbQuestionId: number;
+  slideGuid: string | null;
+  orderInPptx: number;
+}
+
+// Nouvelle interface Participant pour les listes dans une Session
 export interface Participant {
-  id: string;
-  firstName: string;
-  lastName: string;
-  organization?: string;
-  identificationCode?: string;
-  deviceId?: number;
-  hasSigned: boolean;
-  score?: number;
-  passed?: boolean;
-  company?: string;
-  email?: string;
+  idBoitier: string; // Identifiant du boîtier de vote
+  nom: string;
+  prenom: string;
+  identificationCode?: string; // Code d'identification optionnel
+  score?: number; // Score total du participant pour cette session
+  reussite?: boolean; // Statut de réussite du participant pour cette session
+}
+
+// Nouvelle interface pour décrire un bloc thématique sélectionné
+export interface SelectedBlock {
+  theme: string; // e.g., "securite"
+  blockId: string; // e.g., "A", "B" ou un ID numérique spécifique du bloc
+}
+
+// Nouvelle interface pour stocker les résultats d'une session
+export interface SessionResult {
+  id?: number; // Auto-incremented primary key par Dexie
+  sessionId: number; // Clé étrangère vers Session.id
+  // Doit correspondre à l'ID de la question DANS LA DB (QuestionWithId.id)
+  questionId: number;
+  participantIdBoitier: string; // Identifiant du boîtier du participant
+  answer: string; // Réponse donnée (ID de l'option de réponse pour QCM/QCU)
+  isCorrect: boolean; // Si la réponse était correcte
+  pointsObtained: number; // Points obtenus pour cette réponse spécifique
+  timestamp: string; // ISO string date de la réponse
 }
 
 export enum QuestionType {
@@ -33,22 +65,25 @@ export enum QuestionType {
   TrueFalse = 'true-false'
 }
 
+// Interface pour les questions telles qu'elles pourraient être définies initialement
+// L'objet stocké dans Dexie (`QuestionWithId` dans `db.ts`) aura un `id: number`
 export interface Question {
-  id: string;
+  id: string; // ID original de la question (non celui de la DB Dexie)
   text: string;
   type: QuestionType;
   options: string[];
   correctAnswer: string;
   timeLimit?: number;
   isEliminatory: boolean;
-  referential: CACESReferential;
-  theme: QuestionTheme;
+  referentiel: CACESReferential;
+  theme: string;
   image?: Blob;
   createdAt?: string;
-  updatedAt?: string; // Added
-  lastUsedAt?: string; // Added
+  updatedAt?: string;
+  lastUsedAt?: string;
   usageCount?: number;
   correctResponseRate?: number;
+  slideGuid?: string; // Ajout du SlideGUID
 }
 
 export interface QuestionStatistics {
@@ -58,20 +93,6 @@ export interface QuestionStatistics {
   totalResponses: number;
   correctResponseRate: number;
   lastUsed?: string;
-}
-
-export interface Questionnaire {
-  id: string;
-  name: string;
-  referential: string;
-  questions: Question[];
-  passingThreshold: number;
-  themeDistribution: Record<QuestionTheme, number>;
-  eliminatoryCount: number;
-  isRandomized: boolean;
-  totalQuestions: number;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface DeviceMapping {
@@ -114,7 +135,7 @@ export const referentialLimits: Record<ReferentialType, { min: number; max: numb
   'R490': { min: 30, max: 55 }
 };
 
-export type QuestionTheme = 
+export type QuestionTheme =
   | 'reglementation'
   | 'securite'
   | 'technique';
@@ -139,7 +160,6 @@ export const questionCategories: Record<QuestionCategory, string> = {
   eliminatory: 'Éliminatoire'
 };
 
-// Types pour la génération PPTX
 export interface PPTXQuestion {
   question: string;
   correctAnswer: boolean;

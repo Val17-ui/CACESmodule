@@ -1,0 +1,271 @@
+// Timestamp: 2024-06-24T18:50:00Z (Adding debug log before calling Val17 generator)
+// import PptxGenJS from 'pptxgenjs'; // Not directly used now
+import JSZip from 'jszip';
+// import { saveAs } from 'file-saver'; // saveAs n'est plus utilisé ici directement
+import { QuestionWithId as StoredQuestion } from '../db';
+import { Session, Participant } from '../types'; // Assuming these are the correct local types
+// Importer QuestionMapping et ajuster les autres imports si FinalQuestionData a été supprimé
+import {
+  Val17Question,
+  GenerationOptions as Val17GenerationOptions,
+  ConfigOptions as Val17ConfigOptions,
+  generatePPTXVal17,
+  QuestionMapping, // Importer directement
+  SessionInfo as Val17SessionInfo
+} from '../lib/val17-pptx-generator/val17PptxGenerator';
+
+// Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
+export type { QuestionMapping };
+
+
+function generateOmbeaSessionXml(
+  sessionInfo: Val17SessionInfo,
+  participants: Participant[],
+  _questionMappings: QuestionMapping[] // Utiliser QuestionMapping ici, même si non utilisé dans ce XML particulier
+): string {
+  // Using a helper for escaping XML attribute/text values
+  const esc = (unsafe: string | undefined | null): string => {
+    if (unsafe === undefined || unsafe === null) return '';
+    return String(unsafe)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  };
+
+  // Predefined list of known working Device IDs
+  const knownDeviceIDs = ["102494", "1017ED", "0FFB1C", "1027AC"];
+
+  const formatDeviceId = (participantIndex: number): string => {
+    if (participantIndex < knownDeviceIDs.length) {
+      return knownDeviceIDs[participantIndex];
+    }
+    // Fallback for participants exceeding the knownDeviceIDs list
+    console.warn(`Nombre de participants (${participants.length}) supérieur au nombre d'ID boîtiers pré-définis (${knownDeviceIDs.length}). Utilisation d'un ID numérique formaté pour le participant ${participantIndex + 1}.`);
+    return String(participantIndex + 1).padStart(6, '0');
+  };
+
+  let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n`;
+  xml += `<ors:ORSession xmlns:rl="http://www.ombea.com/response/respondentlist" xmlns:ors="http://www.ombea.com/response/session" ORVersion="0" SessionVersion="4">\n`;
+
+  // Placeholder for session-specific info if needed in ORSession.xml root or a dedicated section
+  // For now, the example only shows Questions and RespondentList at the root.
+  // xml += `  <ors:SessionDetails>\n`;
+  // xml += `    <ors:Title>${esc(sessionInfo.title)}</ors:Title>\n`;
+  // xml += `    <ors:Date>${esc(sessionInfo.date || new Date().toISOString().slice(0,10))}</ors:Date>\n`;
+  // xml += `  </ors:SessionDetails>\n`;
+
+  xml += `  <ors:Questions/>\n`; // Empty as per example, questions are in PPTX tags
+
+  xml += `  <ors:RespondentList RespondentListVersion="3">\n`;
+  xml += `    <rl:RespondentHeaders>\n`;
+  xml += `      <rl:DeviceIDHeader Index="1"/>\n`;
+
+  // Traiter FirstName et LastName comme des CustomHeaders
+  // Garder une trace des index pour les propriétés personnalisées
+  let currentHeaderIndex = 2; // DeviceIDHeader est à l'index 1
+
+  xml += `      <rl:CustomHeader Index="${currentHeaderIndex++}">FirstName</rl:CustomHeader>\n`;
+  xml += `      <rl:CustomHeader Index="${currentHeaderIndex++}">LastName</rl:CustomHeader>\n`;
+
+  // Gérer 'Organisation' comme avant, s'il existe
+  const customHeadersForOrganization: { name: string; index: number }[] = [];
+  if (participants.some(p => p.organization)) {
+    customHeadersForOrganization.push({ name: "Organisation", index: currentHeaderIndex++ });
+  }
+  customHeadersForOrganization.forEach(ch => {
+    xml += `      <rl:CustomHeader Index="${ch.index}">${esc(ch.name)}</rl:CustomHeader>\n`;
+  });
+
+  xml += `    </rl:RespondentHeaders>\n`;
+
+  xml += `    <rl:Respondents>\n`;
+  participants.forEach((p, index) => {
+    xml += `      <rl:Respondent ID="${index + 1}">\n`; // Sequential 1-based ID
+    xml += `        <rl:Devices>\n`;
+    // Use the participant's index for the placeholder Device ID for now
+    xml += `          <rl:Device>${formatDeviceId(index)}</rl:Device>\n`;
+    xml += `        </rl:Devices>\n`;
+
+    // Ajouter FirstName comme CustomProperty
+    xml += `        <rl:CustomProperty>\n`;
+    xml += `          <rl:ID>FirstName</rl:ID>\n`; // L'ID doit correspondre au nom du CustomHeader
+    xml += `          <rl:Text>${esc(p.firstName)}</rl:Text>\n`;
+    xml += `        </rl:CustomProperty>\n`;
+
+    // Ajouter LastName comme CustomProperty
+    xml += `        <rl:CustomProperty>\n`;
+    xml += `          <rl:ID>LastName</rl:ID>\n`; // L'ID doit correspondre au nom du CustomHeader
+    xml += `          <rl:Text>${esc(p.lastName)}</rl:Text>\n`;
+    xml += `        </rl:CustomProperty>\n`;
+
+    if (p.organization && customHeadersForOrganization.find(h => h.name === "Organisation")) {
+      xml += `        <rl:CustomProperty>\n`;
+      xml += `          <rl:ID>Organisation</rl:ID>\n`;
+      xml += `          <rl:Text>${esc(p.organization)}</rl:Text>\n`;
+      xml += `        </rl:CustomProperty>\n`;
+    }
+    // Add other custom properties based on detected headers
+    xml += `        <rl:GroupReferences/>\n`;
+    xml += `      </rl:Respondent>\n`;
+  });
+  xml += `    </rl:Respondents>\n`;
+  xml += `    <rl:Groups/>\n`;
+  xml += `  </ors:RespondentList>\n`;
+  xml += `</ors:ORSession>`;
+  return xml;
+}
+
+// Placeholder for a more sophisticated error notification system
+// For now, this ensures alerts are shown if they reach this stage.
+function alertAlreadyShown(_error: Error): boolean {
+  // In a real app, this would check if a user-facing error for this operation
+  // has already been displayed.
+  return false;
+}
+
+export interface AdminPPTXSettings extends Val17ConfigOptions {
+  defaultDuration?: number;
+}
+
+let tempImageUrls: string[] = [];
+
+export function transformQuestionsForVal17Generator(storedQuestions: StoredQuestion[]): Val17Question[] {
+  tempImageUrls.forEach(url => {
+    try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for transformQuestionsForVal17Generator:", url, e); }
+  });
+  tempImageUrls = [];
+
+  return storedQuestions.map((sq) => {
+    let correctAnswerIndex: number | undefined = undefined;
+    if (sq.correctAnswer) {
+      if (sq.type === 'multiple-choice') {
+        const cIndex = parseInt(sq.correctAnswer, 10);
+        if (!isNaN(cIndex) && cIndex >= 0 && cIndex < sq.options.length) {
+          correctAnswerIndex = cIndex;
+        }
+      } else if (sq.type === 'true-false') {
+        correctAnswerIndex = sq.correctAnswer === '0' ? 0 : 1;
+      }
+    }
+
+    let imageUrl: string | undefined = undefined;
+    if (sq.image instanceof Blob) {
+      try {
+        imageUrl = URL.createObjectURL(sq.image);
+        tempImageUrls.push(imageUrl);
+      } catch (e) {
+        console.error("Error creating object URL for image in transformQuestionsForVal17Generator:", e);
+      }
+    }
+
+    return {
+      dbQuestionId: sq.id as number, // Assurer que l'ID est bien passé
+      question: sq.text,
+      options: sq.options,
+      correctAnswerIndex: correctAnswerIndex,
+      imageUrl: imageUrl,
+      points: sq.timeLimit,
+    };
+  });
+}
+
+export async function generatePresentation(
+  sessionInfo: { name: string; date: string; referential: string },
+  _participants: Participant[], // Ce sont les FormParticipant
+  storedQuestions: StoredQuestion[], // Ce sont les QuestionWithId (de la DB)
+  templateFileFromUser: File,
+  adminSettings: AdminPPTXSettings
+): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null }> {
+
+  console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
+
+  const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
+
+  const generationOptions: Val17GenerationOptions = {
+    fileName: `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}_OMBEA.pptx`,
+    defaultDuration: adminSettings.defaultDuration || 30,
+    ombeaConfig: {
+      pollStartMode: adminSettings.pollStartMode,
+      chartValueLabelFormat: adminSettings.chartValueLabelFormat,
+      answersBulletStyle: adminSettings.answersBulletStyle,
+      pollTimeLimit: adminSettings.pollTimeLimit,
+      pollCountdownStartMode: adminSettings.pollCountdownStartMode,
+      pollMultipleResponse: adminSettings.pollMultipleResponse,
+    }
+  };
+
+  try {
+    // Log data being passed to the generator for debugging
+    console.log("Data being passed to generatePPTXVal17:", JSON.stringify({
+      templateName: templateFileFromUser.name,
+      questionsCount: transformedQuestions.length,
+      // Log first 2 questions to check structure, especially correctAnswerIndex and points
+      questionsSample: transformedQuestions.slice(0, 2).map(q => ({
+          text: q.question.substring(0,30) + "...", // Keep log concise
+          optionsCount: q.options.length,
+          correctAnswerIndex: q.correctAnswerIndex,
+          points: q.points,
+          hasImageUrl: !!q.imageUrl
+      })),
+      options: generationOptions
+    }, null, 2));
+
+    // Map sessionInfo to the SessionInfo type expected by val17PptxGenerator
+    const val17SessionInfo: Val17SessionInfo = { // Ensure type consistency
+      title: sessionInfo.name,
+      date: sessionInfo.date,
+    };
+
+    const generatedData = await generatePPTXVal17(
+      templateFileFromUser,
+      transformedQuestions,
+      generationOptions,
+      val17SessionInfo,
+      _participants // _participants ici sont les FormParticipant, generatePPTXVal17 les utilise pour l'instant
+    );
+
+    // Correction: Utiliser generatedData au lieu de generationResult
+    if (generatedData && generatedData.pptxBlob && generatedData.questionMappings) {
+      console.log("PPTX Blob et mappings de questions reçus de generatePPTXVal17.");
+
+      const orSessionXmlContent = generateOmbeaSessionXml(
+        val17SessionInfo,
+        _participants, // Passer les participants (FormParticipant) pour le XML
+        generatedData.questionMappings // Utiliser generatedData ici
+      );
+
+      const outputOrsZip = new JSZip();
+      const pptxFileNameInZip = generationOptions.fileName || `presentation.pptx`;
+      outputOrsZip.file(pptxFileNameInZip, generatedData.pptxBlob); // Utiliser generatedData ici
+      outputOrsZip.file("ORSession.xml", orSessionXmlContent);
+
+      const orsBlob = await outputOrsZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
+
+      const orsFileName = `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}.ors`;
+      console.log(`Fichier .ors "${orsFileName}" (Blob) et questionMappings générés.`);
+      return { orsBlob: orsBlob, questionMappings: generatedData.questionMappings }; // Utiliser generatedData ici
+
+    } else {
+      console.error("Échec de la génération des données PPTX, du Blob ou des questionMappings à partir de generatePPTXVal17.");
+      if (!alertAlreadyShown(new Error("generatePPTXVal17 returned null or incomplete data."))) {
+         alert("La génération du fichier PPTX ou des données de mappage a échoué. Le fichier .ors ne peut pas être créé.");
+      }
+      return { orsBlob: null, questionMappings: null };
+    }
+
+  } catch (error) {
+    console.error("Erreur dans pptxOrchestrator.generatePresentation:", error);
+    if (!alertAlreadyShown(error as Error)) {
+        alert("Une erreur est survenue lors de la création du fichier .ors.");
+    }
+    return { orsBlob: null, questionMappings: null };
+  } finally {
+    tempImageUrls.forEach(url => {
+      try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for generatePresentation (direct call):", url, e); }
+    });
+    console.log("Revoked temporary object URLs for images in generatePresentation (direct call).");
+    tempImageUrls = [];
+  }
+}

@@ -125,9 +125,10 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
       if (rawQ.referential && !Object.values(CACESReferential).includes(rawQ.referential as CACESReferential)) {
         errorsForRow.push(`Référentiel '${rawQ.referential}' invalide.`);
       }
-      if (rawQ.theme && !Object.keys(questionThemes).includes(rawQ.theme as QuestionTheme)) {
-        errorsForRow.push(`Thème '${rawQ.theme}' invalide.`);
-      }
+      // Validation du thème supprimée pour autoriser les thèmes composites comme 'securite_A'
+      // if (rawQ.theme && !Object.keys(questionThemes).includes(rawQ.theme as QuestionTheme)) {
+      //   errorsForRow.push(`Thème '${rawQ.theme}' invalide.`);
+      // }
 
       const options: string[] = [];
       if (rawQ.optionA) options.push(rawQ.optionA);
@@ -138,13 +139,23 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
       const definedOptions = options.filter(opt => opt !== undefined && opt !== null).map(opt => opt.trim());
       if (definedOptions.length < 2) errorsForRow.push("Au moins 2 options (A et B) avec du contenu sont requises.");
 
-      let correctAnswerText = '';
+      let correctAnswerIndexStr = ''; // Store index as string
       const caLetter = rawQ.correctAnswer?.trim().toUpperCase();
-      if (caLetter === 'A' && definedOptions[0]) correctAnswerText = definedOptions[0];
-      else if (caLetter === 'B' && definedOptions[1]) correctAnswerText = definedOptions[1];
-      else if (caLetter === 'C' && definedOptions[2]) correctAnswerText = definedOptions[2];
-      else if (caLetter === 'D' && definedOptions[3]) correctAnswerText = definedOptions[3];
-      else errorsForRow.push(`Valeur de 'correctAnswer' (${rawQ.correctAnswer}) invalide ou option correspondante manquante.`);
+      if (caLetter === 'A') correctAnswerIndexStr = "0";
+      else if (caLetter === 'B') correctAnswerIndexStr = "1";
+      else if (caLetter === 'C' && definedOptions.length > 2) correctAnswerIndexStr = "2";
+      else if (caLetter === 'D' && definedOptions.length > 3) correctAnswerIndexStr = "3";
+      else errorsForRow.push(`Valeur de 'correctAnswer' (${rawQ.correctAnswer}) invalide ou option correspondante non disponible.`);
+
+      // Check if the selected correct option actually exists and has content
+      if (correctAnswerIndexStr !== '') {
+        const idx = parseInt(correctAnswerIndexStr, 10);
+        if (idx >= definedOptions.length || !definedOptions[idx]?.trim()) {
+          errorsForRow.push(`L'option correcte '${caLetter}' (${definedOptions[idx]}) est vide ou non définie.`);
+          correctAnswerIndexStr = ''; // Invalidate if option is bad
+        }
+      }
+
 
       let isEliminatoryBool: boolean | undefined = undefined;
       if (rawQ.isEliminatory !== undefined && rawQ.isEliminatory !== null) {
@@ -161,9 +172,9 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
           id: generateQuestionId(),
           text: rawQ.text!,
           referential: rawQ.referential as CACESReferential,
-          theme: rawQ.theme as QuestionTheme,
+          theme: rawQ.theme!,
           options: definedOptions,
-          correctAnswer: correctAnswerText,
+          correctAnswer: correctAnswerIndexStr, // Storing the index as a string
           isEliminatory: isEliminatoryBool!,
           timeLimit: rawQ.timeLimit || 30,
           image: undefined, // Les images seront gérées séparément
