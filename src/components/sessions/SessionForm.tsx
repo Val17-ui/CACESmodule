@@ -18,7 +18,7 @@ import { StorageManager } from '../../services/StorageManager';
 // Nous utiliserons QuestionWithId directement pour clarifier que c'est l'objet DB.
 import { QuestionWithId as StoredQuestion, addSession, updateSession, getSessionById, getQuestionsForSessionBlocks, addBulkSessionResults, getQuestionById } from '../../db';
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
-import { parseOmbeaResultsXml, ExtractedResultFromXml } from '../../utils/resultsParser'; // Importer le parser et ExtractedResultFromXml
+import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser'; // Importer le parser, ExtractedResultFromXml et transformParsedResponsesToSessionResults
 import JSZip from 'jszip'; // Importer JSZip
 
 
