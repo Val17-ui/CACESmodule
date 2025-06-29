@@ -10,10 +10,9 @@ import {
   referentials,
   Session as DBSession,
   Participant as DBParticipantType,
-  // DBSelectedBlock, // Non utilisé
-  // DBCACESReferential, // Non utilisé
   SessionResult
 } from '../../types';
+// DBSelectedBlock et DBCACESReferential n'étaient pas utilisés directement ici.
 import { StorageManager } from '../../services/StorageManager';
 import {
   QuestionWithId as StoredQuestion,
@@ -23,7 +22,10 @@ import {
   addBulkSessionResults,
   getResultsForSession
 } from '../../db';
+// QuestionMapping est exporté par pptxOrchestrator.ts
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
+// ExtractedResultFromXml est utilisé par parseOmbeaResultsXml, mais son type n'est pas nécessaire ici si on ne type pas la variable intermédiaire.
+// Pour plus de propreté, on peut l'importer si on type explicitement la variable qui reçoit le résultat de parseOmbeaResultsXml.
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import JSZip from 'jszip';
 
@@ -46,13 +48,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [sessionDate, setSessionDate] = useState('');
   const [selectedReferential, setSelectedReferential] = useState<CACESReferential | ''>('');
   const [location, setLocation] = useState('');
-  const [notes, setNotes] = useState(''); // Ajout de l'état pour les notes
+  const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [selectedBlocksSummary, setSelectedBlocksSummary] = useState<Record<string, string>>({});
   const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
-  const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null); // Doit être null initialement
+  const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
 
   const resetFormState = useCallback(() => {
     setCurrentSessionDbId(null);
@@ -73,14 +75,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (sessionIdToLoad) {
       const loadSession = async () => {
         const sessionData = await getSessionById(sessionIdToLoad);
-        setEditingSessionData(sessionData || null); // Gérer undefined de getSessionById
+        setEditingSessionData(sessionData || null);
         if (sessionData) {
           setCurrentSessionDbId(sessionData.id ?? null);
           setSessionName(sessionData.nomSession);
           setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
           setSelectedReferential((sessionData.referentiel as CACESReferential) || '');
           setLocation(sessionData.location || '');
-          setNotes(sessionData.notes || ''); // Charger les notes
+          setNotes(sessionData.notes || '');
 
           const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, index) => ({
             ...p_db,
@@ -191,7 +193,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       location: location,
       status: sessionToUpdate?.status || 'planned',
       questionMappings: sessionToUpdate?.questionMappings,
-      notes: notes, // Sauvegarder les notes de la session
+      notes: notes,
       createdAt: sessionToUpdate?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -218,7 +220,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       }
       if (savedId) {
          const reloadedSession = await getSessionById(savedId);
-         setEditingSessionData(reloadedSession || null); // Gérer undefined -> null
+         setEditingSessionData(reloadedSession || null);
          if (reloadedSession) {
             const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => ({
                 ...p_db,
@@ -288,7 +290,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const savedSessionId = await handleSaveSession(sessionDataForDb);
       if (!savedSessionId) { return; }
 
-      const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referential: sessionDataForDb.referentiel as CACESReferential };
+      const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referentiel: sessionDataForDb.referentiel as CACESReferential };
       const adminSettings: AdminPPTXSettings = { defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod', pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1' };
 
       const participantsForGenerator: DBParticipantType[] = participants.map(p_form => ({
@@ -296,7 +298,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         nom: p_form.lastName,
         prenom: p_form.firstName,
         identificationCode: p_form.identificationCode,
-        // score et reussite ne sont pas transmis ici car non pertinents pour la génération du PPTX
       }));
 
       const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, templateFile, adminSettings);
@@ -309,7 +310,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             questionMappings: questionMappings,
             updatedAt: new Date().toISOString(), status: 'ready'
           });
-          setEditingSessionData(await getSessionById(savedSessionId) || null); // Gérer undefined
+          setEditingSessionData(await getSessionById(savedSessionId) || null);
           setImportSummary(`Session (ID: ${savedSessionId}) .ors et mappings générés. Statut: Prête.`);
         } catch (e: any) { setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`); }
       } else { setImportSummary("Erreur génération .ors/mappings. Données manquantes."); }
@@ -337,7 +338,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const xmlString = await orSessionXmlFile.async("string");
       setImportSummary("Parsing XML...");
 
-      const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString); // ExtractedResultFromXml est bien importé
+      const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
       if (extractedResults.length === 0) { setImportSummary("Aucune réponse extraite."); return; }
       setImportSummary(`${extractedResults.length} réponses extraites. Transformation...`);
 
@@ -608,7 +609,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     <td className="px-4 py-2 whitespace-nowrap text-center">
                       {participant.reussite === true && <Badge variant="success">Réussi</Badge>}
                       {participant.reussite === false && <Badge variant="danger">Échec</Badge>}
-                      {participant.reussite === undefined && <Badge variant="default">-</Badge>} {/* Corrigé: neutral -> default */}
+                      {participant.reussite === undefined && <Badge variant="default">-</Badge>}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
                       <Button variant="ghost" disabled={editingSessionData?.status === 'completed'} size="sm" icon={<Trash2 size={16} />} onClick={() => handleRemoveParticipant(participant.id)} />
@@ -625,7 +626,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       </Card>
 
       <div className="flex justify-between items-center mt-8">
-        <Button variant="outline" onClick={handleBackToList}> {/* Le bouton Annuler/Retour appelle handleBackToList */}
+        <Button variant="outline" onClick={handleBackToList}>
             Retour à la liste
         </Button>
         <div className="space-x-3">

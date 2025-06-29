@@ -10,16 +10,12 @@ import {
   GenerationOptions as Val17GenerationOptions,
   ConfigOptions as Val17ConfigOptions,
   generatePPTXVal17,
-  QuestionMapping as Val17GeneratorQuestionMapping, // Importer avec un alias
+  QuestionMapping, // Importer directement
   SessionInfo as Val17SessionInfo
 } from '../lib/val17-pptx-generator/val17PptxGenerator';
 
-// Définir et exporter un type local QuestionMapping qui est identique
-export interface QuestionMapping {
-  dbQuestionId: number;
-  slideGuid: string | null;
-  orderInPptx: number;
-}
+// Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
+export type { QuestionMapping };
 
 
 function generateOmbeaSessionXml(
