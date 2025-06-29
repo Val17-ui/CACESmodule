@@ -172,7 +172,7 @@ export async function generatePresentation(
   storedQuestions: StoredQuestion[],
   templateFileFromUser: File,
   adminSettings: AdminPPTXSettings
-): Promise<void> {
+): Promise<Blob | null> { // MODIFIED: Return type is now Promise<Blob | null>
 
   console.log(`generatePresentation (simplified for direct call) called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
 
@@ -238,23 +238,24 @@ export async function generatePresentation(
       const orsBlob = await outputOrsZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' }); // Standard MIME for .ors might be this or application/zip
 
       const orsFileName = `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}.ors`;
-      saveAs(orsBlob, orsFileName);
-      console.log(`Fichier .ors "${orsFileName}" généré et téléchargement initié.`);
+      // saveAs(orsBlob, orsFileName); // MODIFIED: Supprimé, sera géré par le composant appelant
+      console.log(`Fichier .ors "${orsFileName}" généré et prêt à être retourné.`);
+      return orsBlob; // MODIFIED: Retourne le Blob
 
     } else {
       console.error("Échec de la génération des données PPTX ou du Blob.");
-      // L'alerte d'erreur est déjà gérée dans generatePPTXVal17 si besoin.
-      // On pourrait ajouter une alerte spécifique à l'orchestrateur si generatePPTXVal17 retourne null sans alerter.
-      if (!alertAlreadyShown(new Error("PPTX generation returned null."))) { // Hypothetical error tracking
+      if (!alertAlreadyShown(new Error("PPTX generation returned null."))) {
          alert("La génération du fichier PPTX a échoué, le fichier .ors ne peut pas être créé.");
       }
+      return null; // MODIFIED: Retourne null en cas d'échec
     }
 
-  } catch (error) { // Catch errors from orchestrator logic itself (e.g., XML generation, zipping)
+  } catch (error) {
     console.error("Erreur dans pptxOrchestrator.generatePresentation:", error);
-    if (!alertAlreadyShown(error as Error)) { // Hypothetical error tracking
+    if (!alertAlreadyShown(error as Error)) {
         alert("Une erreur est survenue lors de la création du fichier .ors.");
     }
+    return null; // MODIFIED: Retourne null en cas d'erreur
   } finally {
     tempImageUrls.forEach(url => {
       try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for generatePresentation (direct call):", url, e); }

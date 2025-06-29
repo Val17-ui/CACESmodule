@@ -1,24 +1,84 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 import { Save, FileUp, UserPlus, Trash2, PackagePlus } from 'lucide-react';
-import { CACESReferential, referentials, Participant } from '../../types';
+import {
+  CACESReferential,
+  referentials,
+  Participant as FormParticipant, // Renommer pour éviter confusion avec DBParticipant
+  Session as DBSession,
+  Participant as DBParticipant,
+  SelectedBlock as DBSelectedBlock,
+  CACESReferential as DBCACESReferential
+} from '../../types';
 import { StorageManager } from '../../services/StorageManager';
-import { StoredQuestion } from '../../db';
-import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator'; // Changed import path
+// StoredQuestion est l'équivalent de QuestionWithId dans db.ts
+// Nous utiliserons QuestionWithId directement pour clarifier que c'est l'objet DB.
+import { QuestionWithId as StoredQuestion, addSession, updateSession, getSessionById } from '../../db';
+import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
 
 
-const SessionForm: React.FC = () => {
+// Interface pour les props du composant, si on veut charger une session existante
+interface SessionFormProps {
+  sessionIdToLoad?: number; // ID de la session à charger pour édition
+}
+
+const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
+  const [currentSessionDbId, setCurrentSessionDbId] = useState<number | null>(sessionIdToLoad || null);
   const [sessionName, setSessionName] = useState('');
   const [sessionDate, setSessionDate] = useState('');
   const [selectedReferential, setSelectedReferential] = useState<CACESReferential | ''>('');
-  const [location, setLocation] = useState('');
+  const [location, setLocation] = useState(''); // Ajouté pour correspondre au plan
   const [notes, setNotes] = useState('');
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [generatedQuestions, setGeneratedQuestions] = useState<StoredQuestion[]>([]); // For debug/display
+  // Utiliser FormParticipant pour l'état local du formulaire
+  const [participants, setParticipants] = useState<FormParticipant[]>([]);
+  const [generatedQuestions, setGeneratedQuestions] = useState<StoredQuestion[]>([]);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [selectedBlocksSummary, setSelectedBlocksSummary] = useState<Record<string, string>>({});
+
+
+  useEffect(() => {
+    if (sessionIdToLoad) {
+      const loadSession = async () => {
+        const sessionData = await getSessionById(sessionIdToLoad);
+        if (sessionData) {
+          setCurrentSessionDbId(sessionData.id ?? null);
+          setSessionName(sessionData.nomSession);
+          setSessionDate(sessionData.dateSession.split('T')[0]); // Format YYYY-MM-DD pour input date
+          setSelectedReferential((sessionData.referentiel as CACESReferential) || '');
+          setLocation(sessionData.location || ''); // Charger location
+          // setNotes(sessionData.notes || ''); // Si notes est ajoutée à DBSession
+
+          // Mapper DBParticipant vers FormParticipant
+          const formParticipants: FormParticipant[] = sessionData.participants.map((p, index) => ({
+            id: `loaded-${index}-${p.idBoitier}`, // Créer un ID unique pour le formulaire
+            firstName: p.prenom,
+            lastName: p.nom,
+            identificationCode: p.identificationCode,
+            deviceId: parseInt(p.idBoitier, 10), // Assumer idBoitier est un nombre stringifiable
+            hasSigned: false, // Ou charger depuis DB si ce champ est ajouté
+            // organization: p.organization || '', // Si ajouté à DBParticipant
+          }));
+          setParticipants(formParticipants);
+
+          const summary: Record<string, string> = {};
+          sessionData.selectionBlocs.forEach(sb => {
+            summary[sb.theme] = sb.blockId;
+          });
+          setSelectedBlocksSummary(summary);
+          // Le fichier .ors (Blob) et templateFile ne sont pas rechargés directement ici
+          // L'utilisateur devrait re-sélectionner le template si regénération.
+        } else {
+          console.warn(`Session avec ID ${sessionIdToLoad} non trouvée.`);
+          // Gérer le cas où la session n'est pas trouvée (ex: rediriger, afficher message)
+        }
+      };
+      loadSession();
+    }
+  }, [sessionIdToLoad]);
+
 
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -26,133 +86,251 @@ const SessionForm: React.FC = () => {
   }));
 
   const handleAddParticipant = () => {
-    const newParticipant: Participant = {
-      id: Date.now().toString(),
+    // Utilisation de FormParticipant
+    const newParticipant: FormParticipant = {
+      id: Date.now().toString(), // ID unique pour la gestion du formulaire
       firstName: '',
       lastName: '',
-      organization: '',
+      // organization: '', // Décommenter si ajouté à FormParticipant
       identificationCode: '',
-      deviceId: participants.length + 1,
-      hasSigned: false
+      deviceId: participants.length + 1, // Attribuer un deviceId séquentiel
+      hasSigned: false,
     };
     setParticipants([...participants, newParticipant]);
   };
 
   const handleRemoveParticipant = (id: string) => {
     const updatedParticipants = participants.filter(p => p.id !== id);
-    // Reassign device IDs
     const reindexedParticipants = updatedParticipants.map((p, index) => ({
       ...p,
-      deviceId: index + 1
+      deviceId: index + 1,
     }));
     setParticipants(reindexedParticipants);
   };
 
-  const handleParticipantChange = (id: string, field: keyof Participant, value: string) => {
-    setParticipants(participants.map(p => 
+  // S'assurer que field est bien une clé de FormParticipant
+  const handleParticipantChange = (id: string, field: keyof FormParticipant, value: string | number | boolean) => {
+    setParticipants(participants.map(p =>
       p.id === id ? { ...p, [field]: value } : p
     ));
   };
 
-  const handleGenerateQuestionnaire = async () => {
+  const prepareSessionDataForDb = async (includeOrsBlob: Blob | null = null): Promise<DBSession | null> => {
     if (!selectedReferential) {
-      console.warn("Veuillez sélectionner un référentiel CACES.");
+      alert("Veuillez sélectionner un référentiel CACES.");
+      return null;
+    }
+
+    const dbParticipants: DBParticipant[] = participants.map(p => ({
+      idBoitier: p.deviceId.toString(),
+      nom: p.lastName,
+      prenom: p.firstName,
+      identificationCode: p.identificationCode,
+    }));
+
+    let currentSelectedBlocksSummary = selectedBlocksSummary;
+    // Si selectedBlocksSummary est vide (ex: sauvegarde brouillon avant génération questions)
+    // et que nous avons un référentiel, on pourrait tenter de le peupler ici
+    // ou laisser vide et le remplir seulement lors de la génération de questionnaire.
+    // Pour l'instant, on utilise ce qui est dans l'état.
+    if (Object.keys(currentSelectedBlocksSummary).length === 0 && selectedReferential) {
+        // Logique pour sélectionner les blocs si non fait (optionnel pour brouillon)
+        // Pour l'instant, on le laisse potentiellement vide pour un brouillon simple.
+        console.log("Aucun bloc sélectionné, sauvegarde de session sans sélection de blocs détaillée.");
+    }
+
+
+    const dbSelectedBlocks: DBSelectedBlock[] = Object.entries(currentSelectedBlocksSummary).map(([theme, blockId]) => ({
+      theme: theme,
+      blockId: blockId,
+    }));
+
+    const sessionToSave: DBSession = {
+      id: currentSessionDbId || undefined,
+      nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
+      dateSession: sessionDate || new Date().toISOString().split('T')[0],
+      referentiel: selectedReferential as DBCACESReferential,
+      participants: dbParticipants,
+      selectionBlocs: dbSelectedBlocks,
+      donneesOrs: includeOrsBlob,
+      location: location,
+      status: currentSessionDbId ? (sessionDataFromDb?.status || 'planned') : 'planned', // Statut par défaut à 'planned' pour nouvelle session
+      // notes: notes,
+      createdAt: currentSessionDbId ? undefined : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    // Si on met à jour, on ne veut pas écraser le statut existant avec 'planned' sauf si non défini
+    if (currentSessionDbId && sessionDataFromDb?.status) {
+      sessionToSave.status = sessionDataFromDb.status;
+    }
+    // Si includeOrsBlob est présent et qu'on n'a pas déjà un statut final, on peut le mettre à 'ready'
+    if (includeOrsBlob && sessionToSave.status !== 'completed' && sessionToSave.status !== 'in-progress' && sessionToSave.status !== 'cancelled') {
+        // This logic is now primarily in handleGenerateQuestionnaireAndOrs
+        // but if prepareSessionDataForDb is called directly with a blob, it could apply here.
+        // For now, 'ready' status is set explicitly after successful ORS update.
+    }
+
+    return sessionToSave;
+  };
+
+  // Variable pour stocker les données de la session chargée pour la modification du statut
+  let sessionDataFromDb: DBSession | null = null;
+  useEffect(() => {
+    if (sessionIdToLoad) {
+      const loadSessionData = async () => {
+        sessionDataFromDb = await getSessionById(sessionIdToLoad);
+      }
+      loadSessionData();
+    }
+  }, [sessionIdToLoad]);
+
+
+  const handleSaveSession = async (sessionData: DBSession | null) => {
+    if (!sessionData) return null;
+
+    try {
+      if (sessionData.id) { // Mise à jour d'une session existante
+        await updateSession(sessionData.id, sessionData);
+        alert(`Session (ID: ${sessionData.id}) mise à jour avec succès !`);
+        return sessionData.id;
+      } else { // Création d'une nouvelle session
+        const newId = await addSession(sessionData);
+        if (newId) {
+          setCurrentSessionDbId(newId);
+          alert(`Session sauvegardée avec succès (ID: ${newId}) !`);
+          return newId;
+        } else {
+          alert("Erreur lors de la sauvegarde de la session.");
+          return null;
+        }
+      }
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde de la session:", error);
+      alert("Une erreur est survenue lors de la sauvegarde.");
+      return null;
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    const sessionData = await prepareSessionDataForDb();
+    if (sessionData) {
+      await handleSaveSession(sessionData);
+    }
+  };
+
+  const handleGenerateQuestionnaireAndOrs = async () => {
+    if (!selectedReferential) {
       alert("Veuillez sélectionner un référentiel CACES.");
       return;
     }
     if (!templateFile) {
-      console.warn("Veuillez sélectionner un fichier modèle PPTX.");
       alert("Veuillez sélectionner un fichier modèle PPTX.");
       return;
     }
-    console.log(`Génération du questionnaire pour le référentiel : ${selectedReferential} avec le modèle ${templateFile.name}`);
-    setGeneratedQuestions([]); // Clear previous results
 
-    console.log(`Génération du questionnaire pour le référentiel : ${selectedReferential} avec le modèle ${templateFile.name}`);
+    console.log(`Génération du questionnaire pour : ${selectedReferential} avec ${templateFile.name}`);
     setGeneratedQuestions([]);
 
-    // Rassembler les informations de session
-    const sessionInfo = {
-      name: sessionName || "Session CACES", // Fournir une valeur par défaut si vide
-      date: sessionDate || new Date().toISOString().slice(0,10),
-      referential: selectedReferential
-    };
-
-    // Définir des AdminPPTXSettings par défaut (seront configurables plus tard)
-    const adminSettings: AdminPPTXSettings = {
-      defaultDuration: 30, // secondes
-      pollTimeLimit: 30, // secondes pour les tags OMBEA
-      answersBulletStyle: 'ppBulletAlphaUCPeriod', // A. B. C.
-      // autres settings par défaut pour Val17ConfigOptions...
-      pollStartMode: 'Automatic',
-      chartValueLabelFormat: 'Response_Count',
-      pollCountdownStartMode: 'Automatic',
-      pollMultipleResponse: '1',
-    };
+    // Logique de sélection des questions (reprise et adaptée)
+    let allSelectedQuestionsForPptx: StoredQuestion[] = [];
+    let tempSelectedBlocksSummary: Record<string, string> = {};
 
     try {
       const baseThemes = await StorageManager.getAllBaseThemesForReferential(selectedReferential);
       if (baseThemes.length === 0) {
-        console.warn(`Aucun thème trouvé pour le référentiel ${selectedReferential}. Vérifiez les données de la bibliothèque.`);
-        alert(`Aucun thème trouvé pour le référentiel ${selectedReferential}.`);
+        alert(`Aucun thème trouvé pour ${selectedReferential}.`);
         return;
       }
-      console.log(`Thèmes de base trouvés pour ${selectedReferential}:`, baseThemes);
-
-      let allSelectedQuestions: StoredQuestion[] = [];
-      const selectedBlocksSummary: Record<string, string> = {};
 
       for (const baseTheme of baseThemes) {
         const blockIdentifiers = await StorageManager.getAllBlockIdentifiersForTheme(selectedReferential, baseTheme);
         if (blockIdentifiers.length === 0) {
-          console.warn(`Aucun bloc trouvé pour le thème ${baseTheme} du référentiel ${selectedReferential}.`);
-          // Selon la logique métier, on pourrait soit s'arrêter, soit continuer sans ce thème.
-          // Pour l'instant, on continue, mais on logue un avertissement.
+          console.warn(`Aucun bloc pour ${baseTheme} dans ${selectedReferential}.`);
           continue;
         }
-
-        // Choisir un blockIdentifier aléatoirement
-        const randomIndex = Math.floor(Math.random() * blockIdentifiers.length);
-        const chosenBlockIdentifier = blockIdentifiers[randomIndex];
-        selectedBlocksSummary[baseTheme] = chosenBlockIdentifier;
-
+        const chosenBlockIdentifier = blockIdentifiers[Math.floor(Math.random() * blockIdentifiers.length)];
+        tempSelectedBlocksSummary[baseTheme] = chosenBlockIdentifier;
         const questionsFromBlock = await StorageManager.getQuestionsForBlock(selectedReferential, baseTheme, chosenBlockIdentifier);
-        if (questionsFromBlock.length > 0) {
-          allSelectedQuestions = allSelectedQuestions.concat(questionsFromBlock);
-        } else {
-          console.warn(`Le bloc ${baseTheme}_${chosenBlockIdentifier} pour ${selectedReferential} est vide.`);
-        }
+        allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBlock);
       }
 
-      setGeneratedQuestions(allSelectedQuestions);
-      console.log("Résumé des blocs sélectionnés:", selectedBlocksSummary);
-      console.log(`Questionnaire à générer avec ${allSelectedQuestions.length} questions.`);
+      setGeneratedQuestions(allSelectedQuestionsForPptx); // Pour affichage/debug
+      setSelectedBlocksSummary(tempSelectedBlocksSummary); // Mettre à jour l'état avec les blocs réellement sélectionnés
+      console.log("Blocs sélectionnés:", tempSelectedBlocksSummary);
+      console.log(`${allSelectedQuestionsForPptx.length} questions pour le questionnaire.`);
 
-      if (allSelectedQuestions.length === 0) {
-        alert("Aucune question n'a pu être sélectionnée pour le questionnaire. Vérifiez la configuration des blocs.");
+      if (allSelectedQuestionsForPptx.length === 0) {
+        alert("Aucune question sélectionnée. Vérifiez la bibliothèque.");
         return;
       }
 
-      // Appel à la fonction principale de génération de présentation
-      await generatePresentation(
-        sessionInfo,
-        participants,
-        allSelectedQuestions,
-        templateFile, // Le fichier modèle uploadé
+      // Préparer les données de session MAIS sans le Blob ORS pour l'instant
+      // On sauvegarde la session avec les blocs sélectionnés avant de générer le .ors
+      let sessionDataForDb = await prepareSessionDataForDb(null);
+      if (!sessionDataForDb) return;
+
+      // Mettre à jour selectionBlocs avec ceux réellement utilisés pour cette génération
+      sessionDataForDb.selectionBlocs = Object.entries(tempSelectedBlocksSummary).map(([theme, blockId]) => ({
+        theme: theme,
+        blockId: blockId,
+      }));
+
+      const savedSessionId = await handleSaveSession(sessionDataForDb);
+      if (!savedSessionId) {
+        alert("La session n'a pas pu être sauvegardée avant la génération du .ors.");
+        return;
+      }
+      // S'assurer que currentSessionDbId est à jour pour la suite
+      if(!currentSessionDbId) setCurrentSessionDbId(savedSessionId);
+
+
+      const sessionInfoForPptx = {
+        name: sessionDataForDb.nomSession,
+        date: sessionDataForDb.dateSession,
+        referential: sessionDataForDb.referentiel as CACESReferential,
+      };
+
+      const adminSettings: AdminPPTXSettings = {
+        defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod',
+        pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count',
+        pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1',
+      };
+
+      // Supposons que generatePresentation retourne le Blob du .ors
+      const orsBlob = await generatePresentation(
+        sessionInfoForPptx,
+        participants, // Utilise FormParticipant, ajuster si generatePresentation attend DBParticipant
+        allSelectedQuestionsForPptx,
+        templateFile,
         adminSettings
       );
-      // generatePresentation gère le saveAs, donc pas besoin ici.
-      // alert(`Génération du PPTX demandée avec ${allSelectedQuestions.length} questions.`);
+
+      console.log("Type de orsBlob reçu:", typeof orsBlob, "Est-ce une instance de Blob ?", orsBlob instanceof Blob);
+      if (orsBlob instanceof Blob) {
+        console.log("Blob .ors reçu, taille:", orsBlob.size, "type:", orsBlob.type);
+        try {
+          await updateSession(savedSessionId, { donneesOrs: orsBlob, updatedAt: new Date().toISOString(), status: 'ready' }); // Changement de statut optionnel
+          console.log(`Session (ID: ${savedSessionId}) mise à jour avec le Blob .ors.`);
+          alert(`Questionnaire, .ors générés et session (ID: ${savedSessionId}) mise à jour avec le fichier .ors! Statut mis à Prête.`);
+          // Peut-être forcer un rechargement ou une mise à jour de l'état ici si on ne quitte pas le formulaire
+        } catch (e) {
+          console.error("Erreur lors de updateSession avec le Blob .ors:", e);
+          alert("Erreur lors de la sauvegarde du fichier .ors dans la session. Vérifiez la console.");
+        }
+      } else {
+        console.warn("generatePresentation n'a pas retourné un Blob valide. Le .ors n'est pas en DB. Type reçu:", typeof orsBlob);
+        alert("Génération PPTX terminée, mais le fichier .ors n'a pas pu être sauvegardé dans la base de données de session.");
+      }
 
     } catch (error) {
-      console.error("Erreur lors de la préparation ou génération du questionnaire/PPTX:", error);
+      console.error("Erreur lors de la génération questionnaire/PPTX ou sauvegarde:", error);
       alert("Une erreur est survenue. Vérifiez la console.");
     }
   };
 
   return (
     <div>
-      <Card title="Informations de la session" className="mb-6">
+      <Card title={currentSessionDbId ? `Modification de la session (ID: ${currentSessionDbId})` : "Nouvelle session"} className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Input
             label="Nom de la session"
@@ -221,6 +399,19 @@ const SessionForm: React.FC = () => {
           />
           {templateFile && <p className="mt-1 text-xs text-green-600">Fichier sélectionné : {templateFile.name}</p>}
         </div>
+
+        {currentSessionDbId && selectedBlocksSummary && Object.keys(selectedBlocksSummary).length > 0 && (
+          <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés pour cette session :</h4>
+            <ul className="list-disc list-inside pl-2 space-y-1">
+              {Object.entries(selectedBlocksSummary).map(([theme, blockId]) => (
+                <li key={theme} className="text-sm text-gray-600">
+                  <span className="font-medium">{theme}:</span> Bloc {blockId}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Card>
       
       <Card title="Participants" className="mb-6">
@@ -347,13 +538,17 @@ const SessionForm: React.FC = () => {
           Annuler
         </Button>
         <div className="space-x-3">
-          <Button variant="outline" icon={<Save size={16} />}>
-            Enregistrer brouillon (Non fonctionnel)
+          <Button
+            variant="outline"
+            icon={<Save size={16} />}
+            onClick={handleSaveDraft}
+          >
+            Enregistrer la session
           </Button>
           <Button
             variant="primary"
             icon={<PackagePlus size={16} />}
-            onClick={handleGenerateQuestionnaire}
+            onClick={handleGenerateQuestionnaireAndOrs}
           >
             Générer questionnaire, .ors & PPTX
           </Button>
