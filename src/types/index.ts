@@ -28,6 +28,8 @@ export interface Participant {
   nom: string;
   prenom: string;
   identificationCode?: string; // Code d'identification optionnel
+  score?: number; // Score total du participant pour cette session
+  reussite?: boolean; // Statut de réussite du participant pour cette session
 }
 
 // Nouvelle interface pour décrire un bloc thématique sélectionné
@@ -43,8 +45,9 @@ export interface SessionResult {
   // Doit correspondre à l'ID de la question DANS LA DB (QuestionWithId.id)
   questionId: number;
   participantIdBoitier: string; // Identifiant du boîtier du participant
-  answer: string; // Réponse donnée
+  answer: string; // Réponse donnée (ID de l'option de réponse pour QCM/QCU)
   isCorrect: boolean; // Si la réponse était correcte
+  pointsObtained: number; // Points obtenus pour cette réponse spécifique
   timestamp: string; // ISO string date de la réponse
 }
 

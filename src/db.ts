@@ -60,12 +60,18 @@ export class MySubClassedDexie extends Dexie {
 
     // Nouvelle version pour ajouter questionMappings à sessions
     this.version(4).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options', // Repris de v3
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings', // Ajout de status et questionMappings (questionMappings non indexé)
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp' // Repris de v3
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
-    // Note: Dexie gère les migrations additives. Les sessions existantes auront questionMappings: undefined.
-    // Le champ status est aussi explicitement listé ici, bien qu'il ait pu être implicitement stocké avant.
+
+    // Nouvelle version pour ajouter pointsObtained à sessionResults
+    this.version(5).stores({
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options', // Repris de v4
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings', // Repris de v4
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp' // Ajout de pointsObtained
+    });
+    // Note: Dexie gère les migrations additives. Les sessionResults existants auront pointsObtained: undefined.
   }
 }
 

@@ -175,9 +175,9 @@ export const transformParsedResponsesToSessionResults = (
       sessionId: currentSessionId,
       questionId: dbQuestionId, // Utiliser le dbQuestionId trouvé grâce au mapping
       participantIdBoitier: extResult.participantDeviceID,
-      answer: extResult.answerGivenID, // Stocke l'ID de l'option de réponse (ex: "1", "2")
+      answer: extResult.answerGivenID,
       isCorrect: isCorrect,
-      // points: extResult.pointsObtained, // Si on veut stocker les points par réponse, il faut ajouter ce champ à SessionResult
+      pointsObtained: extResult.pointsObtained, // Assurer le transfert des points
       timestamp: new Date().toISOString(),
     };
     sessionResults.push(sessionResult);

@@ -11,15 +11,28 @@ import {
   Session as DBSession,
   Participant as DBParticipant,
   SelectedBlock as DBSelectedBlock,
-  CACESReferential as DBCACESReferential
+  CACESReferential as DBCACESReferential,
+  Participant as TypesParticipant // Importer le type Participant de base pour étendre
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 // StoredQuestion est l'équivalent de QuestionWithId dans db.ts
 // Nous utiliserons QuestionWithId directement pour clarifier que c'est l'objet DB.
 import { QuestionWithId as StoredQuestion, addSession, updateSession, getSessionById, getQuestionsForSessionBlocks, addBulkSessionResults, getQuestionById } from '../../db';
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
-import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser'; // Importer le parser, ExtractedResultFromXml et transformParsedResponsesToSessionResults
-import JSZip from 'jszip'; // Importer JSZip
+import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
+import JSZip from 'jszip';
+
+// Étendre l'interface Participant de types/index.ts pour les besoins du formulaire
+interface FormParticipant extends TypesParticipant {
+  id: string; // ID unique pour la gestion du formulaire (peut être différent de idBoitier si besoin)
+  firstName: string; // TypesParticipant a prenom
+  lastName: string;  // TypesParticipant a nom
+  organization?: string;
+  // identificationCode est déjà dans TypesParticipant
+  deviceId: number; // Pour l'affichage séquentiel, idBoitier est la clé
+  hasSigned?: boolean; // Spécifique au formulaire peut-être
+  // score et reussite sont dans TypesParticipant maintenant
+}
 
 
 // Interface pour les props du composant, si on veut charger une session existante
@@ -56,14 +69,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           // setNotes(sessionData.notes || ''); // Si notes est ajoutée à DBSession
 
           // Mapper DBParticipant vers FormParticipant
-          const formParticipants: FormParticipant[] = sessionData.participants.map((p, index) => ({
-            id: `loaded-${index}-${p.idBoitier}`, // Créer un ID unique pour le formulaire
-            firstName: p.prenom,
-            lastName: p.nom,
-            identificationCode: p.identificationCode,
-            deviceId: parseInt(p.idBoitier, 10), // Assumer idBoitier est un nombre stringifiable
-            hasSigned: false, // Ou charger depuis DB si ce champ est ajouté
-            // organization: p.organization || '', // Si ajouté à DBParticipant
+          const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, index) => ({
+            id: `loaded-${index}-${p_db.idBoitier}`, // ID unique pour le formulaire
+            idBoitier: p_db.idBoitier, // Conserver l'idBoitier original
+            firstName: p_db.prenom, // Mapper prenom vers firstName
+            lastName: p_db.nom,    // Mapper nom vers lastName
+            nom: p_db.nom,         // Conserver nom
+            prenom: p_db.prenom,   // Conserver prenom
+            identificationCode: p_db.identificationCode,
+            score: p_db.score,         // Charger le score
+            reussite: p_db.reussite,   // Charger le statut de réussite
+            deviceId: index + 1,       // Assigner un deviceId pour l'affichage séquentiel dans le form
+            // organization: p_db.organization, // Si ce champ existe sur DBParticipant
+            // hasSigned: p_db.hasSigned,      // Si ce champ existe sur DBParticipant
           }));
           setParticipants(formParticipants);
 
@@ -416,19 +434,72 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats de session ont été sauvegardés avec succès !`;
+            let sessionUpdatedForScores = false;
             try {
-              if (currentSessionDbId) { // S'assurer que currentSessionDbId est bien disponible
+              if (currentSessionDbId) {
                 await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
                 message += "\nLe statut de la session a été mis à jour à 'Terminée'.";
-                // Mettre à jour l'état local si nécessaire pour refléter immédiatement le changement de statut si le form reste affiché
-                // ou si sessionDataFromDb est utilisé pour afficher le statut dans ce composant.
+
+                // Calculer et stocker les scores
+                const sessionResultsForScore = await getResultsForSession(currentSessionDbId);
+                const sessionDataForScores = await getSessionById(currentSessionDbId);
+
+                if (sessionDataForScores && sessionResultsForScore.length > 0) {
+                  const scoresByParticipant = new Map<string, number>();
+                  sessionResultsForScore.forEach(sr => {
+                    const currentScore = scoresByParticipant.get(sr.participantIdBoitier) || 0;
+                    scoresByParticipant.set(sr.participantIdBoitier, currentScore + (sr.pointsObtained || 0));
+                  });
+
+                  let participantsUpdated = false;
+                  const SEUIL_REUSSITE_SCORE = 5; // Exemple: 5 points sur 7 questions
+                  let participantsUpdated = false;
+
+                  const updatedParticipants = sessionDataForScores.participants.map(p => {
+                    const participantScore = scoresByParticipant.get(p.idBoitier);
+                    if (participantScore !== undefined) {
+                      participantsUpdated = true;
+                      const reussite = participantScore >= SEUIL_REUSSITE_SCORE;
+                      console.log(`Participant ${p.idBoitier}: Score ${participantScore}, Réussite: ${reussite}`);
+                      return { ...p, score: participantScore, reussite: reussite };
+                    }
+                    return p;
+                  });
+
+                  if (participantsUpdated) {
+                    await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
+                    message += "\nLes scores et statuts de réussite des participants ont été calculés et enregistrés.";
+                    sessionUpdatedForScores = true;
+
+                    // Mettre à jour l'état local `participants` (FormParticipant[]) pour refléter les scores/réussite
+                    // Cela nécessite de mapper DBParticipant (qui est dans updatedParticipants) vers FormParticipant
+                    const formParticipantsToUpdate = updatedParticipants.map((p_db, index) => ({
+                      id: participants[index]?.id || `updated-${index}-${p_db.idBoitier}`, // Conserver l'ID de formulaire si possible
+                      idBoitier: p_db.idBoitier,
+                      firstName: p_db.prenom,
+                      lastName: p_db.nom,
+                      nom: p_db.nom,
+                      prenom: p_db.prenom,
+                      identificationCode: p_db.identificationCode,
+                      score: p_db.score,
+                      reussite: p_db.reussite,
+                      deviceId: participants[index]?.deviceId || index + 1, // Conserver deviceId si possible
+                      organization: participants[index]?.organization, // Conserver les autres champs du formulaire
+                      hasSigned: participants[index]?.hasSigned,
+                    }));
+                    setParticipants(formParticipantsToUpdate);
+                  }
+                } else {
+                  message += "\nImpossible de calculer les scores (données de session ou résultats manquants pour le calcul).";
+                }
               }
-            } catch (statusUpdateError) {
-              console.error("Erreur lors de la mise à jour du statut de la session:", statusUpdateError);
-              message += "\nErreur lors de la mise à jour du statut de la session.";
+            } catch (processingError: any) {
+              console.error("Erreur lors de la mise à jour du statut, du calcul/stockage des scores ou de la réussite:", processingError);
+              if (!sessionUpdatedForScores) message += `\nErreur lors de la mise à jour du statut ou du calcul des scores/réussite: ${processingError.message}`;
+              else message += `\nLes scores/réussite des participants ont été traités, mais une erreur est survenue ensuite: ${processingError.message}`;
             }
-            setImportSummary(message); // Afficher le message de succès/erreur
-            setResultsFile(null); // Réinitialiser le champ fichier après import
+            setImportSummary(message);
+            setResultsFile(null);
           } else {
             setImportSummary("La sauvegarde des résultats de session semble avoir échoué (aucun ID retourné).");
           }
@@ -611,6 +682,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Code d'identification
                 </th>
+                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Score
+                </th>
+                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Réussite
+                </th>
                 <th scope="col" className="relative px-6 py-3">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -619,7 +696,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             <tbody className="bg-white divide-y divide-gray-200">
               {participants.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500\" colSpan={6}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" colSpan={8}> {/* Augmenter colSpan */}
                     <div className="text-center py-4 text-gray-500">
                       Aucun participant ajouté. Utilisez le bouton "Ajouter participant" pour commencer.
                     </div>
@@ -639,6 +716,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)}
                         placeholder="Prénom"
                         className="mb-0"
+                        readOnly={!!currentSessionDbId && !!participant.score} // Rendre readonly si score calculé
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -647,6 +725,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)}
                         placeholder="Nom"
                         className="mb-0"
+                        readOnly={!!currentSessionDbId && !!participant.score} // Rendre readonly si score calculé
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -655,6 +734,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)}
                         placeholder="Organisation (optionnel)"
                         className="mb-0"
+                        readOnly={!!currentSessionDbId && !!participant.score} // Rendre readonly si score calculé
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -663,11 +743,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)}
                         placeholder="Code (optionnel)"
                         className="mb-0"
+                        readOnly={!!currentSessionDbId && !!participant.score} // Rendre readonly si score calculé
                       />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">
+                      {participant.score !== undefined ? participant.score : '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {participant.reussite === true && <Badge variant="success">Réussi</Badge>}
+                      {participant.reussite === false && <Badge variant="danger">Échec</Badge>}
+                      {participant.reussite === undefined && <Badge variant="neutral">-</Badge>}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <Button
                         variant="ghost"
+                        disabled={!!currentSessionDbId && !!participant.score} // Désactiver si score calculé
                         size="sm"
                         icon={<Trash2 size={16} />}
                         onClick={() => handleRemoveParticipant(participant.id)}
