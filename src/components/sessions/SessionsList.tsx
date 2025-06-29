@@ -3,12 +3,12 @@ import { CalendarClock, UserCheck, ClipboardList, Play, Download } from 'lucide-
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import { Session } from '../../types';
+import { Session as DBSession, CACESReferential } from '../../types'; // Importer DBSession
 
 type SessionsListProps = {
-  sessions: Session[];
-  onManageSession: (id: string) => void;
-  onStartExam: (id: string) => void;
+  sessions: DBSession[]; // Utiliser DBSession
+  onManageSession: (id: number) => void; // ID est maintenant number
+  onStartExam: (id: number) => void; // ID est maintenant number
 };
 
 const SessionsList: React.FC<SessionsListProps> = ({
@@ -17,6 +17,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
   onStartExam,
 }) => {
   const formatDate = (dateString: string) => {
+    if (!dateString) return 'Date non définie';
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('fr-FR', {
       day: '2-digit',

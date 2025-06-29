@@ -172,7 +172,7 @@ export async function generatePresentation(
   storedQuestions: StoredQuestion[],
   templateFileFromUser: File,
   adminSettings: AdminPPTXSettings
-): Promise<void> {
+): Promise<Blob | null> { // MODIFIED: Return type is now Promise<Blob | null>
 
   console.log(`generatePresentation (simplified for direct call) called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
 
