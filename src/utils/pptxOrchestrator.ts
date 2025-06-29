@@ -10,16 +10,12 @@ import {
   GenerationOptions as Val17GenerationOptions,
   ConfigOptions as Val17ConfigOptions,
   generatePPTXVal17,
-  QuestionMapping as Val17GeneratorQuestionMapping, // Importer avec un alias
+  QuestionMapping, // Importer directement
   SessionInfo as Val17SessionInfo
 } from '../lib/val17-pptx-generator/val17PptxGenerator';
 
-// Définir et exporter un type local QuestionMapping qui est identique
-export interface QuestionMapping {
-  dbQuestionId: number;
-  slideGuid: string | null;
-  orderInPptx: number;
-}
+// Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
+export type { QuestionMapping };
 
 
 function generateOmbeaSessionXml(
@@ -94,20 +90,23 @@ function generateOmbeaSessionXml(
 
     // Ajouter FirstName comme CustomProperty
     xml += `        <rl:CustomProperty>\n`;
-    xml += `          <rl:ID>FirstName</rl:ID>\n`; // L'ID doit correspondre au nom du CustomHeader
-    xml += `          <rl:Text>${esc(p.firstName)}</rl:Text>\n`;
+    xml += `          <rl:ID>FirstName</rl:ID>\n`;
+    xml += `          <rl:Text>${esc(p.prenom)}</rl:Text>\n`; // Utiliser p.prenom
     xml += `        </rl:CustomProperty>\n`;
 
     // Ajouter LastName comme CustomProperty
     xml += `        <rl:CustomProperty>\n`;
-    xml += `          <rl:ID>LastName</rl:ID>\n`; // L'ID doit correspondre au nom du CustomHeader
-    xml += `          <rl:Text>${esc(p.lastName)}</rl:Text>\n`;
+    xml += `          <rl:ID>LastName</rl:ID>\n`;
+    xml += `          <rl:Text>${esc(p.nom)}</rl:Text>\n`; // Utiliser p.nom
     xml += `        </rl:CustomProperty>\n`;
 
-    if (p.organization && customHeadersForOrganization.find(h => h.name === "Organisation")) {
+    // Assumons que DBParticipantType peut avoir un champ optionnel organization
+    // Si p.organization vient d'un type FormParticipant qui n'est pas DBParticipantType, il faut ajuster
+    const org = (p as any).organization; // Caster temporairement pour accéder à organization
+    if (org && customHeadersForOrganization.find(h => h.name === "Organisation")) {
       xml += `        <rl:CustomProperty>\n`;
       xml += `          <rl:ID>Organisation</rl:ID>\n`;
-      xml += `          <rl:Text>${esc(p.organization)}</rl:Text>\n`;
+      xml += `          <rl:Text>${esc(org)}</rl:Text>\n`;
       xml += `        </rl:CustomProperty>\n`;
     }
     // Add other custom properties based on detected headers

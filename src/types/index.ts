@@ -23,6 +23,13 @@ export interface Session {
   updatedAt?: string;
 }
 
+// Interface pour le mappage Question DB <-> Slide PPTX (par session)
+export interface QuestionMapping {
+  dbQuestionId: number;
+  slideGuid: string | null;
+  orderInPptx: number;
+}
+
 // Nouvelle interface Participant pour les listes dans une Session
 export interface Participant {
   idBoitier: string; // Identifiant du boîtier de vote
