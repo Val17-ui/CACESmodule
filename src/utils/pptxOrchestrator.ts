@@ -196,6 +196,16 @@ export async function generatePresentation(
       pollTimeLimit: adminSettings.pollTimeLimit,
       pollCountdownStartMode: adminSettings.pollCountdownStartMode,
       pollMultipleResponse: adminSettings.pollMultipleResponse,
+    },
+    // Ajouter les noms des layouts pour les diapositives d'introduction
+    // Ces noms doivent correspondre aux noms de fichiers de layout (sans .xml) dans le template PPTX
+    // ou aux noms des layouts tels que définis dans le PPTX.
+    // Par exemple, si vous avez un layout nommé "Titre Session.xml" dans ppt/slideLayouts/
+    // alors titleLayoutName devrait être "Titre Session" ou "Titre Session.xml".
+    introSlideLayouts: {
+      titleLayoutName: "Title Slide Layout",
+      participantsLayoutName: "Participants Slide Layout",
+      // instructionsLayoutName: "Instructions Slide Layout" // Supprimé car la diapositive est dans le modèle
     }
   };
 
