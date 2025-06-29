@@ -753,7 +753,8 @@ async function findLayoutByCSldName(
     if (layoutFile) {
       try {
         const content = await layoutFile.async("string");
-        console.log(`[DEBUG] Contenu début ${actualFileName}: ${content.substring(0, 500)}`); // LOG AJOUTÉ
+        // Correction du log pour s'assurer qu'il s'affiche correctement et est utile.
+        console.log(`[DEBUG] Contenu XML début pour ${actualFileName} (500 premiers caractères):`, content.substring(0, 500));
         const nameMatch = content.match(/<p:cSld[^>]*name="([^"]+)"/);
 
         if (nameMatch && nameMatch[1]) {
