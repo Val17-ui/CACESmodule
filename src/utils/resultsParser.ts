@@ -130,7 +130,7 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
  */
 export const transformParsedResponsesToSessionResults = (
   extractedResults: ExtractedResultFromXml[],
-  questionsInSession: QuestionWithId[],
+  questionMappingsFromSession: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>,
   currentSessionId: number
 ): SessionResult[] => {
   const sessionResults: SessionResult[] = [];
@@ -139,45 +139,45 @@ export const transformParsedResponsesToSessionResults = (
     console.error("ID de session manquant pour la transformation des résultats.");
     return [];
   }
-  if (!questionsInSession || questionsInSession.length === 0) {
-    console.warn("Aucune question correspondante à la session (depuis la DB) n'a été fournie. Impossible de mapper les résultats XML aux IDs de questions de la DB.");
+  if (!questionMappingsFromSession || questionMappingsFromSession.length === 0) {
+    console.warn("Aucun mappage de question (questionMappings) fourni pour la session. Impossible de lier les résultats XML aux IDs de questions de la DB.");
     return [];
   }
 
-  // Créer un Map pour un accès rapide aux questions par slideGuid
-  const questionsBySlideGuid = new Map<string, QuestionWithId>();
-  questionsInSession.forEach(q => {
-    if (q.slideGuid) { // Vérifier que slideGuid existe et n'est pas vide
-      questionsBySlideGuid.set(q.slideGuid, q);
+  // Créer un Map pour un accès rapide au dbQuestionId par slideGuid à partir des mappings de la session
+  const dbQuestionIdBySlideGuid = new Map<string, number>();
+  questionMappingsFromSession.forEach(mapping => {
+    if (mapping.slideGuid && mapping.dbQuestionId) { // s'assurer que slideGuid et dbQuestionId existent
+      dbQuestionIdBySlideGuid.set(mapping.slideGuid, mapping.dbQuestionId);
     } else {
-      console.warn(`Question ID ${q.id} (texte: "${q.text.substring(0,30)}...") n'a pas de slideGuid stocké en DB, elle ne pourra pas être mappée avec les résultats du XML.`);
+      console.warn("Mapping de question incomplet ignoré dans questionMappingsFromSession:", mapping);
     }
   });
 
-  if(questionsBySlideGuid.size === 0) {
-    console.warn("Aucune question de la session en DB n'a de slideGuid. Impossible de procéder au mappage des résultats.");
+  if (dbQuestionIdBySlideGuid.size === 0) {
+    console.warn("Aucun mappage slideGuid -> dbQuestionId valide trouvé dans questionMappingsFromSession. Vérifiez le contenu de session.questionMappings.");
     return [];
   }
+  console.log("Map dbQuestionId par SlideGUID (depuis session.questionMappings):", dbQuestionIdBySlideGuid);
 
   extractedResults.forEach(extResult => {
-    const questionInDb = questionsBySlideGuid.get(extResult.questionSlideGuid);
+    const dbQuestionId = dbQuestionIdBySlideGuid.get(extResult.questionSlideGuid);
 
-    if (!questionInDb || !questionInDb.id) {
-      console.warn(`Impossible de mapper la question XML avec SlideGUID "${extResult.questionSlideGuid}" à une question de la DB (non trouvée ou ID manquant). Résultat ignoré pour le participant ${extResult.participantDeviceID}.`);
+    if (!dbQuestionId) {
+      console.warn(`Impossible de trouver un dbQuestionId pour le SlideGUID XML "${extResult.questionSlideGuid}" via les questionMappings de la session. Résultat ignoré pour le participant ${extResult.participantDeviceID}.`);
       return;
     }
 
     // Déterminer isCorrect en fonction des points.
-    // Une réponse est correcte si elle rapporte des points.
     const isCorrect = extResult.pointsObtained > 0;
 
     const sessionResult: SessionResult = {
       sessionId: currentSessionId,
-      questionId: questionInDb.id,
+      questionId: dbQuestionId, // Utiliser le dbQuestionId trouvé grâce au mapping
       participantIdBoitier: extResult.participantDeviceID,
       answer: extResult.answerGivenID, // Stocke l'ID de l'option de réponse (ex: "1", "2")
       isCorrect: isCorrect,
-      // points: extResult.pointsObtained, // Pourrait être ajouté à SessionResult si besoin de stocker les points par réponse
+      // points: extResult.pointsObtained, // Si on veut stocker les points par réponse, il faut ajouter ce champ à SessionResult
       timestamp: new Date().toISOString(),
     };
     sessionResults.push(sessionResult);

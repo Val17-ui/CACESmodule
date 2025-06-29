@@ -398,24 +398,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         return;
       }
 
-      // Récupérer les QuestionWithId correspondant aux dbQuestionId dans les questionMappings
-      // Cela est nécessaire pour avoir les détails complets des questions (ex: texte, options, etc.) si besoin pour la transformation,
-      // bien que transformParsedResponsesToSessionResults utilise principalement les IDs pour le mappage.
-      // On pourrait optimiser cela si seuls les IDs sont nécessaires pour la transformation.
-      const questionIdsFromMappings = currentSessionData.questionMappings.map(qm => qm.dbQuestionId);
-      const questionsInSession: StoredQuestion[] = [];
-      for (const id of questionIdsFromMappings) {
-        const q = await getQuestionById(id); // Assurez-vous que getQuestionById existe et fonctionne
-        if (q) questionsInSession.push(q);
-      }
-       if (questionsInSession.length !== questionIdsFromMappings.length) {
-        console.warn("Certaines questions mappées n'ont pas pu être récupérées de la DB.");
-      }
+      // Récupérer les questionMappings directement depuis currentSessionData
+      const questionMappings = currentSessionData.questionMappings;
 
+      // Plus besoin de charger `questionsInSession` ici, car `transformParsedResponsesToSessionResults`
+      // utilisera directement les `questionMappings` pour trouver le `dbQuestionId`.
 
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         extractedResults,
-        questionsInSession, // questionsInSession contient maintenant les QuestionWithId complètes
+        questionMappings, // Passer directement les mappings de la session
         currentSessionDbId
       );
 
