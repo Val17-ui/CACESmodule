@@ -716,6 +716,7 @@ async function findLayoutByCSldName(
   targetName: string,
   layoutType: "title" | "participants" // Pour affiner la recherche et les alias
 ): Promise<string | null> {
+  console.log(`[ULTRA_DEBUG] Entrée findLayoutByCSldName. Target: ${targetName}, Type: ${layoutType}. ZIP object keys:`, Object.keys(zip.files));
   const layoutsFolder = zip.folder("ppt/slideLayouts");
   if (!layoutsFolder) {
     console.warn("[DEBUG] Dossier ppt/slideLayouts non trouvé dans le template.");
