@@ -44,18 +44,18 @@ const UpcomingSessions: React.FC<UpcomingSessionsProps> = ({ sessions }) => {
                   <CalendarClock size={20} />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">{session.name}</p>
+                  <p className="font-medium text-gray-900">{session.nomSession}</p>
                   <div className="flex items-center mt-1 space-x-2">
                     <span className="text-sm text-gray-500">
-                      {formatDate(session.date)}
+                      {formatDate(session.dateSession)}
                     </span>
                     <span className="text-gray-300">•</span>
                     <span className="text-sm text-gray-500">
-                      {session.referential}
+                      {session.referentiel}
                     </span>
                     <span className="text-gray-300">•</span>
                     <span className="text-sm text-gray-500">
-                      {session.participantsCount} participants
+                      {session.participants ? session.participants.length : 0} participants
                     </span>
                   </div>
                 </div>
