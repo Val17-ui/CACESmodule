@@ -12,7 +12,6 @@ import {
   Participant as DBParticipantType,
   SessionResult
 } from '../../types';
-// DBSelectedBlock et DBCACESReferential n'étaient pas utilisés directement ici.
 import { StorageManager } from '../../services/StorageManager';
 import {
   QuestionWithId as StoredQuestion,
@@ -22,10 +21,7 @@ import {
   addBulkSessionResults,
   getResultsForSession
 } from '../../db';
-// QuestionMapping est exporté par pptxOrchestrator.ts
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
-// ExtractedResultFromXml est utilisé par parseOmbeaResultsXml, mais son type n'est pas nécessaire ici si on ne type pas la variable intermédiaire.
-// Pour plus de propreté, on peut l'importer si on type explicitement la variable qui reçoit le résultat de parseOmbeaResultsXml.
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import JSZip from 'jszip';
 
@@ -177,7 +173,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       identificationCode: p_form.identificationCode,
       score: p_form.score,
       reussite: p_form.reussite,
-      // notes: p_form.notes // 'notes' est sur la Session, pas sur le Participant
     }));
 
     const sessionToUpdate = editingSessionData;
