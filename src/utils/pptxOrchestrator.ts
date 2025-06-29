@@ -224,28 +224,29 @@ export async function generatePresentation(
       _participants // _participants ici sont les FormParticipant, generatePPTXVal17 les utilise pour l'instant
     );
 
-    if (generationResult && generationResult.pptxBlob && generationResult.questionMappings) {
+    // Correction: Utiliser generatedData au lieu de generationResult
+    if (generatedData && generatedData.pptxBlob && generatedData.questionMappings) {
       console.log("PPTX Blob et mappings de questions reçus de generatePPTXVal17.");
 
       const orSessionXmlContent = generateOmbeaSessionXml(
         val17SessionInfo,
         _participants, // Passer les participants (FormParticipant) pour le XML
-        generationResult.questionMappings // Passer les mappings pour info, même si non utilisés dans ce XML
+        generatedData.questionMappings // Utiliser generatedData ici
       );
 
       const outputOrsZip = new JSZip();
       const pptxFileNameInZip = generationOptions.fileName || `presentation.pptx`;
-      outputOrsZip.file(pptxFileNameInZip, generationResult.pptxBlob);
+      outputOrsZip.file(pptxFileNameInZip, generatedData.pptxBlob); // Utiliser generatedData ici
       outputOrsZip.file("ORSession.xml", orSessionXmlContent);
 
       const orsBlob = await outputOrsZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
 
       const orsFileName = `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}.ors`;
       console.log(`Fichier .ors "${orsFileName}" (Blob) et questionMappings générés.`);
-      return { orsBlob: orsBlob, questionMappings: generationResult.questionMappings };
+      return { orsBlob: orsBlob, questionMappings: generatedData.questionMappings }; // Utiliser generatedData ici
 
     } else {
-      console.error("Échec de la génération des données PPTX, du Blob ou des questionMappings.");
+      console.error("Échec de la génération des données PPTX, du Blob ou des questionMappings à partir de generatePPTXVal17.");
       if (!alertAlreadyShown(new Error("generatePPTXVal17 returned null or incomplete data."))) {
          alert("La génération du fichier PPTX ou des données de mappage a échoué. Le fichier .ors ne peut pas être créé.");
       }
