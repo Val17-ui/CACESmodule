@@ -710,23 +710,80 @@ function findHighestExistingTagNumber(zip: JSZip): number {
   return maxTagNumber;
 }
 
-async function findSlideLayoutFile(
+// Nouvelle fonction pour trouver un layout par son attribut <p:cSld name="...">
+async function findLayoutByCSldName(
   zip: JSZip,
-  layoutName: string
+  targetName: string,
+  layoutType: "title" | "participants" // Pour affiner la recherche et les alias
 ): Promise<string | null> {
-  const layoutPath = `ppt/slideLayouts/${layoutName}`;
-  const layoutFile = zip.file(layoutPath);
-  if (layoutFile) {
-    return layoutPath;
+  const layoutsFolder = zip.folder("ppt/slideLayouts");
+  if (!layoutsFolder) {
+    console.warn("Dossier ppt/slideLayouts non trouvé dans le template.");
+    return null;
   }
-  const layoutPathWithExt = `ppt/slideLayouts/${layoutName}.xml`;
-  const layoutFileWithExt = zip.file(layoutPathWithExt);
-  if (layoutFileWithExt) {
-    return layoutPathWithExt;
+
+  const normalizedTargetName = targetName.toLowerCase().replace(/\s+/g, "");
+
+  let aliases: string[] = [];
+  if (layoutType === "title") {
+    aliases = [
+      "title", "titre",
+      "titlelayout", "titrelayout",
+      "titleslidelayout", "titreslidelayout"
+    ];
+  } else if (layoutType === "participants") {
+    aliases = [
+      "participant", "participants",
+      "participantlayout", "participantslayout",
+      "participantslidelayout", "participantslidelayout",
+      "participantsslidelayout" // Avec double 's' au cas où
+    ];
   }
-  console.warn(`Slide layout "${layoutName}" not found.`);
+
+  const files = layoutsFolder.filter((relativePath) => relativePath.endsWith(".xml") && !relativePath.includes("/_rels/"));
+
+  for (const file of files) {
+    const layoutFile = zip.file(`ppt/slideLayouts/${file.name}`);
+    if (layoutFile) {
+      try {
+        const content = await layoutFile.async("string");
+        const nameMatch = content.match(/<p:cSld[^>]*name="([^"]+)"/);
+        if (nameMatch && nameMatch[1]) {
+          const cSldName = nameMatch[1];
+          const normalizedCSldName = cSldName.toLowerCase().replace(/\s+/g, "");
+
+          // Vérification directe
+          if (normalizedCSldName === normalizedTargetName) {
+            console.log(`Layout trouvé par nom direct: "${cSldName}" dans ${file.name} pour la cible "${targetName}"`);
+            return file.name; // Retourne le nom de fichier (ex: slideLayout1.xml)
+          }
+
+          // Vérification par alias
+          if (aliases.some(alias => normalizedCSldName.includes(alias) || normalizedTargetName.includes(alias))) {
+             // Pour les alias, on vérifie aussi si le cSldName contient des mots clés comme 'title' ou 'participant'
+             let typeMatch = false;
+             if (layoutType === 'title' && (normalizedCSldName.includes('title') || normalizedCSldName.includes('titre'))) {
+                typeMatch = true;
+             } else if (layoutType === 'participants' && (normalizedCSldName.includes('participant') || normalizedCSldName.includes('participants'))) {
+                typeMatch = true;
+             }
+
+            if (typeMatch) {
+                console.log(`Layout trouvé par alias: "${cSldName}" dans ${file.name} pour la cible "${targetName}" (type: ${layoutType})`);
+                return file.name;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Erreur lors de la lecture ou du parsing du layout ${file.name}:`, e);
+      }
+    }
+  }
+
+  console.warn(`Layout avec le nom (ou alias pour ${layoutType}) approchant "${targetName}" non trouvé.`);
   return null;
 }
+
 
 function ensureTagContinuity(
   zip: JSZip,
@@ -1434,139 +1491,63 @@ export async function generatePPTXVal17(
     }[] = [];
 
     if (sessionInfo && options.introSlideLayouts?.titleLayoutName) {
-      const requestedLayoutName = options.introSlideLayouts.titleLayoutName;
-      const layoutFileName = requestedLayoutName.endsWith(".xml")
-        ? requestedLayoutName
-        : `${requestedLayoutName}.xml`;
-      const layoutFilePath = await findSlideLayoutFile(
-        outputZip,
-        layoutFileName
-      );
-      if (layoutFilePath) {
-        const currentIntroSlideNumber =
-          initialExistingSlideCount + introSlidesAddedCount + 1;
-        const titleSlideXml = createIntroTitleSlideXml(
-          sessionInfo,
-          currentIntroSlideNumber
-        );
-        outputZip.file(
-          `ppt/slides/slide${currentIntroSlideNumber}.xml`,
-          titleSlideXml
-        );
-        const layoutRIdInSlide = "rId1";
+      const targetTitleLayoutName = options.introSlideLayouts.titleLayoutName;
+      // Utiliser la nouvelle fonction de recherche par nom de cSld
+      const actualTitleLayoutFileName = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title");
+
+      if (actualTitleLayoutFileName) {
+        const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
+        const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber);
+        outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
+
+        const layoutRIdInSlide = "rId1"; // Généralement, la relation vers le layout est rId1 dans les .rels des slides simples
         const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${layoutFileName}"/>
+  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${actualTitleLayoutFileName}"/>
 </Relationships>`;
-        outputZip.file(
-          `ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`,
-          slideRelsXml
-        );
+        outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
+
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
           layoutRIdInSlide,
-          layoutFileName,
+          layoutFileName: actualTitleLayoutFileName, // Nom de fichier réel trouvé
         });
         introSlidesAddedCount++;
       } else {
-        console.warn(
-          `Layout pour la slide de titre "${requestedLayoutName}" non trouvé. Slide non ajoutée.`
-        );
+        console.warn(`Layout de titre avec nom approchant "${targetTitleLayoutName}" non trouvé. Slide de titre non ajoutée.`);
       }
     }
 
-    if (
-      participants &&
-      participants.length > 0 &&
-      options.introSlideLayouts?.participantsLayoutName
-    ) {
-      const requestedLayoutName =
-        options.introSlideLayouts.participantsLayoutName;
-      const layoutFileName = requestedLayoutName.endsWith(".xml")
-        ? requestedLayoutName
-        : `${requestedLayoutName}.xml`;
-      const layoutFilePath = await findSlideLayoutFile(
-        outputZip,
-        layoutFileName
-      );
-      if (layoutFilePath) {
-        const currentIntroSlideNumber =
-          initialExistingSlideCount + introSlidesAddedCount + 1;
-        const participantsSlideXml = createIntroParticipantsSlideXml(
-          participants,
-          currentIntroSlideNumber
-        );
-        outputZip.file(
-          `ppt/slides/slide${currentIntroSlideNumber}.xml`,
-          participantsSlideXml
-        );
+    if (participants && participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
+      const targetParticipantsLayoutName = options.introSlideLayouts.participantsLayoutName;
+      // Utiliser la nouvelle fonction de recherche
+      const actualParticipantsLayoutFileName = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants");
+
+      if (actualParticipantsLayoutFileName) {
+        const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
+        const participantsSlideXml = createIntroParticipantsSlideXml(participants, currentIntroSlideNumber);
+        outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, participantsSlideXml);
+
         const layoutRIdInSlide = "rId1";
         const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${layoutFileName}"/>
+  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${actualParticipantsLayoutFileName}"/>
 </Relationships>`;
-        outputZip.file(
-          `ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`,
-          slideRelsXml
-        );
+        outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
+
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
           layoutRIdInSlide,
-          layoutFileName,
+          layoutFileName: actualParticipantsLayoutFileName, // Nom de fichier réel trouvé
         });
         introSlidesAddedCount++;
       } else {
-        console.warn(
-          `Layout pour la slide des participants "${requestedLayoutName}" non trouvé. Slide non ajoutée.`
-        );
+        console.warn(`Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé. Slide des participants non ajoutée.`);
       }
     }
 
-    if (options.introSlideLayouts?.instructionsLayoutName) {
-      const requestedLayoutName =
-        options.introSlideLayouts.instructionsLayoutName;
-      const layoutFileName = requestedLayoutName.endsWith(".xml")
-        ? requestedLayoutName
-        : `${requestedLayoutName}.xml`;
-      const layoutFilePath = await findSlideLayoutFile(
-        outputZip,
-        layoutFileName
-      );
-      if (layoutFilePath) {
-        const currentIntroSlideNumber =
-          initialExistingSlideCount + introSlidesAddedCount + 1;
-        const instructionsText = sessionInfo?.title
-          ? `Instructions pour la session ${sessionInfo.title}`
-          : "Instructions de vote";
-        const instructionsSlideXml = createIntroInstructionsSlideXml(
-          currentIntroSlideNumber,
-          instructionsText
-        );
-        outputZip.file(
-          `ppt/slides/slide${currentIntroSlideNumber}.xml`,
-          instructionsSlideXml
-        );
-        const layoutRIdInSlide = "rId1";
-        const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${layoutFileName}"/>
-</Relationships>`;
-        outputZip.file(
-          `ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`,
-          slideRelsXml
-        );
-        newIntroSlideDetails.push({
-          slideNumber: currentIntroSlideNumber,
-          layoutRIdInSlide,
-          layoutFileName,
-        });
-        introSlidesAddedCount++;
-      } else {
-        console.warn(
-          `Layout pour la slide d'instructions "${requestedLayoutName}" non trouvé. Slide non ajoutée.`
-        );
-      }
-    }
+    // La logique pour la diapositive d'instructions a été retirée car elle est maintenant dans le template
+    // if (options.introSlideLayouts?.instructionsLayoutName) { ... }
 
     const effectiveExistingSlideCount =
       initialExistingSlideCount + introSlidesAddedCount;
