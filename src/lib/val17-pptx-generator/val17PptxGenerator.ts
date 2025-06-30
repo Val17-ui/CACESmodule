@@ -499,12 +499,21 @@ function createIntroParticipantsSlideXml(
   // Dimensions et position du tableau (ajuster selon besoin)
   // Ces valeurs sont en EMUs (English Metric Units). 1 pouce = 914400 EMUs.
   // Pour une diapo standard 4:3 (9144000x6858000 EMUs) ou 16:9 (12192000x6858000 EMUs)
-  // On va viser une largeur de ~80% et une position centrée.
-  // Supposons une diapo 16:9 (largeur ~12M EMUs, hauteur ~6.8M EMUs)
-  // Largeur table: 10M EMUs, Hauteur: flexible, X: 1M EMUs, Y: 1.5M EMUs
-  const tableX = 914400;    // 1 pouce du bord gauche
-  const tableY = 1371600;  // 1.5 pouces du haut (après un titre typique)
-  const tableCx = 10363200; // ~11.3 pouces de large (laisse 1 pouce de chaque côté sur une diapo 13.33 pouces)
+  // Ajustons pour mieux centrer et réduire la largeur.
+  // Supposons une largeur de diapositive de 10 pouces (9144000 EMUs pour du 4:3, ou ~12M pour du 16:9)
+  // Prenons une largeur de table de 8 pouces = 8 * 914400 = 7315200 EMUs
+  // Marge gauche = (LargeurTotaleDiapo - LargeurTable) / 2
+  // Si LargeurTotaleDiapo ~ 10M (un peu plus que 4:3), marge = (10M - 7.3M) / 2 ~ 1.35M
+  const tableCx = 7315200; // Largeur de la table (environ 8 pouces)
+  const tableX = Math.round((12192000 - tableCx) / 2); // Centré sur une base 16:9 (largeur 12192000)
+                                                        // Si la diapo est 4:3 (9144000), elle sera plus à droite.
+                                                        // Pour être plus sûr, on pourrait utiliser une plus petite marge fixe.
+                                                        // ex: const tableX = 914400; (1 pouce) et tableCx = 9144000 - (2*914400) = 7315200 pour du 4:3
+                                                        // Ou pour 16:9: tableCx = 12192000 - (2*914400) = 10363200
+  // Pour l'instant, utilisons une largeur fixe et un X basé sur 16:9,
+  // l'utilisateur pourra ajuster son placeholder de corps dans le layout si besoin.
+  // const tableX = 914400; // 1 pouce du bord gauche
+  const tableY = 1524000;  // ~1.67 pouces du haut (laisse de la place pour un titre)
   // Hauteur sera déterminée par le contenu, mais on peut définir une hauteur de ligne min.
 
   // Définition des colonnes et de leurs largeurs (approximatives, en EMUs)
