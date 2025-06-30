@@ -1516,12 +1516,13 @@ export async function generatePPTXVal17(
         console.log(`[DEBUG_INTRO_SLIDE_ADD] Ajouté ppt/slides/slide${currentIntroSlideNumber}.xml`);
 
         const layoutRIdInSlide = "rId1"; // Généralement, la relation vers le layout est rId1 dans les .rels des slides simples
+        const titleLayoutBaseName = actualTitleLayoutFileName.substring(actualTitleLayoutFileName.lastIndexOf('/') + 1);
         const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${actualTitleLayoutFileName}"/>
+  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${titleLayoutBaseName}"/>
 </Relationships>`;
         outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
-        console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels avec Target: ../slideLayouts/${actualTitleLayoutFileName}`);
+        console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels avec Target: ../slideLayouts/${titleLayoutBaseName}`);
 
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
@@ -1546,12 +1547,13 @@ export async function generatePPTXVal17(
         console.log(`[DEBUG_INTRO_SLIDE_ADD] Ajouté ppt/slides/slide${currentIntroSlideNumber}.xml (Participants)`);
 
         const layoutRIdInSlide = "rId1";
+        const participantsLayoutBaseName = actualParticipantsLayoutFileName.substring(actualParticipantsLayoutFileName.lastIndexOf('/') + 1);
         const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${actualParticipantsLayoutFileName}"/>
+  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${participantsLayoutBaseName}"/>
 </Relationships>`;
         outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
-        console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels (Participants) avec Target: ../slideLayouts/${actualParticipantsLayoutFileName}`);
+        console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels (Participants) avec Target: ../slideLayouts/${participantsLayoutBaseName}`);
 
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
