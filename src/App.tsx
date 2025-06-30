@@ -3,7 +3,7 @@ import Dashboard from './pages/Dashboard';
 import Library from './pages/Library';
 // import Questionnaires from './pages/Questionnaires'; // Supprimé
 import Sessions from './pages/Sessions';
-import Exams from './pages/Exams';
+// import Exams from './pages/Exams'; // Supprimé car la fonctionnalité Mode Examen est enlevée
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import { logger } from './utils/logger';
@@ -26,8 +26,8 @@ function App() {
       //   return <Questionnaires activePage={activePage} onPageChange={handlePageChange} />; // Supprimé
       case 'sessions':
         return <Sessions activePage={activePage} onPageChange={handlePageChange} />;
-      case 'exams':
-        return <Exams activePage={activePage} onPageChange={handlePageChange} />;
+      // case 'exams': // Supprimé car la fonctionnalité Mode Examen est enlevée
+      //   return <Exams activePage={activePage} onPageChange={handlePageChange} />;
       case 'reports':
         return <Reports activePage={activePage} onPageChange={handlePageChange} />;
       case 'settings':

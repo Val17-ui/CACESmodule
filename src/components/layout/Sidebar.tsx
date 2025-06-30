@@ -59,7 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
     { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
     // { id: 'questionnaires', label: 'Questionnaires', icon: <ClipboardList size={20} /> }, // Supprimé
     { id: 'sessions', label: 'Sessions', icon: <Users size={20} /> },
-    { id: 'exams', label: 'Mode examen', icon: <FileSpreadsheet size={20} /> },
+    // { id: 'exams', label: 'Mode examen', icon: <FileSpreadsheet size={20} /> }, // Supprimé
     { id: 'reports', label: 'Rapports', icon: <BarChart3 size={20} /> },
   ];
 
