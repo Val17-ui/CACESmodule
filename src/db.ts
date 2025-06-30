@@ -8,6 +8,7 @@ import {
   SessionResult,
   // Question // L'interface Question de types/index.ts décrit la structure originale.
              // Pour Dexie, nous utilisons QuestionWithId ci-dessous.
+  // CACESReferential a été ajouté ici car il est utilisé dans l'interface BlockUsage plus bas.
 } from './types';
 
 // L'interface QuestionWithId est spécifique à Dexie pour gérer l'id auto-incrémenté.
@@ -94,6 +95,115 @@ export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
     return await db.questions.toArray();
   } catch (error) {
     console.error("Error getting all questions: ", error);
+    return [];
+  }
+};
+
+// --- Fonctions de Reporting ---
+
+export interface BlockUsage {
+  referentiel: CACESReferential | string;
+  theme: string;
+  blockId: string;
+  usageCount: number;
+}
+
+/**
+ * Calcule le nombre de fois où chaque bloc a été utilisé dans les sessions terminées,
+ * avec un filtre optionnel sur la période.
+ * @param startDate - Date de début optionnelle (string ISO ou objet Date).
+ * @param endDate - Date de fin optionnelle (string ISO ou objet Date).
+ */
+export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
+  const usageMap = new Map<string, BlockUsage>();
+
+  try {
+    let query = db.sessions.where('status').equals('completed');
+
+    // Gestion des dates pour le filtre de période
+    // Dexie gère bien les objets Date pour les comparaisons.
+    // Assurons-nous que les strings sont converties en Date si nécessaire.
+    // Pour Dexie, il est souvent préférable de stocker les dates comme objets Date ou timestamp (number).
+    // Si dateSession est un string ISO, il faudra peut-être ajuster la requête ou la conversion.
+    // En supposant que dateSession est stocké de manière comparable (ex: timestamp ou objet Date).
+    // Si dateSession est un string ISO 'YYYY-MM-DDTHH:mm:ss.sssZ' ou 'YYYY-MM-DD'
+    // Dexie peut les comparer lexicographiquement, mais c'est plus sûr avec des objets Date ou timestamps.
+    // Pour cet exemple, on va supposer que dateSession est indexé et comparable.
+
+    let sessionsQuery = db.sessions.where('status').equals('completed');
+
+    if (startDate) {
+      const start = startDate instanceof Date ? startDate : new Date(startDate);
+      // Si dateSession est un string, il faut s'assurer que la comparaison est correcte.
+      // Pour les index Dexie, si 'dateSession' est un string, between() fonctionnera lexicographiquement.
+      // Si 'dateSession' est un nombre (timestamp), c'est direct.
+      // Pour être robuste, il faudrait connaître le type exact de session.dateSession.
+      // Supposons ici que c'est compatible avec une comparaison directe ou que l'index gère bien les strings ISO.
+      // sessionsQuery = sessionsQuery.filter(session => session.dateSession >= start.toISOString());
+      // Dexie préfère .aboveOrEqual() pour les index.
+      // Assumons que dateSession est indexé.
+    }
+
+    if (endDate) {
+      const end = endDate instanceof Date ? endDate : new Date(endDate);
+      // sessionsQuery = sessionsQuery.filter(session => session.dateSession <= end.toISOString());
+      // Dexie préfère .belowOrEqual() pour les index.
+    }
+
+    // Refonte du filtrage par date pour Dexie
+    // Si dateSession est indexé, on peut utiliser .between() ou .above()/.below()
+    // Exemple: db.sessions.where('dateSession').aboveOrEqual(startDate).and(s => s.dateSession <= endDate) ...
+    // Pour l'instant, on filtre après récupération si l'indexation directe par date n'est pas simple.
+    // Ou, si on a un index sur dateSession:
+    // Exemple: this.version(6).stores({ sessions: '..., dateSession, ...'});
+
+    const completedSessions = await sessionsQuery.toArray();
+    let filteredSessions = completedSessions;
+
+    if (startDate) {
+      const start = startDate instanceof Date ? startDate : new Date(startDate);
+      // Normaliser l'heure à 00:00:00 pour startDate pour inclure toute la journée
+      start.setHours(0, 0, 0, 0);
+      filteredSessions = filteredSessions.filter(session => {
+        const sessionDate = new Date(session.dateSession); // Assumant que dateSession peut être parsé en Date
+        return sessionDate >= start;
+      });
+    }
+
+    if (endDate) {
+      const end = endDate instanceof Date ? endDate : new Date(endDate);
+      // Normaliser l'heure à 23:59:59 pour endDate pour inclure toute la journée
+      end.setHours(23, 59, 59, 999);
+      filteredSessions = filteredSessions.filter(session => {
+        const sessionDate = new Date(session.dateSession); // Assumant que dateSession peut être parsé en Date
+        return sessionDate <= end;
+      });
+    }
+
+    for (const session of filteredSessions) { // Utiliser filteredSessions ici
+      if (session.selectionBlocs && session.selectionBlocs.length > 0) {
+        const sessionReferentiel = session.referentiel;
+
+        for (const bloc of session.selectionBlocs) {
+          const key = `${sessionReferentiel}-${bloc.theme}-${bloc.blockId}`;
+
+          if (usageMap.has(key)) {
+            const currentUsage = usageMap.get(key)!;
+            currentUsage.usageCount++;
+          } else {
+            usageMap.set(key, {
+              referentiel: sessionReferentiel,
+              theme: bloc.theme,
+              blockId: bloc.blockId,
+              usageCount: 1,
+            });
+          }
+        }
+      }
+    }
+    return Array.from(usageMap.values());
+  } catch (error) {
+    console.error("Erreur lors du calcul de l'utilisation des blocs:", error);
     return [];
   }
 };
