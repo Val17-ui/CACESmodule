@@ -1107,39 +1107,28 @@ async function rebuildPresentationXml(
 
 function updateContentTypesComplete(
   originalContent: string,
-  introSlideDetails: { slideNumber: number; layoutFileName: string }[],
+  introSlideDetails: { slideNumber: number; layoutFileName: string }[], // layoutFileName est le nom de fichier réel (ex: slideLayout1.xml)
   newOmbeaQuestionCount: number,
   totalSlidesInFinalPptx: number,
-  ombeaQuestionLayoutFileName: string,
+  ombeaQuestionLayoutFileName: string, // C'est le layout créé dynamiquement pour les questions OMBEA
   totalTagsUsed: number
 ): string {
   let updatedContent = originalContent;
   let newOverrides = "";
 
+  // Ajouter les Overrides pour les NOUVELLES slides d'introduction
   introSlideDetails.forEach((detail) => {
     const slidePartName = `/ppt/slides/slide${detail.slideNumber}.xml`;
     if (!updatedContent.includes(`PartName="${slidePartName}"`)) {
       newOverrides += `\n  <Override PartName="${slidePartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
     }
-    const introLayoutPartName = `/ppt/slideLayouts/${detail.layoutFileName}`;
-    if (!updatedContent.includes(`PartName="${introLayoutPartName}"`)) {
-      const lastLayoutOverride = updatedContent.lastIndexOf(
-        'ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"'
-      );
-      let insertPoint = -1;
-      if (lastLayoutOverride > -1) {
-        insertPoint = updatedContent.indexOf("/>", lastLayoutOverride) + 2;
-      } else {
-        insertPoint = updatedContent.lastIndexOf("</Types>");
-      }
-      if (insertPoint > -1) {
-        const newLayoutOverride = `\n  <Override PartName="${introLayoutPartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>`;
-        if (!newOverrides.includes(newLayoutOverride))
-          newOverrides += newLayoutOverride;
-      }
-    }
+    // NE PAS ajouter d'Override pour detail.layoutFileName ici, car ces layouts proviennent du template
+    // et sont donc supposés être déjà déclarés dans [Content_Types].xml.
+    // Ajouter un Override en double pour un PartName existant corrompt le PPTX.
   });
 
+  // S'assurer que le layout spécifique aux questions OMBEA (celui généré par ensureOmbeaSlideLayoutExists) est déclaré.
+  // Ce layout EST nouveau et n'est pas censé exister dans le template original.
   const ombeaLayoutPartName = `/ppt/slideLayouts/${ombeaQuestionLayoutFileName}`;
   if (!updatedContent.includes(`PartName="${ombeaLayoutPartName}"`)) {
     const lastLayoutIdx = updatedContent.lastIndexOf("slideLayout");
