@@ -498,36 +498,58 @@ function createIntroParticipantsSlideXml(
 
   // Dimensions et position du tableau (ajuster selon besoin)
   // Ces valeurs sont en EMUs (English Metric Units). 1 pouce = 914400 EMUs.
-  // Pour une diapo standard 4:3 (9144000x6858000 EMUs) ou 16:9 (12192000x6858000 EMUs)
-  // Ajustons pour mieux centrer et réduire la largeur.
-  // Supposons une largeur de diapositive de 10 pouces (9144000 EMUs pour du 4:3, ou ~12M pour du 16:9)
-  // Prenons une largeur de table de 8 pouces = 8 * 914400 = 7315200 EMUs
-  // Marge gauche = (LargeurTotaleDiapo - LargeurTable) / 2
-  // Si LargeurTotaleDiapo ~ 10M (un peu plus que 4:3), marge = (10M - 7.3M) / 2 ~ 1.35M
-  const tableCx = 7315200; // Largeur de la table (environ 8 pouces)
-  const tableX = Math.round((12192000 - tableCx) / 2); // Centré sur une base 16:9 (largeur 12192000)
-                                                        // Si la diapo est 4:3 (9144000), elle sera plus à droite.
-                                                        // Pour être plus sûr, on pourrait utiliser une plus petite marge fixe.
-                                                        // ex: const tableX = 914400; (1 pouce) et tableCx = 9144000 - (2*914400) = 7315200 pour du 4:3
-                                                        // Ou pour 16:9: tableCx = 12192000 - (2*914400) = 10363200
-  // Pour l'instant, utilisons une largeur fixe et un X basé sur 16:9,
-  // l'utilisateur pourra ajuster son placeholder de corps dans le layout si besoin.
-  // const tableX = 914400; // 1 pouce du bord gauche
-  const tableY = 1524000;  // ~1.67 pouces du haut (laisse de la place pour un titre)
-  // Hauteur sera déterminée par le contenu, mais on peut définir une hauteur de ligne min.
+  // Dimensions de la diapositive 16:9 standard
+  const slideWidthEMU = 12192000;
+  const slideHeightEMU = 6858000;
+
+  // Dimensions et position du tableau
+  const tableWidthRatio = 0.90; // Utiliser 90% de la largeur de la diapositive
+  const tableCx = Math.round(slideWidthEMU * tableWidthRatio);
+
+  const rowHeightEMU = 370840; // Hauteur d'une ligne (en-tête ou donnée) ~0.4 pouces
+  const headerRowCount = 1;
+  let tableCy = rowHeightEMU * (participants.length + headerRowCount);
+
+  const tableX = Math.round((slideWidthEMU - tableCx) / 2); // Centré horizontalement
+  let tableY = Math.round((slideHeightEMU - tableCy) / 2); // Centré verticalement
+
+  // Ajustement pour ne pas empiéter sur un titre potentiel en haut
+  const minTableY = 1200000; // Espace minimum pour un titre (environ 1.3 pouces)
+  if (tableY < minTableY) {
+    tableY = minTableY;
+    // Si la table est trop haute pour être centrée sous le titre, elle pourrait déborder en bas.
+    // On pourrait recalculer tableCy pour qu'elle tienne, mais cela réduirait la hauteur des lignes.
+    // Pour l'instant, on la laisse déborder si elle est trop grande.
+    // Une alternative serait : tableCy = slideHeightEMU - minTableY - someBottomMargin;
+  }
+  if (tableY + tableCy > slideHeightEMU) {
+      tableCy = slideHeightEMU - tableY - 182880; // Laisse une petite marge en bas (0.2 pouce)
+      if (tableCy < rowHeightEMU * (participants.length + headerRowCount) && participants.length > 0) {
+          // Si la hauteur dispo est trop petite pour toutes les lignes, on ne fait rien de plus pour l'instant
+          // Le tableau dépassera ou le contenu des cellules sera coupé par PPT.
+      }
+  }
+
 
   // Définition des colonnes et de leurs largeurs (approximatives, en EMUs)
   const colWidths = [];
-  colWidths.push(Math.round(tableCx * 0.08)); // N°
-  colWidths.push(Math.round(tableCx * 0.20)); // ID Boîtier
-  colWidths.push(Math.round(tableCx * 0.25)); // Nom
-  colWidths.push(Math.round(tableCx * 0.25)); // Prénom
-  if (hasOrganizationData) {
-    colWidths.push(Math.round(tableCx * 0.22)); // Organisation
-  } else { // Ajuster les largeurs précédentes si pas d'organisation
-    colWidths[1] = Math.round(tableCx * 0.25);
-    colWidths[2] = Math.round(tableCx * 0.335);
-    colWidths[3] = Math.round(tableCx * 0.335);
+  const numCols = hasOrganizationData ? 5 : 4;
+  if (numCols === 5) {
+    colWidths.push(Math.round(tableCx * 0.08)); // N°
+    colWidths.push(Math.round(tableCx * 0.23)); // ID Boîtier
+    colWidths.push(Math.round(tableCx * 0.23)); // Nom
+    colWidths.push(Math.round(tableCx * 0.23)); // Prénom
+    colWidths.push(Math.round(tableCx * 0.23)); // Organisation
+  } else {
+    colWidths.push(Math.round(tableCx * 0.10)); // N°
+    colWidths.push(Math.round(tableCx * 0.28)); // ID Boîtier
+    colWidths.push(Math.round(tableCx * 0.31)); // Nom
+    colWidths.push(Math.round(tableCx * 0.31)); // Prénom
+  }
+  // S'assurer que la somme des largeurs de colonnes = tableCx
+  let sumWidths = colWidths.reduce((a, b) => a + b, 0);
+  if (sumWidths !== tableCx && colWidths.length > 0) {
+      colWidths[colWidths.length - 1] += (tableCx - sumWidths);
   }
 
 
@@ -539,7 +561,7 @@ function createIntroParticipantsSlideXml(
     </p:nvGraphicFramePr>
     <p:xfrm>
       <a:off x="${tableX}" y="${tableY}"/>
-      <a:ext cx="${tableCx}" cy="0"/>
+      <a:ext cx="${tableCx}" cy="${tableCy}"/>
     </p:xfrm>
     <a:graphic>
       <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
