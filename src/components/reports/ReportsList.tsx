@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, Download, Eye, Printer, FileText } from 'lucide-react';
+import { Download, Eye, Printer, FileText, Calendar, Users, CheckCircle } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
@@ -13,111 +13,66 @@ type ReportsListProps = {
 const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    }).format(date);
+    return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(date);
   };
-  
-  // Only completed sessions can have reports
+
   const completedSessions = sessions.filter(s => s.status === 'completed');
 
+  if (completedSessions.length === 0) {
+    return (
+      <Card>
+        <div className="text-center py-12 text-gray-500">
+          <FileText size={48} className="mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-semibold text-gray-800">Aucun rapport disponible</h3>
+          <p className="mt-1 text-sm">Complétez une session pour générer des rapports.</p>
+        </div>
+      </Card>
+    );
+  }
+
   return (
-    <Card title="Rapports disponibles">
-      <div className="overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Session
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Date
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Référentiel
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Participants
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Taux de réussite
-              </th>
-              <th scope="col" className="relative px-6 py-3">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {completedSessions.length === 0 ? (
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" colSpan={6}>
-                  <div className="text-center py-4 text-gray-500">
-                    Aucun rapport disponible. Complétez une session pour générer des rapports.
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              completedSessions.map((session) => (
-                <tr key={session.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 p-2 rounded-lg bg-green-50 text-green-600">
-                        <FileText size={20} />
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {session.name}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(session.date)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant="primary">{session.referential}</Badge>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {session.participantsCount}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    78%
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Eye size={16} />}
-                        onClick={() => onViewReport(session.id)}
-                      >
-                        Voir
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Download size={16} />}
-                      >
-                        PDF
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Printer size={16} />}
-                      >
-                        Imprimer
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {completedSessions.map((session) => (
+        <Card key={session.id} className="flex flex-col justify-between hover:shadow-md transition-shadow duration-200">
+          <div>
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">{session.name}</h3>
+              <Badge variant="primary">{session.referential}</Badge>
+            </div>
+            <div className="space-y-3 text-sm text-gray-600">
+              <div className="flex items-center">
+                <Calendar size={16} className="mr-2 text-gray-400" />
+                <span>{formatDate(session.date)}</span>
+              </div>
+              <div className="flex items-center">
+                <Users size={16} className="mr-2 text-gray-400" />
+                <span>{session.participantsCount} participants</span>
+              </div>
+              <div className="flex items-center">
+                <CheckCircle size={16} className="mr-2 text-green-500" />
+                <span className="font-medium">Taux de réussite: 78%</span>
+              </div>
+            </div>
+          </div>
+          <div className="border-t -mx-6 mt-6 pt-4 px-6 flex justify-end space-x-2">
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Eye size={16} />}
+              onClick={() => onViewReport(session.id)}
+            >
+              Consulter
+            </Button>
+            <Button variant="outline" size="icon" title="Exporter en PDF">
+              <Download size={16} />
+            </Button>
+            <Button variant="outline" size="icon" title="Imprimer">
+              <Printer size={16} />
+            </Button>
+          </div>
+        </Card>
+      ))}
+    </div>
   );
 };
 
