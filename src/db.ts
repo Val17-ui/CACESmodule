@@ -8,6 +8,7 @@ import {
   SessionResult,
   // Question // L'interface Question de types/index.ts décrit la structure originale.
              // Pour Dexie, nous utilisons QuestionWithId ci-dessous.
+  // CACESReferential a été ajouté ici car il est utilisé dans l'interface BlockUsage plus bas.
 } from './types';
 
 // L'interface QuestionWithId est spécifique à Dexie pour gérer l'id auto-incrémenté.
@@ -94,6 +95,55 @@ export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
     return await db.questions.toArray();
   } catch (error) {
     console.error("Error getting all questions: ", error);
+    return [];
+  }
+};
+
+// --- Fonctions de Reporting ---
+
+export interface BlockUsage {
+  referentiel: CACESReferential | string;
+  theme: string;
+  blockId: string;
+  usageCount: number;
+}
+
+/**
+ * Calcule le nombre de fois où chaque bloc a été utilisé dans les sessions terminées.
+ */
+export const calculateBlockUsage = async (): Promise<BlockUsage[]> => {
+  const usageMap = new Map<string, BlockUsage>();
+
+  try {
+    const completedSessions = await db.sessions
+      .where('status')
+      .equals('completed')
+      .toArray();
+
+    for (const session of completedSessions) {
+      if (session.selectionBlocs && session.selectionBlocs.length > 0) {
+        const sessionReferentiel = session.referentiel; // Référentiel de la session
+
+        for (const bloc of session.selectionBlocs) {
+          const key = `${sessionReferentiel}-${bloc.theme}-${bloc.blockId}`;
+
+          if (usageMap.has(key)) {
+            const currentUsage = usageMap.get(key)!;
+            currentUsage.usageCount++;
+          } else {
+            usageMap.set(key, {
+              referentiel: sessionReferentiel,
+              theme: bloc.theme,
+              blockId: bloc.blockId,
+              usageCount: 1,
+            });
+          }
+        }
+      }
+    }
+    return Array.from(usageMap.values());
+  } catch (error) {
+    console.error("Erreur lors du calcul de l'utilisation des blocs:", error);
     return [];
   }
 };
