@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import Layout from '../components/layout/Layout';
+import GlobalStats from '../components/reports/GlobalStats';
+import ReportTypeSelector, { ReportType } from '../components/reports/ReportTypeSelector';
 import ReportsList from '../components/reports/ReportsList';
 import ReportDetails from '../components/reports/ReportDetails';
+import ParticipantReport from '../components/reports/ParticipantReport';
+import PeriodReport from '../components/reports/PeriodReport';
+import ReferentialReport from '../components/reports/ReferentialReport';
+import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
 import { mockSessions, mockParticipants } from '../data/mockData';
@@ -12,79 +18,102 @@ type ReportsProps = {
 };
 
 const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
-  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [activeReport, setActiveReport] = useState<ReportType | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
-  const handleViewReport = (id: string) => {
-    setSelectedReportId(id);
+  const handleSelectReport = (reportType: ReportType) => {
+    setActiveReport(reportType);
   };
 
-  const handleBackToList = () => {
-    setSelectedReportId(null);
+  const handleViewSessionReport = (sessionId: string) => {
+    setSelectedSessionId(sessionId);
   };
 
-  const selectedSession = selectedReportId
-    ? mockSessions.find((s) => s.id === selectedReportId)
+  const handleBack = () => {
+    if (selectedSessionId) {
+      setSelectedSessionId(null);
+    } else {
+      setActiveReport(null);
+    }
+  };
+
+  const selectedSession = selectedSessionId
+    ? mockSessions.find((s) => s.id === selectedSessionId)
     : null;
+
+  const renderContent = () => {
+    if (selectedSession) {
+      return <ReportDetails session={selectedSession} participants={mockParticipants} />;
+    }
+
+    switch (activeReport) {
+      case 'session':
+        return <ReportsList sessions={mockSessions} onViewReport={handleViewSessionReport} />;
+      case 'participant':
+        return <ParticipantReport />;
+      case 'period':
+        return <PeriodReport />;
+      case 'referential':
+        return <ReferentialReport />;
+      case 'custom':
+        return <CustomReport />;
+      default:
+        return (
+          <>
+            <GlobalStats />
+            <ReportTypeSelector onSelectReport={handleSelectReport} />
+          </>
+        );
+    }
+  };
+
+  const getTitle = () => {
+    if (selectedSession) return `Rapport: ${selectedSession.name}`;
+    if (activeReport) {
+      const reportTitles = {
+        session: 'Rapports par Session',
+        participant: 'Rapports par Participant',
+        period: 'Rapports par Période',
+        referential: 'Rapports par Référentiel',
+        block: 'Rapports par Bloc',
+        custom: 'Rapport Personnalisé',
+      };
+      return reportTitles[activeReport];
+    }
+    return 'Rapports et Statistiques';
+  };
+
+  const getSubtitle = () => {
+    if (selectedSession) return `Analyse détaillée de la session du ${new Date(selectedSession.date).toLocaleDateString('fr-FR')}`;
+    if (activeReport) return 'Sélectionnez un élément pour voir les détails';
+    return 'Visualisez les données de performance et de certification';
+  };
 
   const headerActions = (
     <div className="flex items-center space-x-3">
-      {selectedReportId && (
+      {activeReport && (
+        <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBack}>
+          Retour
+        </Button>
+      )}
+      {selectedSession && (
         <>
-          <Button
-            variant="outline"
-            icon={<ArrowLeft size={16} />}
-            onClick={handleBackToList}
-          >
-            Retour à la liste
-          </Button>
-          <Button
-            variant="outline"
-            icon={<Download size={16} />}
-          >
-            Exporter PDF
-          </Button>
-          <Button
-            variant="outline"
-            icon={<Printer size={16} />}
-          >
-            Imprimer
-          </Button>
+          <Button variant="outline" icon={<Download size={16} />}>Exporter PDF</Button>
+          <Button variant="outline" icon={<Printer size={16} />}>Imprimer</Button>
         </>
       )}
     </div>
   );
 
-  const title = selectedReportId
-    ? `Rapport de session: ${selectedSession?.name}`
-    : "Rapports";
-
-  const subtitle = selectedReportId
-    ? `Résultats détaillés et analyses pour la session du ${
-        new Date(selectedSession?.date || '').toLocaleDateString('fr-FR')
-      }`
-    : "Consultez et générez les rapports de certification";
-
   return (
     <Layout
-      title={title}
-      subtitle={subtitle}
+      title={getTitle()}
+      subtitle={getSubtitle()}
       actions={headerActions}
       activePage={activePage}
       onPageChange={onPageChange}
     >
-      {!selectedReportId ? (
-        <ReportsList 
-          sessions={mockSessions}
-          onViewReport={handleViewReport}
-        />
-      ) : (
-        selectedSession && (
-          <ReportDetails 
-            session={selectedSession}
-            participants={mockParticipants}
-          />
-        )
-      )}
+      {renderContent()}
     </Layout>
   );
 };
