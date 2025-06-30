@@ -490,59 +490,126 @@ function createIntroParticipantsSlideXml(
 ): string {
   console.log("[DEBUG_PARTICIPANTS_SLIDE] Données participants reçues par createIntroParticipantsSlideXml:", JSON.stringify(participants));
   const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
-  const baseId = slideNumber * 1000;
+  const baseSpId = slideNumber * 1000; // Base pour les ID des formes sur la diapositive
+
+  // Déterminer si la colonne Organisation est nécessaire
+  const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
+  const columnCount = hasOrganizationData ? 5 : 4;
+
+  // Dimensions et position du tableau (ajuster selon besoin)
+  // Ces valeurs sont en EMUs (English Metric Units). 1 pouce = 914400 EMUs.
+  // Pour une diapo standard 4:3 (9144000x6858000 EMUs) ou 16:9 (12192000x6858000 EMUs)
+  // On va viser une largeur de ~80% et une position centrée.
+  // Supposons une diapo 16:9 (largeur ~12M EMUs, hauteur ~6.8M EMUs)
+  // Largeur table: 10M EMUs, Hauteur: flexible, X: 1M EMUs, Y: 1.5M EMUs
+  const tableX = 914400;    // 1 pouce du bord gauche
+  const tableY = 1371600;  // 1.5 pouces du haut (après un titre typique)
+  const tableCx = 10363200; // ~11.3 pouces de large (laisse 1 pouce de chaque côté sur une diapo 13.33 pouces)
+  // Hauteur sera déterminée par le contenu, mais on peut définir une hauteur de ligne min.
+
+  // Définition des colonnes et de leurs largeurs (approximatives, en EMUs)
+  const colWidths = [];
+  colWidths.push(Math.round(tableCx * 0.08)); // N°
+  colWidths.push(Math.round(tableCx * 0.20)); // ID Boîtier
+  colWidths.push(Math.round(tableCx * 0.25)); // Nom
+  colWidths.push(Math.round(tableCx * 0.25)); // Prénom
+  if (hasOrganizationData) {
+    colWidths.push(Math.round(tableCx * 0.22)); // Organisation
+  } else { // Ajuster les largeurs précédentes si pas d'organisation
+    colWidths[1] = Math.round(tableCx * 0.25);
+    colWidths[2] = Math.round(tableCx * 0.335);
+    colWidths[3] = Math.round(tableCx * 0.335);
+  }
+
+
+  let tableXml = `<p:graphicFrame>
+    <p:nvGraphicFramePr>
+      <p:cNvPr id="${baseSpId + 2}" name="Tableau Participants"/>
+      <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>
+      <p:nvPr/>
+    </p:nvGraphicFramePr>
+    <p:xfrm>
+      <a:off x="${tableX}" y="${tableY}"/>
+      <a:ext cx="${tableCx}" cy="0"/>
+    </p:xfrm>
+    <a:graphic>
+      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+        <a:tbl>
+          <a:tblPr firstRow="1" bandRow="1">
+            <a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>
+          </a:tblPr>
+          <a:tblGrid>`;
+  colWidths.forEach(w => { tableXml += `<a:gridCol w="${w}"/>`; });
+  tableXml += `</a:tblGrid>`;
+
+  // Ligne d'en-tête
+  tableXml += `<a:tr h="370840">`; // Hauteur de ligne exemple
+  const headers = ["N°", "ID Boîtier", "Nom", "Prénom"];
+  if (hasOrganizationData) headers.push("Organisation");
+
+  headers.forEach(headerText => {
+    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+  });
+  tableXml += `</a:tr>`;
+
+  // Lignes de données pour chaque participant
+  participants.forEach((participant, index) => {
+    tableXml += `<a:tr h="370840">`;
+    // N°
+    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    // ID Boîtier
+    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    // Nom
+    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    // Prénom
+    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    // Organisation (si applicable)
+    if (hasOrganizationData) {
+      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    }
+    tableXml += `</a:tr>`;
+  });
+
+  tableXml += `</a:tbl>
+      </a:graphicData>
+    </a:graphic>
+  </p:graphicFrame>`;
+
+  console.log("[DEBUG_PARTICIPANTS_SLIDE] Table XML généré (premiers 500 chars):", tableXml.substring(0,500));
+
+  // Titre de la diapositive (reste similaire)
   const titleText = "Participants";
   const titlePlaceholder = `<p:sp>
     <p:nvSpPr>
-      <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>
+      <p:cNvPr id="${baseSpId + 1}" name="Title Placeholder"/>
       <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
       <p:nvPr><p:ph type="title"/></p:nvPr>
     </p:nvSpPr>
     <p:spPr/>
     <p:txBody>
       <a:bodyPr/><a:lstStyle/>
-      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-        titleText
-      )}</a:t></a:r></a:p>
+      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleText)}</a:t></a:r></a:p>
     </p:txBody>
   </p:sp>`;
 
-  const participantsListXml = participants
-    .map((participant) => {
-      // Utilise prenom et nom conformément à la nouvelle interface ParticipantForGenerator
-      const fullName = `${participant.prenom || ""} ${participant.nom || ""}`.trim();
-      return `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-        fullName
-      )}</a:t></a:r></a:p>`;
-    })
-    .join("");
-  console.log("[DEBUG_PARTICIPANTS_SLIDE] participantsListXml généré:", participantsListXml);
-
-  const bodyPlaceholder = `<p:sp>
-    <p:nvSpPr>
-      <p:cNvPr id="${baseId + 2}" name="Body Placeholder"/>
-      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-      <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
-    </p:nvSpPr>
-    <p:spPr/>
-    <p:txBody>
-      <a:bodyPr/><a:lstStyle/>
-      ${participantsListXml}
-    </p:txBody>
-  </p:sp>`;
-
+  // Assemblage final de la diapositive
+  // Note: On insère le tableau directement dans spTree. Le layout doit avoir un placeholder de titre,
+  // mais le tableau est ajouté comme un graphicFrame séparé.
+  // Si le layout a un placeholder de corps et qu'on veut que le tableau s'y insère,
+  // il faudrait mettre le <p:graphicFrame> à l'intérieur du <p:sp> du placeholder de corps,
+  // mais cela complique la gestion des dimensions. Pour l'instant, on le met en absolu.
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   ${slideComment}
   <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
     <p:cSld>
       <p:spTree>
         <p:nvGrpSpPr>
-          <p:cNvPr id="${baseId}" name="Intro Participants Group"/>
+          <p:cNvPr id="${baseSpId}" name="Intro Participants Content Group"/>
           <p:cNvGrpSpPr/><p:nvPr/>
         </p:nvGrpSpPr>
         <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
         ${titlePlaceholder}
-        ${bodyPlaceholder}
+        ${tableXml}
       </p:spTree>
     </p:cSld>
     <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
