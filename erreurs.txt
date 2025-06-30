@@ -1,0 +1,117 @@
+[{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "Cannot find module '../ui/card' or its corresponding type declarations.",
+	"source": "ts",
+	"startLineNumber": 6,
+	"startColumn": 58,
+	"endLineNumber": 6,
+	"endColumn": 70
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "Cannot find module '../ui/select' or its corresponding type declarations.",
+	"source": "ts",
+	"startLineNumber": 7,
+	"startColumn": 79,
+	"endLineNumber": 7,
+	"endColumn": 93
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "Cannot find module '../ui/input' or its corresponding type declarations.",
+	"source": "ts",
+	"startLineNumber": 8,
+	"startColumn": 23,
+	"endLineNumber": 8,
+	"endColumn": 36
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "Cannot find module '../ui/button' or its corresponding type declarations.",
+	"source": "ts",
+	"startLineNumber": 9,
+	"startColumn": 24,
+	"endLineNumber": 9,
+	"endColumn": 38
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "Cannot find module '../ui/table' or its corresponding type declarations.",
+	"source": "ts",
+	"startLineNumber": 10,
+	"startColumn": 79,
+	"endLineNumber": 10,
+	"endColumn": 92
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "7006",
+	"severity": 8,
+	"message": "Parameter 'value' implicitly has an 'any' type.",
+	"source": "ts",
+	"startLineNumber": 126,
+	"startColumn": 65,
+	"endLineNumber": 126,
+	"endColumn": 70
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "7006",
+	"severity": 8,
+	"message": "Parameter 'e' implicitly has an 'any' type.",
+	"source": "ts",
+	"startLineNumber": 144,
+	"startColumn": 26,
+	"endLineNumber": 144,
+	"endColumn": 27
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "7006",
+	"severity": 8,
+	"message": "Parameter 'e' implicitly has an 'any' type.",
+	"source": "ts",
+	"startLineNumber": 155,
+	"startColumn": 26,
+	"endLineNumber": 155,
+	"endColumn": 27
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "6133",
+	"severity": 4,
+	"message": "'useMemo' is declared but its value is never read.",
+	"source": "ts",
+	"startLineNumber": 1,
+	"startColumn": 38,
+	"endLineNumber": 1,
+	"endColumn": 45,
+	"tags": [
+		1
+	]
+},{
+	"resource": "/project/workspace/src/components/reports/BlockUsageReport.tsx",
+	"owner": "typescript",
+	"code": "6133",
+	"severity": 4,
+	"message": "'db' is declared but its value is never read.",
+	"source": "ts",
+	"startLineNumber": 2,
+	"startColumn": 10,
+	"endLineNumber": 2,
+	"endColumn": 12,
+	"tags": [
+		1
+	]
+}]

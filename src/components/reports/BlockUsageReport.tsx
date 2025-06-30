@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { db, BlockUsage, calculateBlockUsage } from '../../db'; // Ajuster le chemin si besoin
+import React, { useState, useEffect } from 'react';
+import { BlockUsage, calculateBlockUsage } from '../../db'; // Ajuster le chemin si besoin
 import { CACESReferential } from '../../types'; // Ajuster le chemin si besoin
 
 // Importer les composants UI réutilisables (supposons qu'ils existent)
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'; // Supposé
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'; // Supposé
-import { Input } from '../ui/input'; // Supposé
-import { Button } from '../ui/button'; // Supposé
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'; // Supposé
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
+import { Input } from '../ui/Input';
+import { Button } from '../ui/Button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { ArrowUpDown } from 'lucide-react';
 
 // Options pour le filtre Référentiel (similaire à votre exemple)
@@ -123,7 +123,7 @@ const BlockUsageReport: React.FC = () => {
         <div className="flex flex-wrap gap-4 mb-6 p-4 border rounded-lg">
           <div className="flex-1 min-w-[200px]">
             <label htmlFor="referentiel-filter" className="block text-sm font-medium text-gray-700 mb-1">Référentiel</label>
-            <Select value={selectedReferentiel} onValueChange={(value) => setSelectedReferentiel(value as CACESReferential | string)}>
+            <Select value={selectedReferentiel} onValueChange={(value: string) => setSelectedReferentiel(value as CACESReferential | string)}>
               <SelectTrigger id="referentiel-filter">
                 <SelectValue placeholder="Tous les référentiels" />
               </SelectTrigger>
@@ -141,7 +141,7 @@ const BlockUsageReport: React.FC = () => {
               type="date"
               id="start-date-filter"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStartDate(e.target.value)}
               className="w-full"
             />
           </div>
@@ -152,7 +152,7 @@ const BlockUsageReport: React.FC = () => {
               type="date"
               id="end-date-filter"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEndDate(e.target.value)}
               className="w-full"
             />
           </div>
