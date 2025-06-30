@@ -746,43 +746,38 @@ async function findLayoutByCSldName(
   const files = layoutsFolder.filter((relativePathEntry) => relativePathEntry.endsWith(".xml") && !relativePathEntry.includes("/_rels/"));
   console.log(`[DEBUG] Fichiers .xml trouvés dans ppt/slideLayouts/: ${files.map(f => f.name).join(', ')}`);
 
+  // chaque fileEntry est un JSZipObject
   for (const fileEntry of files) {
-    const actualFileName = fileEntry.name;
-    console.log(`[DEBUG_STEP_1] Examen du fichier layout: ${actualFileName}`);
-    const layoutFile = zip.file(`ppt/slideLayouts/${actualFileName}`);
-
-    if (layoutFile) {
-      console.log(`[DEBUG_STEP_2] Objet layoutFile trouvé pour ${actualFileName}`);
+    console.log(`[DEBUG_STEP_1] Examen de fileEntry.name: ${fileEntry.name}`);
+    // fileEntry EST déjà l'objet JSZipObject, pas besoin de refaire zip.file()
+    // On vérifie juste qu'il n'est pas null ou undefined, bien que filter ne devrait pas en retourner.
+    if (fileEntry) {
+      console.log(`[DEBUG_STEP_2] fileEntry (JSZipObject) est valide pour ${fileEntry.name}`);
       try {
-        console.log(`[DEBUG_STEP_3] Tentative de lecture async de ${actualFileName}`);
-        const content = await layoutFile.async("string");
-        console.log(`[DEBUG_STEP_4] Contenu lu pour ${actualFileName}, longueur: ${content.length}. Début: ${content.substring(0,100)}`);
+        console.log(`[DEBUG_STEP_3] Tentative de lecture async de ${fileEntry.name} directement depuis fileEntry`);
+        const content = await fileEntry.async("string"); // On appelle async directement sur le JSZipObject
+        console.log(`[DEBUG_STEP_4] Contenu lu pour ${fileEntry.name}, longueur: ${content.length}. Début: ${content.substring(0,100)}`);
         const nameMatch = content.match(/<p:cSld[^>]*name="([^"]+)"/);
 
         if (nameMatch && nameMatch[1]) {
           const cSldNameAttr = nameMatch[1]; // Nom exact de l'attribut name dans le XML
           const normalizedCSldNameAttr = cSldNameAttr.toLowerCase().replace(/\s+/g, "");
-          console.log(`[DEBUG] Layout: ${actualFileName}, cSld name attr: "${cSldNameAttr}", normalisé: "${normalizedCSldNameAttr}"`);
+          console.log(`[DEBUG] Layout: ${fileEntry.name}, cSld name attr: "${cSldNameAttr}", normalisé: "${normalizedCSldNameAttr}"`);
 
           // 1. Vérification directe du nom normalisé
           if (normalizedCSldNameAttr === normalizedTargetName) {
-            console.log(`[DEBUG] MATCH DIRECT! Layout trouvé: "${cSldNameAttr}" dans ${actualFileName} pour la cible "${targetName}"`);
-            return actualFileName;
+            console.log(`[DEBUG] MATCH DIRECT! Layout trouvé: "${cSldNameAttr}" dans ${fileEntry.name} pour la cible "${targetName}"`);
+            return fileEntry.name;  // Retourne le nom complet du fichier, ex: "ppt/slideLayouts/slideLayout1.xml"
           }
 
           // 2. Vérification par alias
-          // Un alias correspond si le nom normalisé du layout DANS LE XML contient un des alias définis
-          // ET si le nom normalisé de la CIBLE (fourni en option) contient aussi cet alias (ou un mot clé du type).
-          // Ceci est pour éviter des faux positifs si un layout contient "title" mais que l'utilisateur cherche "participants".
           for (const alias of aliases) {
             const normalizedAlias = alias.toLowerCase().replace(/\s+/g,"");
             if (normalizedCSldNameAttr.includes(normalizedAlias)) {
-              // Le nom du layout XML contient un alias. Est-ce que la cible le contient aussi ou est du bon type?
               let targetMatchesAliasOrType = false;
               if (normalizedTargetName.includes(normalizedAlias)) {
                 targetMatchesAliasOrType = true;
               } else {
-                 // Si le nom cible ne contient pas l'alias exact, on vérifie les mots-clés du type
                  if (layoutType === 'title' && (normalizedTargetName.includes('title') || normalizedTargetName.includes('titre'))) {
                     targetMatchesAliasOrType = true;
                  } else if (layoutType === 'participants' && (normalizedTargetName.includes('participant') || normalizedTargetName.includes('participants'))) {
@@ -791,23 +786,22 @@ async function findLayoutByCSldName(
               }
 
               if (targetMatchesAliasOrType) {
-                console.log(`[DEBUG] MATCH ALIAS! Layout: "${cSldNameAttr}" (${actualFileName}) via alias "${alias}" pour cible "${targetName}" (type: ${layoutType})`);
-                return actualFileName;
+                console.log(`[DEBUG] MATCH ALIAS! Layout: "${cSldNameAttr}" (${fileEntry.name}) via alias "${alias}" pour cible "${targetName}" (type: ${layoutType})`);
+                return fileEntry.name; // Retourne le nom complet du fichier
               }
             }
           }
         } else {
-          console.log(`[DEBUG] Layout: ${actualFileName}, pas d'attribut name trouvé dans <p:cSld>.`);
+          console.log(`[DEBUG] Layout: ${fileEntry.name}, pas d'attribut name trouvé dans <p:cSld>.`);
         }
       } catch (error) {
-        // Log d'erreur plus détaillé
-        console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${actualFileName}:`, error);
+        console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${fileEntry.name}:`, error);
         if (error instanceof Error) {
           console.error(`[DEBUG_ERREUR_STACK] Stack: ${error.stack}`);
         }
       }
     } else {
-      console.warn(`[DEBUG_WARN] layoutFile est null pour ${actualFileName}, ne devrait pas arriver.`);
+      console.warn(`[DEBUG_WARN] fileEntry est null/undefined pour un chemin listé, très étrange.`);
     }
   }
 
