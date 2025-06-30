@@ -11,20 +11,15 @@ export interface SessionInfo {
   // other relevant fields
 }
 
-// Participant interface to match src/types/index.ts
-export interface Participant {
-  id: string;
-  firstName: string;
-  lastName: string;
+// Participant interface alignée sur src/types/index.ts Participant
+// Renommée pour éviter confusion avec le type Participant de l'orchestrateur si jamais il y avait import direct.
+export interface ParticipantForGenerator {
+  idBoitier: string;
+  nom: string;
+  prenom: string;
   organization?: string;
-  identificationCode?: string; // Not used in current XML generation but good to have for consistency
-  deviceId?: number; // Not used directly by createIntroParticipantsSlideXml, but part of the type
-  hasSigned?: boolean; // Not used
-  score?: number; // Not used
-  passed?: boolean; // Not used
-  company?: string; // Could be an alternative for organization if needed
-  email?: string; // Not used
-  // other relevant fields from src/types/index.ts can be added if needed by generator
+  identificationCode?: string;
+  // Les champs comme score, reussite ne sont pas nécessaires pour la génération de la diapo liste participants
 }
 
 export interface IntroSlideLayoutNames {
@@ -490,9 +485,10 @@ function createIntroTitleSlideXml(
 }
 
 function createIntroParticipantsSlideXml(
-  participants: Participant[],
+  participants: ParticipantForGenerator[], // Utilise la nouvelle interface alignée
   slideNumber: number
 ): string {
+  console.log("[DEBUG_PARTICIPANTS_SLIDE] Données participants reçues par createIntroParticipantsSlideXml:", JSON.stringify(participants));
   const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
   const baseId = slideNumber * 1000;
   const titleText = "Participants";
@@ -513,14 +509,14 @@ function createIntroParticipantsSlideXml(
 
   const participantsListXml = participants
     .map((participant) => {
-      const fullName = `${participant.firstName || ""} ${
-        participant.lastName || ""
-      }`.trim();
+      // Utilise prenom et nom conformément à la nouvelle interface ParticipantForGenerator
+      const fullName = `${participant.prenom || ""} ${participant.nom || ""}`.trim();
       return `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
         fullName
       )}</a:t></a:r></a:p>`;
     })
     .join("");
+  console.log("[DEBUG_PARTICIPANTS_SLIDE] participantsListXml généré:", participantsListXml);
 
   const bodyPlaceholder = `<p:sp>
     <p:nvSpPr>
@@ -1439,7 +1435,9 @@ export async function generatePPTXVal17(
   questions: Val17Question[],
   options: GenerationOptions = {},
   sessionInfo?: SessionInfo,
-  participants?: Participant[]
+  // participants est maintenant attendu comme ParticipantForGenerator[] par cette fonction,
+  // le mapping depuis le type de l'orchestrateur doit être fait par l'appelant (pptxOrchestrator)
+  participants?: ParticipantForGenerator[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[] } | null> {
   try {
     const executionId = Date.now();

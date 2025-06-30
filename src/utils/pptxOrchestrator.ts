@@ -231,12 +231,23 @@ export async function generatePresentation(
       date: sessionInfo.date,
     };
 
+    // Mapper les participants de l'orchestrateur (avec nom, prenom)
+    // vers le type ParticipantForGenerator attendu par val17PptxGenerator
+    // (qui a été aligné pour utiliser nom, prenom également, donc le mapping est direct)
+    const participantsForGenerator = _participants.map(p => ({
+      idBoitier: p.idBoitier, // S'assurer que ParticipantForGenerator a ce champ si nécessaire, sinon l'omettre
+      nom: p.nom,
+      prenom: p.prenom,
+      organization: p.organization,
+      identificationCode: p.identificationCode
+    }));
+
     const generatedData = await generatePPTXVal17(
       templateFileFromUser,
       transformedQuestions,
       generationOptions,
       val17SessionInfo,
-      _participants // _participants ici sont les FormParticipant, generatePPTXVal17 les utilise pour l'instant
+      participantsForGenerator // Utiliser les participants mappés
     );
 
     // Correction: Utiliser generatedData au lieu de generationResult
