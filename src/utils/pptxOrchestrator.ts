@@ -183,6 +183,7 @@ export async function generatePresentation(
 ): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null }> {
 
   console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
+  console.log('[DEBUG_ORCHESTRATOR] _participants reçus dans generatePresentation:', JSON.stringify(_participants));
 
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
 
