@@ -30,23 +30,26 @@ const ReportTypeSelector: React.FC<ReportTypeSelectorProps> = ({ onSelectReport 
     <div>
       <h2 className="text-xl font-semibold text-gray-800 mb-4">Choisissez un type de rapport</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {reportTypes.map((report) => (
-          <Card 
-            key={report.id}
-            className="hover:shadow-lg hover:border-blue-500 transition-all duration-200 cursor-pointer"
-            onClick={() => onSelectReport(report.id)}
-          >
-            <div className="flex items-start">
-              <div className="p-3 rounded-lg bg-gray-100 text-gray-600 mr-4">
-                <report.icon size={28} />
+        {reportTypes.map((report) => {
+          const Icon = report.icon;
+          return (
+            <Card 
+              key={report.id}
+              className="hover:shadow-lg hover:border-blue-500 transition-all duration-200 cursor-pointer"
+              onClick={() => onSelectReport(report.id)}
+            >
+              <div className="flex items-start">
+                <div className="p-3 rounded-lg bg-gray-100 text-gray-600 mr-4">
+                  <Icon size={28} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">{report.title}</h3>
+                  <p className="text-sm text-gray-600">{report.description}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">{report.title}</h3>
-                <p className="text-sm text-gray-600">{report.description}</p>
-              </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

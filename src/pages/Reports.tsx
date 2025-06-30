@@ -7,6 +7,7 @@ import ReportDetails from '../components/reports/ReportDetails';
 import ParticipantReport from '../components/reports/ParticipantReport';
 import PeriodReport from '../components/reports/PeriodReport';
 import ReferentialReport from '../components/reports/ReferentialReport';
+import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
@@ -55,6 +56,8 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
         return <PeriodReport />;
       case 'referential':
         return <ReferentialReport />;
+      case 'block':
+        return <BlockReport />;
       case 'custom':
         return <CustomReport />;
       default:
