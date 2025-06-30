@@ -183,6 +183,7 @@ export async function generatePresentation(
 ): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null }> {
 
   console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
+  console.log('[DEBUG_ORCHESTRATOR] _participants reçus dans generatePresentation:', JSON.stringify(_participants));
 
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
 
@@ -196,6 +197,16 @@ export async function generatePresentation(
       pollTimeLimit: adminSettings.pollTimeLimit,
       pollCountdownStartMode: adminSettings.pollCountdownStartMode,
       pollMultipleResponse: adminSettings.pollMultipleResponse,
+    },
+    // Ajouter les noms des layouts pour les diapositives d'introduction
+    // Ces noms doivent correspondre aux noms de fichiers de layout (sans .xml) dans le template PPTX
+    // ou aux noms des layouts tels que définis dans le PPTX.
+    // Par exemple, si vous avez un layout nommé "Titre Session.xml" dans ppt/slideLayouts/
+    // alors titleLayoutName devrait être "Titre Session" ou "Titre Session.xml".
+    introSlideLayouts: {
+      titleLayoutName: "Title Slide Layout",
+      participantsLayoutName: "Participants Slide Layout",
+      // instructionsLayoutName: "Instructions Slide Layout" // Supprimé car la diapositive est dans le modèle
     }
   };
 
@@ -221,12 +232,23 @@ export async function generatePresentation(
       date: sessionInfo.date,
     };
 
+    // Mapper les participants de l'orchestrateur (avec nom, prenom)
+    // vers le type ParticipantForGenerator attendu par val17PptxGenerator
+    // (qui a été aligné pour utiliser nom, prenom également, donc le mapping est direct)
+    const participantsForGenerator = _participants.map(p => ({
+      idBoitier: p.idBoitier, // S'assurer que ParticipantForGenerator a ce champ si nécessaire, sinon l'omettre
+      nom: p.nom,
+      prenom: p.prenom,
+      organization: p.organization,
+      identificationCode: p.identificationCode
+    }));
+
     const generatedData = await generatePPTXVal17(
       templateFileFromUser,
       transformedQuestions,
       generationOptions,
       val17SessionInfo,
-      _participants // _participants ici sont les FormParticipant, generatePPTXVal17 les utilise pour l'instant
+      participantsForGenerator // Utiliser les participants mappés
     );
 
     // Correction: Utiliser generatedData au lieu de generationResult
