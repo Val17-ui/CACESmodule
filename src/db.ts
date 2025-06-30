@@ -1,4 +1,4 @@
-import Dexie, { Table } from "dexie";
+import Dexie, { Table } from 'dexie';
 // Importer les types depuis src/types/index.ts
 import {
   CACESReferential,
@@ -7,16 +7,16 @@ import {
   SelectedBlock, // Utilisé par Session
   SessionResult,
   // Question // L'interface Question de types/index.ts décrit la structure originale.
-  // Pour Dexie, nous utilisons QuestionWithId ci-dessous.
+             // Pour Dexie, nous utilisons QuestionWithId ci-dessous.
   // CACESReferential a été ajouté ici car il est utilisé dans l'interface BlockUsage plus bas.
-} from "./types";
+} from './types';
 
 // L'interface QuestionWithId est spécifique à Dexie pour gérer l'id auto-incrémenté.
 // Elle est similaire à l'interface Question mais id est number?
 export interface QuestionWithId {
   id?: number; // Auto-incremented primary key
   text: string;
-  type: "multiple-choice" | "true-false"; // Ajuster si QuestionType enum est préféré ici
+  type: 'multiple-choice' | 'true-false'; // Ajuster si QuestionType enum est préféré ici
   options: string[];
   correctAnswer: string;
   timeLimit?: number;
@@ -39,51 +39,38 @@ export class MySubClassedDexie extends Dexie {
   sessionResults!: Table<SessionResult, number>; // Nouvelle table pour les résultats de session
 
   constructor() {
-    super("myDatabase");
+    super('myDatabase');
     this.version(1).stores({
       // Schéma existant pour la table questions (sans slideGuid)
-      questions:
-        "++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options",
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options'
     });
 
     this.version(2).stores({
       // Schéma de la v1 reconduit pour questions
-      questions:
-        "++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, *options",
-      sessions:
-        "++id, nomSession, dateSession, referentiel, createdAt, location",
-      sessionResults:
-        "++id, sessionId, questionId, participantIdBoitier, timestamp",
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
 
     // Nouvelle version pour ajouter slideGuid à questions
     this.version(3).stores({
-      questions:
-        "++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options",
-      sessions:
-        "++id, nomSession, dateSession, referentiel, createdAt, location",
-      sessionResults:
-        "++id, sessionId, questionId, participantIdBoitier, timestamp",
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
 
     // Nouvelle version pour ajouter questionMappings à sessions
     this.version(4).stores({
-      questions:
-        "++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options",
-      sessions:
-        "++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings",
-      sessionResults:
-        "++id, sessionId, questionId, participantIdBoitier, timestamp",
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
 
     // Nouvelle version pour ajouter pointsObtained à sessionResults et notes à sessions
     this.version(5).stores({
-      questions:
-        "++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options",
-      sessions:
-        "++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes", // Ajout de notes
-      sessionResults:
-        "++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp",
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes', // Ajout de notes
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp'
     });
     // Note: Dexie gère les migrations additives.
     // Les sessionResults existants auront pointsObtained: undefined.
@@ -94,9 +81,7 @@ export class MySubClassedDexie extends Dexie {
 export const db = new MySubClassedDexie();
 
 // --- Fonctions CRUD pour Questions (existantes) ---
-export const addQuestion = async (
-  question: QuestionWithId
-): Promise<number | undefined> => {
+export const addQuestion = async (question: QuestionWithId): Promise<number | undefined> => {
   try {
     const id = await db.questions.add(question);
     return id;
@@ -124,20 +109,80 @@ export interface BlockUsage {
 }
 
 /**
- * Calcule le nombre de fois où chaque bloc a été utilisé dans les sessions terminées.
+ * Calcule le nombre de fois où chaque bloc a été utilisé dans les sessions terminées,
+ * avec un filtre optionnel sur la période.
+ * @param startDate - Date de début optionnelle (string ISO ou objet Date).
+ * @param endDate - Date de fin optionnelle (string ISO ou objet Date).
  */
-export const calculateBlockUsage = async (): Promise<BlockUsage[]> => {
+export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
   const usageMap = new Map<string, BlockUsage>();
 
   try {
-    const completedSessions = await db.sessions
-      .where("status")
-      .equals("completed")
-      .toArray();
+    let query = db.sessions.where('status').equals('completed');
 
-    for (const session of completedSessions) {
+    // Gestion des dates pour le filtre de période
+    // Dexie gère bien les objets Date pour les comparaisons.
+    // Assurons-nous que les strings sont converties en Date si nécessaire.
+    // Pour Dexie, il est souvent préférable de stocker les dates comme objets Date ou timestamp (number).
+    // Si dateSession est un string ISO, il faudra peut-être ajuster la requête ou la conversion.
+    // En supposant que dateSession est stocké de manière comparable (ex: timestamp ou objet Date).
+    // Si dateSession est un string ISO 'YYYY-MM-DDTHH:mm:ss.sssZ' ou 'YYYY-MM-DD'
+    // Dexie peut les comparer lexicographiquement, mais c'est plus sûr avec des objets Date ou timestamps.
+    // Pour cet exemple, on va supposer que dateSession est indexé et comparable.
+
+    let sessionsQuery = db.sessions.where('status').equals('completed');
+
+    if (startDate) {
+      const start = startDate instanceof Date ? startDate : new Date(startDate);
+      // Si dateSession est un string, il faut s'assurer que la comparaison est correcte.
+      // Pour les index Dexie, si 'dateSession' est un string, between() fonctionnera lexicographiquement.
+      // Si 'dateSession' est un nombre (timestamp), c'est direct.
+      // Pour être robuste, il faudrait connaître le type exact de session.dateSession.
+      // Supposons ici que c'est compatible avec une comparaison directe ou que l'index gère bien les strings ISO.
+      // sessionsQuery = sessionsQuery.filter(session => session.dateSession >= start.toISOString());
+      // Dexie préfère .aboveOrEqual() pour les index.
+      // Assumons que dateSession est indexé.
+    }
+
+    if (endDate) {
+      const end = endDate instanceof Date ? endDate : new Date(endDate);
+      // sessionsQuery = sessionsQuery.filter(session => session.dateSession <= end.toISOString());
+      // Dexie préfère .belowOrEqual() pour les index.
+    }
+
+    // Refonte du filtrage par date pour Dexie
+    // Si dateSession est indexé, on peut utiliser .between() ou .above()/.below()
+    // Exemple: db.sessions.where('dateSession').aboveOrEqual(startDate).and(s => s.dateSession <= endDate) ...
+    // Pour l'instant, on filtre après récupération si l'indexation directe par date n'est pas simple.
+    // Ou, si on a un index sur dateSession:
+    // Exemple: this.version(6).stores({ sessions: '..., dateSession, ...'});
+
+    const completedSessions = await sessionsQuery.toArray();
+    let filteredSessions = completedSessions;
+
+    if (startDate) {
+      const start = startDate instanceof Date ? startDate : new Date(startDate);
+      // Normaliser l'heure à 00:00:00 pour startDate pour inclure toute la journée
+      start.setHours(0, 0, 0, 0);
+      filteredSessions = filteredSessions.filter(session => {
+        const sessionDate = new Date(session.dateSession); // Assumant que dateSession peut être parsé en Date
+        return sessionDate >= start;
+      });
+    }
+
+    if (endDate) {
+      const end = endDate instanceof Date ? endDate : new Date(endDate);
+      // Normaliser l'heure à 23:59:59 pour endDate pour inclure toute la journée
+      end.setHours(23, 59, 59, 999);
+      filteredSessions = filteredSessions.filter(session => {
+        const sessionDate = new Date(session.dateSession); // Assumant que dateSession peut être parsé en Date
+        return sessionDate <= end;
+      });
+    }
+
+    for (const session of filteredSessions) { // Utiliser filteredSessions ici
       if (session.selectionBlocs && session.selectionBlocs.length > 0) {
-        const sessionReferentiel = session.referentiel; // Référentiel de la session
+        const sessionReferentiel = session.referentiel;
 
         for (const bloc of session.selectionBlocs) {
           const key = `${sessionReferentiel}-${bloc.theme}-${bloc.blockId}`;
@@ -163,9 +208,7 @@ export const calculateBlockUsage = async (): Promise<BlockUsage[]> => {
   }
 };
 
-export const getQuestionById = async (
-  id: number
-): Promise<QuestionWithId | undefined> => {
+export const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> => {
   try {
     return await db.questions.get(id);
   } catch (error) {
@@ -173,10 +216,7 @@ export const getQuestionById = async (
   }
 };
 
-export const updateQuestion = async (
-  id: number,
-  updates: Partial<QuestionWithId>
-): Promise<number | undefined> => {
+export const updateQuestion = async (id: number, updates: Partial<QuestionWithId>): Promise<number | undefined> => {
   try {
     await db.questions.update(id, updates);
     return id;
@@ -194,9 +234,7 @@ export const deleteQuestion = async (id: number): Promise<void> => {
 };
 
 // --- Nouvelles fonctions CRUD pour Sessions ---
-export const addSession = async (
-  session: Session
-): Promise<number | undefined> => {
+export const addSession = async (session: Session): Promise<number | undefined> => {
   try {
     // Assurer que les dates sont stockées en string si nécessaire (Dexie les gère bien en Date object aussi)
     // session.createdAt = new Date().toISOString();
@@ -217,9 +255,7 @@ export const getAllSessions = async (): Promise<Session[]> => {
   }
 };
 
-export const getSessionById = async (
-  id: number
-): Promise<Session | undefined> => {
+export const getSessionById = async (id: number): Promise<Session | undefined> => {
   try {
     return await db.sessions.get(id);
   } catch (error) {
@@ -227,10 +263,7 @@ export const getSessionById = async (
   }
 };
 
-export const updateSession = async (
-  id: number,
-  updates: Partial<Session>
-): Promise<number | undefined> => {
+export const updateSession = async (id: number, updates: Partial<Session>): Promise<number | undefined> => {
   try {
     // updates.updatedAt = new Date().toISOString();
     await db.sessions.update(id, updates);
@@ -244,16 +277,14 @@ export const deleteSession = async (id: number): Promise<void> => {
   try {
     await db.sessions.delete(id);
     // Potentiellement, supprimer aussi les sessionResults associés
-    await db.sessionResults.where("sessionId").equals(id).delete();
+    await db.sessionResults.where('sessionId').equals(id).delete();
   } catch (error) {
     console.error(`Error deleting session with id ${id}: `, error);
   }
 };
 
 // --- Nouvelles fonctions CRUD pour SessionResults ---
-export const addSessionResult = async (
-  result: SessionResult
-): Promise<number | undefined> => {
+export const addSessionResult = async (result: SessionResult): Promise<number | undefined> => {
   try {
     const id = await db.sessionResults.add(result);
     return id;
@@ -262,36 +293,25 @@ export const addSessionResult = async (
   }
 };
 
-export const addBulkSessionResults = async (
-  results: SessionResult[]
-): Promise<number[] | undefined> => {
+export const addBulkSessionResults = async (results: SessionResult[]): Promise<number[] | undefined> => {
   try {
     const ids = await db.sessionResults.bulkAdd(results, { allKeys: true });
     return ids as number[];
   } catch (error) {
     console.error("Error adding bulk session results: ", error);
   }
-};
+}
 
-export const getResultsForSession = async (
-  sessionId: number
-): Promise<SessionResult[]> => {
+export const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
   try {
-    return await db.sessionResults
-      .where("sessionId")
-      .equals(sessionId)
-      .toArray();
+    return await db.sessionResults.where('sessionId').equals(sessionId).toArray();
   } catch (error) {
     console.error(`Error getting results for session ${sessionId}: `, error);
     return [];
   }
 };
 
-export const getResultBySessionAndQuestion = async (
-  sessionId: number,
-  questionId: number,
-  participantIdBoitier: string
-): Promise<SessionResult | undefined> => {
+export const getResultBySessionAndQuestion = async (sessionId: number, questionId: number, participantIdBoitier: string): Promise<SessionResult | undefined> => {
   try {
     return await db.sessionResults
       .where({ sessionId, questionId, participantIdBoitier })
@@ -301,10 +321,7 @@ export const getResultBySessionAndQuestion = async (
   }
 };
 
-export const updateSessionResult = async (
-  id: number,
-  updates: Partial<SessionResult>
-): Promise<number | undefined> => {
+export const updateSessionResult = async (id: number, updates: Partial<SessionResult>): Promise<number | undefined> => {
   try {
     await db.sessionResults.update(id, updates);
     return id;
@@ -313,20 +330,16 @@ export const updateSessionResult = async (
   }
 };
 
-export const deleteResultsForSession = async (
-  sessionId: number
-): Promise<void> => {
+export const deleteResultsForSession = async (sessionId: number): Promise<void> => {
   try {
-    await db.sessionResults.where("sessionId").equals(sessionId).delete();
+    await db.sessionResults.where('sessionId').equals(sessionId).delete();
   } catch (error) {
     console.error(`Error deleting results for session ${sessionId}: `, error);
   }
 };
 
 // Récupérer les questions spécifiques basées sur une sélection de blocs (pour une session)
-export const getQuestionsForSessionBlocks = async (
-  selectionBlocs: { theme: string; blockId: string }[]
-): Promise<QuestionWithId[]> => {
+export const getQuestionsForSessionBlocks = async (selectionBlocs: { theme: string; blockId: string }[]): Promise<QuestionWithId[]> => {
   if (!selectionBlocs || selectionBlocs.length === 0) {
     return [];
   }
@@ -357,10 +370,7 @@ export const getQuestionsForSessionBlocks = async (
 
       // Placeholder: Récupère toutes les questions pour le thème principal pour l'instant.
       // La logique de "bloc" spécifique doit être affinée.
-      const questionsFromDb = await db.questions
-        .where("theme")
-        .startsWith(bloc.theme)
-        .toArray();
+      const questionsFromDb = await db.questions.where('theme').startsWith(bloc.theme).toArray();
       // Il faudrait ensuite filtrer ces questions pour celles appartenant spécifiquement à `bloc.blockId`.
       // Cela suppose que `blockId` est encodé quelque part dans les données de la question,
       // ou que la structure de `theme` dans `QuestionWithId` est composite (ex: `securite_A`).
@@ -368,22 +378,17 @@ export const getQuestionsForSessionBlocks = async (
 
       // Pour l'instant, on va ajouter toutes les questions du thème principal,
       // en sachant que c'est une simplification.
-      questionsFromDb.forEach((q) => {
+      questionsFromDb.forEach(q => {
         // Éviter les doublons si une question pouvait appartenir à plusieurs "blocs" logiques via ce filtre simple
-        if (!allMatchingQuestions.some((mq) => mq.id === q.id)) {
+        if (!allMatchingQuestions.some(mq => mq.id === q.id)) {
           allMatchingQuestions.push(q);
         }
       });
     }
-    console.log(
-      `Récupéré ${allMatchingQuestions.length} questions pour les blocs de la session.`
-    );
+    console.log(`Récupéré ${allMatchingQuestions.length} questions pour les blocs de la session.`);
     return allMatchingQuestions;
   } catch (error) {
-    console.error(
-      "Erreur lors de la récupération des questions pour les blocs de session:",
-      error
-    );
+    console.error("Erreur lors de la récupération des questions pour les blocs de session:", error);
     return [];
   }
 };
