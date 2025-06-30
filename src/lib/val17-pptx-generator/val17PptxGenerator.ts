@@ -503,7 +503,7 @@ function createIntroParticipantsSlideXml(
   const slideHeightEMU = 6858000;
 
   // Dimensions et position du tableau
-  const tableWidthRatio = 0.90; // Utiliser 90% de la largeur de la diapositive
+  const tableWidthRatio = 0.85; // Utiliser 85% de la largeur de la diapositive
   const tableCx = Math.round(slideWidthEMU * tableWidthRatio);
 
   const rowHeightEMU = 370840; // Hauteur d'une ligne (en-tête ou donnée) ~0.4 pouces
@@ -535,16 +535,16 @@ function createIntroParticipantsSlideXml(
   const colWidths = [];
   const numCols = hasOrganizationData ? 5 : 4;
   if (numCols === 5) {
-    colWidths.push(Math.round(tableCx * 0.08)); // N°
-    colWidths.push(Math.round(tableCx * 0.23)); // ID Boîtier
-    colWidths.push(Math.round(tableCx * 0.23)); // Nom
-    colWidths.push(Math.round(tableCx * 0.23)); // Prénom
-    colWidths.push(Math.round(tableCx * 0.23)); // Organisation
+    colWidths.push(Math.round(tableCx * 0.06)); // N°
+    colWidths.push(Math.round(tableCx * 0.20)); // ID Boîtier
+    colWidths.push(Math.round(tableCx * 0.27)); // Nom
+    colWidths.push(Math.round(tableCx * 0.27)); // Prénom
+    colWidths.push(Math.round(tableCx * 0.20)); // Organisation
   } else {
-    colWidths.push(Math.round(tableCx * 0.10)); // N°
-    colWidths.push(Math.round(tableCx * 0.28)); // ID Boîtier
-    colWidths.push(Math.round(tableCx * 0.31)); // Nom
-    colWidths.push(Math.round(tableCx * 0.31)); // Prénom
+    colWidths.push(Math.round(tableCx * 0.08)); // N°
+    colWidths.push(Math.round(tableCx * 0.25)); // ID Boîtier
+    colWidths.push(Math.round(tableCx * 0.335)); // Nom
+    colWidths.push(Math.round(tableCx * 0.335)); // Prénom
   }
   // S'assurer que la somme des largeurs de colonnes = tableCx
   let sumWidths = colWidths.reduce((a, b) => a + b, 0);
