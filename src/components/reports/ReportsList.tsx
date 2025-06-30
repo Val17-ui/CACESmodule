@@ -36,17 +36,17 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
         <Card key={session.id} className="flex flex-col justify-between hover:shadow-md transition-shadow duration-200">
           <div>
             <div className="flex items-start justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800">{session.name}</h3>
-              <Badge variant="primary">{session.referential}</Badge>
+              <h3 className="text-lg font-bold text-gray-800">{session.nomSession}</h3>
+              <Badge variant="primary">{session.referentiel}</Badge>
             </div>
             <div className="space-y-3 text-sm text-gray-600">
               <div className="flex items-center">
                 <Calendar size={16} className="mr-2 text-gray-400" />
-                <span>{formatDate(session.date)}</span>
+                <span>{formatDate(session.dateSession)}</span>
               </div>
               <div className="flex items-center">
                 <Users size={16} className="mr-2 text-gray-400" />
-                <span>{session.participantsCount} participants</span>
+                <span>{session.participants.length} participants</span>
               </div>
               <div className="flex items-center">
                 <CheckCircle size={16} className="mr-2 text-green-500" />
@@ -59,14 +59,14 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
               variant="primary"
               size="sm"
               icon={<Eye size={16} />}
-              onClick={() => onViewReport(session.id)}
+              onClick={() => onViewReport(String(session.id))}
             >
               Consulter
             </Button>
-            <Button variant="outline" size="icon" title="Exporter en PDF">
+            <Button variant="outline" size="sm" title="Exporter en PDF">
               <Download size={16} />
             </Button>
-            <Button variant="outline" size="icon" title="Imprimer">
+            <Button variant="outline" size="sm" title="Imprimer">
               <Printer size={16} />
             </Button>
           </div>
