@@ -554,6 +554,7 @@ function createIntroParticipantsSlideXml(
 
   // Lignes de données pour chaque participant
   participants.forEach((participant, index) => {
+    console.log(`[DEBUG_PARTICIPANT_DATA_IN_TABLE_LOOP] Index: ${index}, ID Boîtier: ${participant.idBoitier}, Nom: ${participant.nom}, Prénom: ${participant.prenom}, Org: ${participant.organization}`);
     tableXml += `<a:tr h="370840">`;
     // N°
     tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
