@@ -14,7 +14,7 @@ type ReportItem = {
 
 const reportTypes: ReportItem[] = [
   { id: 'session', title: 'Rapport par session', description: 'Consulter les résultats détaillés pour une session spécifique.', icon: FileText },
-  { id: 'participant', title: 'Rapport par participant', description: 'Suivre la performance et l'historique d'un participant.', icon: User },
+  { id: 'participant', title: 'Rapport par participant', description: `Suivre la performance et l'historique d'un participant.`, icon: User },
   { id: 'period', title: 'Rapport par période', description: 'Analyser les tendances sur une plage de dates définie.', icon: Calendar },
   { id: 'referential', title: 'Rapport par référentiel', description: 'Comparer les statistiques entre différents référentiels CACES.', icon: Layers },
   { id: 'block', title: 'Rapport par bloc de questions', description: 'Évaluer la pertinence et la difficulté des blocs de questions.', icon: BarChartHorizontal },
