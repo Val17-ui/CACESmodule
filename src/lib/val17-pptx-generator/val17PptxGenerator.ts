@@ -1012,79 +1012,98 @@ function updatePresentationRelsWithMappings(
   const oldToNewRIdMap: { [oldRId: string]: string } = {};
   let rIdCounter = 1;
 
-  const slideType =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
-  const slideMasterType =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
+  const slideType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+  const slideMasterType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 
   // 1. SlideMaster is rId1
-  const originalSlideMaster = existingRels.find(
-    (r) => r.type === slideMasterType
-  );
+  const originalSlideMaster = existingRels.find(r => r.type === slideMasterType);
   if (originalSlideMaster) {
     finalRelsOutput.push({ ...originalSlideMaster, rId: "rId1" });
     oldToNewRIdMap[originalSlideMaster.rId] = "rId1";
   } else {
     console.warn("No Slide Master found. Adding a default as rId1.");
-    finalRelsOutput.push({
-      rId: "rId1",
-      type: slideMasterType,
-      target: "slideMasters/slideMaster1.xml",
-      originalRId: "rId1_placeholder",
-    });
+    finalRelsOutput.push({ rId: "rId1", type: slideMasterType, target: "slideMasters/slideMaster1.xml", originalRId: "rId1_placeholder" });
   }
-  rIdCounter = 2; // Next rIds start from 2
+  rIdCounter = 2;
 
-  // 2. All Slides (template -> intro -> new questions)
-  // Template slides
-  for (let i = 1; i <= initialExistingSlideCount; i++) {
-    const slideTarget = `slides/slide${i}.xml`;
-    const originalRel = existingRels.find(
-      (m) => m.target === slideTarget && m.type === slideType
-    );
+  // 2. Construire la liste des slides dans le NOUVEL ordre souhaité: Intro -> Template -> Questions
+
+  // Intro slides (Titre, Participants)
+  // Les `detail.slideNumber` dans introSlideDetails sont les numéros *finaux* des diapos d'intro.
+  // Pour la réorganisation, on a besoin de savoir combien il y en a.
+  introSlideDetails.forEach((detail, index) => {
     const newRId = `rId${rIdCounter++}`;
+    // Le slideNumber pour slideRIdMappings doit être l'ordre final dans la présentation.
+    // Ici, les diapos d'intro sont les premières.
+    const finalSlideOrderIndex = index + 1;
+    finalRelsOutput.push({
+      rId: newRId,
+      type: slideType,
+      target: `slides/slide${detail.slideNumber}.xml`, // detail.slideNumber est le numéro de fichier (ex: slide2.xml si template a 1 slide)
+    });
+    slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
+  });
+
+  // Template slides
+  // Les slides du template commencent après les slides d'intro dans l'ordre final.
+  for (let i = 0; i < initialExistingSlideCount; i++) {
+    const templateSlideFileNumber = i + 1; // Les fichiers du template sont slide1.xml, slide2.xml ...
+    const slideTarget = `slides/slide${templateSlideFileNumber}.xml`;
+    const originalRel = existingRels.find(m => m.target === slideTarget && m.type === slideType);
+    const newRId = `rId${rIdCounter++}`;
+    const finalSlideOrderIndex = introSlideDetails.length + 1 + i;
+
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
       target: slideTarget,
       originalRId: originalRel?.rId,
     });
-    slideRIdMappings.push({ slideNumber: i, rId: newRId });
+    slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
     if (originalRel) oldToNewRIdMap[originalRel.rId] = newRId;
   }
-  // Intro slides
-  introSlideDetails.forEach((detail) => {
-    const newRId = `rId${rIdCounter++}`;
-    finalRelsOutput.push({
-      rId: newRId,
-      type: slideType,
-      target: `slides/slide${detail.slideNumber}.xml`,
-    });
-    slideRIdMappings.push({ slideNumber: detail.slideNumber, rId: newRId });
-  });
+
   // OMBEA question slides
+  // Elles viennent après les diapos d'intro et les diapos du template.
+  // Leurs `slide${slideNum}.xml` sont déjà numérotés correctement par rapport à leur position de création.
   for (let i = 0; i < newOmbeaQuestionCount; i++) {
-    const slideNum =
-      initialExistingSlideCount + introSlideDetails.length + 1 + i;
+    // slideNum est le numéro de fichier de la diapo de question,
+    // calculé comme initialExistingSlideCount + introSlideDetails.length + 1 + i
+    // lors de la création de la diapo de question.
+    const questionSlideFileNumber = initialExistingSlideCount + introSlideDetails.length + 1 + i;
     const newRId = `rId${rIdCounter++}`;
+    const finalSlideOrderIndex = introSlideDetails.length + initialExistingSlideCount + 1 + i;
+
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
-      target: `slides/slide${slideNum}.xml`,
+      target: `slides/slide${questionSlideFileNumber}.xml`,
     });
-    slideRIdMappings.push({ slideNumber: slideNum, rId: newRId });
+    slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   }
 
-  // 3. All other existing relationships (theme, props, tags, masters other than slideMaster, etc.)
+  // 3. All other existing relationships
   existingRels.forEach((origRel) => {
     if (origRel.type !== slideMasterType && origRel.type !== slideType) {
-      const newRId = `rId${rIdCounter++}`;
-      finalRelsOutput.push({ ...origRel, rId: newRId });
-      oldToNewRIdMap[origRel.rId] = newRId;
+      // Si le rId original a déjà été mappé (parce que c'était un slideMaster par ex.), on ne le remappe pas.
+      if (!oldToNewRIdMap[origRel.rId]) {
+        const newRId = `rId${rIdCounter++}`;
+        finalRelsOutput.push({ ...origRel, rId: newRId });
+        oldToNewRIdMap[origRel.rId] = newRId;
+      } else {
+        // Si le rId original est déjà dans oldToNewRIdMap, on le réutilise.
+        // Cela peut arriver si un rId est partagé ou si on a déjà traité ce type de relation.
+        // Pour les types non-slide et non-slideMaster, on s'attend à ce qu'ils soient uniques.
+        // Mais pour être sûr, on récupère le rId déjà assigné.
+        finalRelsOutput.push({ ...origRel, rId: oldToNewRIdMap[origRel.rId] });
+      }
     }
   });
 
+  // S'assurer que slideRIdMappings est trié par le numéro de diapositive final pour rebuildPresentationXml
   slideRIdMappings.sort((a, b) => a.slideNumber - b.slideNumber);
+  console.log("[DEBUG_ORDER] slideRIdMappings final:", JSON.stringify(slideRIdMappings));
+
 
   let updatedContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
   // Sort finalRels by the numeric part of rId for a consistent output
