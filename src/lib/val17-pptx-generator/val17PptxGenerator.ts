@@ -747,15 +747,16 @@ async function findLayoutByCSldName(
   console.log(`[DEBUG] Fichiers .xml trouvés dans ppt/slideLayouts/: ${files.map(f => f.name).join(', ')}`);
 
   for (const fileEntry of files) {
-    const actualFileName = fileEntry.name; // ex: "slideLayout1.xml"
-    console.log(`[DEBUG] Examen du fichier layout: ${actualFileName}`);
+    const actualFileName = fileEntry.name;
+    console.log(`[DEBUG_STEP_1] Examen du fichier layout: ${actualFileName}`);
     const layoutFile = zip.file(`ppt/slideLayouts/${actualFileName}`);
 
     if (layoutFile) {
+      console.log(`[DEBUG_STEP_2] Objet layoutFile trouvé pour ${actualFileName}`);
       try {
-        console.log(`[DEBUG] Tentative de lecture de ${actualFileName}`); // LOG AJOUTÉ AVANT LECTURE
+        console.log(`[DEBUG_STEP_3] Tentative de lecture async de ${actualFileName}`);
         const content = await layoutFile.async("string");
-        console.log(`[DEBUG] Lu contenu pour ${actualFileName}, longueur: ${content.length}`); // LOG AJOUTÉ APRÈS LECTURE
+        console.log(`[DEBUG_STEP_4] Contenu lu pour ${actualFileName}, longueur: ${content.length}. Début: ${content.substring(0,100)}`);
         const nameMatch = content.match(/<p:cSld[^>]*name="([^"]+)"/);
 
         if (nameMatch && nameMatch[1]) {
@@ -798,9 +799,15 @@ async function findLayoutByCSldName(
         } else {
           console.log(`[DEBUG] Layout: ${actualFileName}, pas d'attribut name trouvé dans <p:cSld>.`);
         }
-      } catch (e) {
-        console.warn(`[DEBUG] Erreur lors de la lecture ou du parsing du layout ${actualFileName}:`, e);
+      } catch (error) {
+        // Log d'erreur plus détaillé
+        console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${actualFileName}:`, error);
+        if (error instanceof Error) {
+          console.error(`[DEBUG_ERREUR_STACK] Stack: ${error.stack}`);
+        }
       }
+    } else {
+      console.warn(`[DEBUG_WARN] layoutFile est null pour ${actualFileName}, ne devrait pas arriver.`);
     }
   }
 
