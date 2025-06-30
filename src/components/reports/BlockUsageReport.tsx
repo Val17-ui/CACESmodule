@@ -3,10 +3,10 @@ import { BlockUsage, calculateBlockUsage } from '../../db'; // Ajuster le chemin
 import { CACESReferential } from '../../types'; // Ajuster le chemin si besoin
 
 // Importer les composants UI réutilisables (supposons qu'ils existent)
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
-import { Input } from '../ui/Input';
-import { Button } from '../ui/Button';
+import Card, { CardContent, CardHeader, CardTitle } from '../ui/Card';
+import Select, { SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
+import Input from '../ui/Input';
+import Button from '../ui/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { ArrowUpDown } from 'lucide-react';
 

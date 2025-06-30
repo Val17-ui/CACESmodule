@@ -88,14 +88,14 @@ const TableHead: React.FC<TableHeadProps> = ({ children, className = '', onClick
   );
 };
 
-type TableCellProps = {
+type TableCellProps = React.TdHTMLAttributes<HTMLTableCellElement> & {
   children: React.ReactNode;
   className?: string;
 };
 
-const TableCell: React.FC<TableCellProps> = ({ children, className = '' }) => {
+const TableCell: React.FC<TableCellProps> = ({ children, className = '', ...props }) => {
   return (
-    <td className={`p-4 align-middle [&:has([role=checkbox])]:pr-0 ${className}`}>
+    <td className={`p-4 align-middle [&:has([role=checkbox])]:pr-0 ${className}`} {...props}>
       {children}
     </td>
   );
