@@ -9,6 +9,7 @@ type ButtonProps = {
   onClick?: () => void;
   disabled?: boolean;
   type?: 'button' | 'submit' | 'reset';
+  title?: string;
 };
 
 const Button: React.FC<ButtonProps> = ({
@@ -49,6 +50,7 @@ const Button: React.FC<ButtonProps> = ({
       className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${disabledStyles} ${className}`}
       onClick={onClick}
       disabled={disabled}
+      title={title}
     >
       {/* Add margin to icon only if children are present */}
       {icon && <span className={children ? "mr-2" : ""}>{icon}</span>}

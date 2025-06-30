@@ -20,7 +20,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
   };
   
   // Calculate stats
-  const passedCount = participants.filter(p => p.passed).length;
+  const passedCount = participants.filter(p => p.reussite).length;
   const passRate = (passedCount / participants.length) * 100;
   const averageScore = participants.reduce((sum, p) => sum + (p.score || 0), 0) / participants.length;
 
@@ -30,21 +30,21 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              {session.name}
+              {session.nomSession}
             </h3>
             
             <div className="space-y-3">
               <div className="flex items-center text-sm">
                 <Calendar size={18} className="text-gray-400 mr-2" />
-                <span>Date : {formatDate(session.date)}</span>
+                <span>Date : {formatDate(session.dateSession)}</span>
               </div>
               <div className="flex items-center text-sm">
-                <Badge variant="primary" className="mr-2">{session.referential}</Badge>
+                <Badge variant="primary" className="mr-2">{session.referentiel}</Badge>
                 <span>Référentiel CACES</span>
               </div>
               <div className="flex items-center text-sm">
                 <UserCheck size={18} className="text-gray-400 mr-2" />
-                <span>Participants : {session.participantsCount}</span>
+                <span>Participants : {session.participants.length}</span>
               </div>
             </div>
           </div>
@@ -108,31 +108,28 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {participants.map((participant) => (
-                <tr key={participant.id} className="hover:bg-gray-50">
+                <tr key={participant.idBoitier} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
-                      {participant.lastName} {participant.firstName}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {participant.email}
+                      {participant.nom} {participant.prenom}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {participant.company}
+                    {/* Entreprise non disponible dans l'interface Participant */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {participant.score !== undefined ? (
                       <div className="flex items-center">
                         <div 
                           className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${
-                            participant.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            participant.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                           }`}
                         >
                           {participant.score}
                         </div>
                         <div className="w-24 bg-gray-200 rounded-full h-2">
                           <div 
-                            className={`h-2 rounded-full ${participant.passed ? 'bg-green-600' : 'bg-red-600'}`}
+                            className={`h-2 rounded-full ${participant.reussite ? 'bg-green-600' : 'bg-red-600'}`}
                             style={{ width: `${participant.score}%` }}
                           ></div>
                         </div>
@@ -142,19 +139,11 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {participant.hasSigned ? (
-                      <span className="text-green-600 flex items-center">
-                        <CheckCircle size={16} className="mr-1" /> Signé
-                      </span>
-                    ) : (
-                      <span className="text-red-600 flex items-center">
-                        <XCircle size={16} className="mr-1" /> Non signé
-                      </span>
-                    )}
+                    {/* Émargement non disponible dans l'interface Participant */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {participant.passed !== undefined ? (
-                      participant.passed ? (
+                    {participant.reussite !== undefined ? (
+                      participant.reussite ? (
                         <Badge variant="success">Certifié</Badge>
                       ) : (
                         <Badge variant="danger">Ajourné</Badge>
