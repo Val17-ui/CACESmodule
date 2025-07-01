@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions } from '../../db';
-import { Session } from '../../types';
+import { getAllSessions, getAllResults, getAllQuestions } from '../../db';
+import { Session, SessionResult, QuestionWithId } from '../../types';
 import {
   Table,
   TableHeader,
@@ -10,42 +10,50 @@ import {
   TableHead,
   TableCell,
 } from '../ui/Table';
+import { calculateBlockStats } from '../../utils/reportCalculators';
 
 const BlockReport = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [allResults, setAllResults] = useState<SessionResult[]>([]);
+  const [allQuestions, setAllQuestions] = useState<QuestionWithId[]>([]);
 
   useEffect(() => {
-    const fetchSessions = async () => {
-      const allSessions = await getAllSessions();
-      setSessions(allSessions);
+    const fetchData = async () => {
+      const fetchedSessions = await getAllSessions();
+      setSessions(fetchedSessions);
+      const fetchedResults = await getAllResults();
+      setAllResults(fetchedResults);
+      const fetchedQuestions = await getAllQuestions();
+      setAllQuestions(fetchedQuestions);
     };
-    fetchSessions();
+    fetchData();
   }, []);
 
   const statsByBlock = useMemo(() => {
-    const stats = new Map<string, { useCount: number; successRateSum: number }>();
-
+    const uniqueBlocks = new Map<string, { theme: string; blockId: string }>();
     sessions.forEach(session => {
-      if (session.status !== 'completed' || !session.selectionBlocs) return;
-
-      session.selectionBlocs.forEach(block => {
-        const key = `${session.referentiel} - ${block.theme} - ${block.blockId}`;
-        if (!stats.has(key)) {
-          stats.set(key, { useCount: 0, successRateSum: 0 });
+      session.selectionBlocs?.forEach(block => {
+        const key = `${block.theme}-${block.blockId}`;
+        if (!uniqueBlocks.has(key)) {
+          uniqueBlocks.set(key, block);
         }
-        const currentStats = stats.get(key)!;
-        currentStats.useCount++;
-        // TODO: Replace with real success rate for the block
-        currentStats.successRateSum += 75; 
       });
     });
 
-    return Array.from(stats.entries()).map(([block, data]) => ({
-      block,
-      ...data,
-      avgSuccessRate: data.useCount > 0 ? data.successRateSum / data.useCount : 0,
-    }));
-  }, [sessions]);
+    const calculatedStats: { block: string; useCount: number; avgSuccessRate: number; avgScore: number }[] = [];
+
+    uniqueBlocks.forEach(block => {
+      const stats = calculateBlockStats(block, sessions, allResults, allQuestions);
+      calculatedStats.push({
+        block: `${block.theme} - ${block.blockId}`,
+        useCount: stats.usageCount,
+        avgSuccessRate: stats.averageSuccessRate,
+        avgScore: stats.averageScore,
+      });
+    });
+
+    return calculatedStats;
+  }, [sessions, allResults, allQuestions]);
 
   return (
     <Card>
@@ -56,6 +64,7 @@ const BlockReport = () => {
             <TableHead>Bloc</TableHead>
             <TableHead className="text-center">Utilisations</TableHead>
             <TableHead className="text-center">Taux de réussite moyen</TableHead>
+            <TableHead className="text-center">Note moyenne</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -64,6 +73,7 @@ const BlockReport = () => {
               <TableCell className="font-medium">{stat.block}</TableCell>
               <TableCell className="text-center">{stat.useCount}</TableCell>
               <TableCell className="text-center">{stat.avgSuccessRate.toFixed(2)}%</TableCell>
+              <TableCell className="text-center">{stat.avgScore.toFixed(2)}%</TableCell>
             </TableRow>
           ))}
         </TableBody>

@@ -1,21 +1,46 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
 import { Users, CheckCircle, BarChart2, PieChart } from 'lucide-react';
 import { Session } from '../../types';
+import { calculateSessionStats } from '../../utils/reportCalculators';
+import { getResultsForSession, getQuestionsForSessionBlocks } from '../../db';
 
 type GlobalStatsProps = {
   sessions: Session[];
 };
 
 const GlobalStats: React.FC<GlobalStatsProps> = ({ sessions }) => {
+  const [avgSuccessRate, setAvgSuccessRate] = useState(0);
+
   const completedSessions = sessions.filter(s => s.status === 'completed');
+
+  useEffect(() => {
+    const calculateOverallStats = async () => {
+      let totalSuccessRates = 0;
+      let sessionsCounted = 0;
+
+      for (const session of completedSessions) {
+        if (session.id) {
+          const results = await getResultsForSession(session.id);
+          const questions = await getQuestionsForSessionBlocks(session.selectionBlocs || []);
+          const stats = calculateSessionStats(session, results, questions);
+          totalSuccessRates += stats.successRate;
+          sessionsCounted++;
+        }
+      }
+
+      if (sessionsCounted > 0) {
+        setAvgSuccessRate(totalSuccessRates / sessionsCounted);
+      } else {
+        setAvgSuccessRate(0);
+      }
+    };
+
+    calculateOverallStats();
+  }, [sessions]);
 
   const totalSessions = completedSessions.length;
   const totalParticipants = completedSessions.reduce((acc, session) => acc + (session.participants?.length || 0), 0);
-  
-  // TODO: Calculate real average success rate
-  const avgSuccessRate = 81;
-
   const activeReferentials = new Set(completedSessions.map(s => s.referentiel)).size;
 
   return (
@@ -39,7 +64,7 @@ const GlobalStats: React.FC<GlobalStatsProps> = ({ sessions }) => {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Taux de réussite moyen</p>
-              <p className="text-2xl font-semibold text-gray-900">{avgSuccessRate}%</p>
+              <p className="text-2xl font-semibold text-gray-900">{avgSuccessRate.toFixed(0)}%</p>
             </div>
           </div>
         </Card>

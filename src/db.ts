@@ -302,6 +302,15 @@ export const addBulkSessionResults = async (results: SessionResult[]): Promise<n
   }
 }
 
+export const getAllResults = async (): Promise<SessionResult[]> => {
+  try {
+    return await db.sessionResults.toArray();
+  } catch (error) {
+    console.error("Error getting all session results: ", error);
+    return [];
+  }
+};
+
 export const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
   try {
     return await db.sessionResults.where('sessionId').equals(sessionId).toArray();

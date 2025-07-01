@@ -1,11 +1,13 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import { AlertTriangle, BarChart, UserCheck, Calendar, Download } from 'lucide-react';
-import { Session, Participant } from '../../types';
+import { Session, Participant, SessionResult, QuestionWithId } from '../../types';
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { getResultsForSession, getQuestionsForSessionBlocks, getAllSessions, getAllResults, getAllQuestions } from '../../db';
+import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess, calculateQuestionSuccessRate } from '../../utils/reportCalculators';
 
 type ReportDetailsProps = {
   session: Session;
@@ -14,6 +16,31 @@ type ReportDetailsProps = {
 
 const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) => {
   const reportRef = useRef<HTMLDivElement>(null);
+  const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
+  const [sessionQuestions, setSessionQuestions] = useState<QuestionWithId[]>([]);
+  const [allSessions, setAllSessions] = useState<Session[]>([]);
+  const [allResults, setAllResults] = useState<SessionResult[]>([]);
+  const [allQuestions, setAllQuestions] = useState<QuestionWithId[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (session.id) {
+        const results = await getResultsForSession(session.id);
+        setSessionResults(results);
+        if(session.selectionBlocs) {
+          const questions = await getQuestionsForSessionBlocks(session.selectionBlocs);
+          setSessionQuestions(questions);
+        }
+      }
+      const fetchedAllSessions = await getAllSessions();
+      setAllSessions(fetchedAllSessions);
+      const fetchedAllResults = await getAllResults();
+      setAllResults(fetchedAllResults);
+      const fetchedAllQuestions = await getAllQuestions();
+      setAllQuestions(fetchedAllQuestions);
+    };
+    fetchData();
+  }, [session]);
 
   const handleExportPDF = () => {
     if (reportRef.current) {
@@ -29,24 +56,28 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
   };
 
   const formatDate = (dateString: string | undefined | null): string => {
-    if (!dateString) {
-      return 'Date non spécifiée';
-    }
+    if (!dateString) return 'Date non spécifiée';
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      return 'Date invalide';
-    }
-    return new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    }).format(date);
+    if (isNaN(date.getTime())) return 'Date invalide';
+    return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
   };
-  
-  // Calculate stats
-  const passedCount = participants.filter(p => p.reussite).length;
-  const passRate = (passedCount / participants.length) * 100;
-  const averageScore = participants.reduce((sum, p) => sum + (p.score || 0), 0) / participants.length;
+
+  const participantCalculatedData = participants.map(p => {
+    const participantResults = sessionResults.filter(r => r.participantIdBoitier === p.idBoitier);
+    const score = calculateParticipantScore(participantResults, sessionQuestions);
+    const themeScores = calculateThemeScores(participantResults, sessionQuestions);
+    const reussite = determineIndividualSuccess(score, themeScores);
+    return { ...p, score, reussite };
+  });
+
+  const passedCount = participantCalculatedData.filter(p => p.reussite).length;
+  const passRate = participants.length > 0 ? (passedCount / participants.length) * 100 : 0;
+  const averageScore = participants.length > 0 ? participantCalculatedData.reduce((sum, p) => sum + (p.score || 0), 0) / participants.length : 0;
+
+  const questionSuccessRates = sessionQuestions.map(q => ({
+    question: q,
+    successRate: calculateQuestionSuccessRate(q.id!, allSessions, allResults, allQuestions),
+  }));
 
   return (
     <div>
@@ -117,68 +148,29 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Participant
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Entreprise
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Score
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Émargement
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Statut
-                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {participants.map((participant) => (
+                {participantCalculatedData.map((participant) => (
                   <tr key={participant.idBoitier} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {participant.nom} {participant.prenom}
+                      <div className="text-sm font-medium text-gray-900">{participant.nom} {participant.prenom}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${participant.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {participant.score.toFixed(0)}
+                        </div>
+                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div className={`h-2 rounded-full ${participant.reussite ? 'bg-green-600' : 'bg-red-600'}`} style={{ width: `${participant.score}%` }}></div>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {/* Entreprise non disponible dans l'interface Participant */}
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {participant.score !== undefined ? (
-                        <div className="flex items-center">
-                          <div 
-                            className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${
-                              participant.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {participant.score}
-                          </div>
-                          <div className="w-24 bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full ${participant.reussite ? 'bg-green-600' : 'bg-red-600'}`}
-                              style={{ width: `${participant.score}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      ) : (
-                        <span>N/A</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {/* Émargement non disponible dans l'interface Participant */}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {participant.reussite !== undefined ? (
-                        participant.reussite ? (
-                          <Badge variant="success">Certifié</Badge>
-                        ) : (
-                          <Badge variant="danger">Ajourné</Badge>
-                        )
-                      ) : (
-                        <Badge variant="warning">En attente</Badge>
-                      )}
+                      {participant.reussite ? <Badge variant="success">Certifié</Badge> : <Badge variant="danger">Ajourné</Badge>}
                     </td>
                   </tr>
                 ))}
@@ -196,12 +188,11 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
           </div>
           
           <div className="space-y-3">
-            {[...Array(5)].map((_, i) => {
-              const successRate = Math.floor(Math.random() * 40) + 60;
-              const isLow = successRate < 70;
+            {questionSuccessRates.map((qStat, i) => {
+              const isLow = qStat.successRate < 70;
               
               return (
-                <div key={i} className="flex items-center">
+                <div key={qStat.question.id} className="flex items-center">
                   <div className="w-16 flex-shrink-0 text-sm text-gray-700">
                     Q{i + 1}
                   </div>
@@ -209,13 +200,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
                     <div className="w-full bg-gray-200 rounded-full h-2.5">
                       <div 
                         className={`h-2.5 rounded-full ${isLow ? 'bg-amber-500' : 'bg-blue-600'}`}
-                        style={{ width: `${successRate}%` }}
+                        style={{ width: `${qStat.successRate}%` }}
                       ></div>
                     </div>
                   </div>
                   <div className="w-16 flex-shrink-0 text-right">
                     <span className={`text-sm font-medium ${isLow ? 'text-amber-600' : 'text-blue-600'}`}>
-                      {successRate}%
+                      {qStat.successRate.toFixed(0)}%
                     </span>
                   </div>
                   {isLow && (
