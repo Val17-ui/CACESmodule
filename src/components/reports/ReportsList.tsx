@@ -1,9 +1,17 @@
 import React from 'react';
-import { Download, Eye, Printer, FileText, Calendar, Users, CheckCircle } from 'lucide-react';
+import { Download, Eye, Printer, FileText } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import { Session } from '../../types';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '../ui/Table';
 
 type ReportsListProps = {
   sessions: Session[];
@@ -37,48 +45,51 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {completedSessions.map((session) => (
-        <Card key={session.id} className="flex flex-col justify-between hover:shadow-md transition-shadow duration-200">
-          <div>
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800">{session.nomSession}</h3>
-              <Badge variant="primary">{session.referentiel}</Badge>
-            </div>
-            <div className="space-y-3 text-sm text-gray-600">
-              <div className="flex items-center">
-                <Calendar size={16} className="mr-2 text-gray-400" />
-                <span>{formatDate(session.dateSession)}</span>
-              </div>
-              <div className="flex items-center">
-                <Users size={16} className="mr-2 text-gray-400" />
-                <span>{session.participants?.length || 0} participants</span>
-              </div>
-              <div className="flex items-center">
-                <CheckCircle size={16} className="mr-2 text-green-500" />
-                <span className="font-medium">Taux de réussite: 78%</span>
-              </div>
-            </div>
-          </div>
-          <div className="border-t -mx-6 mt-6 pt-4 px-6 flex justify-end space-x-2">
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<Eye size={16} />}
-              onClick={() => onViewReport(String(session.id))}
-            >
-              Consulter
-            </Button>
-            <Button variant="outline" size="sm" title="Exporter en PDF">
-              <Download size={16} />
-            </Button>
-            <Button variant="outline" size="sm" title="Imprimer">
-              <Printer size={16} />
-            </Button>
-          </div>
-        </Card>
-      ))}
-    </div>
+    <Card>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Nom de la session</TableHead>
+            <TableHead>Référentiel</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead className="text-center">Participants</TableHead>
+            <TableHead className="text-center">Taux de réussite</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {completedSessions.map((session) => (
+            <TableRow key={session.id} className="hover:bg-gray-50">
+              <TableCell className="font-medium">{session.nomSession}</TableCell>
+              <TableCell>
+                <Badge variant="secondary">{session.referentiel}</Badge>
+              </TableCell>
+              <TableCell>{formatDate(session.dateSession)}</TableCell>
+              <TableCell className="text-center">{session.participants?.length || 0}</TableCell>
+              <TableCell className="text-center font-medium text-green-600">78%</TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={<Eye size={14} />}
+                    onClick={() => onViewReport(String(session.id))}
+                  >
+                    Consulter
+                  </Button>
+                  <Button variant="ghost" size="sm" title="Exporter en PDF">
+                    <Download size={16} />
+                  </Button>
+                  <Button variant="ghost" size="sm" title="Imprimer">
+                    <Printer size={16} />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
   );
 };
 

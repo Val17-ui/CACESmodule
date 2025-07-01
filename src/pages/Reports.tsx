@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../components/layout/Layout';
 import GlobalStats from '../components/reports/GlobalStats';
 import ReportTypeSelector, { ReportType } from '../components/reports/ReportTypeSelector';
@@ -10,8 +10,11 @@ import ReferentialReport from '../components/reports/ReferentialReport';
 import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
-import { ArrowLeft, Download, Printer } from 'lucide-react';
-import { mockSessions, mockParticipants } from '../data/mockData';
+import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
+import { getAllSessions, getSessionById, getResultsForSession } from '../db';
+import { Session, Participant, CACESReferential } from '../types';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
 
 type ReportsProps = {
   activePage: string;
@@ -19,37 +22,84 @@ type ReportsProps = {
 };
 
 const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [activeReport, setActiveReport] = useState<ReportType | null>(null);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [sessionParticipants, setSessionParticipants] = useState<Participant[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [referentialFilter, setReferentialFilter] = useState<string>('all');
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      const allSessions = await getAllSessions();
+      setSessions(allSessions);
+    };
+    fetchSessions();
+  }, []);
 
   const handleSelectReport = (reportType: ReportType) => {
     setActiveReport(reportType);
   };
 
-  const handleViewSessionReport = (sessionId: string) => {
-    setSelectedSessionId(sessionId);
+  const handleViewSessionReport = async (sessionId: string) => {
+    const session = await getSessionById(Number(sessionId));
+    if (session) {
+      setSelectedSession(session);
+      const results = await getResultsForSession(Number(sessionId));
+      setSessionParticipants(session.participants || []);
+    }
   };
 
   const handleBack = () => {
-    if (selectedSessionId) {
-      setSelectedSessionId(null);
+    if (selectedSession) {
+      setSelectedSession(null);
+      setSessionParticipants([]);
     } else {
       setActiveReport(null);
     }
   };
 
-  const selectedSession = selectedSessionId
-    ? mockSessions.find((s) => s.id != null && String(s.id) === selectedSessionId)
-    : null;
+  const filteredSessions = useMemo(() => {
+    return sessions
+      .filter(session => 
+        referentialFilter === 'all' || session.referentiel === referentialFilter
+      )
+      .filter(session => 
+        session.nomSession.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+  }, [sessions, searchTerm, referentialFilter]);
 
   const renderContent = () => {
     if (selectedSession) {
-      return <ReportDetails session={selectedSession} participants={mockParticipants} />;
+      return <ReportDetails session={selectedSession} participants={sessionParticipants} />;
     }
 
     switch (activeReport) {
       case 'session':
-        return <ReportsList sessions={mockSessions} onViewReport={handleViewSessionReport} />;
+        return (
+          <div>
+            <div className="mb-4 flex space-x-4">
+              <Input 
+                placeholder="Rechercher par nom..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-1/3"
+                icon={<Search size={16} className="text-gray-400"/>}
+              />
+              <Select
+                value={referentialFilter}
+                onChange={(e) => setReferentialFilter(e.target.value)}
+                className="w-1/4"
+              >
+                <option value="all">Tous les référentiels</option>
+                {Object.values(CACESReferential).map(ref => (
+                  <option key={ref} value={ref}>{ref}</option>
+                ))}
+              </Select>
+            </div>
+            <ReportsList sessions={filteredSessions} onViewReport={handleViewSessionReport} />
+          </div>
+        );
       case 'participant':
         return <ParticipantReport />;
       case 'period':
@@ -63,7 +113,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
       default:
         return (
           <>
-            <GlobalStats />
+            <GlobalStats sessions={filteredSessions} />
             <ReportTypeSelector onSelectReport={handleSelectReport} />
           </>
         );
@@ -117,7 +167,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
       onPageChange={onPageChange}
     >
       {renderContent()}
-    </Layout>
+    </Layout
   );
 };
 
