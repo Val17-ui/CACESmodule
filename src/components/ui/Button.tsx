@@ -21,6 +21,7 @@ const Button: React.FC<ButtonProps> = ({
   onClick,
   disabled = false,
   type = 'button',
+  title, // Added title to destructuring
 }) => {
   const baseStyles = 'inline-flex items-center justify-center rounded-xl transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-offset-2';
   

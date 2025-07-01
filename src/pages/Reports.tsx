@@ -39,7 +39,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   };
 
   const selectedSession = selectedSessionId
-    ? mockSessions.find((s) => s.id === selectedSessionId)
+    ? mockSessions.find((s) => s.id != null && String(s.id) === selectedSessionId)
     : null;
 
   const renderContent = () => {
@@ -71,7 +71,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   };
 
   const getTitle = () => {
-    if (selectedSession) return `Rapport: ${selectedSession.name}`;
+    if (selectedSession) return `Rapport: ${selectedSession.nomSession}`;
     if (activeReport) {
       const reportTitles = {
         session: 'Rapports par Session',
@@ -87,7 +87,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   };
 
   const getSubtitle = () => {
-    if (selectedSession) return `Analyse détaillée de la session du ${new Date(selectedSession.date).toLocaleDateString('fr-FR')}`;
+    if (selectedSession) return `Analyse détaillée de la session du ${new Date(selectedSession.dateSession).toLocaleDateString('fr-FR')}`;
     if (activeReport) return 'Sélectionnez un élément pour voir les détails';
     return 'Visualisez les données de performance et de certification';
   };

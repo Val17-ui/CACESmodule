@@ -7,7 +7,7 @@ type CardProps = {
   onClick?: () => void;
 };
 
-const Card: React.FC<CardProps> = ({ title, children, className = '' }) => {
+const Card: React.FC<CardProps> = ({ title, children, className = '', onClick }) => { // Added onClick to destructuring
   return (
     <div className={`bg-white rounded-2xl shadow-md overflow-hidden ${className}`} onClick={onClick}>
       {title && (

@@ -10,8 +10,14 @@ type ReportDetailsProps = {
 };
 
 const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) => {
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined | null): string => {
+    if (!dateString) {
+      return 'Date non spécifiée';
+    }
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return 'Date invalide';
+    }
     return new Intl.DateTimeFormat('fr-FR', {
       day: '2-digit',
       month: '2-digit',
@@ -44,7 +50,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
               </div>
               <div className="flex items-center text-sm">
                 <UserCheck size={18} className="text-gray-400 mr-2" />
-                <span>Participants : {session.participants.length}</span>
+                <span>Participants : {session.participants?.length || 0}</span>
               </div>
             </div>
           </div>

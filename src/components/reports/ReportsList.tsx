@@ -11,8 +11,14 @@ type ReportsListProps = {
 };
 
 const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => {
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined | null): string => {
+    if (!dateString) {
+      return 'Date non spécifiée';
+    }
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return 'Date invalide';
+    }
     return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(date);
   };
 
@@ -46,7 +52,7 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
               </div>
               <div className="flex items-center">
                 <Users size={16} className="mr-2 text-gray-400" />
-                <span>{session.participants.length} participants</span>
+                <span>{session.participants?.length || 0} participants</span>
               </div>
               <div className="flex items-center">
                 <CheckCircle size={16} className="mr-2 text-green-500" />
