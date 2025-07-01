@@ -11,8 +11,14 @@ type ReportsListProps = {
 };
 
 const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => {
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined | null): string => {
+    if (!dateString) {
+      return 'Date non spécifiée';
+    }
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return 'Date invalide';
+    }
     return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(date);
   };
 
