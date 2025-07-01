@@ -52,7 +52,7 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
               </div>
               <div className="flex items-center">
                 <Users size={16} className="mr-2 text-gray-400" />
-                <span>{session.participants.length} participants</span>
+                <span>{session.participants?.length || 0} participants</span>
               </div>
               <div className="flex items-center">
                 <CheckCircle size={16} className="mr-2 text-green-500" />
