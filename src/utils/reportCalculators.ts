@@ -1,0 +1,225 @@
+import { Session, SessionResult, QuestionWithId, SelectedBlock } from '../types';
+
+/**
+ * Calcule la note globale d'un participant pour une session spécifique.
+ * Prend en compte toutes les questions de la session, traitant les non-réponses comme incorrectes.
+ * @param participantResults - Toutes les réponses d'un participant pour la session.
+ * @param sessionQuestions - Toutes les questions de la session.
+ * @returns La note globale en pourcentage.
+ */
+export const calculateParticipantScore = (
+  participantResults: SessionResult[],
+  sessionQuestions: QuestionWithId[]
+): number => {
+  if (sessionQuestions.length === 0) {
+    return 0;
+  }
+
+  let correctAnswersCount = 0;
+  sessionQuestions.forEach(question => {
+    const result = participantResults.find(r => r.questionId === question.id);
+    if (result && result.isCorrect) {
+      correctAnswersCount++;
+    }
+  });
+
+  const score = (correctAnswersCount / sessionQuestions.length) * 100;
+  return score;
+};
+
+/**
+ * Calcule les notes par thématique pour un participant.
+ * Prend en compte toutes les questions de la session, traitant les non-réponses comme incorrectes.
+ * @param participantResults - Les résultats du participant.
+ * @param sessionQuestions - Les questions de la session.
+ * @returns Un objet avec les scores pour chaque thématique.
+ */
+export const calculateThemeScores = (
+  participantResults: SessionResult[],
+  sessionQuestions: QuestionWithId[]
+): { [theme: string]: number } => {
+  const themeScores: { [theme: string]: { correct: number; total: number } } = {};
+
+  sessionQuestions.forEach(question => {
+    const theme = question.theme;
+    if (!themeScores[theme]) {
+      themeScores[theme] = { correct: 0, total: 0 };
+    }
+    themeScores[theme].total++; // Compte toutes les questions pour le total
+
+    const result = participantResults.find(r => r.questionId === question.id);
+    if (result && result.isCorrect) {
+      themeScores[theme].correct++;
+    }
+  });
+
+  const finalScores: { [theme: string]: number } = {};
+  for (const theme in themeScores) {
+    const { correct, total } = themeScores[theme];
+    finalScores[theme] = total > 0 ? (correct / total) * 100 : 0;
+  }
+
+  return finalScores;
+};
+
+/**
+ * Détermine si un participant a réussi la session.
+ * @param globalScore - La note globale du participant.
+ * @param themeScores - Les notes par thématique du participant.
+ * @returns true si le participant a réussi, sinon false.
+ */
+export const determineIndividualSuccess = (
+  globalScore: number,
+  themeScores: { [theme: string]: number }
+): boolean => {
+  if (globalScore < 70) {
+    return false;
+  }
+
+  for (const theme in themeScores) {
+    if (themeScores[theme] < 50) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+/**
+ * Calcule les statistiques d'une session.
+ * @param session - La session.
+ * @param sessionResults - Les résultats de la session.
+ * @param sessionQuestions - Les questions de la session.
+ * @returns Les statistiques de la session.
+ */
+export const calculateSessionStats = (
+  session: Session,
+  sessionResults: SessionResult[],
+  sessionQuestions: QuestionWithId[]
+) => {
+  const participantScores = session.participants.map(p => {
+    const participantResults = sessionResults.filter(r => r.participantIdBoitier === p.idBoitier);
+    return calculateParticipantScore(participantResults, sessionQuestions);
+  });
+
+  const averageScore = participantScores.reduce((sum, score) => sum + score, 0) / participantScores.length;
+
+  const successCount = session.participants.filter(p => {
+    const participantResults = sessionResults.filter(r => r.participantIdBoitier === p.idBoitier);
+    const score = calculateParticipantScore(participantResults, sessionQuestions);
+    const themeScores = calculateThemeScores(participantResults, sessionQuestions);
+    return determineIndividualSuccess(score, themeScores);
+  }).length;
+
+  const successRate = (successCount / session.participants.length) * 100;
+
+  return { averageScore, successRate };
+};
+
+/**
+ * Calcule le taux de réussite pour une question spécifique.
+ * Prend en compte toutes les fois où la question a été présentée dans des sessions terminées.
+ * @param questionId - L'ID de la question.
+ * @param allSessions - Toutes les sessions.
+ * @param allResults - Tous les résultats de toutes les sessions.
+ * @param allQuestions - Toutes les questions.
+ * @returns Le taux de réussite en pourcentage.
+ */
+export const calculateQuestionSuccessRate = (
+  questionId: number,
+  allSessions: Session[],
+  allResults: SessionResult[],
+  allQuestions: QuestionWithId[]
+): number => {
+  let totalPresentations = 0;
+  let correctAnswers = 0;
+
+  const question = allQuestions.find(q => q.id === questionId);
+  if (!question) return 0; // Question not found
+
+  allSessions.forEach(session => {
+    if (session.status === 'completed' && session.selectionBlocs) {
+      // Check if this question was part of this session
+      const isQuestionInSession = session.selectionBlocs.some(block => 
+        question.theme === block.theme && question.slideGuid === block.blockId
+      );
+
+      if (isQuestionInSession) {
+        // For each participant in this session, this question was presented
+        const participantsInSession = session.participants?.length || 0;
+        totalPresentations += participantsInSession;
+
+        // Count correct answers for this question in this session
+        const resultsForThisQuestionInSession = allResults.filter(r => 
+          r.sessionId === session.id && r.questionId === questionId
+        );
+        correctAnswers += resultsForThisQuestionInSession.filter(r => r.isCorrect).length;
+      }
+    }
+  });
+
+  return totalPresentations > 0 ? (correctAnswers / totalPresentations) * 100 : 0;
+};
+
+/**
+ * Calcule les statistiques pour un bloc de questions spécifique.
+ * @param block - Le bloc de questions.
+ * @param allSessions - Toutes les sessions.
+ * @param allResults - Tous les résultats.
+ * @param allQuestions - Toutes les questions.
+ * @returns Les statistiques du bloc (usageCount, averageSuccessRate, averageScore).
+ */
+export const calculateBlockStats = (
+  block: SelectedBlock,
+  allSessions: Session[],
+  allResults: SessionResult[],
+  allQuestions: QuestionWithId[]
+) => {
+  let totalParticipantsForBlock = 0;
+  let totalSuccessfulParticipantsForBlock = 0;
+  let totalScoreForBlock = 0;
+  let scoreCountForBlock = 0;
+
+  const sessionsContainingBlock = allSessions.filter(s =>
+    s.status === 'completed' && s.selectionBlocs?.some(b => b.theme === block.theme && b.blockId === block.blockId)
+  );
+
+  for (const session of sessionsContainingBlock) {
+    if (session.id) {
+      const questionsInThisBlock = allQuestions.filter(q =>
+        q.theme === block.theme && q.slideGuid === block.blockId // Assuming slideGuid is blockId
+      );
+
+      if (questionsInThisBlock.length === 0) continue;
+
+      const sessionResults = allResults.filter(r => r.sessionId === session.id);
+
+      for (const participant of session.participants || []) {
+        const participantResultsForBlock = sessionResults.filter(r =>
+          r.participantIdBoitier === participant.idBoitier &&
+          questionsInThisBlock.some(q => q.id === r.questionId)
+        );
+
+        if (participantResultsForBlock.length > 0) {
+          const participantScoreOnBlock = calculateParticipantScore(participantResultsForBlock, questionsInThisBlock);
+          // Simplified success for block: score on block >= 70%.
+          const participantSuccessOnBlock = participantScoreOnBlock >= 70;
+
+          totalParticipantsForBlock++;
+          totalScoreForBlock += participantScoreOnBlock;
+          scoreCountForBlock++;
+
+          if (participantSuccessOnBlock) {
+            totalSuccessfulParticipantsForBlock++;
+          }
+        }
+      }
+    }
+  }
+
+  const averageSuccessRate = totalParticipantsForBlock > 0 ? (totalSuccessfulParticipantsForBlock / totalParticipantsForBlock) * 100 : 0;
+  const averageScore = scoreCountForBlock > 0 ? totalScoreForBlock / scoreCountForBlock : 0;
+  const usageCount = sessionsContainingBlock.length; // Number of completed sessions where the block was selected
+
+  return { usageCount, averageSuccessRate, averageScore };
+};

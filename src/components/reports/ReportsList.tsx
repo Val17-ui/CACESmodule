@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Download, Eye, Printer, FileText } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
@@ -12,6 +12,8 @@ import {
   TableHead,
   TableCell,
 } from '../ui/Table';
+import { calculateSessionStats } from '../../utils/reportCalculators';
+import { getResultsForSession, getQuestionsForSessionBlocks } from '../../db';
 
 type ReportsListProps = {
   sessions: Session[];
@@ -19,6 +21,23 @@ type ReportsListProps = {
 };
 
 const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => {
+  const [sessionStats, setSessionStats] = useState<{[sessionId: number]: { averageScore: number, successRate: number }}>({});
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const stats: {[sessionId: number]: { averageScore: number, successRate: number }} = {};
+      for (const session of sessions) {
+        if (session.id && session.status === 'completed') {
+          const results = await getResultsForSession(session.id);
+          const questions = await getQuestionsForSessionBlocks(session.selectionBlocs || []);
+          stats[session.id] = calculateSessionStats(session, results, questions);
+        }
+      }
+      setSessionStats(stats);
+    };
+    fetchStats();
+  }, [sessions]);
+
   const formatDate = (dateString: string | undefined | null): string => {
     if (!dateString) {
       return 'Date non spécifiée';
@@ -62,11 +81,13 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
             <TableRow key={session.id} className="hover:bg-gray-50">
               <TableCell className="font-medium">{session.nomSession}</TableCell>
               <TableCell>
-                <Badge variant="default">{session.referentiel}</Badge>
+                <Badge variant="secondary">{session.referentiel}</Badge>
               </TableCell>
               <TableCell>{formatDate(session.dateSession)}</TableCell>
               <TableCell className="text-center">{session.participants?.length || 0}</TableCell>
-              <TableCell className="text-center font-medium text-green-600">78%</TableCell>
+              <TableCell className="text-center font-medium text-green-600">
+                {session.id && sessionStats[session.id] ? `${sessionStats[session.id].successRate.toFixed(0)}%` : 'N/A'}
+              </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end space-x-2">
                   <Button
