@@ -1,0 +1,289 @@
+[{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'passed' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 23,
+	"startColumn": 50,
+	"endLineNumber": 23,
+	"endColumn": 56
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'name' does not exist on type 'Session'.",
+	"source": "ts",
+	"startLineNumber": 33,
+	"startColumn": 24,
+	"endLineNumber": 33,
+	"endColumn": 28
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'date' does not exist on type 'Session'.",
+	"source": "ts",
+	"startLineNumber": 39,
+	"startColumn": 50,
+	"endLineNumber": 39,
+	"endColumn": 54
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'referential' does not exist on type 'Session'. Did you mean 'referentiel'?",
+	"source": "ts",
+	"startLineNumber": 42,
+	"startColumn": 68,
+	"endLineNumber": 42,
+	"endColumn": 79,
+	"relatedInformation": [
+		{
+			"startLineNumber": 14,
+			"startColumn": 3,
+			"endLineNumber": 14,
+			"endColumn": 14,
+			"message": "'referentiel' is declared here.",
+			"resource": "/project/workspace/src/types/index.ts"
+		}
+	]
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'participantsCount' does not exist on type 'Session'. Did you mean 'participants'?",
+	"source": "ts",
+	"startLineNumber": 47,
+	"startColumn": 47,
+	"endLineNumber": 47,
+	"endColumn": 64,
+	"relatedInformation": [
+		{
+			"startLineNumber": 15,
+			"startColumn": 3,
+			"endLineNumber": 15,
+			"endColumn": 15,
+			"message": "'participants' is declared here.",
+			"resource": "/project/workspace/src/types/index.ts"
+		}
+	]
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 111,
+	"startColumn": 38,
+	"endLineNumber": 111,
+	"endColumn": 40
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'lastName' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 114,
+	"startColumn": 36,
+	"endLineNumber": 114,
+	"endColumn": 44
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'firstName' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 114,
+	"startColumn": 59,
+	"endLineNumber": 114,
+	"endColumn": 68
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'email' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 117,
+	"startColumn": 36,
+	"endLineNumber": 117,
+	"endColumn": 41
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'company' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 121,
+	"startColumn": 34,
+	"endLineNumber": 121,
+	"endColumn": 41
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'passed' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 128,
+	"startColumn": 41,
+	"endLineNumber": 128,
+	"endColumn": 47
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'passed' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 135,
+	"startColumn": 72,
+	"endLineNumber": 135,
+	"endColumn": 78
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'hasSigned' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 145,
+	"startColumn": 34,
+	"endLineNumber": 145,
+	"endColumn": 43
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'passed' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 156,
+	"startColumn": 34,
+	"endLineNumber": 156,
+	"endColumn": 40
+},{
+	"resource": "/project/workspace/src/components/reports/ReportDetails.tsx",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'passed' does not exist on type 'Participant'.",
+	"source": "ts",
+	"startLineNumber": 157,
+	"startColumn": 35,
+	"endLineNumber": 157,
+	"endColumn": 41
+}]
+
+[{
+	"resource": "/project/workspace/src/components/reports/ReportsList.tsx",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ children: Element; variant: \"outline\"; size: \"sm\"; title: string; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.\n  Property 'title' does not exist on type 'IntrinsicAttributes & ButtonProps'.",
+	"source": "ts",
+	"startLineNumber": 66,
+	"startColumn": 49,
+	"endLineNumber": 66,
+	"endColumn": 54
+},{
+	"resource": "/project/workspace/src/components/reports/ReportsList.tsx",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ children: Element; variant: \"outline\"; size: \"sm\"; title: string; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.\n  Property 'title' does not exist on type 'IntrinsicAttributes & ButtonProps'.",
+	"source": "ts",
+	"startLineNumber": 69,
+	"startColumn": 49,
+	"endLineNumber": 69,
+	"endColumn": 54
+}]
+
+[{
+	"resource": "/project/workspace/src/components/reports/ReportTypeSelector.tsx",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "',' expected.",
+	"source": "ts",
+	"startLineNumber": 17,
+	"startColumn": 99,
+	"endLineNumber": 17,
+	"endColumn": 109
+},{
+	"resource": "/project/workspace/src/components/reports/ReportTypeSelector.tsx",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'historique' does not exist in type 'ReportItem'.",
+	"source": "ts",
+	"startLineNumber": 17,
+	"startColumn": 99,
+	"endLineNumber": 17,
+	"endColumn": 109
+},{
+	"resource": "/project/workspace/src/components/reports/ReportTypeSelector.tsx",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No value exists in scope for the shorthand property 'historique'. Either declare one or provide an initializer.",
+	"source": "ts",
+	"startLineNumber": 17,
+	"startColumn": 99,
+	"endLineNumber": 17,
+	"endColumn": 109
+},{
+	"resource": "/project/workspace/src/components/reports/ReportTypeSelector.tsx",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "',' expected.",
+	"source": "ts",
+	"startLineNumber": 17,
+	"startColumn": 110,
+	"endLineNumber": 17,
+	"endColumn": 111
+},{
+	"resource": "/project/workspace/src/components/reports/ReportTypeSelector.tsx",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No value exists in scope for the shorthand property 'd'. Either declare one or provide an initializer.",
+	"source": "ts",
+	"startLineNumber": 17,
+	"startColumn": 110,
+	"endLineNumber": 17,
+	"endColumn": 111
+},{
+	"resource": "/project/workspace/src/components/reports/ReportTypeSelector.tsx",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "',' expected.",
+	"source": "ts",
+	"startLineNumber": 17,
+	"startColumn": 111,
+	"endLineNumber": 17,
+	"endColumn": 128
+},{
+	"resource": "/project/workspace/src/components/reports/ReportTypeSelector.tsx",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "':' expected.",
+	"source": "ts",
+	"startLineNumber": 17,
+	"startColumn": 128,
+	"endLineNumber": 17,
+	"endColumn": 129
+}]

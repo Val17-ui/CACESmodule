@@ -8,7 +8,7 @@ import Card from '../components/ui/Card';
 import { Plus, FileUp, FileDown, BarChart3 } from 'lucide-react';
 import { exportQuestionsToExcel, parseQuestionsExcel, RawExcelQuestion } from '../utils/excelProcessor';
 import { mockQuestions } from '../data/mockData';
-import { Question, QuestionType, CACESReferential, QuestionTheme, questionThemes } from '../types'; // Removed referentials
+import { Question, QuestionType, CACESReferential } from '../types'; // Removed referentials, QuestionTheme, questionThemes
 import { StorageManager } from '../services/StorageManager'; // Import StorageManager
 import { saveAs } from 'file-saver';
 
@@ -171,7 +171,7 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
         const newQuestion: Question = {
           id: generateQuestionId(),
           text: rawQ.text!,
-          referential: rawQ.referential as CACESReferential,
+          referentiel: rawQ.referential as CACESReferential, // Use referentiel for Question type
           theme: rawQ.theme!,
           options: definedOptions,
           correctAnswer: correctAnswerIndexStr, // Storing the index as a string
@@ -196,17 +196,22 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
     const savingErrors: string[] = [];
 
     if (newQuestions.length > 0) {
-      const questionsToSaveDb = newQuestions.map(q => {
-        const { id, ...questionWithoutId } = q; // Omit id
-        return questionWithoutId;
+      const questionsToSaveToDb = newQuestions.map(q => {
+        const { id, referentiel, ...restOfQuestion } = q; // Omit id, extract referentiel
+        // Map to the structure expected by StorageManager.addQuestion (Omit<StoredQuestion, 'id'>)
+        // StoredQuestion uses 'referential'
+        return {
+          ...restOfQuestion,
+          referential: referentiel, // Map referentiel to referential
+        };
       });
 
-      overallFeedback.push(`Tentative de sauvegarde de ${questionsToSaveDb.length} question(s) dans la base de données...`);
+      overallFeedback.push(`Tentative de sauvegarde de ${questionsToSaveToDb.length} question(s) dans la base de données...`);
 
-      for (const questionToSave of questionsToSaveDb) {
+      for (const questionToSave of questionsToSaveToDb) {
         try {
-          // questionToSave is already Omit<Question, 'id'> which is compatible with Omit<StoredQuestion, 'id'>
-          // as StoredQuestion's id is also omitted and other fields are compatible.
+          // questionToSave is now Omit<Question, 'id' | 'referentiel'> & { referential: CACESReferential }
+          // which is compatible with Omit<StoredQuestion, 'id'>
           await StorageManager.addQuestion(questionToSave);
           savedCount++;
         } catch (error) {
@@ -309,7 +314,7 @@ const Library: React.FC<LibraryProps> = ({ activePage, onPageChange }) => {
   const renderContent = () => {
     switch (activeView) {
       case 'form':
-        return <QuestionForm questionId={editingQuestionId} onSave={handleBackToLibrary} onCancel={handleBackToLibrary} />;
+        return <QuestionForm questionId={editingQuestionId ? Number(editingQuestionId) : null} onSave={handleBackToLibrary} onCancel={handleBackToLibrary} />;
       case 'statistics':
         return <QuestionStatistics />;
       default:
