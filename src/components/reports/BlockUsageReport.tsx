@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { BlockUsage, calculateBlockUsage } from '../../db'; // Ajuster le chemin si besoin
 import { CACESReferential } from '../../types'; // Ajuster le chemin si besoin
 
-// Importer les composants UI réutilisables (supposons qu'ils existent)
-import Card, { CardContent, CardHeader, CardTitle } from '../ui/Card';
-import Select, { SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
+// Importer les composants UI réutilisables
+import Card from '../ui/Card';
+import Select from '../ui/Select'; // Updated import
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
@@ -115,25 +115,22 @@ const BlockUsageReport: React.FC = () => {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Rapport d'utilisation des blocs de questions</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-wrap gap-4 mb-6 p-4 border rounded-lg">
-          <div className="flex-1 min-w-[200px]">
-            <label htmlFor="referentiel-filter" className="block text-sm font-medium text-gray-700 mb-1">Référentiel</label>
-            <Select value={selectedReferentiel} onValueChange={(value: string) => setSelectedReferentiel(value as CACESReferential | string)}>
-              <SelectTrigger id="referentiel-filter">
-                <SelectValue placeholder="Tous les référentiels" />
-              </SelectTrigger>
-              <SelectContent>
-                {referentialOptions.map(option => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+    <Card title="Rapport d'utilisation des blocs de questions">
+      {/* CardHeader, CardTitle, and CardContent removed, content moved directly under Card */}
+      <div className="flex flex-wrap gap-4 mb-6 p-4 border rounded-lg">
+        <div className="flex-1 min-w-[200px]">
+          {/* <label htmlFor="referentiel-filter" className="block text-sm font-medium text-gray-700 mb-1">Référentiel</label> */}
+          {/* The simple Select component has its own label prop */}
+          <Select
+            id="referentiel-filter"
+            label="Référentiel"
+            options={referentialOptions}
+            value={selectedReferentiel}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedReferentiel(e.target.value as CACESReferential | string)}
+            placeholder="Tous les référentiels" // The simple Select uses this for its disabled default option
+            className="w-full" // Added for styling consistency
+          />
+        </div>
 
           <div className="flex-1 min-w-[200px]">
             <label htmlFor="start-date-filter" className="block text-sm font-medium text-gray-700 mb-1">Date de début</label>
@@ -201,7 +198,7 @@ const BlockUsageReport: React.FC = () => {
             </TableBody>
           </Table>
         )}
-      </CardContent>
+      {/* End of CardContent equivalent */}
     </Card>
   );
 };
