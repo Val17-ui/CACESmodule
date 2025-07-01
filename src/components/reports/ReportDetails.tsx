@@ -50,7 +50,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
               </div>
               <div className="flex items-center text-sm">
                 <UserCheck size={18} className="text-gray-400 mr-2" />
-                <span>Participants : {session.participants.length}</span>
+                <span>Participants : {session.participants?.length || 0}</span>
               </div>
             </div>
           </div>
