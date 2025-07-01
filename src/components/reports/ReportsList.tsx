@@ -62,7 +62,7 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
             <TableRow key={session.id} className="hover:bg-gray-50">
               <TableCell className="font-medium">{session.nomSession}</TableCell>
               <TableCell>
-                <Badge variant="secondary">{session.referentiel}</Badge>
+                <Badge variant="default">{session.referentiel}</Badge>
               </TableCell>
               <TableCell>{formatDate(session.dateSession)}</TableCell>
               <TableCell className="text-center">{session.participants?.length || 0}</TableCell>

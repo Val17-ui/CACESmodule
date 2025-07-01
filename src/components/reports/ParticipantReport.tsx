@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import { getAllSessions, getResultsForSession } from '../../db';
 import { Session, Participant, SessionResult } from '../../types';
@@ -131,7 +131,7 @@ const ParticipantReport = () => {
               <TableCell>{participant.nom}</TableCell>
               <TableCell className="text-center">{sessionCount}</TableCell>
               <TableCell className="text-right">
-                <Button variant="link" onClick={() => handleSelectParticipant(participant)}>Détails</Button>
+                <Button variant="ghost" onClick={() => handleSelectParticipant(participant)}>Détails</Button>
               </TableCell>
             </TableRow>
           ))}
