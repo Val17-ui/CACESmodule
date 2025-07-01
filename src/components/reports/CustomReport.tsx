@@ -52,19 +52,27 @@ const CustomReport = () => {
     <Card>
       <h2 className="text-xl font-bold mb-4">Rapport Personnalisé</h2>
       <div className="grid grid-cols-4 gap-4 mb-4 p-4 border rounded-lg">
-        <Select name="referentiel" value={filters.referentiel} onChange={handleFilterChange}>
-          <option value="all">Tous les référentiels</option>
-          {Object.values(CACESReferential).map(ref => (
-            <option key={ref} value={ref}>{ref}</option>
-          ))}
-        </Select>
-        <Select name="status" value={filters.status} onChange={handleFilterChange}>
-          <option value="all">Tous les statuts</option>
-          <option value="planned">Planifié</option>
-          <option value="in-progress">En cours</option>
-          <option value="completed">Terminé</option>
-          <option value="cancelled">Annulé</option>
-        </Select>
+        <Select
+          name="referentiel"
+          value={filters.referentiel}
+          onChange={handleFilterChange}
+          options={[
+            { value: 'all', label: 'Tous les référentiels' },
+            ...Object.values(CACESReferential).map(ref => ({ value: ref, label: ref }))
+          ]}
+        />
+        <Select
+          name="status"
+          value={filters.status}
+          onChange={handleFilterChange}
+          options={[
+            { value: 'all', label: 'Tous les statuts' },
+            { value: 'planned', label: 'Planifié' },
+            { value: 'in-progress', label: 'En cours' },
+            { value: 'completed', label: 'Terminé' },
+            { value: 'cancelled', label: 'Annulé' }
+          ]}
+        />
         <Input name="startDate" type="date" value={filters.startDate} onChange={handleFilterChange} />
         <Input name="endDate" type="date" value={filters.endDate} onChange={handleFilterChange} />
       </div>

@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
-import { CheckCircle, XCircle, AlertTriangle, BarChart, UserCheck, Calendar, Download } from 'lucide-react';
+import { AlertTriangle, BarChart, UserCheck, Calendar, Download } from 'lucide-react';
 import { Session, Participant } from '../../types';
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
@@ -17,7 +17,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
 
   const handleExportPDF = () => {
     if (reportRef.current) {
-      html2canvas(reportRef.current).then(canvas => {
+      html2canvas(reportRef.current).then((canvas: HTMLCanvasElement) => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();

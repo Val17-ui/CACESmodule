@@ -45,7 +45,6 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
     const session = await getSessionById(Number(sessionId));
     if (session) {
       setSelectedSession(session);
-      const results = await getResultsForSession(Number(sessionId));
       setSessionParticipants(session.participants || []);
     }
   };
@@ -90,12 +89,11 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 value={referentialFilter}
                 onChange={(e) => setReferentialFilter(e.target.value)}
                 className="w-1/4"
-              >
-                <option value="all">Tous les référentiels</option>
-                {Object.values(CACESReferential).map(ref => (
-                  <option key={ref} value={ref}>{ref}</option>
-                ))}
-              </Select>
+                options={[
+                  { value: 'all', label: 'Tous les référentiels' },
+                  ...Object.values(CACESReferential).map(ref => ({ value: ref, label: ref }))
+                ]}
+              />
             </div>
             <ReportsList sessions={filteredSessions} onViewReport={handleViewSessionReport} />
           </div>
@@ -167,7 +165,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
       onPageChange={onPageChange}
     >
       {renderContent()}
-    </Layout
+    </Layout>
   );
 };
 
