@@ -54,6 +54,7 @@ export interface Val17Question {
   correctAnswerIndex?: number; // 0-based index
   imageUrl?: string;
   points?: number; // Corresponds to timeLimit from StoredQuestion, used for duration
+  theme: string; // AJOUTÉ - pour stocker le thème original complet (ex: "securite_A")
 }
 
 // Structure pour le mappage retourné - Assurer l'export
@@ -61,7 +62,9 @@ export interface QuestionMapping { // Déjà exporté, c'est bien.
   dbQuestionId: number;
   slideGuid: string | null;
   orderInPptx: number;
-  // title?: string;
+  theme: string;   // AJOUTÉ (sera le thème de base, ex: "securite")
+  blockId: string; // AJOUTÉ (sera l'ID du bloc, ex: "A")
+  // title?: string; // Optionnel pour debug, peut être retiré
 }
 
 interface TagInfo {
@@ -488,7 +491,7 @@ function createIntroParticipantsSlideXml(
   participants: ParticipantForGenerator[], // Utilise la nouvelle interface alignée
   slideNumber: number
 ): string {
-  console.log("[DEBUG_PARTICIPANTS_SLIDE] Données participants reçues par createIntroParticipantsSlideXml:", JSON.stringify(participants));
+  // console.log("[DEBUG_PARTICIPANTS_SLIDE] Données participants reçues par createIntroParticipantsSlideXml:", JSON.stringify(participants)); // DEBUG
   const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
   const baseSpId = slideNumber * 1000; // Base pour les ID des formes sur la diapositive
 
@@ -585,7 +588,7 @@ function createIntroParticipantsSlideXml(
 
   // Lignes de données pour chaque participant
   participants.forEach((participant, index) => {
-    console.log(`[DEBUG_PARTICIPANT_DATA_IN_TABLE_LOOP] Index: ${index}, ID Boîtier: ${participant.idBoitier}, Nom: ${participant.nom}, Prénom: ${participant.prenom}, Org: ${participant.organization}`);
+    // console.log(`[DEBUG_PARTICIPANT_DATA_IN_TABLE_LOOP] Index: ${index}, ID Boîtier: ${participant.idBoitier}, Nom: ${participant.nom}, Prénom: ${participant.prenom}, Org: ${participant.organization}`); // DEBUG
     tableXml += `<a:tr h="370840">`;
     // N°
     tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
@@ -607,7 +610,7 @@ function createIntroParticipantsSlideXml(
     </a:graphic>
   </p:graphicFrame>`;
 
-  console.log("[DEBUG_PARTICIPANTS_SLIDE] Table XML généré (premiers 500 chars):", tableXml.substring(0,500));
+  // console.log("[DEBUG_PARTICIPANTS_SLIDE] Table XML généré (premiers 500 chars):", tableXml.substring(0,500)); // DEBUG
 
   // Titre de la diapositive (reste similaire)
   const titleText = "Participants";
@@ -792,16 +795,12 @@ function findHighestExistingTagNumber(zip: JSZip): number {
       const match = relativePath.match(/tag(\d+)\.xml$/);
       if (match && match[1]) {
         const tagNum = parseInt(match[1], 10);
-        console.log(
-          `[TAG_DEBUG] Found existing tag: ${relativePath}, number: ${tagNum}`
-        );
+        // console.log(`[TAG_DEBUG] Found existing tag: ${relativePath}, number: ${tagNum}`); // DEBUG
         if (tagNum > maxTagNumber) maxTagNumber = tagNum;
       }
     });
   }
-  console.log(
-    `[TAG_DEBUG] findHighestExistingTagNumber returning: ${maxTagNumber}`
-  );
+  // console.log(`[TAG_DEBUG] findHighestExistingTagNumber returning: ${maxTagNumber}`); // DEBUG
   return maxTagNumber;
 }
 
@@ -811,15 +810,15 @@ async function findLayoutByCSldName(
   targetName: string,
   layoutType: "title" | "participants" // Pour affiner la recherche et les alias
 ): Promise<string | null> {
-  console.log(`[ULTRA_DEBUG] Entrée findLayoutByCSldName. Target: ${targetName}, Type: ${layoutType}. ZIP object keys:`, Object.keys(zip.files));
+  // console.log(`[ULTRA_DEBUG] Entrée findLayoutByCSldName. Target: ${targetName}, Type: ${layoutType}. ZIP object keys:`, Object.keys(zip.files)); // DEBUG
   const layoutsFolder = zip.folder("ppt/slideLayouts");
   if (!layoutsFolder) {
-    console.warn("[DEBUG] Dossier ppt/slideLayouts non trouvé dans le template.");
+    // console.warn("[DEBUG] Dossier ppt/slideLayouts non trouvé dans le template."); // DEBUG
     return null;
   }
 
   const normalizedTargetName = targetName.toLowerCase().replace(/\s+/g, "");
-  console.log(`[DEBUG] Recherche layout pour targetName: "${targetName}", normalisé: "${normalizedTargetName}", type: ${layoutType}`);
+  // console.log(`[DEBUG] Recherche layout pour targetName: "${targetName}", normalisé: "${normalizedTargetName}", type: ${layoutType}`); // DEBUG
 
   let aliases: string[] = [];
   if (layoutType === "title") {
@@ -836,32 +835,32 @@ async function findLayoutByCSldName(
       "participantsslidelayout"
     ];
   }
-  console.log(`[DEBUG] Alias pour ${layoutType}:`, aliases);
+  // console.log(`[DEBUG] Alias pour ${layoutType}:`, aliases); // DEBUG
 
   const files = layoutsFolder.filter((relativePathEntry) => relativePathEntry.endsWith(".xml") && !relativePathEntry.includes("/_rels/"));
-  console.log(`[DEBUG] Fichiers .xml trouvés dans ppt/slideLayouts/: ${files.map(f => f.name).join(', ')}`);
+  // console.log(`[DEBUG] Fichiers .xml trouvés dans ppt/slideLayouts/: ${files.map(f => f.name).join(', ')}`); // DEBUG
 
   // chaque fileEntry est un JSZipObject
   for (const fileEntry of files) {
-    console.log(`[DEBUG_STEP_1] Examen de fileEntry.name: ${fileEntry.name}`);
+    // console.log(`[DEBUG_STEP_1] Examen de fileEntry.name: ${fileEntry.name}`); // DEBUG
     // fileEntry EST déjà l'objet JSZipObject, pas besoin de refaire zip.file()
     // On vérifie juste qu'il n'est pas null ou undefined, bien que filter ne devrait pas en retourner.
     if (fileEntry) {
-      console.log(`[DEBUG_STEP_2] fileEntry (JSZipObject) est valide pour ${fileEntry.name}`);
+      // console.log(`[DEBUG_STEP_2] fileEntry (JSZipObject) est valide pour ${fileEntry.name}`); // DEBUG
       try {
-        console.log(`[DEBUG_STEP_3] Tentative de lecture async de ${fileEntry.name} directement depuis fileEntry`);
+        // console.log(`[DEBUG_STEP_3] Tentative de lecture async de ${fileEntry.name} directement depuis fileEntry`); // DEBUG
         const content = await fileEntry.async("string"); // On appelle async directement sur le JSZipObject
-        console.log(`[DEBUG_STEP_4] Contenu lu pour ${fileEntry.name}, longueur: ${content.length}. Début: ${content.substring(0,100)}`);
+        // console.log(`[DEBUG_STEP_4] Contenu lu pour ${fileEntry.name}, longueur: ${content.length}. Début: ${content.substring(0,100)}`); // DEBUG
         const nameMatch = content.match(/<p:cSld[^>]*name="([^"]+)"/);
 
         if (nameMatch && nameMatch[1]) {
           const cSldNameAttr = nameMatch[1]; // Nom exact de l'attribut name dans le XML
           const normalizedCSldNameAttr = cSldNameAttr.toLowerCase().replace(/\s+/g, "");
-          console.log(`[DEBUG] Layout: ${fileEntry.name}, cSld name attr: "${cSldNameAttr}", normalisé: "${normalizedCSldNameAttr}"`);
+          // console.log(`[DEBUG] Layout: ${fileEntry.name}, cSld name attr: "${cSldNameAttr}", normalisé: "${normalizedCSldNameAttr}"`); // DEBUG
 
           // 1. Vérification directe du nom normalisé
           if (normalizedCSldNameAttr === normalizedTargetName) {
-            console.log(`[DEBUG] MATCH DIRECT! Layout trouvé: "${cSldNameAttr}" dans ${fileEntry.name} pour la cible "${targetName}"`);
+            // console.log(`[DEBUG] MATCH DIRECT! Layout trouvé: "${cSldNameAttr}" dans ${fileEntry.name} pour la cible "${targetName}"`); // DEBUG
             return fileEntry.name;  // Retourne le nom complet du fichier, ex: "ppt/slideLayouts/slideLayout1.xml"
           }
 
@@ -881,26 +880,26 @@ async function findLayoutByCSldName(
               }
 
               if (targetMatchesAliasOrType) {
-                console.log(`[DEBUG] MATCH ALIAS! Layout: "${cSldNameAttr}" (${fileEntry.name}) via alias "${alias}" pour cible "${targetName}" (type: ${layoutType})`);
+                // console.log(`[DEBUG] MATCH ALIAS! Layout: "${cSldNameAttr}" (${fileEntry.name}) via alias "${alias}" pour cible "${targetName}" (type: ${layoutType})`); // DEBUG
                 return fileEntry.name; // Retourne le nom complet du fichier
               }
             }
           }
         } else {
-          console.log(`[DEBUG] Layout: ${fileEntry.name}, pas d'attribut name trouvé dans <p:cSld>.`);
+          // console.log(`[DEBUG] Layout: ${fileEntry.name}, pas d'attribut name trouvé dans <p:cSld>.`); // DEBUG
         }
       } catch (error) {
-        console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${fileEntry.name}:`, error);
+        // console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${fileEntry.name}:`, error); // DEBUG
         if (error instanceof Error) {
-          console.error(`[DEBUG_ERREUR_STACK] Stack: ${error.stack}`);
+          // console.error(`[DEBUG_ERREUR_STACK] Stack: ${error.stack}`); // DEBUG
         }
       }
     } else {
-      console.warn(`[DEBUG_WARN] fileEntry est null/undefined pour un chemin listé, très étrange.`);
+      // console.warn(`[DEBUG_WARN] fileEntry est null/undefined pour un chemin listé, très étrange.`); // DEBUG
     }
   }
 
-  console.warn(`[DEBUG] Layout avec le nom (ou alias pour ${layoutType}) approchant "${targetName}" NON TROUVÉ après examen de tous les fichiers.`);
+  // console.warn(`[DEBUG] Layout avec le nom (ou alias pour ${layoutType}) approchant "${targetName}" NON TROUVÉ après examen de tous les fichiers.`); // DEBUG
   return null;
 }
 
@@ -1124,7 +1123,7 @@ function updatePresentationRelsWithMappings(
 
   // S'assurer que slideRIdMappings est trié par le numéro de diapositive final pour rebuildPresentationXml
   slideRIdMappings.sort((a, b) => a.slideNumber - b.slideNumber);
-  console.log("[DEBUG_ORDER] slideRIdMappings final:", JSON.stringify(slideRIdMappings));
+    // console.log("[DEBUG_ORDER] slideRIdMappings final:", JSON.stringify(slideRIdMappings)); // DEBUG
 
 
   let updatedContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
@@ -1629,7 +1628,7 @@ export async function generatePPTXVal17(
         const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
         const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber);
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
-        console.log(`[DEBUG_INTRO_SLIDE_ADD] Ajouté ppt/slides/slide${currentIntroSlideNumber}.xml`);
+        // console.log(`[DEBUG_INTRO_SLIDE_ADD] Ajouté ppt/slides/slide${currentIntroSlideNumber}.xml`); // DEBUG
 
         const layoutRIdInSlide = "rId1"; // Généralement, la relation vers le layout est rId1 dans les .rels des slides simples
         const titleLayoutBaseName = actualTitleLayoutFileName.substring(actualTitleLayoutFileName.lastIndexOf('/') + 1);
@@ -1638,7 +1637,7 @@ export async function generatePPTXVal17(
   <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${titleLayoutBaseName}"/>
 </Relationships>`;
         outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
-        console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels avec Target: ../slideLayouts/${titleLayoutBaseName}`);
+        // console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels avec Target: ../slideLayouts/${titleLayoutBaseName}`); // DEBUG
 
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
@@ -1660,7 +1659,7 @@ export async function generatePPTXVal17(
         const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
         const participantsSlideXml = createIntroParticipantsSlideXml(participants, currentIntroSlideNumber);
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, participantsSlideXml);
-        console.log(`[DEBUG_INTRO_SLIDE_ADD] Ajouté ppt/slides/slide${currentIntroSlideNumber}.xml (Participants)`);
+        // console.log(`[DEBUG_INTRO_SLIDE_ADD] Ajouté ppt/slides/slide${currentIntroSlideNumber}.xml (Participants)`); // DEBUG
 
         const layoutRIdInSlide = "rId1";
         const participantsLayoutBaseName = actualParticipantsLayoutFileName.substring(actualParticipantsLayoutFileName.lastIndexOf('/') + 1);
@@ -1669,7 +1668,7 @@ export async function generatePPTXVal17(
   <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${participantsLayoutBaseName}"/>
 </Relationships>`;
         outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
-        console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels (Participants) avec Target: ../slideLayouts/${participantsLayoutBaseName}`);
+        // console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels (Participants) avec Target: ../slideLayouts/${participantsLayoutBaseName}`); // DEBUG
 
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
@@ -1781,6 +1780,7 @@ export async function generatePPTXVal17(
         i + 1,
         existingTagsCount
       );
+      /* DEBUG Start
       if (i === 0) {
         console.log(
           `[TAG_DEBUG] First new question (index ${
@@ -1788,7 +1788,7 @@ export async function generatePPTXVal17(
           }), baseTagNumberForSlide: ${baseTagNumberForSlide} (calculated with offset: ${existingTagsCount})`
         );
       }
-
+      DEBUG End */
       // Construction de slideRelsXml en respectant l'ordre observé chez OMBEA
       // Les Id (rId1, rId2, etc.) sont ceux utilisés par slideX.xml pour référencer les targets.
       let slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
@@ -1846,11 +1846,28 @@ export async function generatePPTXVal17(
         }
       }
       // Utiliser questionData.dbQuestionId ici
+      // questionData.theme contient le theme complet (ex: "securite_A")
+      let baseTheme = '';
+      let blockIdentifier = '';
+      if (questionData.theme) {
+        const parts = questionData.theme.split('_');
+        baseTheme = parts[0];
+        if (parts.length > 1) {
+          blockIdentifier = parts[1];
+        } else {
+          // Cas où le thème n'a pas de suffixe de bloc explicite, pourrait être un thème général
+          // ou une question non assignée à un bloc spécifique A, B, C...
+          // Pour l'instant, on laisse blockIdentifier vide ou on pourrait mettre une valeur par défaut.
+          console.warn(`[val17PptxGenerator] Question avec dbQuestionId ${questionData.dbQuestionId} a un thème "${questionData.theme}" sans suffixe de bloc identifiable (_X).`);
+        }
+      }
+
       questionMappingsInternal.push({
-        dbQuestionId: questionData.dbQuestionId, // Assurez-vous que Val17Question a dbQuestionId
+        dbQuestionId: questionData.dbQuestionId,
         slideGuid: slideGuid,
         orderInPptx: i + 1, // Ordre basé sur l'itération des questions pour cette session
-        // title: questionData.question, // Optionnel pour debug
+        theme: baseTheme,        // AJOUTÉ
+        blockId: blockIdentifier // AJOUTÉ
       });
     }
     if (existingTagsCount > 0 && questions.length > 0) {

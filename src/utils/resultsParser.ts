@@ -25,6 +25,8 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "application/xml");
 
+  // console.log("XML content snippet for debugging (first 500 chars):", xmlString.substring(0, 500)); // DEBUG
+
   const parserErrorNode = xmlDoc.querySelector("parsererror");
   if (parserErrorNode) {
     console.error("Erreur de parsing XML:", parserErrorNode.textContent || "Erreur inconnue du parser");
@@ -50,17 +52,24 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
   if(respondentToDeviceMap.size === 0) {
     console.warn("Aucun mappage RespondentID vers DeviceID n'a pu être créé à partir de RespondentList. Le parsing des réponses pourrait échouer à trouver les DeviceID.");
   } else {
-    console.log("Map RespondentID vers DeviceID créé:", respondentToDeviceMap);
+    // console.log("Map RespondentID vers DeviceID créé:", respondentToDeviceMap); // DEBUG
   }
 
 
   // 2. Itérer sur chaque <ors:Question>
   const questionNodes = xmlDoc.querySelectorAll("ORSession > Questions > Question");
-  console.log(`Nombre de <Question> trouvées dans le XML: ${questionNodes.length}`);
+  // console.log(`Nombre de <Question> trouvées dans le XML: ${questionNodes.length}`); // DEBUG
 
   questionNodes.forEach((qNode, qIndex) => {
     const slideGuid = qNode.getAttribute("SlideGUID");
     const questionXMLId = qNode.getAttribute("ID"); // ID numérique simple (1, 2, ...) de la question dans le XML
+
+    /* DEBUG Start
+    if (qIndex < 3) { // Log details for the first 3 questions
+      console.log(`[Parser Log] Question XML ID: ${questionXMLId}, SlideGUID: ${slideGuid}`);
+      console.log(`[Parser Log] Question Node OuterHTML: ${qNode.outerHTML.substring(0, 500)}...`);
+    }
+    DEBUG End */
 
     if (!slideGuid) {
       console.warn(`Question (ID XML: ${questionXMLId || qIndex + 1}) n'a pas de SlideGUID. Ses réponses seront ignorées.`);
@@ -83,8 +92,14 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
          console.warn(`ID ou Points manquant pour une Answer dans Question SlideGUID ${slideGuid}`);
       }
     });
+    /* DEBUG Start
+    if (qIndex < 3) {
+        console.log(`[Parser Log] answerScores map for SlideGUID ${slideGuid}:`, answerScores);
+    }
+    DEBUG End */
 
     // 2b. Itérer sur chaque <ors:Response> pour cette question
+    let responseCounterForQuestion = 0;
     qNode.querySelectorAll("Responses > Response").forEach(responseNode => {
       // RespondentID dans <ors:Response> est l'ID séquentiel (1, 2, 3...)
       const respondentIdSequential = responseNode.getAttribute("RespondentID");
@@ -96,7 +111,12 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
 
       if (participantDeviceID && slideGuid && answerGivenID) {
         const pointsObtained = answerScores.get(answerGivenID) ?? 0;
-
+        /* DEBUG Start
+        if (qIndex < 3 && responseCounterForQuestion < 5) { // Log for first 3 questions, first 5 responses
+            console.log(`[Parser Log] Response for SlideGUID ${slideGuid}: RespondentIDSeq=${respondentIdSequential}, DeviceID=${participantDeviceID}, AnswerGivenID=${answerGivenID}, PointsObtained=${pointsObtained}`);
+            responseCounterForQuestion++;
+        }
+        DEBUG End */
         extractedResults.push({
           participantDeviceID,
           questionSlideGuid: slideGuid,
@@ -135,6 +155,8 @@ export const transformParsedResponsesToSessionResults = (
 ): SessionResult[] => {
   const sessionResults: SessionResult[] = [];
 
+  // console.log("[Transform Log] Initial questionMappingsFromSession:", questionMappingsFromSession); // DEBUG
+
   if (!currentSessionId) {
     console.error("ID de session manquant pour la transformation des résultats.");
     return [];
@@ -158,10 +180,16 @@ export const transformParsedResponsesToSessionResults = (
     console.warn("Aucun mappage slideGuid -> dbQuestionId valide trouvé dans questionMappingsFromSession. Vérifiez le contenu de session.questionMappings.");
     return [];
   }
-  console.log("Map dbQuestionId par SlideGUID (depuis session.questionMappings):", dbQuestionIdBySlideGuid);
+  // console.log("[Transform Log] Map dbQuestionId par SlideGUID (depuis session.questionMappings):", dbQuestionIdBySlideGuid); // DEBUG
 
-  extractedResults.forEach(extResult => {
+  extractedResults.forEach((extResult, index) => {
     const dbQuestionId = dbQuestionIdBySlideGuid.get(extResult.questionSlideGuid);
+
+    /* DEBUG Start
+    if (index < 5) { // Log details for the first 5 extracted results being transformed
+        console.log(`[Transform Log] Processing extResult ${index}: SlideGUID=${extResult.questionSlideGuid}, ParticipantDeviceID=${extResult.participantDeviceID}, PointsObtained=${extResult.pointsObtained}`);
+    }
+    DEBUG End */
 
     if (!dbQuestionId) {
       console.warn(`Impossible de trouver un dbQuestionId pour le SlideGUID XML "${extResult.questionSlideGuid}" via les questionMappings de la session. Résultat ignoré pour le participant ${extResult.participantDeviceID}.`);
@@ -170,6 +198,11 @@ export const transformParsedResponsesToSessionResults = (
 
     // Déterminer isCorrect en fonction des points.
     const isCorrect = extResult.pointsObtained > 0;
+    /* DEBUG Start
+     if (index < 5) {
+        console.log(`[Transform Log] For extResult ${index}: dbQuestionId=${dbQuestionId}, isCorrect derived as ${isCorrect} from points ${extResult.pointsObtained}`);
+    }
+    DEBUG End */
 
     const sessionResult: SessionResult = {
       sessionId: currentSessionId,
@@ -181,8 +214,20 @@ export const transformParsedResponsesToSessionResults = (
       timestamp: new Date().toISOString(),
     };
     sessionResults.push(sessionResult);
+    /* DEBUG Start
+    if (index < 5) {
+        console.log(`[Transform Log] Created SessionResult ${index}:`, sessionResult);
+    }
+    DEBUG End */
   });
 
   console.log(`${sessionResults.length} résultats transformés en SessionResult.`);
+  /* DEBUG Start
+  if (sessionResults.length > 0 && sessionResults.length < 5) {
+    console.log("[Transform Log] All transformed SessionResults (if few):", sessionResults);
+  } else if (sessionResults.length > 0) {
+    console.log("[Transform Log] First 3 transformed SessionResults:", sessionResults.slice(0,3));
+  }
+  DEBUG End */
   return sessionResults;
 };
