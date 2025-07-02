@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Consolidated import, added useEffect
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
 // Button from '../components/ui/Button'; // Supprimé car non utilisé
@@ -19,9 +19,10 @@ type SettingsProps = {
 
 type AdminTab = 'files' | 'hardware' | 'preferences' | 'library' | 'backup' | 'technical';
 
-import React, { useState, useEffect } from 'react'; // Import useEffect
-// ... other imports
-import TechnicalSettings from '../components/settings/TechnicalSettings';
+// Removed duplicate import of React, useState, useEffect
+// import React, { useState, useEffect } from 'react';
+// // ... other imports
+// import TechnicalSettings from '../components/settings/TechnicalSettings'; // This import is fine if not duplicated
 
 const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('files');
