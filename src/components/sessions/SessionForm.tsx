@@ -18,25 +18,19 @@ import {
   addSession,
   updateSession,
   getSessionById,
-  addBulkSessionResults, // This was confirmed to be in the user-provided db.ts
+  addBulkSessionResults,
   getResultsForSession,
   getQuestionsByIds,
-  db // db might still be needed for other direct calls or if some functions are still missing
+  getAllVotingDevices, // Import function to get voting devices
+  VotingDevice,      // Import type for VotingDevice
+  db
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import JSZip from 'jszip';
 
-// TEMPORARY: Hardcoded list of physical OMBEA device IDs
-// TODO: Replace with a system where these are managed (e.g., admin section or settings)
-const OMBEA_DEVICE_IDS: string[] = [
-  "102494", // Corresponds to logical deviceId 1
-  "1017ED", // Corresponds to logical deviceId 2
-  "PHYSID3", // Placeholder for logical deviceId 3
-  "PHYSID4", // Placeholder for logical deviceId 4
-  // Add more as needed, up to the number of physical devices available
-];
+// const OMBEA_DEVICE_IDS: string[] = [ ... ]; // REMOVED - Will fetch from DB
 
 interface FormParticipant extends DBParticipantType {
   id: string; // Unique ID for React key prop
@@ -65,6 +59,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
+  const [hardwareDevices, setHardwareDevices] = useState<VotingDevice[]>([]); // State for hardware devices
+
+  useEffect(() => { // Effect to load hardware devices on component mount
+    const fetchHardwareDevices = async () => {
+      const devicesFromDb = await getAllVotingDevices();
+      // Sort by ID to ensure consistent order, similar to HardwareSettings
+      setHardwareDevices(devicesFromDb.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
+    };
+    fetchHardwareDevices();
+  }, []);
 
   const resetFormState = useCallback(() => {
     setCurrentSessionDbId(null);
@@ -96,20 +100,29 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
           // p_db.idBoitier now stores the PHYSICAL Ombea ID
           const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
-            let logicalDeviceId = loopIndex + 1; // Default to loop order if physical ID not in our hardcoded list
-            const physicalIdIndex = OMBEA_DEVICE_IDS.indexOf(p_db.idBoitier);
+            let logicalDeviceId = 0; // Default to 0 if not found, indicating an issue or unassigned
+            const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
 
             if (physicalIdIndex !== -1) {
-              logicalDeviceId = physicalIdIndex + 1; // 1-based logical ID
-            } else if (p_db.idBoitier) { // If idBoitier is a physical ID not in our list
+              logicalDeviceId = physicalIdIndex + 1; // 1-based logical ID from the current hardware config
+            } else if (p_db.idBoitier) {
+              // If the stored physical ID is not in the current hardware list
               console.warn(
                 `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} ` +
-                `n'a pas été trouvé dans la liste OMBEA_DEVICE_IDS. Utilisation de l'ordre (${logicalDeviceId}) comme deviceId logique.`
+                `n'a pas été trouvé dans la configuration matérielle actuelle. Le boîtier logique sera 0.`
               );
+              // Keep p_db.idBoitier as is (it's the stored physical ID)
+              // logicalDeviceId remains 0, user might need to re-assign or be alerted.
+            } else {
+              // No physical ID was stored for this participant. Assign based on loop order if needed,
+              // but this scenario should ideally be less common with proper assignment.
+              // For now, this might mean the participant didn't have a device.
+              logicalDeviceId = 0; // Or handle as unassigned
+               console.log(`Participant ${p_db.prenom} ${p_db.nom} n'avait pas d'ID boîtier physique stocké.`);
             }
 
             return {
-              ...p_db, // Spreads nom, prenom, score, reussite, identificationCode, and PHYSICAL idBoitier
+              ...p_db, // Spreads nom, prenom, score, reussite, identificationCode, and PHYSICAL idBoitier (p_db.idBoitier)
               id: `loaded-${loopIndex}-${p_db.idBoitier}`, // Unique key for React
               firstName: p_db.prenom,
               lastName: p_db.nom,
@@ -195,32 +208,31 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       return null;
     }
 
-    const dbParticipants: DBParticipantType[] = participants.map((p_form, index) => {
-      let assignedPhysicalId = p_form.idBoitier; // Default to existing idBoitier if any
+    const dbParticipants: DBParticipantType[] = participants.map((p_form) => {
+      let assignedPhysicalId = ''; // Initialize with empty string
 
-      // Use p_form.deviceId (logical 1-based order) to get the physical ID
-      // The user-facing 'deviceId' field in the form should be the logical number (1, 2, 3...)
+      // p_form.deviceId is the logical 1-based number selected by the user in the form.
       const logicalDeviceId = p_form.deviceId;
 
-      if (logicalDeviceId > 0 && logicalDeviceId <= OMBEA_DEVICE_IDS.length) {
-        assignedPhysicalId = OMBEA_DEVICE_IDS[logicalDeviceId - 1];
-      } else {
+      if (logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
+        // The logicalDeviceId is 1-based, so subtract 1 for 0-based array index.
+        assignedPhysicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
+      } else if (logicalDeviceId !== 0) { // If 0, it means unassigned, so physical ID remains empty.
+        // This case means the logicalDeviceId is out of bounds of the current hardware config
         console.warn(
-          `Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) hors limites ` +
-          `ou non défini par rapport à la liste OMBEA_DEVICE_IDS (taille: ${OMBEA_DEVICE_IDS.length}). ` +
-          `L'idBoitier actuel (${p_form.idBoitier}) sera conservé ou sera vide s'il n'est pas défini.`
+          `Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) ` +
+          `qui est hors limites par rapport à la configuration matérielle actuelle (taille: ${hardwareDevices.length}). ` +
+          `Aucun ID physique ne sera assigné.`
         );
-        // If no valid logicalDeviceId, try to keep existing p_form.idBoitier if it might be a pre-loaded physical ID,
-        // otherwise, it might become undefined or an empty string if we don't have a fallback.
-        // For new participants, p_form.idBoitier might be the initial (logical) deviceId.toString().
-        // This logic ensures we prioritize mapping via OMBEA_DEVICE_IDS if logicalDeviceId is valid.
-        if (!assignedPhysicalId) { // If p_form.idBoitier was also empty or undefined
-            assignedPhysicalId = `ERROR_NO_PHYSICAL_ID_FOR_LOGICAL_${logicalDeviceId}`;
-        }
+        // assignedPhysicalId remains '', indicating no valid physical device is linked.
+        // The application might need further logic to handle participants without a valid assigned device.
       }
+      // If logicalDeviceId is 0 (or invalid), assignedPhysicalId remains '', meaning no device is assigned.
+      // p_form.idBoitier (from loaded data) isn't directly used here for re-assignment
+      // as the source of truth for mapping is now hardwareDevices and p_form.deviceId (logical choice).
 
       return {
-        idBoitier: assignedPhysicalId, // This should now be the PHYSICAL Ombea ID
+        idBoitier: assignedPhysicalId, // This is the PHYSICAL Ombea ID from hardwareDevices
         nom: p_form.lastName,
         prenom: p_form.firstName,
         identificationCode: p_form.identificationCode,
@@ -271,15 +283,24 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
          const reloadedSession = await getSessionById(savedId); // Reverted to getSessionById
          setEditingSessionData(reloadedSession || null);
          if (reloadedSession) {
-            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => ({
+            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => {
+              let logicalDeviceId = 0; // Default if mapping fails
+              const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
+              if (physicalIdIndex !== -1) {
+                logicalDeviceId = physicalIdIndex + 1; // 1-based
+              } else if (p_db.idBoitier) {
+                console.warn(`[handleSaveSession] L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} n'est pas dans la config matériel. Boîtier logique sera 0.`);
+              }
+              return {
                 ...p_db,
-                id: `form-${index}-${p_db.idBoitier}`,
+                id: participants[index]?.id || `form-${index}-${p_db.idBoitier}`, // Preserve React key if possible
                 firstName: p_db.prenom,
                 lastName: p_db.nom,
-                deviceId: parseInt(p_db.idBoitier, 10) || index + 1,
+                deviceId: logicalDeviceId, // Logical device ID based on current hardware config
                 organization: (participants[index] as any)?.organization || '',
                 hasSigned: (participants[index] as any)?.hasSigned || false,
-              }));
+              };
+            });
             setParticipants(formParticipants);
             const summary: Record<string, string> = {};
             if(reloadedSession.selectionBlocs){
@@ -343,25 +364,26 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const adminSettings: AdminPPTXSettings = { defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod', pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1' };
 
       const participantsForGenerator: DBParticipantType[] = participants.map((p_form, index) => {
-        let physicalId = '';
+        let physicalId = ''; // Initialize with empty string
         // p_form.deviceId is the 1-based logical order from the form
         const logicalDeviceId = p_form.deviceId;
 
-        if (logicalDeviceId > 0 && logicalDeviceId <= OMBEA_DEVICE_IDS.length) {
-          physicalId = OMBEA_DEVICE_IDS[logicalDeviceId - 1];
-        } else {
-          // Fallback or error for invalid logicalDeviceId
-          // This case should ideally be prevented by form validation or clearer UI for deviceId input
+        if (logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
+          // The logicalDeviceId is 1-based, so subtract 1 for 0-based array index.
+          physicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
+        } else if (logicalDeviceId !== 0) { // If 0, it means unassigned, so physical ID remains empty.
           console.warn(
             `[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) ` +
-            `a un deviceId logique (${logicalDeviceId}) invalide pour le mapping vers un ID physique. ` +
-            `Tentative d'utilisation de p_form.idBoitier ('${p_form.idBoitier}') ou d'un fallback.`
+            `a un deviceId logique (${logicalDeviceId}) invalide pour le mapping vers un ID physique (config actuelle: ${hardwareDevices.length} boîtiers). ` +
+            `L'ID physique sera vide pour ce participant dans le .ors.`
           );
-          physicalId = p_form.idBoitier || `INVALID_LOGICAL_ID_${logicalDeviceId}`;
+          // physicalId remains '', as no valid mapping found.
+          // The .ors generation might need to handle or skip participants without a physicalId.
         }
+        // If logicalDeviceId is 0, physicalId also remains '', meaning no device assigned.
 
         return {
-          idBoitier: physicalId, // Ensure this is the PHYSICAL Ombea ID
+          idBoitier: physicalId, // This is the PHYSICAL Ombea ID from hardwareDevices
           nom: p_form.lastName,
           prenom: p_form.firstName,
           identificationCode: p_form.identificationCode,
@@ -479,15 +501,26 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
                       // console.log("[SessionForm Import Log] Participants from final reloaded session (first 2):", finalUpdatedSession.participants.slice(0,2)); // DEBUG
-                      const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db, index) => ({
-                        ...p_db,
-                        id: participants[index]?.id || `updated-${index}-${p_db.idBoitier}`, // Conserver l'ID React si possible
-                        firstName: p_db.prenom,
-                        lastName: p_db.nom,
-                        deviceId: participants[index]?.deviceId || parseInt(p_db.idBoitier,10) || index + 1,
-                        organization: participants[index]?.organization || (p_db as any).organization,
-                        hasSigned: participants[index]?.hasSigned || (p_db as any).hasSigned,
-                      }));
+                      const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db, index) => {
+                        let logicalDeviceId = 0; // Default if mapping fails
+                        const currentParticipantState = participants[index]; // For preserving non-DB state like 'organization'
+                        const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
+
+                        if (physicalIdIndex !== -1) {
+                          logicalDeviceId = physicalIdIndex + 1; // 1-based
+                        } else if (p_db.idBoitier) {
+                          console.warn(`[handleImportResults] L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} (après import résultats) n'est pas dans la config matériel. Boîtier logique sera 0.`);
+                        }
+                        return {
+                          ...p_db,
+                          id: currentParticipantState?.id || `updated-${index}-${p_db.idBoitier}`,
+                          firstName: p_db.prenom,
+                          lastName: p_db.nom,
+                          deviceId: logicalDeviceId,
+                          organization: currentParticipantState?.organization || (p_db as any).organization,
+                          hasSigned: currentParticipantState?.hasSigned || (p_db as any).hasSigned,
+                        };
+                      });
                       setParticipants(formParticipantsToUpdate);
                     }
                   } else { message += "\nImpossible de charger les questions pour le calcul des scores."; }
