@@ -60,7 +60,8 @@ const TechnicalSettings: React.FC = () => {
   }
 
   return (
-    <Card title="Paramètres Techniques" description="Configurez les noms par défaut des fichiers exportés.">
+    <Card title="Paramètres Techniques">
+      <p className="text-sm text-gray-600 mb-6">Configurez les noms par défaut des fichiers exportés.</p>
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
           <label className="font-medium text-gray-700">Préfixe des rapports PDF</label>

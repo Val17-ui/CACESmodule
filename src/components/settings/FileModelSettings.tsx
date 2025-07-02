@@ -52,7 +52,8 @@ const FileModelSettings: React.FC = () => {
   };
 
   return (
-    <Card title="Modèle PowerPoint" description="Gérez le modèle .pptx par défaut pour la génération des questionnaires.">
+    <Card title="Modèle PowerPoint">
+      <p className="text-sm text-gray-600 mb-4">Gérez le modèle .pptx par défaut pour la génération des questionnaires.</p>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Modèle actuel</label>

@@ -1,9 +1,9 @@
-'''import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
-import { Save, Info } from 'lucide-react';
+import { Save } from 'lucide-react'; // Supprimé Info car non utilisé
 import { getAdminSetting, setAdminSetting } from '../../db';
 
 // Définition des types pour les préférences
@@ -60,7 +60,7 @@ const UserPreferences: React.FC = () => {
   };
 
   const handleChange = (key: keyof UserPreferencesData, value: string | number) => {
-    setPreferences(prev => ({ ...prev, [key]: value }));
+    setPreferences((prev: UserPreferencesData) => ({ ...prev, [key]: value }));
   };
 
   if (isLoading) {
@@ -68,7 +68,8 @@ const UserPreferences: React.FC = () => {
   }
 
   return (
-    <Card title="Préférences Utilisateur" description="Ces paramètres affectent la génération des questionnaires .pptx et .ors.">
+    <Card title="Préférences Utilisateur">
+      <p className="text-sm text-gray-600 mb-6">Ces paramètres affectent la génération des questionnaires .pptx et .ors.</p>
       <div className="space-y-6">
         {/* Ouverture du vote */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
@@ -135,4 +136,3 @@ const UserPreferences: React.FC = () => {
 };
 
 export default UserPreferences;
-''

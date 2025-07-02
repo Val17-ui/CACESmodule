@@ -18,9 +18,10 @@ import {
   addSession,
   updateSession,
   getSessionById,
-  addBulkSessionResults,
+  addBulkSessionResults, // This was confirmed to be in the user-provided db.ts
   getResultsForSession,
-  getQuestionsByIds
+  getQuestionsByIds,
+  db // db might still be needed for other direct calls or if some functions are still missing
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -83,7 +84,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   useEffect(() => {
     if (sessionIdToLoad) {
       const loadSession = async () => {
-        const sessionData = await getSessionById(sessionIdToLoad);
+        const sessionData = await getSessionById(sessionIdToLoad); // Reverted to getSessionById
         setEditingSessionData(sessionData || null);
         if (sessionData) {
           setCurrentSessionDbId(sessionData.id ?? null);
@@ -254,10 +255,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     try {
       let savedId: number | undefined;
       if (sessionData.id) {
-        await updateSession(sessionData.id, sessionData);
+        await updateSession(sessionData.id, sessionData); // Reverted to updateSession
         savedId = sessionData.id;
       } else {
-        const newId = await addSession(sessionData);
+        const newId = await addSession(sessionData); // Reverted to addSession
         if (newId) {
           setCurrentSessionDbId(newId);
           savedId = newId;
@@ -267,7 +268,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         }
       }
       if (savedId) {
-         const reloadedSession = await getSessionById(savedId);
+         const reloadedSession = await getSessionById(savedId); // Reverted to getSessionById
          setEditingSessionData(reloadedSession || null);
          if (reloadedSession) {
             const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => ({
@@ -375,12 +376,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
         const { orsBlob, questionMappings } = generationOutput;
         try {
-          await updateSession(savedSessionId, {
+          await updateSession(savedSessionId, { // Reverted to updateSession
             donneesOrs: orsBlob,
             questionMappings: questionMappings,
             updatedAt: new Date().toISOString(), status: 'ready'
           });
-          setEditingSessionData(await getSessionById(savedSessionId) || null);
+          setEditingSessionData(await getSessionById(savedSessionId) || null); // Reverted to getSessionById
           setImportSummary(`Session (ID: ${savedSessionId}) .ors et mappings générés. Statut: Prête.`);
         } catch (e: any) { setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`); }
       } else { setImportSummary("Erreur génération .ors/mappings. Données manquantes."); }
@@ -422,21 +423,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
       if (sessionResultsToSave.length > 0) {
         try {
-          const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+          const savedResultIds = await addBulkSessionResults(sessionResultsToSave); // Reverted to addBulkSessionResults
           // console.log("[SessionForm Import Log] Saved Result IDs from DB:", savedResultIds); // DEBUG
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats sauvegardés !`;
             let sessionProcessError: string | null = null;
             try {
               if (currentSessionDbId) {
-                await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+                await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() }); // Reverted to updateSession
                 message += "\nStatut session: 'Terminée'.";
 
-                const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId);
+                const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId); // Reverted to getResultsForSession
                 // console.log("[SessionForm Import Log] Fetched SessionResults for score calculation (first 5):", sessionResultsForScore.slice(0,5)); // DEBUG
-                let sessionDataForScores = await getSessionById(currentSessionDbId);
+                let sessionDataForScores = await getSessionById(currentSessionDbId); // Reverted to getSessionById
                 // console.log("[SessionForm Import Log] SessionData for score calculation:", sessionDataForScores); // DEBUG
-
 
                 if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
@@ -471,10 +471,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     });
                     // console.log("[SessionForm Import Log] UpdatedParticipants with scores (first 2):", updatedParticipants.slice(0,2)); // DEBUG
 
-                    await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
+                    await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() }); // Reverted to updateSession
                     message += "\nScores et réussite calculés et mis à jour.";
 
-                    const finalUpdatedSession = await getSessionById(currentSessionDbId);
+                    const finalUpdatedSession = await getSessionById(currentSessionDbId); // Reverted to getSessionById
                     // console.log("[SessionForm Import Log] Final reloaded session data after score update:", finalUpdatedSession); // DEBUG
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);

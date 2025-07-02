@@ -38,7 +38,7 @@ const SystemLogViewer: React.FC = () => {
           <Button variant="outline" onClick={handleRefreshLogs} icon={<RefreshCw size={16} />}>
             Rafraîchir
           </Button>
-          <Button variant="destructive" onClick={handleClearLogs} icon={<Trash2 size={16} />}>
+          <Button variant="danger" onClick={handleClearLogs} icon={<Trash2 size={16} />}> {/* Changed "destructive" to "danger" */}
             Effacer les logs
           </Button>
         </div>
@@ -55,13 +55,14 @@ const SystemLogViewer: React.FC = () => {
                 <span>{log.message}</span>
                 {log.details && typeof log.details === 'object' && log.details !== null && (
                   <pre className="ml-4 mt-1 text-xs bg-gray-100 p-2 rounded overflow-x-auto">
-                    {(() => {
+                    {String((() => { // Ensure the result is explicitly cast to string
                       try {
                         return JSON.stringify(log.details, null, 2);
                       } catch (e) {
-                        return 'Error: Unable to serialize details';
+                        // Ensure the error message is also a string, though it already is.
+                        return String('Error: Unable to serialize details');
                       }
-                    })()}
+                    })())}
                   </pre>
                 )}
               </li>
