@@ -372,6 +372,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
                   if (sessionQuestions.length > 0) {
                     const updatedParticipants = sessionDataForScores.participants.map((p, pIndex) => {
+                      if (pIndex < 2) {
+                        console.log(`[SessionForm ScoreCalc Debug] Participant p (index ${pIndex}):`, JSON.stringify(p));
+                        console.log(`[SessionForm ScoreCalc Debug] Valeur de p.idBoitier pour ce participant: ${p.idBoitier}`);
+                        console.log(`[SessionForm ScoreCalc Debug] Comparaison : r.participantIdBoitier (ex: ${sessionResultsForScore[0]?.participantIdBoitier}) vs p.idBoitier (${p.idBoitier})`);
+                      }
                       const participantResults = sessionResultsForScore.filter(r => r.participantIdBoitier === p.idBoitier);
                       if (pIndex < 2) { // Log for first 2 participants
                         console.log(`[SessionForm Import Log] For participant ${p.idBoitier} (${p.nom}), their results for scoring (first 5):`, participantResults.slice(0,5));
