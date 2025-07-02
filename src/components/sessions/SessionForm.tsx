@@ -15,13 +15,13 @@ import {
 import { StorageManager } from '../../services/StorageManager';
 import {
   QuestionWithId as StoredQuestion,
-  addSession,
-  updateSession,
+  // addSession, // Not exported from db.ts
+  updateSession, // Assuming updateSession and getSessionById ARE exported
   getSessionById,
   // addBulkSessionResults, // This function is not exported from db.ts
   getResultsForSession,
   getQuestionsByIds,
-  db // Import db object to use db.sessionResults.bulkAdd
+  db // Import db object to use db.sessions.add and db.sessionResults.bulkAdd
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -84,7 +84,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   useEffect(() => {
     if (sessionIdToLoad) {
       const loadSession = async () => {
-        const sessionData = await getSessionById(sessionIdToLoad);
+        const sessionData = await db.sessions.get(sessionIdToLoad); // Use db.sessions.get
         setEditingSessionData(sessionData || null);
         if (sessionData) {
           setCurrentSessionDbId(sessionData.id ?? null);
@@ -255,20 +255,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     try {
       let savedId: number | undefined;
       if (sessionData.id) {
-        await updateSession(sessionData.id, sessionData);
+        await db.sessions.update(sessionData.id, sessionData); // Use db.sessions.update
         savedId = sessionData.id;
       } else {
-        const newId = await addSession(sessionData);
+        // Use db.sessions.add directly
+        const newId = await db.sessions.add(sessionData);
         if (newId) {
-          setCurrentSessionDbId(newId);
-          savedId = newId;
+          setCurrentSessionDbId(newId as number); // Dexie's add returns the new primary key
+          savedId = newId as number;
         } else {
           setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée.");
           return null;
         }
       }
       if (savedId) {
-         const reloadedSession = await getSessionById(savedId);
+         const reloadedSession = await db.sessions.get(savedId); // Use db.sessions.get
          setEditingSessionData(reloadedSession || null);
          if (reloadedSession) {
             const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => ({
@@ -376,12 +377,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
         const { orsBlob, questionMappings } = generationOutput;
         try {
-          await updateSession(savedSessionId, {
+          await db.sessions.update(savedSessionId, { // Use db.sessions.update
             donneesOrs: orsBlob,
             questionMappings: questionMappings,
             updatedAt: new Date().toISOString(), status: 'ready'
           });
-          setEditingSessionData(await getSessionById(savedSessionId) || null);
+          setEditingSessionData(await db.sessions.get(savedSessionId) || null); // Use db.sessions.get
           setImportSummary(`Session (ID: ${savedSessionId}) .ors et mappings générés. Statut: Prête.`);
         } catch (e: any) { setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`); }
       } else { setImportSummary("Erreur génération .ors/mappings. Données manquantes."); }
@@ -431,14 +432,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             let sessionProcessError: string | null = null;
             try {
               if (currentSessionDbId) {
-                await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+                await db.sessions.update(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() }); // Use db.sessions.update
                 message += "\nStatut session: 'Terminée'.";
 
-                const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId);
+                const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId); // Assuming getResultsForSession IS exported
                 // console.log("[SessionForm Import Log] Fetched SessionResults for score calculation (first 5):", sessionResultsForScore.slice(0,5)); // DEBUG
-                let sessionDataForScores = await getSessionById(currentSessionDbId);
+                let sessionDataForScores = await db.sessions.get(currentSessionDbId); // Use db.sessions.get
                 // console.log("[SessionForm Import Log] SessionData for score calculation:", sessionDataForScores); // DEBUG
-
 
                 if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
@@ -473,10 +473,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     });
                     // console.log("[SessionForm Import Log] UpdatedParticipants with scores (first 2):", updatedParticipants.slice(0,2)); // DEBUG
 
-                    await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
+                    await db.sessions.update(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() }); // Use db.sessions.update
                     message += "\nScores et réussite calculés et mis à jour.";
 
-                    const finalUpdatedSession = await getSessionById(currentSessionDbId);
+                    const finalUpdatedSession = await db.sessions.get(currentSessionDbId); // Use db.sessions.get
                     // console.log("[SessionForm Import Log] Final reloaded session data after score update:", finalUpdatedSession); // DEBUG
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
