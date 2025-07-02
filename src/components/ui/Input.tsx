@@ -16,6 +16,8 @@ type InputProps = {
   max?: number;
   icon?: ReactNode;
   iconPosition?: 'left' | 'right';
+  autoFocus?: boolean;
+  accept?: string; // Ajout de la prop accept
 };
 
 const Input: React.FC<InputProps> = ({
@@ -34,6 +36,8 @@ const Input: React.FC<InputProps> = ({
   max,
   icon,
   iconPosition = 'left',
+  autoFocus = false,
+  accept, // Ajout de accept aux props déstructurées
 }) => {
   const inputId = id || name;
 
@@ -73,6 +77,8 @@ const Input: React.FC<InputProps> = ({
           disabled={disabled}
           min={min}
           max={max}
+          autoFocus={autoFocus}
+          accept={accept} // Utilisation de la prop accept
         />
         {icon && iconPosition === 'right' && (
           <span className="absolute right-3 inset-y-0 flex items-center justify-center">
