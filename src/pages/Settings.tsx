@@ -33,7 +33,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
     { id: 'files', label: 'Fichiers et Modèles', icon: <File size={20} /> },
     { id: 'hardware', label: 'Matériel', icon: <HardDrive size={20} /> },
     { id: 'preferences', label: 'Préférences', icon: <User size={20} /> },
-    { id: 'library', label: 'Bibliothèque Questions', icon: <BookOpen size={20} /> },
+    { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
     { id: 'backup', label: 'Sauvegarde & Restauration', icon: <Database size={20} /> },
     { id: 'technical', label: 'Paramètres Techniques', icon: <Wrench size={20} /> },
   ];

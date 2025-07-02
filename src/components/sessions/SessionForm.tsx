@@ -18,25 +18,20 @@ import {
   addSession,
   updateSession,
   getSessionById,
-  addBulkSessionResults, // This was confirmed to be in the user-provided db.ts
+  addBulkSessionResults,
   getResultsForSession,
   getQuestionsByIds,
-  db // db might still be needed for other direct calls or if some functions are still missing
+  getAllVotingDevices,
+  VotingDevice,
+  getGlobalPptxTemplate, // Import the new getter for the global template
+  db
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import JSZip from 'jszip';
 
-// TEMPORARY: Hardcoded list of physical OMBEA device IDs
-// TODO: Replace with a system where these are managed (e.g., admin section or settings)
-const OMBEA_DEVICE_IDS: string[] = [
-  "102494", // Corresponds to logical deviceId 1
-  "1017ED", // Corresponds to logical deviceId 2
-  "PHYSID3", // Placeholder for logical deviceId 3
-  "PHYSID4", // Placeholder for logical deviceId 4
-  // Add more as needed, up to the number of physical devices available
-];
+// const OMBEA_DEVICE_IDS: string[] = [ ... ]; // REMOVED - Will fetch from DB
 
 interface FormParticipant extends DBParticipantType {
   id: string; // Unique ID for React key prop
@@ -60,11 +55,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
-  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  // const [templateFile, setTemplateFile] = useState<File | null>(null); // REMOVED - Global template will be used
   const [selectedBlocksSummary, setSelectedBlocksSummary] = useState<Record<string, string>>({});
   const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
+  const [hardwareDevices, setHardwareDevices] = useState<VotingDevice[]>([]); // State for hardware devices
+
+  useEffect(() => { // Effect to load hardware devices on component mount
+    const fetchHardwareDevices = async () => {
+      const devicesFromDb = await getAllVotingDevices();
+      // Sort by ID to ensure consistent order, similar to HardwareSettings
+      setHardwareDevices(devicesFromDb.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
+    };
+    fetchHardwareDevices();
+  }, []);
 
   const resetFormState = useCallback(() => {
     setCurrentSessionDbId(null);
@@ -74,7 +79,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setLocation('');
     setNotes('');
     setParticipants([]);
-    setTemplateFile(null);
+    // setTemplateFile(null); // REMOVED
     setSelectedBlocksSummary({});
     setResultsFile(null);
     setImportSummary(null);
@@ -96,20 +101,29 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
           // p_db.idBoitier now stores the PHYSICAL Ombea ID
           const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
-            let logicalDeviceId = loopIndex + 1; // Default to loop order if physical ID not in our hardcoded list
-            const physicalIdIndex = OMBEA_DEVICE_IDS.indexOf(p_db.idBoitier);
+            let logicalDeviceId = 0; // Default to 0 if not found, indicating an issue or unassigned
+            const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
 
             if (physicalIdIndex !== -1) {
-              logicalDeviceId = physicalIdIndex + 1; // 1-based logical ID
-            } else if (p_db.idBoitier) { // If idBoitier is a physical ID not in our list
+              logicalDeviceId = physicalIdIndex + 1; // 1-based logical ID from the current hardware config
+            } else if (p_db.idBoitier) {
+              // If the stored physical ID is not in the current hardware list
               console.warn(
                 `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} ` +
-                `n'a pas été trouvé dans la liste OMBEA_DEVICE_IDS. Utilisation de l'ordre (${logicalDeviceId}) comme deviceId logique.`
+                `n'a pas été trouvé dans la configuration matérielle actuelle. Le boîtier logique sera 0.`
               );
+              // Keep p_db.idBoitier as is (it's the stored physical ID)
+              // logicalDeviceId remains 0, user might need to re-assign or be alerted.
+            } else {
+              // No physical ID was stored for this participant. Assign based on loop order if needed,
+              // but this scenario should ideally be less common with proper assignment.
+              // For now, this might mean the participant didn't have a device.
+              logicalDeviceId = 0; // Or handle as unassigned
+               console.log(`Participant ${p_db.prenom} ${p_db.nom} n'avait pas d'ID boîtier physique stocké.`);
             }
 
             return {
-              ...p_db, // Spreads nom, prenom, score, reussite, identificationCode, and PHYSICAL idBoitier
+              ...p_db, // Spreads nom, prenom, score, reussite, identificationCode, and PHYSICAL idBoitier (p_db.idBoitier)
               id: `loaded-${loopIndex}-${p_db.idBoitier}`, // Unique key for React
               firstName: p_db.prenom,
               lastName: p_db.nom,
@@ -195,32 +209,31 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       return null;
     }
 
-    const dbParticipants: DBParticipantType[] = participants.map((p_form, index) => {
-      let assignedPhysicalId = p_form.idBoitier; // Default to existing idBoitier if any
+    const dbParticipants: DBParticipantType[] = participants.map((p_form) => {
+      let assignedPhysicalId = ''; // Initialize with empty string
 
-      // Use p_form.deviceId (logical 1-based order) to get the physical ID
-      // The user-facing 'deviceId' field in the form should be the logical number (1, 2, 3...)
+      // p_form.deviceId is the logical 1-based number selected by the user in the form.
       const logicalDeviceId = p_form.deviceId;
 
-      if (logicalDeviceId > 0 && logicalDeviceId <= OMBEA_DEVICE_IDS.length) {
-        assignedPhysicalId = OMBEA_DEVICE_IDS[logicalDeviceId - 1];
-      } else {
+      if (logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
+        // The logicalDeviceId is 1-based, so subtract 1 for 0-based array index.
+        assignedPhysicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
+      } else if (logicalDeviceId !== 0) { // If 0, it means unassigned, so physical ID remains empty.
+        // This case means the logicalDeviceId is out of bounds of the current hardware config
         console.warn(
-          `Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) hors limites ` +
-          `ou non défini par rapport à la liste OMBEA_DEVICE_IDS (taille: ${OMBEA_DEVICE_IDS.length}). ` +
-          `L'idBoitier actuel (${p_form.idBoitier}) sera conservé ou sera vide s'il n'est pas défini.`
+          `Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) ` +
+          `qui est hors limites par rapport à la configuration matérielle actuelle (taille: ${hardwareDevices.length}). ` +
+          `Aucun ID physique ne sera assigné.`
         );
-        // If no valid logicalDeviceId, try to keep existing p_form.idBoitier if it might be a pre-loaded physical ID,
-        // otherwise, it might become undefined or an empty string if we don't have a fallback.
-        // For new participants, p_form.idBoitier might be the initial (logical) deviceId.toString().
-        // This logic ensures we prioritize mapping via OMBEA_DEVICE_IDS if logicalDeviceId is valid.
-        if (!assignedPhysicalId) { // If p_form.idBoitier was also empty or undefined
-            assignedPhysicalId = `ERROR_NO_PHYSICAL_ID_FOR_LOGICAL_${logicalDeviceId}`;
-        }
+        // assignedPhysicalId remains '', indicating no valid physical device is linked.
+        // The application might need further logic to handle participants without a valid assigned device.
       }
+      // If logicalDeviceId is 0 (or invalid), assignedPhysicalId remains '', meaning no device is assigned.
+      // p_form.idBoitier (from loaded data) isn't directly used here for re-assignment
+      // as the source of truth for mapping is now hardwareDevices and p_form.deviceId (logical choice).
 
       return {
-        idBoitier: assignedPhysicalId, // This should now be the PHYSICAL Ombea ID
+        idBoitier: assignedPhysicalId, // This is the PHYSICAL Ombea ID from hardwareDevices
         nom: p_form.lastName,
         prenom: p_form.firstName,
         identificationCode: p_form.identificationCode,
@@ -271,15 +284,24 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
          const reloadedSession = await getSessionById(savedId); // Reverted to getSessionById
          setEditingSessionData(reloadedSession || null);
          if (reloadedSession) {
-            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => ({
+            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => {
+              let logicalDeviceId = 0; // Default if mapping fails
+              const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
+              if (physicalIdIndex !== -1) {
+                logicalDeviceId = physicalIdIndex + 1; // 1-based
+              } else if (p_db.idBoitier) {
+                console.warn(`[handleSaveSession] L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} n'est pas dans la config matériel. Boîtier logique sera 0.`);
+              }
+              return {
                 ...p_db,
-                id: `form-${index}-${p_db.idBoitier}`,
+                id: participants[index]?.id || `form-${index}-${p_db.idBoitier}`, // Preserve React key if possible
                 firstName: p_db.prenom,
                 lastName: p_db.nom,
-                deviceId: parseInt(p_db.idBoitier, 10) || index + 1,
+                deviceId: logicalDeviceId, // Logical device ID based on current hardware config
                 organization: (participants[index] as any)?.organization || '',
                 hasSigned: (participants[index] as any)?.hasSigned || false,
-              }));
+              };
+            });
             setParticipants(formParticipants);
             const summary: Record<string, string> = {};
             if(reloadedSession.selectionBlocs){
@@ -305,10 +327,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       }
     }
   };
+  const [isGeneratingOrs, setIsGeneratingOrs] = useState(false); // To disable button during generation
 
   const handleGenerateQuestionnaireAndOrs = async () => {
     if (!selectedReferential) { setImportSummary("Veuillez sélectionner un référentiel."); return; }
-    if (!templateFile) { setImportSummary("Veuillez sélectionner un fichier modèle PPTX."); return; }
+
+    setIsGeneratingOrs(true);
+    setImportSummary("Vérification du modèle PPTX global...");
+
+    const globalPptxTemplate = await getGlobalPptxTemplate();
+    if (!globalPptxTemplate) {
+      setImportSummary("Aucun modèle PPTX global n'est configuré. Veuillez en définir un dans Paramètres > Fichiers et modèles.");
+      setIsGeneratingOrs(false);
+      return;
+    }
 
     setImportSummary("Génération .ors...");
     let allSelectedQuestionsForPptx: StoredQuestion[] = [];
@@ -343,49 +375,47 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const adminSettings: AdminPPTXSettings = { defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod', pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1' };
 
       const participantsForGenerator: DBParticipantType[] = participants.map((p_form, index) => {
-        let physicalId = '';
-        // p_form.deviceId is the 1-based logical order from the form
+        let physicalId = ''; // Initialize with empty string
         const logicalDeviceId = p_form.deviceId;
-
-        if (logicalDeviceId > 0 && logicalDeviceId <= OMBEA_DEVICE_IDS.length) {
-          physicalId = OMBEA_DEVICE_IDS[logicalDeviceId - 1];
-        } else {
-          // Fallback or error for invalid logicalDeviceId
-          // This case should ideally be prevented by form validation or clearer UI for deviceId input
-          console.warn(
-            `[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) ` +
-            `a un deviceId logique (${logicalDeviceId}) invalide pour le mapping vers un ID physique. ` +
-            `Tentative d'utilisation de p_form.idBoitier ('${p_form.idBoitier}') ou d'un fallback.`
-          );
-          physicalId = p_form.idBoitier || `INVALID_LOGICAL_ID_${logicalDeviceId}`;
+        if (logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
+          physicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
+        } else if (logicalDeviceId !== 0) {
+          console.warn(`[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) invalide. L'ID physique sera vide.`);
         }
-
         return {
-          idBoitier: physicalId, // Ensure this is the PHYSICAL Ombea ID
-          nom: p_form.lastName,
-          prenom: p_form.firstName,
+          idBoitier: physicalId, nom: p_form.lastName, prenom: p_form.firstName,
           identificationCode: p_form.identificationCode,
-          // score and reussite are not needed for .ors generation itself
         };
       });
 
-      console.log('[SessionForm Gen .ors] Participants being sent to generatePresentation:', participantsForGenerator);
+      console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
 
-      const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, templateFile, adminSettings);
+      // Use globalPptxTemplate instead of templateFile
+      const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, globalPptxTemplate, adminSettings);
 
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
         const { orsBlob, questionMappings } = generationOutput;
         try {
-          await updateSession(savedSessionId, { // Reverted to updateSession
-            donneesOrs: orsBlob,
-            questionMappings: questionMappings,
+          await updateSession(savedSessionId, {
+            donneesOrs: orsBlob, questionMappings: questionMappings,
             updatedAt: new Date().toISOString(), status: 'ready'
           });
-          setEditingSessionData(await getSessionById(savedSessionId) || null); // Reverted to getSessionById
+          setEditingSessionData(await getSessionById(savedSessionId) || null);
           setImportSummary(`Session (ID: ${savedSessionId}) .ors et mappings générés. Statut: Prête.`);
-        } catch (e: any) { setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`); }
-      } else { setImportSummary("Erreur génération .ors/mappings. Données manquantes."); }
-    } catch (error: any) { setImportSummary(`Erreur majeure génération: ${error.message}`); }
+        } catch (e: any) {
+          setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`);
+          console.error("Erreur sauvegarde .ors/mappings:", e);
+        }
+      } else {
+        setImportSummary("Erreur génération .ors/mappings. Données manquantes ou erreur interne.");
+        console.error("Erreur génération .ors/mappings. Output:", generationOutput);
+      }
+    } catch (error: any) {
+      setImportSummary(`Erreur majeure génération: ${error.message}`);
+      console.error("Erreur majeure génération:", error);
+    } finally {
+      setIsGeneratingOrs(false); // Re-enable button
+    }
   };
 
 
@@ -479,15 +509,26 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
                       // console.log("[SessionForm Import Log] Participants from final reloaded session (first 2):", finalUpdatedSession.participants.slice(0,2)); // DEBUG
-                      const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db, index) => ({
-                        ...p_db,
-                        id: participants[index]?.id || `updated-${index}-${p_db.idBoitier}`, // Conserver l'ID React si possible
-                        firstName: p_db.prenom,
-                        lastName: p_db.nom,
-                        deviceId: participants[index]?.deviceId || parseInt(p_db.idBoitier,10) || index + 1,
-                        organization: participants[index]?.organization || (p_db as any).organization,
-                        hasSigned: participants[index]?.hasSigned || (p_db as any).hasSigned,
-                      }));
+                      const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db, index) => {
+                        let logicalDeviceId = 0; // Default if mapping fails
+                        const currentParticipantState = participants[index]; // For preserving non-DB state like 'organization'
+                        const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
+
+                        if (physicalIdIndex !== -1) {
+                          logicalDeviceId = physicalIdIndex + 1; // 1-based
+                        } else if (p_db.idBoitier) {
+                          console.warn(`[handleImportResults] L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} (après import résultats) n'est pas dans la config matériel. Boîtier logique sera 0.`);
+                        }
+                        return {
+                          ...p_db,
+                          id: currentParticipantState?.id || `updated-${index}-${p_db.idBoitier}`,
+                          firstName: p_db.prenom,
+                          lastName: p_db.nom,
+                          deviceId: logicalDeviceId,
+                          organization: currentParticipantState?.organization || (p_db as any).organization,
+                          hasSigned: currentParticipantState?.hasSigned || (p_db as any).hasSigned,
+                        };
+                      });
                       setParticipants(formParticipantsToUpdate);
                     }
                   } else { message += "\nImpossible de charger les questions pour le calcul des scores."; }
@@ -571,22 +612,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             readOnly={editingSessionData?.status === 'completed'}
           />
         </div>
+        {/* PPTX Template Upload Section - REMOVED
         <div className="mt-6">
-          <label htmlFor="templateFileInput" className="block text-sm font-medium text-gray-700 mb-1">Modèle PPTX</label>
-          {/* @ts-ignore */}
-          <Input
-            id="templateFileInput"
-            type="file"
-            accept=".pptx"
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setTemplateFile(e.target.files ? e.target.files[0] : null)}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            {...fileInputProps(!!editingSessionData?.donneesOrs || editingSessionData?.status === 'completed')}
-          />
-          {templateFile && <p className="mt-1 text-xs text-green-600">Fichier: {templateFile.name}</p>}
-          {editingSessionData?.donneesOrs && !templateFile && (
-            <p className="mt-1 text-xs text-blue-600">Un .ors a déjà été généré. Pour le régénérer, sélectionnez un nouveau modèle.</p>
-          )}
+          ...
         </div>
+        */}
         {currentSessionDbId && editingSessionData?.selectionBlocs && editingSessionData.selectionBlocs.length > 0 && (
           <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50 mb-6">
             <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés:</h4>
@@ -721,11 +751,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             Retour à la liste
         </Button>
         <div className="space-x-3">
-          <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed'}>
+          <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
             Enregistrer Brouillon
           </Button>
-          <Button variant="primary" icon={<PackagePlus size={16} />} onClick={handleGenerateQuestionnaireAndOrs} disabled={!!editingSessionData?.donneesOrs || editingSessionData?.status === 'completed'}>
-            {editingSessionData?.donneesOrs ? "Régénérer .ors" : "Générer .ors & PPTX"}
+          <Button
+            variant="primary"
+            icon={<PackagePlus size={16} />}
+            onClick={handleGenerateQuestionnaireAndOrs}
+            disabled={isGeneratingOrs || !!editingSessionData?.donneesOrs || editingSessionData?.status === 'completed'}
+            title={!editingSessionData?.referentiel ? "Veuillez d'abord sélectionner un référentiel" :
+                   !!editingSessionData?.donneesOrs ? "Un .ors a déjà été généré pour cette session" :
+                   "Générer le questionnaire .ors et le fichier PPTX"}
+          >
+            {isGeneratingOrs ? "Génération..." : (editingSessionData?.donneesOrs ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
           </Button>
         </div>
       </div>
