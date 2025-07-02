@@ -27,12 +27,23 @@ import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesT
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import JSZip from 'jszip';
 
+// TEMPORARY: Hardcoded list of physical OMBEA device IDs
+// TODO: Replace with a system where these are managed (e.g., admin section or settings)
+const OMBEA_DEVICE_IDS: string[] = [
+  "102494", // Corresponds to logical deviceId 1
+  "1017ED", // Corresponds to logical deviceId 2
+  "PHYSID3", // Placeholder for logical deviceId 3
+  "PHYSID4", // Placeholder for logical deviceId 4
+  // Add more as needed, up to the number of physical devices available
+];
+
 interface FormParticipant extends DBParticipantType {
-  id: string;
-  firstName: string;
-  lastName: string;
+  id: string; // Unique ID for React key prop
+  firstName: string; // Corresponds to DBParticipantType.prenom
+  lastName: string; // Corresponds to DBParticipantType.nom
   organization?: string;
-  deviceId: number;
+  deviceId: number; // Logical 1-based order/number of the device in the UI (e.g., 1, 2, 3)
+  // idBoitier in DBParticipantType will store the physical Ombea ID
   hasSigned?: boolean;
 }
 
@@ -82,15 +93,30 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setLocation(sessionData.location || '');
           setNotes(sessionData.notes || '');
 
-          const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, index) => ({
-            ...p_db,
-            id: `loaded-${index}-${p_db.idBoitier}`,
-            firstName: p_db.prenom,
-            lastName: p_db.nom,
-            deviceId: parseInt(p_db.idBoitier, 10) || index + 1,
-            organization: (p_db as any).organization || '',
-            hasSigned: (p_db as any).hasSigned || false,
-          }));
+          // p_db.idBoitier now stores the PHYSICAL Ombea ID
+          const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
+            let logicalDeviceId = loopIndex + 1; // Default to loop order if physical ID not in our hardcoded list
+            const physicalIdIndex = OMBEA_DEVICE_IDS.indexOf(p_db.idBoitier);
+
+            if (physicalIdIndex !== -1) {
+              logicalDeviceId = physicalIdIndex + 1; // 1-based logical ID
+            } else if (p_db.idBoitier) { // If idBoitier is a physical ID not in our list
+              console.warn(
+                `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} ` +
+                `n'a pas été trouvé dans la liste OMBEA_DEVICE_IDS. Utilisation de l'ordre (${logicalDeviceId}) comme deviceId logique.`
+              );
+            }
+
+            return {
+              ...p_db, // Spreads nom, prenom, score, reussite, identificationCode, and PHYSICAL idBoitier
+              id: `loaded-${loopIndex}-${p_db.idBoitier}`, // Unique key for React
+              firstName: p_db.prenom,
+              lastName: p_db.nom,
+              deviceId: logicalDeviceId, // Logical number for the form input
+              organization: (p_db as any).organization || '',
+              hasSigned: (p_db as any).hasSigned || false,
+            };
+          });
           setParticipants(formParticipants);
 
           const summary: Record<string, string> = {};
@@ -168,14 +194,39 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       return null;
     }
 
-    const dbParticipants: DBParticipantType[] = participants.map(p_form => ({
-      idBoitier: p_form.idBoitier || p_form.deviceId.toString(),
-      nom: p_form.lastName,
-      prenom: p_form.firstName,
-      identificationCode: p_form.identificationCode,
-      score: p_form.score,
-      reussite: p_form.reussite,
-    }));
+    const dbParticipants: DBParticipantType[] = participants.map((p_form, index) => {
+      let assignedPhysicalId = p_form.idBoitier; // Default to existing idBoitier if any
+
+      // Use p_form.deviceId (logical 1-based order) to get the physical ID
+      // The user-facing 'deviceId' field in the form should be the logical number (1, 2, 3...)
+      const logicalDeviceId = p_form.deviceId;
+
+      if (logicalDeviceId > 0 && logicalDeviceId <= OMBEA_DEVICE_IDS.length) {
+        assignedPhysicalId = OMBEA_DEVICE_IDS[logicalDeviceId - 1];
+      } else {
+        console.warn(
+          `Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) hors limites ` +
+          `ou non défini par rapport à la liste OMBEA_DEVICE_IDS (taille: ${OMBEA_DEVICE_IDS.length}). ` +
+          `L'idBoitier actuel (${p_form.idBoitier}) sera conservé ou sera vide s'il n'est pas défini.`
+        );
+        // If no valid logicalDeviceId, try to keep existing p_form.idBoitier if it might be a pre-loaded physical ID,
+        // otherwise, it might become undefined or an empty string if we don't have a fallback.
+        // For new participants, p_form.idBoitier might be the initial (logical) deviceId.toString().
+        // This logic ensures we prioritize mapping via OMBEA_DEVICE_IDS if logicalDeviceId is valid.
+        if (!assignedPhysicalId) { // If p_form.idBoitier was also empty or undefined
+            assignedPhysicalId = `ERROR_NO_PHYSICAL_ID_FOR_LOGICAL_${logicalDeviceId}`;
+        }
+      }
+
+      return {
+        idBoitier: assignedPhysicalId, // This should now be the PHYSICAL Ombea ID
+        nom: p_form.lastName,
+        prenom: p_form.firstName,
+        identificationCode: p_form.identificationCode,
+        score: p_form.score, // Score and reussite are calculated after results import
+        reussite: p_form.reussite,
+      };
+    });
 
     const sessionToUpdate = editingSessionData;
 
