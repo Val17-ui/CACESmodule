@@ -341,12 +341,34 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referentiel: sessionDataForDb.referentiel as CACESReferential };
       const adminSettings: AdminPPTXSettings = { defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod', pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1' };
 
-      const participantsForGenerator: DBParticipantType[] = participants.map(p_form => ({
-        idBoitier: p_form.idBoitier || p_form.deviceId.toString(),
-        nom: p_form.lastName,
-        prenom: p_form.firstName,
-        identificationCode: p_form.identificationCode,
-      }));
+      const participantsForGenerator: DBParticipantType[] = participants.map((p_form, index) => {
+        let physicalId = '';
+        // p_form.deviceId is the 1-based logical order from the form
+        const logicalDeviceId = p_form.deviceId;
+
+        if (logicalDeviceId > 0 && logicalDeviceId <= OMBEA_DEVICE_IDS.length) {
+          physicalId = OMBEA_DEVICE_IDS[logicalDeviceId - 1];
+        } else {
+          // Fallback or error for invalid logicalDeviceId
+          // This case should ideally be prevented by form validation or clearer UI for deviceId input
+          console.warn(
+            `[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) ` +
+            `a un deviceId logique (${logicalDeviceId}) invalide pour le mapping vers un ID physique. ` +
+            `Tentative d'utilisation de p_form.idBoitier ('${p_form.idBoitier}') ou d'un fallback.`
+          );
+          physicalId = p_form.idBoitier || `INVALID_LOGICAL_ID_${logicalDeviceId}`;
+        }
+
+        return {
+          idBoitier: physicalId, // Ensure this is the PHYSICAL Ombea ID
+          nom: p_form.lastName,
+          prenom: p_form.firstName,
+          identificationCode: p_form.identificationCode,
+          // score and reussite are not needed for .ors generation itself
+        };
+      });
+
+      console.log('[SessionForm Gen .ors] Participants being sent to generatePresentation:', participantsForGenerator);
 
       const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, templateFile, adminSettings);
 
