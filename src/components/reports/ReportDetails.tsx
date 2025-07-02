@@ -244,7 +244,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <div>
                         <span className="text-gray-500">Score moyen sur bloc:</span>
-                        <strong className="ml-1 text-gray-700">{bs.averageScoreOnBlock.toFixed(0)}%</strong>
+                        <strong className="ml-1 text-gray-700">{bs.averageScoreStringOnBlock}</strong>
                     </div>
                     <div>
                         <span className="text-gray-500">Taux de réussite du bloc:</span>
@@ -256,7 +256,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
             </div>
              <div className="mt-4 bg-blue-50 p-3 rounded-lg">
                 <p className="text-xs text-blue-700">
-                <strong>Note :</strong> Le "Taux de réussite du bloc" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique.
+                <strong>Note :</strong> Le "Taux de réussite du bloc" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique (par exemple, au moins {Math.ceil(bs.questionsInBlockCount * 0.5)} bonnes réponses sur {bs.questionsInBlockCount} questions pour le dernier bloc listé).
                 </p>
             </div>
           </Card>

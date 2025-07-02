@@ -229,8 +229,8 @@ export const calculateBlockStats = (
 export interface BlockPerformanceStats {
   blockTheme: string;
   blockId: string;
-  averageScoreOnBlock: number; // Note moyenne obtenue par les participants SUR LES QUESTIONS DE CE BLOC
-  successRateOnBlock: number;  // % de participants ayant "réussi" ce bloc (score >= 70% sur les q° du bloc)
+  averageScoreStringOnBlock: string; // Format "X.Y/Z", ex: "32.5/50"
+  successRateOnBlock: number;  // % de participants ayant "réussi" ce bloc (score >= 50% sur les q° du bloc)
   participantsCountInSession: number;   // Nb de participants dans CETTE session (ayant donc eu ce bloc)
   questionsInBlockCount: number; // Nombre de questions composant ce bloc dans cette session
 }
@@ -263,44 +263,37 @@ export const calculateBlockPerformanceForSession = (
     .map(qm => qm.dbQuestionId);
 
   if (questionIdsInBlockForThisSession.length === 0) {
-    // console.warn(`[BlockPerformance] Aucune question trouvée pour le bloc ${blockSelection.theme} - ${blockSelection.blockId} dans les mappings de la session ${session.id}.`);
-    return null; // Pas de questions pour ce bloc dans cette session
+    return null;
   }
+  const numQuestionsInBlock = questionIdsInBlockForThisSession.length;
 
-  let totalScoreOnBlockAggregated = 0;
+  let totalCorrectAnswersInBlockAcrossParticipants = 0;
   let successfulParticipantsOnBlockCount = 0;
   const sessionParticipantsCount = session.participants.length;
 
   session.participants.forEach(participant => {
-    // Filtrer les résultats du participant pour les questions de ce bloc uniquement
     const participantResultsForBlock = sessionResults.filter(r =>
       r.participantIdBoitier === participant.idBoitier &&
       questionIdsInBlockForThisSession.includes(r.questionId)
     );
 
-    let correctAnswersInBlock = 0;
+    let correctAnswersInBlockForParticipant = 0;
     participantResultsForBlock.forEach(result => {
       if (result.isCorrect) {
-        correctAnswersInBlock++;
+        correctAnswersInBlockForParticipant++;
       }
     });
 
-    // Score du participant pour CE bloc spécifique
-    const scoreOnBlock = questionIdsInBlockForThisSession.length > 0
-      ? (correctAnswersInBlock / questionIdsInBlockForThisSession.length) * 100
-      : 0;
+    totalCorrectAnswersInBlockAcrossParticipants += correctAnswersInBlockForParticipant;
 
-    totalScoreOnBlockAggregated += scoreOnBlock;
-
-    // Definir la reussite pour ce bloc (ex: >= 50% sur les questions du bloc)
-    // Ce seuil pourrait être configurable plus tard
-    if (scoreOnBlock >= 50) { // Seuil de réussite du bloc ajusté à 50%
+    // Condition de reussite du bloc pour CE participant : >= 50% des questions de CE bloc
+    if (numQuestionsInBlock > 0 && (correctAnswersInBlockForParticipant / numQuestionsInBlock) >= 0.50) {
       successfulParticipantsOnBlockCount++;
     }
   });
 
-  const averageScoreOnBlock = sessionParticipantsCount > 0
-    ? totalScoreOnBlockAggregated / sessionParticipantsCount
+  const averageCorrectAnswers = sessionParticipantsCount > 0
+    ? totalCorrectAnswersInBlockAcrossParticipants / sessionParticipantsCount
     : 0;
 
   const successRateOnBlock = sessionParticipantsCount > 0
@@ -310,9 +303,9 @@ export const calculateBlockPerformanceForSession = (
   return {
     blockTheme: blockSelection.theme,
     blockId: blockSelection.blockId,
-    averageScoreOnBlock: averageScoreOnBlock,
+    averageScoreStringOnBlock: `${averageCorrectAnswers.toFixed(1)}/${numQuestionsInBlock}`,
     successRateOnBlock: successRateOnBlock,
     participantsCountInSession: sessionParticipantsCount,
-    questionsInBlockCount: questionIdsInBlockForThisSession.length,
+    questionsInBlockCount: numQuestionsInBlock,
   };
 };
