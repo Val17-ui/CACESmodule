@@ -23,6 +23,7 @@ import {
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
+import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import JSZip from 'jszip';
 
 interface FormParticipant extends DBParticipantType {
@@ -356,29 +357,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId);
                 let sessionDataForScores = await getSessionById(currentSessionDbId);
 
-                if (sessionDataForScores && sessionResultsForScore.length > 0) {
-                  const scoresByParticipant = new Map<string, number>();
-                  sessionResultsForScore.forEach((sr: SessionResult) => {
-                    const currentScore = scoresByParticipant.get(sr.participantIdBoitier) || 0;
-                    scoresByParticipant.set(sr.participantIdBoitier, currentScore + (sr.pointsObtained || 0));
-                  });
+                if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
+                  const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
+                  const sessionQuestions = await getQuestionsByIds(questionIds);
 
-                  const SEUIL_REUSSITE_SCORE = 5;
-                  let participantsActuallyUpdated = false;
+                  if (sessionQuestions.length > 0) {
+                    const updatedParticipants = sessionDataForScores.participants.map(p => {
+                      const participantResults = sessionResultsForScore.filter(r => r.participantIdBoitier === p.idBoitier);
+                      const score = calculateParticipantScore(participantResults, sessionQuestions);
+                      const themeScores = calculateThemeScores(participantResults, sessionQuestions);
+                      const reussite = determineIndividualSuccess(score, themeScores);
+                      return { ...p, score, reussite };
+                    });
 
-                  const updatedParticipants = sessionDataForScores.participants.map(p => {
-                    const participantScore = scoresByParticipant.get(p.idBoitier);
-                    if (participantScore !== undefined) {
-                      participantsActuallyUpdated = true;
-                      const reussite = participantScore >= SEUIL_REUSSITE_SCORE;
-                      return { ...p, score: participantScore, reussite: reussite };
-                    }
-                    return p;
-                  });
-
-                  if (participantsActuallyUpdated) {
                     await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
-                    message += "\nScores et réussite calculés.";
+                    message += "\nScores et réussite calculés et mis à jour.";
 
                     const finalUpdatedSession = await getSessionById(currentSessionDbId);
                     if (finalUpdatedSession) {
@@ -394,8 +387,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       }));
                       setParticipants(formParticipantsToUpdate);
                     }
-                  }
-                } else { message += "\nImpossible de calculer scores."; }
+                  } else { message += "\nImpossible de charger les questions pour le calcul des scores."; }
+                } else { message += "\nImpossible de calculer les scores (données de session ou résultats manquants)."; }
               }
             } catch (processingError: any) { sessionProcessError = processingError.message; }
             if(sessionProcessError) { message += `\nErreur post-traitement: ${sessionProcessError}`; }
