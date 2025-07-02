@@ -78,6 +78,27 @@ export const addQuestion = async (question: QuestionWithId): Promise<number | un
   }
 };
 
+// Specific function to get the globally stored PPTX template
+export const getGlobalPptxTemplate = async (): Promise<File | null> => {
+  try {
+    const templateFile = await db.adminSettings.get('pptxTemplateFile');
+    if (templateFile && templateFile.value instanceof File) {
+      return templateFile.value;
+    } else if (templateFile && templateFile.value instanceof Blob) {
+      // If it's stored as a Blob, try to reconstruct a File object.
+      // This might happen depending on how Dexie handles File objects across sessions/versions.
+      // We'd ideally need the filename, but for now, a default name or just the blob is better than nothing.
+      // For robust File reconstruction, storing filename alongside was a good idea.
+      const fileName = (await db.adminSettings.get('pptxTemplateFileName'))?.value || 'template.pptx';
+      return new File([templateFile.value], fileName, { type: templateFile.value.type });
+    }
+    return null;
+  } catch (error) {
+    console.error("Error getting global PPTX template:", error);
+    return null;
+  }
+};
+
 export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
   try {
     return await db.questions.toArray();

@@ -21,8 +21,9 @@ import {
   addBulkSessionResults,
   getResultsForSession,
   getQuestionsByIds,
-  getAllVotingDevices, // Import function to get voting devices
-  VotingDevice,      // Import type for VotingDevice
+  getAllVotingDevices,
+  VotingDevice,
+  getGlobalPptxTemplate, // Import the new getter for the global template
   db
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
@@ -54,7 +55,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
-  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  // const [templateFile, setTemplateFile] = useState<File | null>(null); // REMOVED - Global template will be used
   const [selectedBlocksSummary, setSelectedBlocksSummary] = useState<Record<string, string>>({});
   const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
@@ -78,7 +79,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setLocation('');
     setNotes('');
     setParticipants([]);
-    setTemplateFile(null);
+    // setTemplateFile(null); // REMOVED
     setSelectedBlocksSummary({});
     setResultsFile(null);
     setImportSummary(null);
@@ -326,10 +327,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       }
     }
   };
+  const [isGeneratingOrs, setIsGeneratingOrs] = useState(false); // To disable button during generation
 
   const handleGenerateQuestionnaireAndOrs = async () => {
     if (!selectedReferential) { setImportSummary("Veuillez sélectionner un référentiel."); return; }
-    if (!templateFile) { setImportSummary("Veuillez sélectionner un fichier modèle PPTX."); return; }
+
+    setIsGeneratingOrs(true);
+    setImportSummary("Vérification du modèle PPTX global...");
+
+    const globalPptxTemplate = await getGlobalPptxTemplate();
+    if (!globalPptxTemplate) {
+      setImportSummary("Aucun modèle PPTX global n'est configuré. Veuillez en définir un dans Paramètres > Fichiers et modèles.");
+      setIsGeneratingOrs(false);
+      return;
+    }
 
     setImportSummary("Génération .ors...");
     let allSelectedQuestionsForPptx: StoredQuestion[] = [];
@@ -365,49 +376,46 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
       const participantsForGenerator: DBParticipantType[] = participants.map((p_form, index) => {
         let physicalId = ''; // Initialize with empty string
-        // p_form.deviceId is the 1-based logical order from the form
         const logicalDeviceId = p_form.deviceId;
-
         if (logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
-          // The logicalDeviceId is 1-based, so subtract 1 for 0-based array index.
           physicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
-        } else if (logicalDeviceId !== 0) { // If 0, it means unassigned, so physical ID remains empty.
-          console.warn(
-            `[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) ` +
-            `a un deviceId logique (${logicalDeviceId}) invalide pour le mapping vers un ID physique (config actuelle: ${hardwareDevices.length} boîtiers). ` +
-            `L'ID physique sera vide pour ce participant dans le .ors.`
-          );
-          // physicalId remains '', as no valid mapping found.
-          // The .ors generation might need to handle or skip participants without a physicalId.
+        } else if (logicalDeviceId !== 0) {
+          console.warn(`[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) invalide. L'ID physique sera vide.`);
         }
-        // If logicalDeviceId is 0, physicalId also remains '', meaning no device assigned.
-
         return {
-          idBoitier: physicalId, // This is the PHYSICAL Ombea ID from hardwareDevices
-          nom: p_form.lastName,
-          prenom: p_form.firstName,
+          idBoitier: physicalId, nom: p_form.lastName, prenom: p_form.firstName,
           identificationCode: p_form.identificationCode,
-          // score and reussite are not needed for .ors generation itself
         };
       });
 
-      console.log('[SessionForm Gen .ors] Participants being sent to generatePresentation:', participantsForGenerator);
+      console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
 
-      const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, templateFile, adminSettings);
+      // Use globalPptxTemplate instead of templateFile
+      const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, globalPptxTemplate, adminSettings);
 
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
         const { orsBlob, questionMappings } = generationOutput;
         try {
-          await updateSession(savedSessionId, { // Reverted to updateSession
-            donneesOrs: orsBlob,
-            questionMappings: questionMappings,
+          await updateSession(savedSessionId, {
+            donneesOrs: orsBlob, questionMappings: questionMappings,
             updatedAt: new Date().toISOString(), status: 'ready'
           });
-          setEditingSessionData(await getSessionById(savedSessionId) || null); // Reverted to getSessionById
+          setEditingSessionData(await getSessionById(savedSessionId) || null);
           setImportSummary(`Session (ID: ${savedSessionId}) .ors et mappings générés. Statut: Prête.`);
-        } catch (e: any) { setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`); }
-      } else { setImportSummary("Erreur génération .ors/mappings. Données manquantes."); }
-    } catch (error: any) { setImportSummary(`Erreur majeure génération: ${error.message}`); }
+        } catch (e: any) {
+          setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`);
+          console.error("Erreur sauvegarde .ors/mappings:", e);
+        }
+      } else {
+        setImportSummary("Erreur génération .ors/mappings. Données manquantes ou erreur interne.");
+        console.error("Erreur génération .ors/mappings. Output:", generationOutput);
+      }
+    } catch (error: any) {
+      setImportSummary(`Erreur majeure génération: ${error.message}`);
+      console.error("Erreur majeure génération:", error);
+    } finally {
+      setIsGeneratingOrs(false); // Re-enable button
+    }
   };
 
 
@@ -604,22 +612,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             readOnly={editingSessionData?.status === 'completed'}
           />
         </div>
+        {/* PPTX Template Upload Section - REMOVED
         <div className="mt-6">
-          <label htmlFor="templateFileInput" className="block text-sm font-medium text-gray-700 mb-1">Modèle PPTX</label>
-          {/* @ts-ignore */}
-          <Input
-            id="templateFileInput"
-            type="file"
-            accept=".pptx"
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setTemplateFile(e.target.files ? e.target.files[0] : null)}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            {...fileInputProps(!!editingSessionData?.donneesOrs || editingSessionData?.status === 'completed')}
-          />
-          {templateFile && <p className="mt-1 text-xs text-green-600">Fichier: {templateFile.name}</p>}
-          {editingSessionData?.donneesOrs && !templateFile && (
-            <p className="mt-1 text-xs text-blue-600">Un .ors a déjà été généré. Pour le régénérer, sélectionnez un nouveau modèle.</p>
-          )}
+          ...
         </div>
+        */}
         {currentSessionDbId && editingSessionData?.selectionBlocs && editingSessionData.selectionBlocs.length > 0 && (
           <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50 mb-6">
             <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés:</h4>
@@ -754,11 +751,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             Retour à la liste
         </Button>
         <div className="space-x-3">
-          <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed'}>
+          <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
             Enregistrer Brouillon
           </Button>
-          <Button variant="primary" icon={<PackagePlus size={16} />} onClick={handleGenerateQuestionnaireAndOrs} disabled={!!editingSessionData?.donneesOrs || editingSessionData?.status === 'completed'}>
-            {editingSessionData?.donneesOrs ? "Régénérer .ors" : "Générer .ors & PPTX"}
+          <Button
+            variant="primary"
+            icon={<PackagePlus size={16} />}
+            onClick={handleGenerateQuestionnaireAndOrs}
+            disabled={isGeneratingOrs || !!editingSessionData?.donneesOrs || editingSessionData?.status === 'completed'}
+            title={!editingSessionData?.referentiel ? "Veuillez d'abord sélectionner un référentiel" :
+                   !!editingSessionData?.donneesOrs ? "Un .ors a déjà été généré pour cette session" :
+                   "Générer le questionnaire .ors et le fichier PPTX"}
+          >
+            {isGeneratingOrs ? "Génération..." : (editingSessionData?.donneesOrs ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
           </Button>
         </div>
       </div>
