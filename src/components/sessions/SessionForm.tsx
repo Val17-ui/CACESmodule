@@ -19,7 +19,8 @@ import {
   updateSession,
   getSessionById,
   addBulkSessionResults,
-  getResultsForSession
+  getResultsForSession,
+  getQuestionsByIds
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
