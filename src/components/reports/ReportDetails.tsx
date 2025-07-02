@@ -6,7 +6,7 @@ import { Session, Participant, SessionResult, QuestionWithId } from '../../types
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { getResultsForSession, getQuestionsForSessionBlocks, getAllSessions, getAllResults, getAllQuestions } from '../../db';
+import { getResultsForSession, getQuestionsByIds, getAllSessions, getAllResults, getAllQuestions } from '../../db';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess, calculateQuestionSuccessRate } from '../../utils/reportCalculators';
 
 type ReportDetailsProps = {
@@ -27,9 +27,12 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
       if (session.id) {
         const results = await getResultsForSession(session.id);
         setSessionResults(results);
-        if(session.selectionBlocs) {
-          const questions = await getQuestionsForSessionBlocks(session.selectionBlocs);
-          setSessionQuestions(questions);
+        if (session.questionMappings && session.questionMappings.length > 0) {
+          const questionIds = session.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
+          if (questionIds.length > 0) {
+            const questions = await getQuestionsByIds(questionIds);
+            setSessionQuestions(questions);
+          }
         }
       }
       const fetchedAllSessions = await getAllSessions();
