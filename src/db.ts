@@ -216,6 +216,16 @@ export const getQuestionById = async (id: number): Promise<QuestionWithId | unde
   }
 };
 
+export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
+  try {
+    const questions = await db.questions.bulkGet(ids);
+    return questions.filter((q): q is QuestionWithId => q !== undefined);
+  } catch (error) {
+    console.error(`Error getting questions by ids: `, error);
+    return [];
+  }
+};
+
 export const updateQuestion = async (id: number, updates: Partial<QuestionWithId>): Promise<number | undefined> => {
   try {
     await db.questions.update(id, updates);
