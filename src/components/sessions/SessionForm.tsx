@@ -336,17 +336,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       setImportSummary("Parsing XML...");
 
       const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
+      console.log("[SessionForm Import Log] Extracted Results from XML:", extractedResults.slice(0, 5)); // Log first 5
       if (extractedResults.length === 0) { setImportSummary("Aucune réponse extraite."); return; }
       setImportSummary(`${extractedResults.length} réponses extraites. Transformation...`);
 
       const currentQuestionMappings = editingSessionData.questionMappings;
+      console.log("[SessionForm Import Log] Current Question Mappings for transformation:", currentQuestionMappings);
       if (!currentQuestionMappings || currentQuestionMappings.length === 0) { setImportSummary("Erreur: Mappages questions manquants."); return; }
 
       const sessionResultsToSave = transformParsedResponsesToSessionResults(extractedResults, currentQuestionMappings, currentSessionDbId);
+      console.log("[SessionForm Import Log] SessionResults to Save (first 5):", sessionResultsToSave.slice(0,5));
 
       if (sessionResultsToSave.length > 0) {
         try {
           const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+          console.log("[SessionForm Import Log] Saved Result IDs from DB:", savedResultIds);
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats sauvegardés !`;
             let sessionProcessError: string | null = null;
@@ -356,27 +360,41 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 message += "\nStatut session: 'Terminée'.";
 
                 const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId);
+                console.log("[SessionForm Import Log] Fetched SessionResults for score calculation (first 5):", sessionResultsForScore.slice(0,5));
                 let sessionDataForScores = await getSessionById(currentSessionDbId);
+                console.log("[SessionForm Import Log] SessionData for score calculation:", sessionDataForScores);
+
 
                 if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
                   const sessionQuestions = await getQuestionsByIds(questionIds);
+                  console.log("[SessionForm Import Log] SessionQuestions for score calculation (first 5):", sessionQuestions.slice(0,5));
 
                   if (sessionQuestions.length > 0) {
-                    const updatedParticipants = sessionDataForScores.participants.map(p => {
+                    const updatedParticipants = sessionDataForScores.participants.map((p, pIndex) => {
                       const participantResults = sessionResultsForScore.filter(r => r.participantIdBoitier === p.idBoitier);
+                      if (pIndex < 2) { // Log for first 2 participants
+                        console.log(`[SessionForm Import Log] For participant ${p.idBoitier} (${p.nom}), their results for scoring (first 5):`, participantResults.slice(0,5));
+                        console.log(`[SessionForm Import Log] All sessionQuestions for ${p.idBoitier} (${p.nom}) scoring (first 5):`, sessionQuestions.slice(0,5));
+                      }
                       const score = calculateParticipantScore(participantResults, sessionQuestions);
                       const themeScores = calculateThemeScores(participantResults, sessionQuestions);
                       const reussite = determineIndividualSuccess(score, themeScores);
+                       if (pIndex < 2) {
+                        console.log(`[SessionForm Import Log] Participant ${p.idBoitier} (${p.nom}) - Calculated Score: ${score}, Reussite: ${reussite}, ThemeScores:`, themeScores);
+                      }
                       return { ...p, score, reussite };
                     });
+                    console.log("[SessionForm Import Log] UpdatedParticipants with scores (first 2):", updatedParticipants.slice(0,2));
 
                     await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
                     message += "\nScores et réussite calculés et mis à jour.";
 
                     const finalUpdatedSession = await getSessionById(currentSessionDbId);
+                    console.log("[SessionForm Import Log] Final reloaded session data after score update:", finalUpdatedSession);
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
+                       console.log("[SessionForm Import Log] Participants from final reloaded session (first 2):", finalUpdatedSession.participants.slice(0,2));
                       const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db, index) => ({
                         ...p_db,
                         id: participants[index]?.id || `updated-${index}-${p_db.idBoitier}`,
