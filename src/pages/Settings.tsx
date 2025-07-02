@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'; // Consolidated import, added useEffect
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
-// Button from '../components/ui/Button'; // Supprimé car non utilisé
-import { File, HardDrive, User, BookOpen, Database, Wrench } from 'lucide-react'; // SettingsIcon supprimé
+import Button from '../components/ui/Button'; // Added missing import for Button
+import { File, HardDrive, User, BookOpen, Database, Wrench, Plus } from 'lucide-react'; // SettingsIcon supprimé, Added Plus
 
 // Import des nouveaux composants
 import FileModelSettings from '../components/settings/FileModelSettings';
