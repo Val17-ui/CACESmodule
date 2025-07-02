@@ -80,7 +80,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         iseliminatory: 'isEliminatory',
         timelimit: 'timeLimit',
         imagename: 'imageName',
-        type: 'type', // Added 'type' as a required column for clarity
+        // type: 'type', // Type column is no longer strictly needed for import logic, will default to multiple-choice
       };
 
       const headerMap: Record<string, number> = {}; // Maps internal key to column index
@@ -98,11 +98,10 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         }
       });
 
-      // Validate required headers (using internal keys)
-      const requiredImportKeys = ['texte', 'referential', 'type', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory'];
+      // Validate required headers (using internal keys) - 'type' is removed from here
+      const requiredImportKeys = ['texte', 'referential', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory'];
       for (const key of requiredImportKeys) {
         if (headerMap[key] === undefined) {
-          // Try to find the display name for a more user-friendly error
           const displayName = Object.keys(expectedHeaders).find(k => expectedHeaders[k] === key) || key;
           throw new Error(`Colonne manquante ou mal nommée dans le fichier Excel : "${displayName}"`);
         }
@@ -123,60 +122,53 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
             continue;
         }
 
-        const questionTypeRaw = (row[headerMap['type']] || 'QCM').toString().toUpperCase(); // Default to QCM if type is missing, as per old logic
-        let StoredQuestionType: 'multiple-choice' | 'true-false';
+        // All questions are now 'multiple-choice'
+        const StoredQuestionType: 'multiple-choice' = 'multiple-choice';
         let options: string[] = [];
         let correctAnswerStr: string = '';
 
-        if (questionTypeRaw === 'QCM' || questionTypeRaw === 'QCU') {
-          StoredQuestionType = 'multiple-choice';
-          options = [
-            (row[headerMap['optionA']] || '').toString(),
-            (row[headerMap['optionB']] || '').toString(),
-            (row[headerMap['optionC']] || '').toString(),
-            (row[headerMap['optionD']] || '').toString()
-          ].map(opt => opt.trim()).filter(opt => opt !== '');
+        // Check if it looks like a True/False question based on options (e.g. optionA is "Vrai", optionB is "Faux", C & D are empty)
+        // This is an interpretation based on common patterns if the 'type' column is absent or ignored.
+        const optA = (row[headerMap['optionA']] || '').toString().trim();
+        const optB = (row[headerMap['optionB']] || '').toString().trim();
+        const optC = (row[headerMap['optionC']] || '').toString().trim();
+        const optD = (row[headerMap['optionD']] || '').toString().trim();
 
-          if (options.length < 2) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Les QCM/QCU doivent avoir au moins 2 options (A et B renseignées).`);
+        options = [optA, optB];
+        if (optC !== '') options.push(optC);
+        if (optD !== '') options.push(optD);
+        options = options.filter(opt => opt !== ''); // Remove any fully empty options that might have been added
+
+        if (options.length < 2) {
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Au moins 2 options (OptionA et OptionB) doivent être renseignées.`);
             continue;
-          }
+        }
 
-          const correctAnswerLetter = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
-          if (correctAnswerLetter === 'A') correctAnswerStr = "0";
-          else if (correctAnswerLetter === 'B') correctAnswerStr = "1";
-          else if (correctAnswerLetter === 'C' && options.length > 2) correctAnswerStr = "2";
-          else if (correctAnswerLetter === 'D' && options.length > 3) correctAnswerStr = "3";
-          else {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide ou option correspondante non disponible pour QCM/QCU.`);
-            continue;
-          }
-          // Validate if the selected correct option actually has content
-          const caIdx = parseInt(correctAnswerStr, 10);
-          if (!options[caIdx]?.trim()) {
-             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): L'option correcte '${correctAnswerLetter}' est vide.`);
-             continue;
-          }
+        const correctAnswerLetter = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
+        if (correctAnswerLetter === 'A') correctAnswerStr = "0";
+        else if (correctAnswerLetter === 'B') correctAnswerStr = "1";
+        else if (correctAnswerLetter === 'C' && options.length > 2) correctAnswerStr = "2";
+        else if (correctAnswerLetter === 'D' && options.length > 3) correctAnswerStr = "3";
+        else {
+            // For a 2-option question that might be True/False, allow 'VRAI'/'FAUX' as correct answer
+            if (options.length === 2) {
+                if (correctAnswerLetter === 'VRAI' && (optA.toUpperCase() === 'VRAI' || options[0].toUpperCase() === correctAnswerLetter)) correctAnswerStr = "0";
+                else if (correctAnswerLetter === 'FAUX' && (optB.toUpperCase() === 'FAUX' || options[1].toUpperCase() === correctAnswerLetter)) correctAnswerStr = "1";
+                else {
+                     errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide. Utilisez A, B, C, D ou Vrai/Faux pour les questions à 2 options.`);
+                     continue;
+                }
+            } else {
+                errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide ou option correspondante non disponible.`);
+                continue;
+            }
+        }
 
-        } else if (questionTypeRaw === 'VRAIFAUX' || questionTypeRaw === 'VRAI/FAUX' || questionTypeRaw === 'VF') {
-          StoredQuestionType = 'true-false';
-          // Use optionA and optionB if provided for True/False, otherwise default
-          const optAContent = (row[headerMap['optionA']] || 'Vrai').toString().trim();
-          const optBContent = (row[headerMap['optionB']] || 'Faux').toString().trim();
-          options = [optAContent, optBContent];
-
-          const correctAnswerInput = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
-          if (correctAnswerInput === 'A' || correctAnswerInput === 'VRAI' || correctAnswerInput === '0') {
-            correctAnswerStr = '0';
-          } else if (correctAnswerInput === 'B' || correctAnswerInput === 'FAUX' || correctAnswerInput === '1') {
-            correctAnswerStr = '1';
-          } else {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Réponse correcte '${correctAnswerInput}' invalide pour Vrai/Faux. Utilisez A/B, Vrai/Faux, ou 0/1.`);
-            continue;
-          }
-        } else {
-           errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Type de question "${questionTypeRaw}" non supporté. Utilisez QCM, QCU, ou VraiFaux.`);
-          continue;
+        // Validate if the selected correct option actually has content
+        const caIdx = parseInt(correctAnswerStr, 10);
+        if (!options[caIdx]?.trim()) { // Check against the potentially filtered options list
+           errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): L'option correcte '${correctAnswerLetter}' est vide ou non définie.`);
+           continue;
         }
 
         const referentialRaw = (row[headerMap['referential']] || '').toString().toUpperCase();
