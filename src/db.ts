@@ -18,6 +18,7 @@ export interface QuestionWithId {
   usageCount?: number;
   correctResponseRate?: number;
   slideGuid?: string;
+  imageName?: string; // Added to store the name of the image file
 }
 
 export interface VotingDevice {

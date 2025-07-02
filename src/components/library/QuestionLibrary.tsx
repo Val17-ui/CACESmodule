@@ -67,39 +67,44 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       }
 
       const headerRow = jsonRows[0] as string[];
-      // Define expected headers (case insensitive for robustness)
+      // Define expected headers based on user's list (keys are normalized for internal use)
       const expectedHeaders: Record<string, string> = {
-        texte: 'Texte',
-        type: 'Type (QCM/QCU/VraiFaux)',
-        option1: 'Option1',
-        option2: 'Option2',
-        option3: 'Option3',
-        option4: 'Option4',
-        reponsecorrecte: 'ReponseCorrecte (index ou Vrai/Faux)',
-        referentiel: 'Referentiel (R489, etc.)',
-        theme: 'Theme',
-        esteliminatoire: 'EstEliminatoire (Oui/Non)',
-        tempslimitesec: 'TempsLimiteSec',
-        // nomimage: 'NomImage' // Image import not handled in this pass
+        texte: 'texte',
+        referential: 'referential',
+        theme: 'theme',
+        optiona: 'optionA',
+        optionb: 'optionB',
+        optionc: 'optionC',
+        optiond: 'optionD',
+        correctanswer: 'correctAnswer',
+        iseliminatory: 'isEliminatory',
+        timelimit: 'timeLimit',
+        imagename: 'imageName',
+        type: 'type', // Added 'type' as a required column for clarity
       };
 
-      // Map actual headers to expected keys
-      const headerMap: Record<string, number> = {};
+      const headerMap: Record<string, number> = {}; // Maps internal key to column index
       headerRow.forEach((header, index) => {
         const normalizedHeader = (header || '').toString().toLowerCase().replace(/\s+/g, '');
-        for (const key in expectedHeaders) {
-          if (normalizedHeader === key || normalizedHeader === expectedHeaders[key].toLowerCase().replace(/\s+/g, '')) {
-            headerMap[key] = index;
-            break;
-          }
+        if (expectedHeaders[normalizedHeader]) { // If direct match with a normalized key
+            headerMap[expectedHeaders[normalizedHeader]] = index;
+        } else { // Fallback to check against display values if needed (less strict)
+            for (const key in expectedHeaders) {
+                if (normalizedHeader === expectedHeaders[key].toLowerCase().replace(/\s+/g, '')) {
+                    headerMap[expectedHeaders[key]] = index; // Map internal key to index
+                    break;
+                }
+            }
         }
       });
 
-      // Validate required headers
-      const requiredDbFields: (keyof typeof expectedHeaders)[] = ['texte', 'type', 'referentiel', 'reponsecorrecte'];
-      for (const field of requiredDbFields) {
-        if (headerMap[field] === undefined) {
-          throw new Error(`Colonne manquante ou mal nommée : "${expectedHeaders[field]}"`);
+      // Validate required headers (using internal keys)
+      const requiredImportKeys = ['texte', 'referential', 'type', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory'];
+      for (const key of requiredImportKeys) {
+        if (headerMap[key] === undefined) {
+          // Try to find the display name for a more user-friendly error
+          const displayName = Object.keys(expectedHeaders).find(k => expectedHeaders[k] === key) || key;
+          throw new Error(`Colonne manquante ou mal nommée dans le fichier Excel : "${displayName}"`);
         }
       }
 
@@ -114,76 +119,101 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
         const questionText = row[headerMap['texte']];
         if (!questionText || questionText.toString().trim() === '') {
-            errorsEncountered.push(`Ligne ${i + 1}: Le texte de la question est manquant.`);
+            errorsEncountered.push(`Ligne ${i + 1}: Le champ 'texte' est manquant.`);
             continue;
         }
 
-        const questionTypeRaw = (row[headerMap['type']] || '').toString().toUpperCase();
-        let questionType: 'multiple-choice' | 'true-false';
+        const questionTypeRaw = (row[headerMap['type']] || 'QCM').toString().toUpperCase(); // Default to QCM if type is missing, as per old logic
+        let StoredQuestionType: 'multiple-choice' | 'true-false';
         let options: string[] = [];
-        let correctAnswer: string = '';
+        let correctAnswerStr: string = '';
 
         if (questionTypeRaw === 'QCM' || questionTypeRaw === 'QCU') {
-          questionType = 'multiple-choice';
+          StoredQuestionType = 'multiple-choice';
           options = [
-            (row[headerMap['option1']] || '').toString(),
-            (row[headerMap['option2']] || '').toString(),
-            (row[headerMap['option3']] || '').toString(),
-            (row[headerMap['option4']] || '').toString()
-          ].filter(opt => opt.trim() !== '');
+            (row[headerMap['optionA']] || '').toString(),
+            (row[headerMap['optionB']] || '').toString(),
+            (row[headerMap['optionC']] || '').toString(),
+            (row[headerMap['optionD']] || '').toString()
+          ].map(opt => opt.trim()).filter(opt => opt !== '');
 
           if (options.length < 2) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Les QCM/QCU doivent avoir au moins 2 options.`);
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Les QCM/QCU doivent avoir au moins 2 options (A et B renseignées).`);
             continue;
           }
-          const correctAnswerIndex = parseInt(row[headerMap['reponsecorrecte']], 10);
-          if (isNaN(correctAnswerIndex) || correctAnswerIndex < 0 || correctAnswerIndex >= options.length) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Réponse correcte invalide pour QCM/QCU.`);
+
+          const correctAnswerLetter = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
+          if (correctAnswerLetter === 'A') correctAnswerStr = "0";
+          else if (correctAnswerLetter === 'B') correctAnswerStr = "1";
+          else if (correctAnswerLetter === 'C' && options.length > 2) correctAnswerStr = "2";
+          else if (correctAnswerLetter === 'D' && options.length > 3) correctAnswerStr = "3";
+          else {
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide ou option correspondante non disponible pour QCM/QCU.`);
             continue;
           }
-          correctAnswer = correctAnswerIndex.toString();
+          // Validate if the selected correct option actually has content
+          const caIdx = parseInt(correctAnswerStr, 10);
+          if (!options[caIdx]?.trim()) {
+             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): L'option correcte '${correctAnswerLetter}' est vide.`);
+             continue;
+          }
 
         } else if (questionTypeRaw === 'VRAIFAUX' || questionTypeRaw === 'VRAI/FAUX' || questionTypeRaw === 'VF') {
-          questionType = 'true-false';
-          options = ['Vrai', 'Faux']; // Standardized options for true/false
-          const correctAnswerRaw = (row[headerMap['reponsecorrecte']] || '').toString().toLowerCase();
-          if (correctAnswerRaw === 'vrai' || correctAnswerRaw === 'true' || correctAnswerRaw === '0') {
-            correctAnswer = '0'; // Index of "Vrai"
-          } else if (correctAnswerRaw === 'faux' || correctAnswerRaw === 'false' || correctAnswerRaw === '1') {
-            correctAnswer = '1'; // Index of "Faux"
+          StoredQuestionType = 'true-false';
+          // Use optionA and optionB if provided for True/False, otherwise default
+          const optAContent = (row[headerMap['optionA']] || 'Vrai').toString().trim();
+          const optBContent = (row[headerMap['optionB']] || 'Faux').toString().trim();
+          options = [optAContent, optBContent];
+
+          const correctAnswerInput = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
+          if (correctAnswerInput === 'A' || correctAnswerInput === 'VRAI' || correctAnswerInput === '0') {
+            correctAnswerStr = '0';
+          } else if (correctAnswerInput === 'B' || correctAnswerInput === 'FAUX' || correctAnswerInput === '1') {
+            correctAnswerStr = '1';
           } else {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Réponse correcte invalide pour Vrai/Faux. Utilisez Vrai ou Faux.`);
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Réponse correcte '${correctAnswerInput}' invalide pour Vrai/Faux. Utilisez A/B, Vrai/Faux, ou 0/1.`);
             continue;
           }
         } else {
-          errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Type de question "${questionTypeRaw}" non supporté.`);
+           errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Type de question "${questionTypeRaw}" non supporté. Utilisez QCM, QCU, ou VraiFaux.`);
           continue;
         }
 
-        const referentialRaw = (row[headerMap['referentiel']] || '').toString().toUpperCase();
+        const referentialRaw = (row[headerMap['referential']] || '').toString().toUpperCase();
         if (!Object.values(CACESReferential).includes(referentialRaw as CACESReferential)) {
             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel "${referentialRaw}" invalide.`);
             continue;
         }
 
-        const newQuestion: Omit<StoredQuestion, 'id'> = {
+        const isEliminatoryRaw = (row[headerMap['isEliminatory']] || 'Non').toString().trim().toUpperCase();
+        let isEliminatoryBool = false;
+        if (isEliminatoryRaw === 'OUI' || isEliminatoryRaw === 'TRUE' || isEliminatoryRaw === '1') {
+            isEliminatoryBool = true;
+        } else if (isEliminatoryRaw !== 'NON' && isEliminatoryRaw !== 'FALSE' && isEliminatoryRaw !== '0') {
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Valeur pour 'isEliminatory' (${isEliminatoryRaw}) invalide. Utilisez Oui/Non, True/False, 0/1.`);
+            continue;
+        }
+
+
+        const newQuestionData: Omit<StoredQuestion, 'id'> = {
           text: questionText.toString(),
-          type: questionType,
+          type: StoredQuestionType,
           options: options,
-          correctAnswer: correctAnswer,
+          correctAnswer: correctAnswerStr,
           referential: referentialRaw as CACESReferential,
           theme: (row[headerMap['theme']] || '').toString(),
-          isEliminatory: (row[headerMap['esteliminatoire']] || '').toString().toLowerCase() === 'oui',
-          timeLimit: parseInt(row[headerMap['tempslimitesec']], 10) || 30,
+          isEliminatory: isEliminatoryBool,
+          timeLimit: parseInt(row[headerMap['timelimit']], 10) || 30,
+          imageName: (row[headerMap['imagename']] || '').toString().trim() || undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           usageCount: 0,
           correctResponseRate: 0,
-          // image: undefined // Image import not handled in this pass
+          image: undefined, // Actual image blob not handled from this import
         };
 
         try {
-            await StorageManager.addQuestion(newQuestion);
+            await StorageManager.addQuestion(newQuestionData);
             questionsAdded++;
         } catch (e: any) {
             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Erreur DB - ${e.message}`);
