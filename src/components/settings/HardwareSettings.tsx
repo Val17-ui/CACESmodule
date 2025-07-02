@@ -34,12 +34,12 @@ const HardwareSettings: React.FC = () => {
 
   const handleAddDevice = async () => {
     if (!newDevicePhysicalId.trim()) {
-      setError("L'ID technique ne peut pas être vide.");
+      setError("L'ID boîtier OMBEA ne peut pas être vide.");
       return;
     }
     // Check for duplicates before adding
     if (devices.some(d => d.physicalId === newDevicePhysicalId.trim())) {
-      setError("Cet ID technique existe déjà.");
+      setError("Cet ID boîtier OMBEA existe déjà.");
       return;
     }
     try {
@@ -69,13 +69,13 @@ const HardwareSettings: React.FC = () => {
 
   const handleSaveEdit = async (id: number) => {
     const deviceToSave = devices.find(d => d.id === id);
-    if (!deviceToSave || !deviceToSave.currentPhysicalIdValue) {
-      setError("L'ID technique ne peut pas être vide pour la sauvegarde.");
+    if (!deviceToSave || !deviceToSave.currentPhysicalIdValue?.trim()) {
+      setError("L'ID boîtier OMBEA ne peut pas être vide pour la sauvegarde.");
       return;
     }
     // Check for duplicates, excluding the current device being edited
     if (devices.some(d => d.id !== id && d.physicalId === deviceToSave.currentPhysicalIdValue?.trim())) {
-      setError("Cet ID technique existe déjà.");
+      setError("Cet ID boîtier OMBEA existe déjà.");
       return;
     }
 
@@ -155,7 +155,7 @@ const HardwareSettings: React.FC = () => {
     <Card title="Matériel - Gestion des Boîtiers de Vote">
       <p className="text-sm text-gray-600 mb-4">
         Gérez la liste de vos boîtiers de vote OMBEA. Le "Numéro de boîtier" est généré automatiquement et utilisé pour l'attribution dans les sessions.
-        L'"ID Technique" est l'identifiant physique unique de chaque boîtier OMBEA.
+        L'"ID boîtier OMBEA" est l'identifiant physique unique de chaque boîtier OMBEA.
       </p>
       {error && (
         <div className="mb-4 p-3 rounded-md bg-red-100 text-red-700 flex items-center">
@@ -168,7 +168,7 @@ const HardwareSettings: React.FC = () => {
         <div className="flex items-center space-x-2">
           {/* @ts-ignore */}
           <Input
-            placeholder="ID Technique du nouveau boîtier"
+            placeholder="ID boîtier OMBEA du nouveau boîtier"
             value={newDevicePhysicalId}
             onChange={handleAddNewDeviceInputChange}
             className="flex-grow"
@@ -180,7 +180,7 @@ const HardwareSettings: React.FC = () => {
       <div className="flex justify-end space-x-2 mb-4">
         <label htmlFor="excel-import" className="inline-flex">
           <Button variant="outline" icon={<Upload size={16}/>} onClick={() => document.getElementById('excel-import')?.click()} type="button">
-            Importer IDs Techniques (.xlsx)
+            Importer IDs boîtier OMBEA (.xlsx)
           </Button>
         </label>
         <input type="file" id="excel-import" accept=".xlsx, .csv" className="hidden" onChange={handleImport} />
@@ -191,7 +191,7 @@ const HardwareSettings: React.FC = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Numéro de boîtier</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Technique (ID physique OMBEA)</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID boîtier OMBEA</th>
               <th className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -226,7 +226,16 @@ const HardwareSettings: React.FC = () => {
                     ) : (
                       <>
                         <Button size="sm" variant="outline" onClick={() => toggleEditMode(device.id!)}>Modifier</Button>
-                        <Button size="sm" variant="danger" onClick={() => handleDelete(device.id!)} icon={<Trash2 size={16}/>}>Supprimer</Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleDelete(device.id!)}
+                          icon={<Trash2 size={16}/>}
+                          disabled={index !== devices.length - 1}
+                          title={index !== devices.length - 1 ? "Seul le dernier boîtier de la liste peut être supprimé" : "Supprimer le boîtier"}
+                        >
+                          Supprimer
+                        </Button>
                       </>
                     )}
                   </td>
@@ -238,8 +247,9 @@ const HardwareSettings: React.FC = () => {
       </div>
       <div className="mt-4 p-3 bg-blue-50 rounded-lg">
         <p className="text-sm text-blue-800">
-          <strong>Important:</strong> La suppression d'un boîtier est définitive. Si vous souhaitez simplement changer l'ID technique d'un boîtier numéroté, utilisez la fonction "Modifier".
-          L'ordre des boîtiers (Numéro de boîtier) est basé sur leur ordre d'ajout. La suppression d'un boîtier réindexera les suivants.
+          <strong>Important:</strong> La suppression d'un boîtier est définitive (seul le dernier boîtier de la liste peut être supprimé).
+          Si vous souhaitez simplement changer l'ID boîtier OMBEA d'un boîtier numéroté, utilisez la fonction "Modifier".
+          L'ordre des boîtiers (Numéro de boîtier) est basé sur leur ordre d'ajout.
         </p>
       </div>
     </Card>
