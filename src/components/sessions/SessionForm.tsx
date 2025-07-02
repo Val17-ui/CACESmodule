@@ -18,9 +18,10 @@ import {
   addSession,
   updateSession,
   getSessionById,
-  addBulkSessionResults,
+  // addBulkSessionResults, // This function is not exported from db.ts
   getResultsForSession,
-  getQuestionsByIds
+  getQuestionsByIds,
+  db // Import db object to use db.sessionResults.bulkAdd
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -422,7 +423,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
       if (sessionResultsToSave.length > 0) {
         try {
-          const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+          // Use db.sessionResults.bulkAdd directly
+          const savedResultIds = await db.sessionResults.bulkAdd(sessionResultsToSave, { allKeys: true });
           // console.log("[SessionForm Import Log] Saved Result IDs from DB:", savedResultIds); // DEBUG
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats sauvegardés !`;
