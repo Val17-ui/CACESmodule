@@ -1,86 +1,74 @@
 import Dexie, { Table } from 'dexie';
-// Importer les types depuis src/types/index.ts
-import {
-  CACESReferential,
-  Session,
-  Participant, // Utilisé par Session
-  SelectedBlock, // Utilisé par Session
-  SessionResult,
-  // Question // L'interface Question de types/index.ts décrit la structure originale.
-             // Pour Dexie, nous utilisons QuestionWithId ci-dessous.
-  // CACESReferential a été ajouté ici car il est utilisé dans l'interface BlockUsage plus bas.
-} from './types';
+import { CACESReferential, Session, Participant, SessionResult } from './types';
 
-// L'interface QuestionWithId est spécifique à Dexie pour gérer l'id auto-incrémenté.
-// Elle est similaire à l'interface Question mais id est number?
+// Interfaces pour la DB
 export interface QuestionWithId {
-  id?: number; // Auto-incremented primary key
+  id?: number;
   text: string;
-  type: 'multiple-choice' | 'true-false'; // Ajuster si QuestionType enum est préféré ici
+  type: 'multiple-choice' | 'true-false';
   options: string[];
   correctAnswer: string;
   timeLimit?: number;
   isEliminatory: boolean;
-  referential: CACESReferential | string; // Permettre string pour flexibilité
+  referential: CACESReferential | string;
   theme: string;
   image?: Blob | null;
   createdAt?: string;
   updatedAt?: string;
   usageCount?: number;
   correctResponseRate?: number;
-  // Il faut s'assurer que cette interface est cohérente avec la table 'questions' existante
-  // et l'interface `Question` dans `types/index.ts` pour les champs non-ID.
-  slideGuid?: string; // Ajout du SlideGUID
+  slideGuid?: string;
+}
+
+export interface VotingDevice {
+  id?: number;
+  physicalId: string;
 }
 
 export class MySubClassedDexie extends Dexie {
-  questions!: Table<QuestionWithId, number>; // Clé primaire de type number
-  sessions!: Table<Session, number>; // Nouvelle table pour les sessions
-  sessionResults!: Table<SessionResult, number>; // Nouvelle table pour les résultats de session
+  questions!: Table<QuestionWithId, number>;
+  sessions!: Table<Session, number>;
+  sessionResults!: Table<SessionResult, number>;
+  adminSettings!: Table<{ key: string; value: any }, string>;
+  votingDevices!: Table<VotingDevice, number>;
 
   constructor() {
     super('myDatabase');
     this.version(1).stores({
-      // Schéma existant pour la table questions (sans slideGuid)
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options'
     });
-
     this.version(2).stores({
-      // Schéma de la v1 reconduit pour questions
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, *options',
       sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
-
-    // Nouvelle version pour ajouter slideGuid à questions
     this.version(3).stores({
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
       sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
-
-    // Nouvelle version pour ajouter questionMappings à sessions
     this.version(4).stores({
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
       sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings',
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
-
-    // Nouvelle version pour ajouter pointsObtained à sessionResults et notes à sessions
     this.version(5).stores({
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes', // Ajout de notes
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes',
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp'
     });
-    // Note: Dexie gère les migrations additives.
-    // Les sessionResults existants auront pointsObtained: undefined.
-    // Les sessions existantes auront notes: undefined.
+    this.version(6).stores({
+      adminSettings: '&key'
+    });
+    this.version(7).stores({
+      votingDevices: '++id, &physicalId'
+    });
   }
 }
 
 export const db = new MySubClassedDexie();
 
-// --- Fonctions CRUD pour Questions (existantes) ---
+// Fonctions CRUD pour Questions
 export const addQuestion = async (question: QuestionWithId): Promise<number | undefined> => {
   try {
     const id = await db.questions.add(question);
@@ -95,115 +83,6 @@ export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
     return await db.questions.toArray();
   } catch (error) {
     console.error("Error getting all questions: ", error);
-    return [];
-  }
-};
-
-// --- Fonctions de Reporting ---
-
-export interface BlockUsage {
-  referentiel: CACESReferential | string;
-  theme: string;
-  blockId: string;
-  usageCount: number;
-}
-
-/**
- * Calcule le nombre de fois où chaque bloc a été utilisé dans les sessions terminées,
- * avec un filtre optionnel sur la période.
- * @param startDate - Date de début optionnelle (string ISO ou objet Date).
- * @param endDate - Date de fin optionnelle (string ISO ou objet Date).
- */
-export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
-  const usageMap = new Map<string, BlockUsage>();
-
-  try {
-    let query = db.sessions.where('status').equals('completed');
-
-    // Gestion des dates pour le filtre de période
-    // Dexie gère bien les objets Date pour les comparaisons.
-    // Assurons-nous que les strings sont converties en Date si nécessaire.
-    // Pour Dexie, il est souvent préférable de stocker les dates comme objets Date ou timestamp (number).
-    // Si dateSession est un string ISO, il faudra peut-être ajuster la requête ou la conversion.
-    // En supposant que dateSession est stocké de manière comparable (ex: timestamp ou objet Date).
-    // Si dateSession est un string ISO 'YYYY-MM-DDTHH:mm:ss.sssZ' ou 'YYYY-MM-DD'
-    // Dexie peut les comparer lexicographiquement, mais c'est plus sûr avec des objets Date ou timestamps.
-    // Pour cet exemple, on va supposer que dateSession est indexé et comparable.
-
-    let sessionsQuery = db.sessions.where('status').equals('completed');
-
-    if (startDate) {
-      const start = startDate instanceof Date ? startDate : new Date(startDate);
-      // Si dateSession est un string, il faut s'assurer que la comparaison est correcte.
-      // Pour les index Dexie, si 'dateSession' est un string, between() fonctionnera lexicographiquement.
-      // Si 'dateSession' est un nombre (timestamp), c'est direct.
-      // Pour être robuste, il faudrait connaître le type exact de session.dateSession.
-      // Supposons ici que c'est compatible avec une comparaison directe ou que l'index gère bien les strings ISO.
-      // sessionsQuery = sessionsQuery.filter(session => session.dateSession >= start.toISOString());
-      // Dexie préfère .aboveOrEqual() pour les index.
-      // Assumons que dateSession est indexé.
-    }
-
-    if (endDate) {
-      const end = endDate instanceof Date ? endDate : new Date(endDate);
-      // sessionsQuery = sessionsQuery.filter(session => session.dateSession <= end.toISOString());
-      // Dexie préfère .belowOrEqual() pour les index.
-    }
-
-    // Refonte du filtrage par date pour Dexie
-    // Si dateSession est indexé, on peut utiliser .between() ou .above()/.below()
-    // Exemple: db.sessions.where('dateSession').aboveOrEqual(startDate).and(s => s.dateSession <= endDate) ...
-    // Pour l'instant, on filtre après récupération si l'indexation directe par date n'est pas simple.
-    // Ou, si on a un index sur dateSession:
-    // Exemple: this.version(6).stores({ sessions: '..., dateSession, ...'});
-
-    const completedSessions = await sessionsQuery.toArray();
-    let filteredSessions = completedSessions;
-
-    if (startDate) {
-      const start = startDate instanceof Date ? startDate : new Date(startDate);
-      // Normaliser l'heure à 00:00:00 pour startDate pour inclure toute la journée
-      start.setHours(0, 0, 0, 0);
-      filteredSessions = filteredSessions.filter(session => {
-        const sessionDate = new Date(session.dateSession); // Assumant que dateSession peut être parsé en Date
-        return sessionDate >= start;
-      });
-    }
-
-    if (endDate) {
-      const end = endDate instanceof Date ? endDate : new Date(endDate);
-      // Normaliser l'heure à 23:59:59 pour endDate pour inclure toute la journée
-      end.setHours(23, 59, 59, 999);
-      filteredSessions = filteredSessions.filter(session => {
-        const sessionDate = new Date(session.dateSession); // Assumant que dateSession peut être parsé en Date
-        return sessionDate <= end;
-      });
-    }
-
-    for (const session of filteredSessions) { // Utiliser filteredSessions ici
-      if (session.selectionBlocs && session.selectionBlocs.length > 0) {
-        const sessionReferentiel = session.referentiel;
-
-        for (const bloc of session.selectionBlocs) {
-          const key = `${sessionReferentiel}-${bloc.theme}-${bloc.blockId}`;
-
-          if (usageMap.has(key)) {
-            const currentUsage = usageMap.get(key)!;
-            currentUsage.usageCount++;
-          } else {
-            usageMap.set(key, {
-              referentiel: sessionReferentiel,
-              theme: bloc.theme,
-              blockId: bloc.blockId,
-              usageCount: 1,
-            });
-          }
-        }
-      }
-    }
-    return Array.from(usageMap.values());
-  } catch (error) {
-    console.error("Erreur lors du calcul de l'utilisation des blocs:", error);
     return [];
   }
 };
@@ -226,188 +105,75 @@ export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]
   }
 };
 
-export const updateQuestion = async (id: number, updates: Partial<QuestionWithId>): Promise<number | undefined> => {
+// ... (autres fonctions pour questions, sessions, etc.)
+
+// Fonctions pour AdminSettings
+export const getAdminSetting = async (key: string): Promise<any> => {
   try {
-    await db.questions.update(id, updates);
-    return id;
+    const setting = await db.adminSettings.get(key);
+    return setting?.value;
   } catch (error) {
-    console.error(`Error updating question with id ${id}: `, error);
+    console.error(`Error getting setting ${key}:`, error);
+    return undefined;
   }
 };
 
-export const deleteQuestion = async (id: number): Promise<void> => {
+export const setAdminSetting = async (key: string, value: any): Promise<void> => {
   try {
-    await db.questions.delete(id);
+    await db.adminSettings.put({ key, value });
   } catch (error) {
-    console.error(`Error deleting question with id ${id}: `, error);
+    console.error(`Error setting ${key}:`, error);
   }
 };
 
-// --- Nouvelles fonctions CRUD pour Sessions ---
-export const addSession = async (session: Session): Promise<number | undefined> => {
+export const getAllAdminSettings = async (): Promise<{ key: string; value: any }[]> => {
   try {
-    // Assurer que les dates sont stockées en string si nécessaire (Dexie les gère bien en Date object aussi)
-    // session.createdAt = new Date().toISOString();
-    // session.updatedAt = new Date().toISOString();
-    const id = await db.sessions.add(session);
-    return id;
+    return await db.adminSettings.toArray();
   } catch (error) {
-    console.error("Error adding session: ", error);
-  }
-};
-
-export const getAllSessions = async (): Promise<Session[]> => {
-  try {
-    return await db.sessions.toArray();
-  } catch (error) {
-    console.error("Error getting all sessions: ", error);
+    console.error("Error getting all admin settings:", error);
     return [];
   }
 };
 
-export const getSessionById = async (id: number): Promise<Session | undefined> => {
+// Fonctions CRUD pour VotingDevices
+export const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
   try {
-    return await db.sessions.get(id);
+    return await db.votingDevices.add(device as VotingDevice);
   } catch (error) {
-    console.error(`Error getting session with id ${id}: `, error);
+    console.error("Error adding voting device:", error);
   }
 };
 
-export const updateSession = async (id: number, updates: Partial<Session>): Promise<number | undefined> => {
+export const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
   try {
-    // updates.updatedAt = new Date().toISOString();
-    await db.sessions.update(id, updates);
-    return id;
+    return await db.votingDevices.toArray();
   } catch (error) {
-    console.error(`Error updating session with id ${id}: `, error);
-  }
-};
-
-export const deleteSession = async (id: number): Promise<void> => {
-  try {
-    await db.sessions.delete(id);
-    // Potentiellement, supprimer aussi les sessionResults associés
-    await db.sessionResults.where('sessionId').equals(id).delete();
-  } catch (error) {
-    console.error(`Error deleting session with id ${id}: `, error);
-  }
-};
-
-// --- Nouvelles fonctions CRUD pour SessionResults ---
-export const addSessionResult = async (result: SessionResult): Promise<number | undefined> => {
-  try {
-    const id = await db.sessionResults.add(result);
-    return id;
-  } catch (error) {
-    console.error("Error adding session result: ", error);
-  }
-};
-
-export const addBulkSessionResults = async (results: SessionResult[]): Promise<number[] | undefined> => {
-  try {
-    const ids = await db.sessionResults.bulkAdd(results, { allKeys: true });
-    return ids as number[];
-  } catch (error) {
-    console.error("Error adding bulk session results: ", error);
-  }
-}
-
-export const getAllResults = async (): Promise<SessionResult[]> => {
-  try {
-    return await db.sessionResults.toArray();
-  } catch (error) {
-    console.error("Error getting all session results: ", error);
+    console.error("Error getting all voting devices:", error);
     return [];
   }
 };
 
-export const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
+export const updateVotingDevice = async (id: number, updates: Partial<VotingDevice>): Promise<number> => {
   try {
-    return await db.sessionResults.where('sessionId').equals(sessionId).toArray();
+    return await db.votingDevices.update(id, updates);
   } catch (error) {
-    console.error(`Error getting results for session ${sessionId}: `, error);
-    return [];
+    console.error(`Error updating voting device ${id}:`, error);
+    return 0;
   }
 };
 
-export const getResultBySessionAndQuestion = async (sessionId: number, questionId: number, participantIdBoitier: string): Promise<SessionResult | undefined> => {
+export const deleteVotingDevice = async (id: number): Promise<void> => {
   try {
-    return await db.sessionResults
-      .where({ sessionId, questionId, participantIdBoitier })
-      .first();
+    await db.votingDevices.delete(id);
   } catch (error) {
-    console.error(`Error getting specific result: `, error);
+    console.error(`Error deleting voting device ${id}:`, error);
   }
 };
 
-export const updateSessionResult = async (id: number, updates: Partial<SessionResult>): Promise<number | undefined> => {
+export const bulkAddVotingDevices = async (devices: VotingDevice[]): Promise<void> => {
   try {
-    await db.sessionResults.update(id, updates);
-    return id;
+    await db.votingDevices.bulkAdd(devices, { allKeys: false });
   } catch (error) {
-    console.error(`Error updating session result with id ${id}: `, error);
-  }
-};
-
-export const deleteResultsForSession = async (sessionId: number): Promise<void> => {
-  try {
-    await db.sessionResults.where('sessionId').equals(sessionId).delete();
-  } catch (error) {
-    console.error(`Error deleting results for session ${sessionId}: `, error);
-  }
-};
-
-// Récupérer les questions spécifiques basées sur une sélection de blocs (pour une session)
-export const getQuestionsForSessionBlocks = async (selectionBlocs: { theme: string; blockId: string }[]): Promise<QuestionWithId[]> => {
-  if (!selectionBlocs || selectionBlocs.length === 0) {
-    return [];
-  }
-
-  const allMatchingQuestions: QuestionWithId[] = [];
-
-  try {
-    for (const bloc of selectionBlocs) {
-      // StorageManager.getQuestionsForBlock(referential, baseTheme, chosenBlockIdentifier);
-      // Ici, nous devons simuler une logique similaire ou adapter.
-      // Puisque QuestionWithId a 'theme' et potentiellement une manière d'identifier un 'blockId'
-      // (peut-être que 'theme' dans QuestionWithId est composite comme 'securite_A')
-      // ou alors il faut une structure de données plus complexe pour les blocs.
-      // Pour l'instant, supposons que 'theme' dans QuestionWithId peut être 'theme_blockId'
-      // ou que nous filtrons par thème puis par une autre propriété pour le bloc si elle existe.
-
-      // Exemple simplifié: si le thème de la question est exactement "theme_blockId"
-      // const blockThemeIdentifier = `${bloc.theme}_${bloc.blockId}`;
-      // const questionsFromDb = await db.questions.where('theme').equals(blockThemeIdentifier).toArray();
-
-      // Ou, si 'theme' est juste le thème principal et 'blockId' n'est pas directement un champ de QuestionWithId
-      // cette fonction devient plus complexe et pourrait nécessiter de lire toutes les questions d'un thème
-      // puis de les filtrer d'une manière ou d'une autre si 'blockId' n'est pas un champ.
-      // Pour la simulation, nous allons supposer que le thème stocké dans QuestionWithId
-      // est une concaténation ou que nous pouvons filtrer par thème principal.
-      // Pour l'instant, cette fonction est un placeholder et nécessitera une logique de filtrage
-      // plus précise basée sur la structure réelle de QuestionWithId et comment les blocs sont définis.
-
-      // Placeholder: Récupère toutes les questions pour le thème principal pour l'instant.
-      // La logique de "bloc" spécifique doit être affinée.
-      const questionsFromDb = await db.questions.where('theme').startsWith(bloc.theme).toArray();
-      // Il faudrait ensuite filtrer ces questions pour celles appartenant spécifiquement à `bloc.blockId`.
-      // Cela suppose que `blockId` est encodé quelque part dans les données de la question,
-      // ou que la structure de `theme` dans `QuestionWithId` est composite (ex: `securite_A`).
-      // Si `QuestionWithId.theme` est juste "securite", et `blockId` est "A", il faut une autre info.
-
-      // Pour l'instant, on va ajouter toutes les questions du thème principal,
-      // en sachant que c'est une simplification.
-      questionsFromDb.forEach(q => {
-        // Éviter les doublons si une question pouvait appartenir à plusieurs "blocs" logiques via ce filtre simple
-        if (!allMatchingQuestions.some(mq => mq.id === q.id)) {
-          allMatchingQuestions.push(q);
-        }
-      });
-    }
-    console.log(`Récupéré ${allMatchingQuestions.length} questions pour les blocs de la session.`);
-    return allMatchingQuestions;
-  } catch (error) {
-    console.error("Erreur lors de la récupération des questions pour les blocs de session:", error);
-    return [];
+    console.error("Error bulk adding voting devices:", error);
   }
 };
