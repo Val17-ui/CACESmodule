@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import { Settings as SettingsIcon, File, HardDrive, User, BookOpen, Database, Wrench } from 'lucide-react';
+// Button from '../components/ui/Button'; // Supprimé car non utilisé
+import { File, HardDrive, User, BookOpen, Database, Wrench } from 'lucide-react'; // SettingsIcon supprimé
 
 // Import des nouveaux composants
 import FileModelSettings from '../components/settings/FileModelSettings';
@@ -22,6 +22,13 @@ type AdminTab = 'files' | 'hardware' | 'preferences' | 'library' | 'backup' | 't
 const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('files');
 
+  const handleEditQuestion = (id: string) => {
+    // TODO: Implement actual navigation or modal opening for question editing
+    console.log("Edit question requested for ID:", id);
+    // For now, we can switch to a specific tab or show a notification
+    // Or, if you have a dedicated page/modal for editing, navigate/open it here
+  };
+
   const tabs: { id: AdminTab; label: string; icon: JSX.Element }[] = [
     { id: 'files', label: 'Fichiers et Modèles', icon: <File size={20} /> },
     { id: 'hardware', label: 'Matériel', icon: <HardDrive size={20} /> },
@@ -36,7 +43,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
       case 'files': return <FileModelSettings />;
       case 'hardware': return <HardwareSettings />;
       case 'preferences': return <UserPreferences />;
-      case 'library': return <QuestionLibrary />;
+      case 'library': return <QuestionLibrary onEditQuestion={handleEditQuestion} />;
       case 'backup': return <BackupRestore />;
       case 'technical': return <TechnicalSettings />;
       default: return null;

@@ -82,12 +82,15 @@ const HardwareSettings: React.FC = () => {
   };
 
   return (
-    <Card title="Gestion des Boîtiers de Vote" description="Ajoutez, modifiez ou importez la liste de vos boîtiers.">
+    <Card title="Gestion des Boîtiers de Vote">
+      <p className="text-sm text-gray-600 mb-4">Ajoutez, modifiez ou importez la liste de vos boîtiers.</p>
       <div className="flex justify-end space-x-2 mb-4">
         <Button variant="outline" onClick={handleAddDevice} icon={<Plus size={16}/>}>Ajouter manuellement</Button>
-        <Button asChild variant="outline" icon={<Upload size={16}/>}>
-          <label htmlFor="excel-import">Importer (.xlsx)</label>
-        </Button>
+        <label htmlFor="excel-import" className="inline-flex">
+          <Button variant="outline" icon={<Upload size={16}/>} onClick={() => document.getElementById('excel-import')?.click()} type="button">
+            Importer (.xlsx)
+          </Button>
+        </label>
         <input type="file" id="excel-import" accept=".xlsx" className="hidden" onChange={handleImport} />
       </div>
 
@@ -107,7 +110,11 @@ const HardwareSettings: React.FC = () => {
                     <Input
                       value={editingValue}
                       onChange={(e) => setEditingValue(e.target.value)}
-                      autoFocus
+                      // autoFocus prop is passed directly to the underlying HTML input if the Input component spreads props
+                      // Assuming Input component handles passing props like autoFocus correctly.
+                      // If not, the Input component itself would need modification.
+                      // For now, we ensure the prop name is correct as per HTML standard.
+                      autoFocus={true}
                     />
                   ) : (
                     device.physicalId
