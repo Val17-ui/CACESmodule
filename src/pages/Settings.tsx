@@ -19,9 +19,20 @@ type SettingsProps = {
 
 type AdminTab = 'files' | 'hardware' | 'preferences' | 'library' | 'backup' | 'technical';
 
+import React, { useState, useEffect } from 'react'; // Import useEffect
+// ... other imports
+import TechnicalSettings from '../components/settings/TechnicalSettings';
+
 const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('files');
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null); // For QuestionForm
+
+  // Effect to reset editingQuestionId when activeTab changes to something other than 'library'
+  useEffect(() => {
+    if (activeTab !== 'library') {
+      setEditingQuestionId(null);
+    }
+  }, [activeTab]);
 
   const handleEditQuestion = (id: string) => {
     setEditingQuestionId(id);
@@ -50,13 +61,13 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'files':
-        setEditingQuestionId(null); // Clear editing state if switching to other main tabs
+        // setEditingQuestionId(null); // REMOVED - Handled by useEffect
         return <FileModelSettings />;
       case 'hardware':
-        setEditingQuestionId(null);
+        // setEditingQuestionId(null); // REMOVED
         return <HardwareSettings />;
       case 'preferences':
-        setEditingQuestionId(null);
+        // setEditingQuestionId(null); // REMOVED
         return <UserPreferences />;
       case 'library':
         if (editingQuestionId === 'new') { // Handle creation
@@ -84,13 +95,13 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
           </>
         );
       case 'backup':
-        setEditingQuestionId(null);
+        // setEditingQuestionId(null); // REMOVED
         return <BackupRestore />;
       case 'technical':
-        setEditingQuestionId(null);
+        // setEditingQuestionId(null); // REMOVED
         return <TechnicalSettings />;
       default:
-        setEditingQuestionId(null);
+        // setEditingQuestionId(null); // REMOVED
         return null;
     }
   };
