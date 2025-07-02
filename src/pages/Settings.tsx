@@ -9,6 +9,7 @@ import FileModelSettings from '../components/settings/FileModelSettings';
 import HardwareSettings from '../components/settings/HardwareSettings';
 import UserPreferences from '../components/settings/UserPreferences';
 import QuestionLibrary from '../components/library/QuestionLibrary'; // Réutilisation comme demandé
+import QuestionForm from '../components/library/QuestionForm'; // Added missing import for QuestionForm
 import BackupRestore from '../components/settings/BackupRestore';
 import TechnicalSettings from '../components/settings/TechnicalSettings';
 
