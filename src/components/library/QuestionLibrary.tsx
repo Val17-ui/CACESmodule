@@ -6,7 +6,7 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
-import { QuestionTheme, referentials, questionThemes } from '../../types';
+import { QuestionTheme, referentials, questionThemes, CACESReferential } from '../../types'; // Added CACESReferential
 import { StorageManager, StoredQuestion } from '../../services/StorageManager'; // Import StorageManager
 type QuestionLibraryProps = {
   onEditQuestion: (id: string) => void;
