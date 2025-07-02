@@ -1,49 +1,87 @@
 import React, { useRef, useEffect, useState } from 'react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
-import { AlertTriangle, BarChart, UserCheck, Calendar, Download } from 'lucide-react';
-import { Session, Participant, SessionResult, QuestionWithId } from '../../types';
+import { AlertTriangle, BarChart, UserCheck, Calendar, Download, Layers } from 'lucide-react'; // Ajout de Layers
+import { Session, Participant, SessionResult, QuestionWithId, QuestionMapping } from '../../types'; // Ajout de QuestionMapping
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { getResultsForSession, getQuestionsByIds, getAllSessions, getAllResults, getAllQuestions } from '../../db';
-import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess, calculateQuestionSuccessRate } from '../../utils/reportCalculators';
+import { getResultsForSession, getQuestionsByIds } from '../../db'; // getAllSessions, getAllResults, getAllQuestions sont retires si non utilises pour stats par bloc de session
+import {
+  calculateParticipantScore,
+  calculateThemeScores,
+  determineIndividualSuccess,
+  // calculateQuestionSuccessRate, // Retiré
+  calculateBlockPerformanceForSession, // Ajouté
+  BlockPerformanceStats // Ajouté
+} from '../../utils/reportCalculators';
 
 type ReportDetailsProps = {
   session: Session;
-  participants: Participant[];
+  // participants n'est plus directement une prop, car session.participants sera utilisé
 };
 
-const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) => {
+const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
-  const [sessionQuestions, setSessionQuestions] = useState<QuestionWithId[]>([]);
-  const [allSessions, setAllSessions] = useState<Session[]>([]);
-  const [allResults, setAllResults] = useState<SessionResult[]>([]);
-  const [allQuestions, setAllQuestions] = useState<QuestionWithId[]>([]);
+  const [questionsForThisSession, setQuestionsForThisSession] = useState<QuestionWithId[]>([]);
+  const [blockStats, setBlockStats] = useState<BlockPerformanceStats[]>([]);
+
+  // Utiliser session.participants directement
+  const participants = session.participants || [];
 
   useEffect(() => {
     const fetchData = async () => {
       if (session.id) {
         const results = await getResultsForSession(session.id);
         setSessionResults(results);
+
         if (session.questionMappings && session.questionMappings.length > 0) {
-          const questionIds = session.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
+          const questionIds = session.questionMappings
+            .map(q => q.dbQuestionId)
+            .filter((id): id is number => id !== null && id !== undefined);
+
           if (questionIds.length > 0) {
             const questions = await getQuestionsByIds(questionIds);
-            setSessionQuestions(questions);
+            setQuestionsForThisSession(questions);
+          } else {
+            setQuestionsForThisSession([]);
           }
+        } else {
+          setQuestionsForThisSession([]);
         }
+      } else {
+        setSessionResults([]);
+        setQuestionsForThisSession([]);
       }
-      const fetchedAllSessions = await getAllSessions();
-      setAllSessions(fetchedAllSessions);
-      const fetchedAllResults = await getAllResults();
-      setAllResults(fetchedAllResults);
-      const fetchedAllQuestions = await getAllQuestions();
-      setAllQuestions(fetchedAllQuestions);
     };
     fetchData();
   }, [session]);
+
+  useEffect(() => {
+    // Calculer les stats par bloc une fois que session, sessionResults et questionsForThisSession sont disponibles
+    if (session && session.selectionBlocs && sessionResults.length > 0 && questionsForThisSession.length > 0) {
+      const calculatedBlockStats: BlockPerformanceStats[] = [];
+      session.selectionBlocs.forEach(blockSelection => {
+        // Note: calculateBlockPerformanceForSession attend `allQuestions` pour le mapping.
+        // Ici, `questionsForThisSession` contient déjà les questions pertinentes pour la session.
+        // Si `calculateBlockPerformanceForSession` a besoin de ALL questions de la DB pour une raison X,
+        // il faudrait les charger. Mais pour les stats DANS la session, `questionsForThisSession` devrait suffire
+        // si la logique interne de `calculateBlockPerformanceForSession` est adaptée.
+        // Pour l'instant, on passe `questionsForThisSession` comme équivalent de `allQuestions` pour ce contexte.
+        // La fonction `calculateBlockPerformanceForSession` a été écrite pour prendre `allQuestions`
+        // mais elle filtre ensuite par `questionIdsInSession`. Donc c'est ok.
+        const stats = calculateBlockPerformanceForSession(blockSelection, session, sessionResults);
+        if (stats) {
+          calculatedBlockStats.push(stats);
+        }
+      });
+      setBlockStats(calculatedBlockStats);
+    } else {
+      setBlockStats([]);
+    }
+  }, [session, sessionResults, questionsForThisSession]);
+
 
   const handleExportPDF = () => {
     if (reportRef.current) {
@@ -67,20 +105,21 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
 
   const participantCalculatedData = participants.map(p => {
     const participantResults = sessionResults.filter(r => r.participantIdBoitier === p.idBoitier);
-    const score = calculateParticipantScore(participantResults, sessionQuestions);
-    const themeScores = calculateThemeScores(participantResults, sessionQuestions);
+    // Utiliser questionsForThisSession au lieu de sessionQuestions
+    const score = calculateParticipantScore(participantResults, questionsForThisSession);
+    const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
     const reussite = determineIndividualSuccess(score, themeScores);
     return { ...p, score, reussite };
   });
 
   const passedCount = participantCalculatedData.filter(p => p.reussite).length;
   const passRate = participants.length > 0 ? (passedCount / participants.length) * 100 : 0;
-  const averageScore = participants.length > 0 ? participantCalculatedData.reduce((sum, p) => sum + (p.score || 0), 0) / participants.length : 0;
+  const averageScoreOverall = participants.length > 0
+    ? participantCalculatedData.reduce((sum, p) => sum + (p.score || 0), 0) / participants.length
+    : 0;
 
-  const questionSuccessRates = sessionQuestions.map(q => ({
-    question: q,
-    successRate: calculateQuestionSuccessRate(q.id!, allSessions, allResults, allQuestions),
-  }));
+
+  // La section pour questionSuccessRates est supprimée et remplacée par blockStats plus bas
 
   return (
     <div>
@@ -126,7 +165,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
                 <div>
                   <p className="text-xs text-gray-500">Score moyen</p>
                   <p className="text-2xl font-semibold text-gray-900">
-                    {averageScore.toFixed(0)}/100
+                    {averageScoreOverall.toFixed(0)}/100
                   </p>
                 </div>
                 <div>
@@ -152,8 +191,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
               <thead className="bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score Global Session</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Session</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -165,15 +204,20 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${participant.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {participant.score.toFixed(0)}
+                          {participant.score !== undefined ? participant.score.toFixed(0) : '-'}
                         </div>
                         <div className="w-24 bg-gray-200 rounded-full h-2">
-                          <div className={`h-2 rounded-full ${participant.reussite ? 'bg-green-600' : 'bg-red-600'}`} style={{ width: `${participant.score}%` }}></div>
+                          <div
+                            className={`h-2 rounded-full ${participant.reussite ? 'bg-green-600' : 'bg-red-600'}`}
+                            style={{ width: `${participant.score || 0}%` }}
+                          ></div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {participant.reussite ? <Badge variant="success">Certifié</Badge> : <Badge variant="danger">Ajourné</Badge>}
+                      {participant.reussite === true && <Badge variant="success">Certifié</Badge>}
+                      {participant.reussite === false && <Badge variant="danger">Ajourné</Badge>}
+                      {participant.reussite === undefined && <Badge variant="neutral">-</Badge>}
                     </td>
                   </tr>
                 ))}
@@ -181,53 +225,43 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, participants }) 
             </table>
           </div>
         </Card>
-        
-        <Card title="Analyse des réponses" className="mb-6">
-          <div className="flex items-center mb-4">
-            <BarChart size={20} className="text-gray-400 mr-2" />
-            <h3 className="text-lg font-medium text-gray-900">
-              Taux de réussite par question
-            </h3>
-          </div>
-          
-          <div className="space-y-3">
-            {questionSuccessRates.map((qStat, i) => {
-              const isLow = qStat.successRate < 70;
-              
-              return (
-                <div key={qStat.question.id} className="flex items-center">
-                  <div className="w-16 flex-shrink-0 text-sm text-gray-700">
-                    Q{i + 1}
-                  </div>
-                  <div className="flex-1 mx-2">
-                    <div className="w-full bg-gray-200 rounded-full h-2.5">
-                      <div 
-                        className={`h-2.5 rounded-full ${isLow ? 'bg-amber-500' : 'bg-blue-600'}`}
-                        style={{ width: `${qStat.successRate}%` }}
-                      ></div>
+
+        {blockStats.length > 0 && (
+          <Card title="Performances par Bloc de Questions (pour cette session)" className="mb-6">
+            <div className="flex items-center mb-3 text-gray-600">
+                <Layers size={18} className="mr-2" />
+                <h3 className="text-md font-semibold">
+                Détail par bloc utilisé dans cette session
+                </h3>
+            </div>
+            <div className="space-y-4">
+              {blockStats.map(bs => (
+                <div key={`${bs.blockTheme}-${bs.blockId}`} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-1">
+                    Thème: <span className="font-normal">{bs.blockTheme}</span> - Bloc: <span className="font-normal">{bs.blockId}</span>
+                    <span className="text-xs text-gray-500 ml-2">({bs.questionsInBlockCount} questions)</span>
+                  </h4>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div>
+                        <span className="text-gray-500">Score moyen sur bloc:</span>
+                        <strong className="ml-1 text-gray-700">{bs.averageScoreOnBlock.toFixed(0)}%</strong>
+                    </div>
+                    <div>
+                        <span className="text-gray-500">Taux de réussite du bloc:</span>
+                        <strong className="ml-1 text-gray-700">{bs.successRateOnBlock.toFixed(0)}%</strong>
                     </div>
                   </div>
-                  <div className="w-16 flex-shrink-0 text-right">
-                    <span className={`text-sm font-medium ${isLow ? 'text-amber-600' : 'text-blue-600'}`}>
-                      {qStat.successRate.toFixed(0)}%
-                    </span>
-                  </div>
-                  {isLow && (
-                    <div className="w-6 flex-shrink-0 ml-2">
-                      <AlertTriangle size={16} className="text-amber-500" />
-                    </div>
-                  )}
                 </div>
-              );
-            })}
-          </div>
-          
-          <div className="mt-6 bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Note d'analyse :</strong> Certaines questions ont un taux de réussite inférieur à 70%. Il est recommandé de revoir ces points lors des prochaines formations.
-            </p>
-          </div>
-        </Card>
+              ))}
+            </div>
+             <div className="mt-4 bg-blue-50 p-3 rounded-lg">
+                <p className="text-xs text-blue-700">
+                <strong>Note :</strong> Le "Taux de réussite du bloc" indique le pourcentage de participants ayant obtenu au moins 70% de bonnes réponses aux questions de ce bloc spécifique.
+                </p>
+            </div>
+          </Card>
+        )}
+
       </div>
     </div>
   );

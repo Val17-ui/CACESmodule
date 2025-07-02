@@ -223,3 +223,96 @@ export const calculateBlockStats = (
 
   return { usageCount, averageSuccessRate, averageScore };
 };
+
+// --- Stats par Bloc pour UNE session spécifique ---
+
+export interface BlockPerformanceStats {
+  blockTheme: string;
+  blockId: string;
+  averageScoreOnBlock: number; // Note moyenne obtenue par les participants SUR LES QUESTIONS DE CE BLOC
+  successRateOnBlock: number;  // % de participants ayant "réussi" ce bloc (score >= 70% sur les q° du bloc)
+  participantsCountInSession: number;   // Nb de participants dans CETTE session (ayant donc eu ce bloc)
+  questionsInBlockCount: number; // Nombre de questions composant ce bloc dans cette session
+}
+
+/**
+ * Calcule les statistiques de performance pour un bloc de questions spécifique au sein d'UNE session donnée.
+ * @param blockSelection - L'objet { theme, blockId } du bloc sélectionné pour la session.
+ * @param session - L'objet Session complet (doit contenir questionMappings enrichis et participants).
+ * @param sessionResults - Array des SessionResult pour CETTE session.
+ * @returns BlockPerformanceStats | null si les données sont insuffisantes.
+ */
+export const calculateBlockPerformanceForSession = (
+  blockSelection: { theme: string; blockId: string },
+  session: Session,
+  sessionResults: SessionResult[]
+): BlockPerformanceStats | null => {
+  if (
+    !session.participants ||
+    session.participants.length === 0 ||
+    !session.questionMappings ||
+    session.questionMappings.length === 0
+  ) {
+    console.warn('[BlockPerformance] Données de session (participants ou questionMappings) manquantes.');
+    return null;
+  }
+
+  // 1. Identifier les dbQuestionId qui appartiennent à ce bloc pour cette session
+  const questionIdsInBlockForThisSession = session.questionMappings
+    .filter(qm => qm.theme === blockSelection.theme && qm.blockId === blockSelection.blockId)
+    .map(qm => qm.dbQuestionId);
+
+  if (questionIdsInBlockForThisSession.length === 0) {
+    // console.warn(`[BlockPerformance] Aucune question trouvée pour le bloc ${blockSelection.theme} - ${blockSelection.blockId} dans les mappings de la session ${session.id}.`);
+    return null; // Pas de questions pour ce bloc dans cette session
+  }
+
+  let totalScoreOnBlockAggregated = 0;
+  let successfulParticipantsOnBlockCount = 0;
+  const sessionParticipantsCount = session.participants.length;
+
+  session.participants.forEach(participant => {
+    // Filtrer les résultats du participant pour les questions de ce bloc uniquement
+    const participantResultsForBlock = sessionResults.filter(r =>
+      r.participantIdBoitier === participant.idBoitier &&
+      questionIdsInBlockForThisSession.includes(r.questionId)
+    );
+
+    let correctAnswersInBlock = 0;
+    participantResultsForBlock.forEach(result => {
+      if (result.isCorrect) {
+        correctAnswersInBlock++;
+      }
+    });
+
+    // Score du participant pour CE bloc spécifique
+    const scoreOnBlock = questionIdsInBlockForThisSession.length > 0
+      ? (correctAnswersInBlock / questionIdsInBlockForThisSession.length) * 100
+      : 0;
+
+    totalScoreOnBlockAggregated += scoreOnBlock;
+
+    // Définir la réussite pour ce bloc (ex: >= 70% sur les questions du bloc)
+    // Ce seuil pourrait être configurable plus tard
+    if (scoreOnBlock >= 70) {
+      successfulParticipantsOnBlockCount++;
+    }
+  });
+
+  const averageScoreOnBlock = sessionParticipantsCount > 0
+    ? totalScoreOnBlockAggregated / sessionParticipantsCount
+    : 0;
+
+  const successRateOnBlock = sessionParticipantsCount > 0
+    ? (successfulParticipantsOnBlockCount / sessionParticipantsCount) * 100
+    : 0;
+
+  return {
+    blockTheme: blockSelection.theme,
+    blockId: blockSelection.blockId,
+    averageScoreOnBlock: averageScoreOnBlock,
+    successRateOnBlock: successRateOnBlock,
+    participantsCountInSession: sessionParticipantsCount,
+    questionsInBlockCount: questionIdsInBlockForThisSession.length,
+  };
+};
