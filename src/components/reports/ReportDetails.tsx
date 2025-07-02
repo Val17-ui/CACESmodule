@@ -254,11 +254,14 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                 </div>
               ))}
             </div>
-             <div className="mt-4 bg-blue-50 p-3 rounded-lg">
-                <p className="text-xs text-blue-700">
-                <strong>Note :</strong> Le "Taux de réussite du bloc" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique (par exemple, au moins {Math.ceil(bs.questionsInBlockCount * 0.5)} bonnes réponses sur {bs.questionsInBlockCount} questions pour le dernier bloc listé).
-                </p>
-            </div>
+            {blockStats.length > 0 && (
+              <div className="mt-4 bg-blue-50 p-3 rounded-lg">
+                  <p className="text-xs text-blue-700">
+                  <strong>Note :</strong> Le "Taux de réussite du bloc" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique.
+                  Par exemple, pour un bloc de {blockStats[0].questionsInBlockCount} questions, il faut au moins {Math.ceil(blockStats[0].questionsInBlockCount * 0.5)} bonnes réponses.
+                  </p>
+              </div>
+            )}
           </Card>
         )}
 
