@@ -292,9 +292,9 @@ export const calculateBlockPerformanceForSession = (
 
     totalScoreOnBlockAggregated += scoreOnBlock;
 
-    // Définir la réussite pour ce bloc (ex: >= 70% sur les questions du bloc)
+    // Definir la reussite pour ce bloc (ex: >= 50% sur les questions du bloc)
     // Ce seuil pourrait être configurable plus tard
-    if (scoreOnBlock >= 70) {
+    if (scoreOnBlock >= 50) { // Seuil de réussite du bloc ajusté à 50%
       successfulParticipantsOnBlockCount++;
     }
   });

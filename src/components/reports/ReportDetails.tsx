@@ -256,7 +256,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
             </div>
              <div className="mt-4 bg-blue-50 p-3 rounded-lg">
                 <p className="text-xs text-blue-700">
-                <strong>Note :</strong> Le "Taux de réussite du bloc" indique le pourcentage de participants ayant obtenu au moins 70% de bonnes réponses aux questions de ce bloc spécifique.
+                <strong>Note :</strong> Le "Taux de réussite du bloc" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique.
                 </p>
             </div>
           </Card>
