@@ -537,7 +537,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                     <Badge variant="primary">{question.referential}</Badge>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {question.theme ? questionThemes[question.theme as QuestionTheme] : 'N/A'}
+                    {question.theme || 'N/A'} {/* Display the raw theme string */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {question.usageCount || 0} fois
@@ -563,6 +563,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                       >
                         Modifier
                       </Button>
+                      {/* "Dupliquer" Button Removed
                       <Button
                         variant="ghost"
                         size="sm"
@@ -571,6 +572,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                       >
                         Dupliquer
                       </Button>
+                      */}
                       <Button
                         variant="ghost"
                         size="sm"
