@@ -27,12 +27,23 @@ import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesT
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import JSZip from 'jszip';
 
+// TEMPORARY: Hardcoded list of physical OMBEA device IDs
+// TODO: Replace with a system where these are managed (e.g., admin section or settings)
+const OMBEA_DEVICE_IDS: string[] = [
+  "102494", // Corresponds to logical deviceId 1
+  "1017ED", // Corresponds to logical deviceId 2
+  "PHYSID3", // Placeholder for logical deviceId 3
+  "PHYSID4", // Placeholder for logical deviceId 4
+  // Add more as needed, up to the number of physical devices available
+];
+
 interface FormParticipant extends DBParticipantType {
-  id: string;
-  firstName: string;
-  lastName: string;
+  id: string; // Unique ID for React key prop
+  firstName: string; // Corresponds to DBParticipantType.prenom
+  lastName: string; // Corresponds to DBParticipantType.nom
   organization?: string;
-  deviceId: number;
+  deviceId: number; // Logical 1-based order/number of the device in the UI (e.g., 1, 2, 3)
+  // idBoitier in DBParticipantType will store the physical Ombea ID
   hasSigned?: boolean;
 }
 
@@ -82,15 +93,30 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setLocation(sessionData.location || '');
           setNotes(sessionData.notes || '');
 
-          const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, index) => ({
-            ...p_db,
-            id: `loaded-${index}-${p_db.idBoitier}`,
-            firstName: p_db.prenom,
-            lastName: p_db.nom,
-            deviceId: parseInt(p_db.idBoitier, 10) || index + 1,
-            organization: (p_db as any).organization || '',
-            hasSigned: (p_db as any).hasSigned || false,
-          }));
+          // p_db.idBoitier now stores the PHYSICAL Ombea ID
+          const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
+            let logicalDeviceId = loopIndex + 1; // Default to loop order if physical ID not in our hardcoded list
+            const physicalIdIndex = OMBEA_DEVICE_IDS.indexOf(p_db.idBoitier);
+
+            if (physicalIdIndex !== -1) {
+              logicalDeviceId = physicalIdIndex + 1; // 1-based logical ID
+            } else if (p_db.idBoitier) { // If idBoitier is a physical ID not in our list
+              console.warn(
+                `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} ` +
+                `n'a pas été trouvé dans la liste OMBEA_DEVICE_IDS. Utilisation de l'ordre (${logicalDeviceId}) comme deviceId logique.`
+              );
+            }
+
+            return {
+              ...p_db, // Spreads nom, prenom, score, reussite, identificationCode, and PHYSICAL idBoitier
+              id: `loaded-${loopIndex}-${p_db.idBoitier}`, // Unique key for React
+              firstName: p_db.prenom,
+              lastName: p_db.nom,
+              deviceId: logicalDeviceId, // Logical number for the form input
+              organization: (p_db as any).organization || '',
+              hasSigned: (p_db as any).hasSigned || false,
+            };
+          });
           setParticipants(formParticipants);
 
           const summary: Record<string, string> = {};
@@ -168,14 +194,39 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       return null;
     }
 
-    const dbParticipants: DBParticipantType[] = participants.map(p_form => ({
-      idBoitier: p_form.idBoitier || p_form.deviceId.toString(),
-      nom: p_form.lastName,
-      prenom: p_form.firstName,
-      identificationCode: p_form.identificationCode,
-      score: p_form.score,
-      reussite: p_form.reussite,
-    }));
+    const dbParticipants: DBParticipantType[] = participants.map((p_form, index) => {
+      let assignedPhysicalId = p_form.idBoitier; // Default to existing idBoitier if any
+
+      // Use p_form.deviceId (logical 1-based order) to get the physical ID
+      // The user-facing 'deviceId' field in the form should be the logical number (1, 2, 3...)
+      const logicalDeviceId = p_form.deviceId;
+
+      if (logicalDeviceId > 0 && logicalDeviceId <= OMBEA_DEVICE_IDS.length) {
+        assignedPhysicalId = OMBEA_DEVICE_IDS[logicalDeviceId - 1];
+      } else {
+        console.warn(
+          `Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) hors limites ` +
+          `ou non défini par rapport à la liste OMBEA_DEVICE_IDS (taille: ${OMBEA_DEVICE_IDS.length}). ` +
+          `L'idBoitier actuel (${p_form.idBoitier}) sera conservé ou sera vide s'il n'est pas défini.`
+        );
+        // If no valid logicalDeviceId, try to keep existing p_form.idBoitier if it might be a pre-loaded physical ID,
+        // otherwise, it might become undefined or an empty string if we don't have a fallback.
+        // For new participants, p_form.idBoitier might be the initial (logical) deviceId.toString().
+        // This logic ensures we prioritize mapping via OMBEA_DEVICE_IDS if logicalDeviceId is valid.
+        if (!assignedPhysicalId) { // If p_form.idBoitier was also empty or undefined
+            assignedPhysicalId = `ERROR_NO_PHYSICAL_ID_FOR_LOGICAL_${logicalDeviceId}`;
+        }
+      }
+
+      return {
+        idBoitier: assignedPhysicalId, // This should now be the PHYSICAL Ombea ID
+        nom: p_form.lastName,
+        prenom: p_form.firstName,
+        identificationCode: p_form.identificationCode,
+        score: p_form.score, // Score and reussite are calculated after results import
+        reussite: p_form.reussite,
+      };
+    });
 
     const sessionToUpdate = editingSessionData;
 
@@ -290,12 +341,34 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referentiel: sessionDataForDb.referentiel as CACESReferential };
       const adminSettings: AdminPPTXSettings = { defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod', pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1' };
 
-      const participantsForGenerator: DBParticipantType[] = participants.map(p_form => ({
-        idBoitier: p_form.idBoitier || p_form.deviceId.toString(),
-        nom: p_form.lastName,
-        prenom: p_form.firstName,
-        identificationCode: p_form.identificationCode,
-      }));
+      const participantsForGenerator: DBParticipantType[] = participants.map((p_form, index) => {
+        let physicalId = '';
+        // p_form.deviceId is the 1-based logical order from the form
+        const logicalDeviceId = p_form.deviceId;
+
+        if (logicalDeviceId > 0 && logicalDeviceId <= OMBEA_DEVICE_IDS.length) {
+          physicalId = OMBEA_DEVICE_IDS[logicalDeviceId - 1];
+        } else {
+          // Fallback or error for invalid logicalDeviceId
+          // This case should ideally be prevented by form validation or clearer UI for deviceId input
+          console.warn(
+            `[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) ` +
+            `a un deviceId logique (${logicalDeviceId}) invalide pour le mapping vers un ID physique. ` +
+            `Tentative d'utilisation de p_form.idBoitier ('${p_form.idBoitier}') ou d'un fallback.`
+          );
+          physicalId = p_form.idBoitier || `INVALID_LOGICAL_ID_${logicalDeviceId}`;
+        }
+
+        return {
+          idBoitier: physicalId, // Ensure this is the PHYSICAL Ombea ID
+          nom: p_form.lastName,
+          prenom: p_form.firstName,
+          identificationCode: p_form.identificationCode,
+          // score and reussite are not needed for .ors generation itself
+        };
+      });
+
+      console.log('[SessionForm Gen .ors] Participants being sent to generatePresentation:', participantsForGenerator);
 
       const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, templateFile, adminSettings);
 
@@ -336,17 +409,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       setImportSummary("Parsing XML...");
 
       const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
+      // console.log("[SessionForm Import Log] Extracted Results from XML:", extractedResults.slice(0, 5)); // DEBUG
       if (extractedResults.length === 0) { setImportSummary("Aucune réponse extraite."); return; }
       setImportSummary(`${extractedResults.length} réponses extraites. Transformation...`);
 
       const currentQuestionMappings = editingSessionData.questionMappings;
+      // console.log("[SessionForm Import Log] Current Question Mappings for transformation:", currentQuestionMappings); // DEBUG
       if (!currentQuestionMappings || currentQuestionMappings.length === 0) { setImportSummary("Erreur: Mappages questions manquants."); return; }
 
       const sessionResultsToSave = transformParsedResponsesToSessionResults(extractedResults, currentQuestionMappings, currentSessionDbId);
+      // console.log("[SessionForm Import Log] SessionResults to Save (first 5):", sessionResultsToSave.slice(0,5)); // DEBUG
 
       if (sessionResultsToSave.length > 0) {
         try {
           const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+          // console.log("[SessionForm Import Log] Saved Result IDs from DB:", savedResultIds); // DEBUG
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats sauvegardés !`;
             let sessionProcessError: string | null = null;
@@ -356,30 +433,55 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 message += "\nStatut session: 'Terminée'.";
 
                 const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId);
+                // console.log("[SessionForm Import Log] Fetched SessionResults for score calculation (first 5):", sessionResultsForScore.slice(0,5)); // DEBUG
                 let sessionDataForScores = await getSessionById(currentSessionDbId);
+                // console.log("[SessionForm Import Log] SessionData for score calculation:", sessionDataForScores); // DEBUG
+
 
                 if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
                   const sessionQuestions = await getQuestionsByIds(questionIds);
+                  // console.log("[SessionForm Import Log] SessionQuestions for score calculation (first 5):", sessionQuestions.slice(0,5)); // DEBUG
 
                   if (sessionQuestions.length > 0) {
-                    const updatedParticipants = sessionDataForScores.participants.map(p => {
+                    const updatedParticipants = sessionDataForScores.participants.map((p, pIndex) => {
+                      /* DEBUG Start
+                      if (pIndex < 2) {
+                        console.log(`[SessionForm ScoreCalc Debug] Participant p (index ${pIndex}):`, JSON.stringify(p));
+                        console.log(`[SessionForm ScoreCalc Debug] Valeur de p.idBoitier pour ce participant: ${p.idBoitier}`);
+                        console.log(`[SessionForm ScoreCalc Debug] Comparaison : r.participantIdBoitier (ex: ${sessionResultsForScore[0]?.participantIdBoitier}) vs p.idBoitier (${p.idBoitier})`);
+                      }
+                      DEBUG End */
                       const participantResults = sessionResultsForScore.filter(r => r.participantIdBoitier === p.idBoitier);
+                      /* DEBUG Start
+                      if (pIndex < 2) { // Log for first 2 participants
+                        console.log(`[SessionForm Import Log] For participant ${p.idBoitier} (${p.nom}), their results for scoring (first 5):`, participantResults.slice(0,5));
+                        console.log(`[SessionForm Import Log] All sessionQuestions for ${p.idBoitier} (${p.nom}) scoring (first 5):`, sessionQuestions.slice(0,5));
+                      }
+                      DEBUG End */
                       const score = calculateParticipantScore(participantResults, sessionQuestions);
                       const themeScores = calculateThemeScores(participantResults, sessionQuestions);
                       const reussite = determineIndividualSuccess(score, themeScores);
+                      /* DEBUG Start
+                       if (pIndex < 2) {
+                        console.log(`[SessionForm Import Log] Participant ${p.idBoitier} (${p.nom}) - Calculated Score: ${score}, Reussite: ${reussite}, ThemeScores:`, themeScores);
+                      }
+                      DEBUG End */
                       return { ...p, score, reussite };
                     });
+                    // console.log("[SessionForm Import Log] UpdatedParticipants with scores (first 2):", updatedParticipants.slice(0,2)); // DEBUG
 
                     await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
                     message += "\nScores et réussite calculés et mis à jour.";
 
                     const finalUpdatedSession = await getSessionById(currentSessionDbId);
+                    // console.log("[SessionForm Import Log] Final reloaded session data after score update:", finalUpdatedSession); // DEBUG
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
+                      // console.log("[SessionForm Import Log] Participants from final reloaded session (first 2):", finalUpdatedSession.participants.slice(0,2)); // DEBUG
                       const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db, index) => ({
                         ...p_db,
-                        id: participants[index]?.id || `updated-${index}-${p_db.idBoitier}`,
+                        id: participants[index]?.id || `updated-${index}-${p_db.idBoitier}`, // Conserver l'ID React si possible
                         firstName: p_db.prenom,
                         lastName: p_db.nom,
                         deviceId: participants[index]?.deviceId || parseInt(p_db.idBoitier,10) || index + 1,

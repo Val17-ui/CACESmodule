@@ -169,7 +169,8 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
       options: sq.options,
       correctAnswerIndex: correctAnswerIndex,
       imageUrl: imageUrl,
-      points: sq.timeLimit,
+      points: sq.timeLimit, // ou sq.points si c'est le bon champ pour la durée/points
+      theme: sq.theme, // AJOUTÉ : Passer le thème complet (ex: "securite_A")
     };
   });
 }
@@ -182,8 +183,8 @@ export async function generatePresentation(
   adminSettings: AdminPPTXSettings
 ): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null }> {
 
-  console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`);
-  console.log('[DEBUG_ORCHESTRATOR] _participants reçus dans generatePresentation:', JSON.stringify(_participants));
+  // console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`); // DEBUG
+  // console.log('[DEBUG_ORCHESTRATOR] _participants reçus dans generatePresentation:', JSON.stringify(_participants)); // DEBUG
 
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
 
@@ -212,6 +213,7 @@ export async function generatePresentation(
 
   try {
     // Log data being passed to the generator for debugging
+    /* DEBUG Start
     console.log("Data being passed to generatePPTXVal17:", JSON.stringify({
       templateName: templateFileFromUser.name,
       questionsCount: transformedQuestions.length,
@@ -225,6 +227,7 @@ export async function generatePresentation(
       })),
       options: generationOptions
     }, null, 2));
+    DEBUG End */
 
     // Map sessionInfo to the SessionInfo type expected by val17PptxGenerator
     const val17SessionInfo: Val17SessionInfo = { // Ensure type consistency
@@ -253,7 +256,7 @@ export async function generatePresentation(
 
     // Correction: Utiliser generatedData au lieu de generationResult
     if (generatedData && generatedData.pptxBlob && generatedData.questionMappings) {
-      console.log("PPTX Blob et mappings de questions reçus de generatePPTXVal17.");
+      // console.log("PPTX Blob et mappings de questions reçus de generatePPTXVal17."); // DEBUG
 
       const orSessionXmlContent = generateOmbeaSessionXml(
         val17SessionInfo,
@@ -269,7 +272,7 @@ export async function generatePresentation(
       const orsBlob = await outputOrsZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
 
       const orsFileName = `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}.ors`;
-      console.log(`Fichier .ors "${orsFileName}" (Blob) et questionMappings générés.`);
+      // console.log(`Fichier .ors "${orsFileName}" (Blob) et questionMappings générés.`); // DEBUG
       return { orsBlob: orsBlob, questionMappings: generatedData.questionMappings }; // Utiliser generatedData ici
 
     } else {
@@ -290,7 +293,7 @@ export async function generatePresentation(
     tempImageUrls.forEach(url => {
       try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for generatePresentation (direct call):", url, e); }
     });
-    console.log("Revoked temporary object URLs for images in generatePresentation (direct call).");
+    // console.log("Revoked temporary object URLs for images in generatePresentation (direct call)."); // DEBUG
     tempImageUrls = [];
   }
 }

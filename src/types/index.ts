@@ -24,10 +24,13 @@ export interface Session {
 }
 
 // Interface pour le mappage Question DB <-> Slide PPTX (par session)
+// Doit correspondre à celle dans val17PptxGenerator.ts
 export interface QuestionMapping {
   dbQuestionId: number;
   slideGuid: string | null;
   orderInPptx: number;
+  theme: string;   // AJOUTÉ - thème de base de la question (ex: "securite")
+  blockId: string; // AJOUTÉ - ID du bloc de la question (ex: "A")
 }
 
 // Nouvelle interface Participant pour les listes dans une Session
