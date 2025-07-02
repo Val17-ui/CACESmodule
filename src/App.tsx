@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Dashboard from './pages/Dashboard';
-import Library from './pages/Library';
+
 // import Questionnaires from './pages/Questionnaires'; // Supprimé
 import Sessions from './pages/Sessions';
 // import Exams from './pages/Exams'; // Supprimé car la fonctionnalité Mode Examen est enlevée
@@ -20,8 +20,7 @@ function App() {
     switch (activePage) {
       case 'dashboard':
         return <Dashboard activePage={activePage} onPageChange={handlePageChange} />;
-      case 'library':
-        return <Library activePage={activePage} onPageChange={handlePageChange} />;
+      
       // case 'questionnaires': // Supprimé
       //   return <Questionnaires activePage={activePage} onPageChange={handlePageChange} />; // Supprimé
       case 'sessions':
