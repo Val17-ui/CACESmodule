@@ -16,11 +16,11 @@ type SessionsProps = {
 
 import Input from '../components/ui/Input'; // Importer le composant Input
 
-import Input from '../components/ui/Input'; // Importer le composant Input
+// import Input from '../components/ui/Input'; // Nettoyage du double import, déjà fait plus haut
 import Select from '../components/ui/Select'; // Importer le composant Select pour les filtres de période
 
 // --- Fonctions utilitaires pour les dates ---
-// (Ces fonctions pourraient être déplacées dans un fichier utils/dateUtils.ts si elles deviennent nombreuses)
+// ... (les fonctions de date restent les mêmes)
 
 const getTodayRange = () => {
   const start = new Date();
@@ -115,119 +115,111 @@ const periodFilters = [
 const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [managingSessionId, setManagingSessionId] = useState<number | null>(sessionId ?? null);
-  const [dbSessions, setDbSessions] = useState<DBSession[]>([]); // Contient les sessions triées
+  const [rawSessions, setRawSessions] = useState<DBSession[]>([]); // Sessions brutes de la DB
+  const [processedSessions, setProcessedSessions] = useState<DBSession[]>([]); // Sessions triées et filtrées
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
 
-
-  // Effet pour gérer le sessionId passé en prop
+  // Effet pour gérer le sessionId passé en prop (pour l'affichage direct d'un formulaire)
   useEffect(() => {
     if (sessionId !== undefined) {
       setManagingSessionId(sessionId);
-      setIsCreating(false); // On n'est pas en création si un ID est fourni
-    } else {
-      // Si aucun sessionId n'est fourni (par exemple, navigation directe vers la page 'sessions')
-      // on s'assure de ne pas être en mode édition sauf si l'utilisateur clique explicitement sur "créer"
-      // ou sur une session de la liste.
-      // Si on veut que la page Sessions réinitialise sa vue (liste) quand on navigue vers elle sans ID,
-      // il faudrait peut-être aussi réinitialiser managingSessionId ici.
-      // setManagingSessionId(null); // Décommenter si on veut toujours afficher la liste par défaut sans ID
+      setIsCreating(false);
     }
   }, [sessionId]);
 
-
-  const fetchSessions = useCallback(async () => {
+  // Fetcher les sessions brutes
+  const fetchRawSessions = useCallback(async () => {
     setIsLoading(true);
     try {
       const sessionsFromDb = await getAllSessions();
-      setDbSessions(sessionsFromDb);
+      setRawSessions(sessionsFromDb);
     } catch (error) {
       console.error("Erreur lors de la récupération des sessions:", error);
-      setDbSessions([]); // En cas d'erreur, afficher une liste vide
+      setRawSessions([]);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
+  // Effet pour fetcher les sessions si on n'est pas en mode gestion/création, ou si la liste est vide
   useEffect(() => {
-    // Ne fetcher les sessions que si on n'est pas en train de charger un formulaire directement via sessionId
-    if (!managingSessionId || dbSessions.length === 0 ) {
-        fetchSessions();
+    if (!managingSessionId) { // Si on n'est pas en train de gérer une session spécifique
+        fetchRawSessions();
     } else {
-        setIsLoading(false);
+        // Si on gère une session spécifique, on pourrait vouloir charger les données de cette session
+        // mais la liste complète n'est pas nécessaire immédiatement, donc on arrête le chargement de la liste.
+        // Si rawSessions est vide, il faudrait peut-être la charger quand même pour le cas où l'utilisateur
+        // annule la gestion et retourne à la liste.
+        if(rawSessions.length === 0) fetchRawSessions();
+        else setIsLoading(false);
     }
-  }, [fetchSessions, managingSessionId]); // dbSessions.length enlevé pour éviter boucle si tri modifie l'ordre
+  }, [fetchRawSessions, managingSessionId]);
 
-  // Nouveau useEffect pour trier les sessions une fois qu'elles sont chargées ou modifiées
+
+  // Effet pour trier et filtrer les sessions
   useEffect(() => {
-    if (dbSessions.length > 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    let sessionsToProcess = [...rawSessions];
 
-      const sortedSessions = [...dbSessions].sort((a, b) => {
-        const dateA = new Date(a.dateSession);
-        dateA.setHours(0, 0, 0, 0);
-        const dateB = new Date(b.dateSession);
-        dateB.setHours(0, 0, 0, 0);
+    // 1. Tri
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    sessionsToProcess.sort((a, b) => {
+      const dateA = new Date(a.dateSession); dateA.setHours(0, 0, 0, 0);
+      const dateB = new Date(b.dateSession); dateB.setHours(0, 0, 0, 0);
+      const getCategory = (session: DBSession, sessionDate: Date) => {
+        if (session.status === 'in-progress' || ((session.status === 'planned' || session.status === 'ready') && sessionDate.getTime() === today.getTime())) return 1; // Jour
+        if ((session.status === 'planned' || session.status === 'ready') && sessionDate.getTime() > today.getTime()) return 2; // Planifiées (futur)
+        if (session.status === 'completed') return 3; // Terminées
+        return 4; // Autres
+      };
+      const categoryA = getCategory(a, dateA);
+      const categoryB = getCategory(b, dateB);
+      if (categoryA !== categoryB) return categoryA - categoryB;
+      switch (categoryA) {
+        case 1: // Jour
+          if (a.status === 'in-progress' && b.status !== 'in-progress') return -1;
+          if (a.status !== 'in-progress' && b.status === 'in-progress') return 1;
+          return a.nomSession.localeCompare(b.nomSession);
+        case 2: // Planifiées
+          if (dateA.getTime() !== dateB.getTime()) return dateA.getTime() - dateB.getTime();
+          return a.nomSession.localeCompare(b.nomSession);
+        case 3: // Terminées
+          if (dateA.getTime() !== dateB.getTime()) return dateB.getTime() - dateA.getTime();
+          return a.nomSession.localeCompare(b.nomSession);
+        default: // Autres
+          if (dateA.getTime() !== dateB.getTime()) return dateB.getTime() - dateA.getTime();
+          return a.nomSession.localeCompare(b.nomSession);
+      }
+    });
 
-        // Catégorisation
-        const getCategory = (session: DBSession, sessionDate: Date) => {
-          if (session.status === 'in-progress' || ((session.status === 'planned' || session.status === 'ready') && sessionDate.getTime() === today.getTime())) {
-            return 1; // Jour
-          }
-          if ((session.status === 'planned' || session.status === 'ready') && sessionDate.getTime() > today.getTime()) {
-            return 2; // Planifiées (futur)
-          }
-          if (session.status === 'completed') {
-            return 3; // Terminées
-          }
-          return 4; // Autres (cancelled, etc.)
-        };
-
-        const categoryA = getCategory(a, dateA);
-        const categoryB = getCategory(b, dateB);
-
-        if (categoryA !== categoryB) {
-          return categoryA - categoryB; // Tri par catégorie
-        }
-
-        // Tri interne à chaque catégorie
-        switch (categoryA) {
-          case 1: // Jour
-            // in-progress avant planned/ready, puis par nom
-            if (a.status === 'in-progress' && b.status !== 'in-progress') return -1;
-            if (a.status !== 'in-progress' && b.status === 'in-progress') return 1;
-            return a.nomSession.localeCompare(b.nomSession);
-          case 2: // Planifiées (futur)
-            // Par date croissante, puis par nom
-            if (dateA.getTime() !== dateB.getTime()) {
-              return dateA.getTime() - dateB.getTime();
-            }
-            return a.nomSession.localeCompare(b.nomSession);
-          case 3: // Terminées
-            // Par date décroissante, puis par nom
-            if (dateA.getTime() !== dateB.getTime()) {
-              return dateB.getTime() - dateA.getTime();
-            }
-            return a.nomSession.localeCompare(b.nomSession);
-          default: // Autres
-            // Par date (les plus récentes d'abord), puis par nom
-             if (dateA.getTime() !== dateB.getTime()) {
-              return dateB.getTime() - dateA.getTime();
-            }
-            return a.nomSession.localeCompare(b.nomSession);
-        }
-      });
-      setDbSessions(prevSessions => {
-        // Vérifier si l'ordre a réellement changé pour éviter une boucle de re-rendu infinie
-        if (JSON.stringify(prevSessions) !== JSON.stringify(sortedSessions)) {
-          return sortedSessions;
-        }
-        return prevSessions;
-      });
+    // 2. Filtrage par période
+    if (selectedPeriod !== 'all' && sessionsToProcess.length > 0) {
+      const filterOption = periodFilters.find(f => f.value === selectedPeriod);
+      if (filterOption && filterOption.getDateRange) {
+        const { start, end } = filterOption.getDateRange();
+        sessionsToProcess = sessionsToProcess.filter(session => {
+          if (!session.dateSession) return false;
+          const sessionDate = new Date(session.dateSession);
+          sessionDate.setHours(0,0,0,0);
+          return sessionDate >= start && sessionDate <= end;
+        });
+      }
     }
-  }, [dbSessions]); // Déclenché quand dbSessions original est chargé ou modifié par fetchSessions
+
+    // 3. Filtrage par terme de recherche
+    if (searchTerm && sessionsToProcess.length > 0) {
+      const term = searchTerm.toLowerCase();
+      sessionsToProcess = sessionsToProcess.filter(session =>
+        session.nomSession.toLowerCase().includes(term) ||
+        (session.referentiel as string).toLowerCase().includes(term)
+      );
+    }
+
+    setProcessedSessions(sessionsToProcess);
+
+  }, [rawSessions, searchTerm, selectedPeriod]);
 
 
   const handleCreateNew = () => {
@@ -335,6 +327,11 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
             </Select>
           </div>
           <SessionsList
+            sessions={processedSessions} // Utiliser les sessions traitées
+            onManageSession={handleManageSession}
+            onStartExam={handleStartExam}
+          />
+          {/* Ancien code de filtrage en ligne, maintenant géré dans useEffect
             sessions={dbSessions
               .filter(session => { // Filtre par période
                 if (selectedPeriod === 'all' || !session.dateSession) return true;
