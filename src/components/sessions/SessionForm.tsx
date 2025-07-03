@@ -11,7 +11,7 @@ import {
   Session as DBSession,
   Participant as DBParticipantType,
   SessionResult,
-  Trainer // Assurez-vous que Trainer est importé si vous l'utilisez comme type explicite
+  Trainer
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import {
@@ -67,9 +67,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('details');
   const [isGeneratingOrs, setIsGeneratingOrs] = useState(false);
   const [modifiedAfterOrsGeneration, setModifiedAfterOrsGeneration] = useState(false);
-  const [trainersList, setTrainersList] = useState<Trainer[]>([]); // Déclaration de trainersList
+  const [trainersList, setTrainersList] = useState<Trainer[]>([]);
   const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
-
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -106,13 +105,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setEditingSessionData(null);
     setActiveTab('details');
     setModifiedAfterOrsGeneration(false);
-    // Ne pas réinitialiser selectedTrainerId ici s'il doit persister pour un nouveau formulaire
-    // ou le réinitialiser au formateur par défaut si c'est le comportement souhaité.
-    // Pour l'instant, il est initialisé dans le useEffect ci-dessus.
   }, []);
 
   useEffect(() => {
-    if (sessionIdToLoad && hardwareLoaded && trainersList.length > 0) { // Attendre aussi trainersList
+    if (sessionIdToLoad && hardwareLoaded && trainersList.length >= 0) { // Attendre trainersList aussi (>=0 pour cas où il n'y a pas de formateurs)
       const loadSession = async () => {
         const sessionData = await getSessionById(sessionIdToLoad);
         setEditingSessionData(sessionData || null);
@@ -153,7 +149,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     } else if (!sessionIdToLoad) {
       resetFormTactic();
     }
-  }, [sessionIdToLoad, hardwareLoaded, hardwareDevices, resetFormTactic, trainersList]); // Ajout de trainersList aux dépendances
+  }, [sessionIdToLoad, hardwareLoaded, hardwareDevices, resetFormTactic, trainersList]);
 
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -192,6 +188,117 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }));
   };
 
+  // --- Début Logique Import Participants ---
+  const parseCsvParticipants = (fileContent: string): Omit<FormParticipant, 'id' | 'deviceId' | 'idBoitier' | 'score' | 'reussite' | 'hasSigned'>[] => {
+    const newParticipantsCsv: Omit<FormParticipant, 'id' | 'deviceId' | 'idBoitier' | 'score' | 'reussite' | 'hasSigned'>[] = [];
+    const lines = fileContent.split(/\r\n|\n/);
+    lines.forEach(line => {
+      if (line.trim() === '') return;
+      const values = line.split(',');
+      if (values.length >= 2) {
+        newParticipantsCsv.push({
+          firstName: values[0]?.trim() || '', lastName: values[1]?.trim() || '',
+          prenom: values[0]?.trim() || '', nom: values[1]?.trim() || '',
+          organization: values[2]?.trim() || '', identificationCode: values[3]?.trim() || '',
+        });
+      }
+    });
+    return newParticipantsCsv;
+  };
+
+  const parseExcelParticipants = (data: Uint8Array): Omit<FormParticipant, 'id' | 'deviceId' | 'idBoitier' | 'score' | 'reussite' | 'hasSigned'>[] => {
+    const newParticipantsExcel: Omit<FormParticipant, 'id' | 'deviceId' | 'idBoitier' | 'score' | 'reussite' | 'hasSigned'>[] = [];
+    const workbook = XLSX.read(data, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+    if (jsonData.length === 0) return newParticipantsExcel;
+    let headers: string[] = [];
+    let dataStartIndex = 0;
+    const potentialHeaders = jsonData[0].map(h => h.toString().toLowerCase()); // Assurer que h est une chaîne
+    const hasPrenom = potentialHeaders.includes('prénom') || potentialHeaders.includes('prenom');
+    const hasNom = potentialHeaders.includes('nom');
+    if (hasPrenom && hasNom) {
+      headers = potentialHeaders; dataStartIndex = 1;
+    } else {
+      headers = ['prénom', 'nom', 'organisation', 'code identification']; dataStartIndex = 0;
+    }
+    const prenomIndex = headers.findIndex(h => h === 'prénom' || h === 'prenom');
+    const nomIndex = headers.findIndex(h => h === 'nom');
+    const orgIndex = headers.findIndex(h => h === 'organisation');
+    const codeIndex = headers.findIndex(h => h === 'code identification' || h === 'code');
+    for (let i = dataStartIndex; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      if (row.some(cell => cell && cell.toString().trim() !== '')) {
+        const firstName = prenomIndex !== -1 ? row[prenomIndex]?.toString().trim() || '' : row[0]?.toString().trim() || '';
+        const lastName = nomIndex !== -1 ? row[nomIndex]?.toString().trim() || '' : row[1]?.toString().trim() || '';
+        if (firstName || lastName) {
+            newParticipantsExcel.push({
+            firstName, lastName, prenom: firstName, nom: lastName,
+            organization: orgIndex !== -1 ? row[orgIndex]?.toString().trim() || '' : row[2]?.toString().trim() || '',
+            identificationCode: codeIndex !== -1 ? row[codeIndex]?.toString().trim() || '' : row[3]?.toString().trim() || '',
+            });
+        }
+      }
+    }
+    return newParticipantsExcel;
+  };
+
+  const addImportedParticipants = (
+    parsedData: Omit<FormParticipant, 'id' | 'deviceId' | 'idBoitier' | 'score' | 'reussite' | 'hasSigned'>[],
+    fileName: string
+  ) => {
+    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+    if (parsedData.length > 0) {
+      const newFormParticipants = parsedData.map((p, index) => ({
+        ...p, id: `imported-${Date.now()}-${index}`, deviceId: null,
+        idBoitier: '', score: undefined, reussite: undefined, hasSigned: false,
+      }));
+      setParticipants(prev => [...prev, ...newFormParticipants]);
+      setImportSummary(`${parsedData.length} participants importés de ${fileName}. Assignez les boîtiers.`);
+    } else {
+      setImportSummary(`Aucun participant valide trouvé dans ${fileName}.`);
+    }
+  };
+
+  const handleParticipantFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportSummary(`Import du fichier ${file.name}...`);
+    try {
+      let parsedData: Omit<FormParticipant, 'id' | 'deviceId' | 'idBoitier' | 'score' | 'reussite' | 'hasSigned'>[] = [];
+      if (file.name.endsWith('.csv') || file.type === 'text/csv') {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          parsedData = parseCsvParticipants(text);
+          addImportedParticipants(parsedData, file.name);
+        };
+        reader.onerror = () => setImportSummary(`Erreur lecture fichier CSV: ${reader.error}`);
+        reader.readAsText(file);
+      } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.type === 'application/vnd.ms-excel') {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = e.target?.result as ArrayBuffer;
+          const byteArray = new Uint8Array(data);
+          parsedData = parseExcelParticipants(byteArray);
+          addImportedParticipants(parsedData, file.name);
+        };
+        reader.onerror = () => setImportSummary(`Erreur lecture fichier Excel: ${reader.error}`);
+        reader.readAsArrayBuffer(file);
+      } else {
+        setImportSummary(`Type de fichier non supporté: ${file.name}`);
+      }
+    } catch (error: any) {
+      setImportSummary(`Erreur import: ${error.message}`);
+      console.error("Erreur import participants:", error);
+    } finally {
+      if (event.target) { event.target.value = ''; }
+    }
+  };
+  // --- Fin Logique Import Participants ---
+
+
   const prepareSessionDataForDb = async (includeOrsBlob?: Blob | null): Promise<DBSession | null> => {
     const dbParticipants: DBParticipantType[] = participants.map((p_form) => {
       let assignedPhysicalId = '';
@@ -199,8 +306,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (logicalDeviceId && logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
         assignedPhysicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
       } else if (p_form.idBoitier && logicalDeviceId === null) {
-         console.warn( `Participant ${p_form.lastName} (${p_form.firstName}) n'a plus de boîtier assigné, l'ancien ID ${p_form.idBoitier} est conservé s'il n'y a pas de nouveau deviceId.`);
-         assignedPhysicalId = p_form.idBoitier; // Conserver l'ancien si le deviceId est explicitement null
+         assignedPhysicalId = p_form.idBoitier;
+         console.warn( `Participant ${p_form.lastName} (${p_form.firstName}) deviceId logique (${logicalDeviceId}) ne correspond plus. Ancien ID physique ${p_form.idBoitier} conservé.`);
       } else if (logicalDeviceId) {
          console.warn( `Participant ${p_form.lastName} (${p_form.firstName}) deviceId logique (${logicalDeviceId}) hors limites.`);
       }
@@ -479,7 +586,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const renderTabContent = () => {
     const isReadOnly = editingSessionData?.status === 'completed';
-    const isOrsGeneratedAndNotEditable = !!editingSessionData?.donneesOrs && editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready';
+    // L'ORS peut être généré/régénéré si la session est 'planned' ou 'ready'.
+    // Une fois que des résultats sont importés, la session passe à 'completed', bloquant la (re)génération.
+    // Si l'ORS est généré (donneesOrs existe) ET que la session n'est plus 'planned' ou 'ready' (ex: 'in-progress' si on avait ce statut, ou 'cancelled'),
+    // on pourrait aussi bloquer certaines modifications des participants.
+    // Pour l'instant, la principale condition de blocage est `isReadOnly` (session complétée).
+    // Le bouton de génération ORS a sa propre logique `disabled`.
+    // `isOrsGeneratedAndNotEditable` est plus spécifique pour les actions sur les participants.
+    const isOrsGeneratedAndNotReadyForRegeneration = !!editingSessionData?.donneesOrs && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
 
 
     switch (activeTab) {
@@ -512,7 +626,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 onChange={(e) => setSelectedReferential(e.target.value as CACESReferential | '')}
                 placeholder="Sélectionner un référentiel"
                 required
-                disabled={!!editingSessionData?.questionMappings || isReadOnly} // Bloqué si ORS généré ou session terminée
+                disabled={!!editingSessionData?.questionMappings || isReadOnly}
               />
                <Select
                 label="Formateur"
@@ -568,14 +682,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   id="participant-file-input"
                   className="hidden"
                   accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  onChange={handleParticipantFileSelect}
+                  onChange={handleParticipantFileSelect} // Assurez-vous que cette fonction est définie
                 />
                 <Button
                   variant="outline"
                   icon={<FileUp size={16} />}
-                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                  disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
                   onClick={() => document.getElementById('participant-file-input')?.click()}
-                  title={isOrsGeneratedAndNotEditable ? "L'import est bloqué car l'ORS a été généré et la session n'est plus modifiable à ce niveau." : "Importer une liste de participants"}
+                  title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Importer une liste de participants"}
                 >
                   Importer Participants
                 </Button>
@@ -583,8 +697,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   variant="outline"
                   icon={<UserPlus size={16} />}
                   onClick={handleAddParticipant}
-                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                  title={isOrsGeneratedAndNotEditable ? "L'ajout est bloqué car l'ORS a été généré et la session n'est plus modifiable à ce niveau." : "Ajouter un participant"}
+                  disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
+                  title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Ajouter un participant"}
                 />
               </div>
             </div>
@@ -615,7 +729,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                             onChange={(e) => handleParticipantChange(participant.id, 'deviceId', e.target.value === '' ? null : (parseInt(e.target.value,10) || null))}
                             className="mb-0 w-24 text-center"
                             placeholder="N/A"
-                            readOnly={isOrsGeneratedAndNotEditable || isReadOnly}
+                            readOnly={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
                           />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
@@ -641,11 +755,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
                           <Button
                             variant="ghost"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                            disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
                             size="sm"
                             icon={<Trash2 size={16} />}
                             onClick={() => handleRemoveParticipant(participant.id)}
-                            title={isOrsGeneratedAndNotEditable ? "Suppression bloquée car l'ORS a été généré et la session n'est plus modifiable à ce niveau." : "Supprimer participant"}
+                            title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Supprimer participant"}
                           />
                         </td>
                       </tr>
