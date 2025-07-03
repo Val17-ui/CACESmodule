@@ -10,10 +10,12 @@ import { logger } from './utils/logger';
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard');
+  const [currentSessionId, setCurrentSessionId] = useState<number | undefined>(undefined);
 
-  const handlePageChange = (page: string) => {
-    logger.info(`Navigation vers ${page}`);
+  const handlePageChange = (page: string, sessionId?: number) => {
+    logger.info(`Navigation vers ${page}${sessionId ? ` (Session ID: ${sessionId})` : ''}`);
     setActivePage(page);
+    setCurrentSessionId(sessionId);
   };
 
   const renderPage = () => {
@@ -24,7 +26,9 @@ function App() {
       // case 'questionnaires': // Supprimé
       //   return <Questionnaires activePage={activePage} onPageChange={handlePageChange} />; // Supprimé
       case 'sessions':
-        return <Sessions activePage={activePage} onPageChange={handlePageChange} />;
+        // Passe currentSessionId au composant Sessions
+        // Ce composant devra gérer l'affichage de la liste ou d'un détail basé sur la présence de cet ID
+        return <Sessions activePage={activePage} onPageChange={handlePageChange} sessionId={currentSessionId} />;
       // case 'exams': // Supprimé car la fonctionnalité Mode Examen est enlevée
       //   return <Exams activePage={activePage} onPageChange={handlePageChange} />;
       case 'reports':

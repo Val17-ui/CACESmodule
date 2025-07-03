@@ -1,32 +1,48 @@
 import React from 'react';
 import { Users, Calendar, CheckCircle, Clock } from 'lucide-react';
 import Card from '../ui/Card';
+import { Session } from '../../types';
 
-const DashboardCards: React.FC = () => {
+type DashboardCardsProps = {
+  sessions: Session[];
+};
+
+const DashboardCards: React.FC<DashboardCardsProps> = ({ sessions }) => {
+  const plannedSessionsCount = sessions.filter(s => s.status === 'planned').length;
+
+  const totalParticipantsInPlannedOrInProgress = sessions
+    .filter(s => s.status === 'planned' || s.status === 'in-progress')
+    .reduce((acc, session) => acc + (session.participants?.length || 0), 0);
+
+  // TODO: Calculer le taux de réussite et les certifications à partir des données réelles si possible.
+  // Pour l'instant, utilisons des placeholders.
+  const successRate = 'N/A'; // Exemple: calculer à partir des sessionResults
+  const certificationsCount = 'N/A'; // Exemple: nombre de participants avec reussite: true
+
   const cards = [
     { 
-      title: 'Sessions à venir', 
-      value: '5', 
+      title: 'Sessions planifiées',
+      value: plannedSessionsCount.toString(),
       icon: <Calendar size={24} className="text-blue-600" />,
-      change: '+2 cette semaine'
+      change: '' // Pourrait être "X cette semaine" si on ajoute une logique de date
     },
     { 
-      title: 'Participants', 
-      value: '42', 
+      title: 'Participants (planifiés/en cours)',
+      value: totalParticipantsInPlannedOrInProgress.toString(),
       icon: <Users size={24} className="text-green-600" />,
-      change: '+15 ce mois'
+      change: '' // Pourrait être "Y ce mois"
     },
     { 
-      title: 'Taux de réussite', 
-      value: '78%', 
+      title: 'Taux de réussite global',
+      value: successRate,
       icon: <CheckCircle size={24} className="text-amber-500" />,
-      change: '+5% vs. mois dernier'
+      change: '' // Pourrait être "Z% vs. mois dernier"
     },
     { 
-      title: 'Certifications', 
-      value: '124', 
+      title: 'Certifications émises',
+      value: certificationsCount,
       icon: <Clock size={24} className="text-purple-600" />,
-      change: '30 en attente'
+      change: '' // Pourrait être "W en attente"
     },
   ];
 
@@ -38,7 +54,7 @@ const DashboardCards: React.FC = () => {
             <div>
               <p className="text-sm font-medium text-gray-500">{card.title}</p>
               <p className="mt-1 text-3xl font-semibold text-gray-900">{card.value}</p>
-              <p className="mt-2 text-xs text-gray-500">{card.change}</p>
+              {card.change && <p className="mt-2 text-xs text-gray-500">{card.change}</p>}
             </div>
             <div className="p-2 rounded-lg bg-gray-50">
               {card.icon}
