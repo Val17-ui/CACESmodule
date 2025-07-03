@@ -20,12 +20,12 @@ const Header: React.FC<HeaderProps> = ({ title, subtitle, actions }) => {
         <div className="flex items-center space-x-4">
           {actions}
           
-          <div className="relative">
+          {/* <div className="relative">
             <Button variant="ghost" className="rounded-full p-2">
               <Bell size={20} />
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </Button>
-          </div>
+          </div> */}
           
           {/* <div className="flex items-center">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 mr-2">

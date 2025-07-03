@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Layout from '../components/layout/Layout';
 import DashboardCards from '../components/dashboard/DashboardCards';
 import DashboardSessionsOverview from '../components/dashboard/DashboardSessionsOverview'; // Renommé
-import QuickActions from '../components/dashboard/QuickActions';
+// import QuickActions from '../components/dashboard/QuickActions'; // Supprimé
 import Button from '../components/ui/Button';
 import { Plus } from 'lucide-react';
 // import { mockSessions } from '../data/mockData'; // Plus besoin des mocks ici directement
@@ -71,13 +71,13 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
       onPageChange={onPageChange}
     >
       <DashboardCards sessions={sessions} />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 gap-6"> {/* Simplification de la grille si DashboardSessionsOverview prend toute la largeur */}
+        <div className="lg:col-span-3"> {/* DashboardSessionsOverview prend toute la largeur */}
           <DashboardSessionsOverview sessions={sessions} onPageChange={onPageChange} />
         </div>
-        <div>
+        {/* <div>
           <QuickActions onPageChange={onPageChange} />
-        </div>
+        </div> */}
       </div>
     </Layout>
   );

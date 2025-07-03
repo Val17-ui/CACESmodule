@@ -10,15 +10,31 @@ import { Session as DBSession } from '../types'; // Importer le type Session de 
 
 type SessionsProps = {
   activePage: string;
-  onPageChange: (page: string) => void;
+  onPageChange: (page: string, sessionId?: number) => void; // sessionId est optionnel ici aussi
+  sessionId?: number; // Reçu de App.tsx
 };
 
-const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange }) => {
+const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId }) => {
   const [isCreating, setIsCreating] = useState(false);
-  // managingSessionId sera maintenant un nombre (l'ID de la DB) ou null
-  const [managingSessionId, setManagingSessionId] = useState<number | null>(null);
+  const [managingSessionId, setManagingSessionId] = useState<number | null>(sessionId ?? null);
   const [dbSessions, setDbSessions] = useState<DBSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Effet pour gérer le sessionId passé en prop
+  useEffect(() => {
+    if (sessionId !== undefined) {
+      setManagingSessionId(sessionId);
+      setIsCreating(false); // On n'est pas en création si un ID est fourni
+    } else {
+      // Si aucun sessionId n'est fourni (par exemple, navigation directe vers la page 'sessions')
+      // on s'assure de ne pas être en mode édition sauf si l'utilisateur clique explicitement sur "créer"
+      // ou sur une session de la liste.
+      // Si on veut que la page Sessions réinitialise sa vue (liste) quand on navigue vers elle sans ID,
+      // il faudrait peut-être aussi réinitialiser managingSessionId ici.
+      // setManagingSessionId(null); // Décommenter si on veut toujours afficher la liste par défaut sans ID
+    }
+  }, [sessionId]);
+
 
   const fetchSessions = useCallback(async () => {
     setIsLoading(true);
@@ -34,12 +50,17 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange }) => {
   }, []);
 
   useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+    // Ne fetcher les sessions que si on n'est pas en train de charger un formulaire directement via sessionId
+    if (!managingSessionId || dbSessions.length === 0 ) { // fetch si pas d'ID de gestion ou si la liste est vide
+        fetchSessions();
+    } else {
+        setIsLoading(false); // On a déjà un ID, on ne charge pas la liste complète
+    }
+  }, [fetchSessions, managingSessionId, dbSessions.length]);
 
   const handleCreateNew = () => {
     setIsCreating(true);
-    setManagingSessionId(null); // Pas d'ID pour une nouvelle session
+    setManagingSessionId(null);
   };
 
   // id est maintenant un nombre
@@ -58,7 +79,9 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange }) => {
   const handleBackToList = () => {
     setIsCreating(false);
     setManagingSessionId(null);
-    fetchSessions(); // Rafraîchir la liste des sessions après création/modification
+    // fetchSessions(); // Rafraîchir la liste des sessions après création/modification - fetchSessions est déjà dans un useEffect dépendant de managingSessionId
+    // Notifier App.tsx qu'on n'est plus sur une session spécifique
+    onPageChange(activePage, undefined); // ou onPageChange('sessions', undefined) si on veut forcer la page sessions
   };
 
   const headerActions = (
