@@ -158,7 +158,8 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   }, [fetchRawSessions, managingSessionId]);
 
 
-  // Effet pour trier et filtrer les sessions
+  /* // Correction: Utilisation de /* ... */ pour commenter le bloc
+  // Effet pour trier et filtrer les sessions - TEMPORAIREMENT COMMENTÉ POUR DEBUG
   useEffect(() => {
     let sessionsToProcess = [...rawSessions];
 
@@ -219,6 +220,29 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
 
     setProcessedSessions(sessionsToProcess);
 
+  }, [rawSessions, searchTerm, selectedPeriod]);
+  */ // Correction: Balise de fin de commentaire
+
+  // Utiliser rawSessions directement pour le debug, ou processedSessions s'il est initialisé
+  useEffect(() => {
+    // Cette condition est simplifiée : on copie rawSessions vers processedSessions
+    // dès que rawSessions change et qu'aucun filtre n'est actif.
+    // Si les filtres étaient actifs, ils seraient appliqués par l'autre useEffect (maintenant commenté).
+    if (!searchTerm && selectedPeriod === 'all') {
+       setProcessedSessions([...rawSessions]); // Copier pour éviter mutation directe si rawSessions est utilisé ailleurs
+    } else if (searchTerm || selectedPeriod !== 'all') {
+      // Si des filtres sont actifs mais l'effet de filtrage est commenté,
+      // pour le debug, on pourrait vouloir afficher la liste brute pour éviter la confusion.
+      // Ou, idéalement, l'effet de filtrage serait actif.
+      // Pour l'instant, avec l'effet de filtrage commenté, ceci assure que si on change un filtre,
+      // on ne voit plus juste rawSessions, mais il n'y aura pas de filtrage.
+      // Cela met en évidence que l'effet de filtrage est nécessaire.
+      // Alternativement, pour un debug strict où l'on veut voir les données brutes:
+      // setProcessedSessions([...rawSessions]);
+      // Mais pour tester l'absence de l'effet de filtrage, on ne fait rien ici si des filtres sont sélectionnés.
+      // La logique actuelle va juste copier rawSessions si aucun filtre n'est actif.
+      // Si on active un filtre (via UI), processedSessions ne sera pas mis à jour par CET effet.
+    }
   }, [rawSessions, searchTerm, selectedPeriod]);
 
 
@@ -306,6 +330,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     >
       {!isCreating && !managingSessionId ? (
         <>
+          {/* SECTION FILTRES TEMPORAIREMENT COMMENTÉE POUR DEBUG
           <div className="flex flex-wrap gap-4 mb-4">
             <Input
               type="text"
@@ -326,8 +351,9 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
               ))}
             </Select>
           </div>
+          */}
           <SessionsList
-            sessions={processedSessions} // Utiliser les sessions traitées
+            sessions={processedSessions} // Pour le debug, processedSessions est maintenant une copie de rawSessions
             onManageSession={handleManageSession}
             onStartExam={handleStartExam}
           />
