@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarClock, ChevronRight, AlertTriangle } from 'lucide-react';
+import { CalendarClock, ChevronRight } from 'lucide-react'; // AlertTriangle supprimé
 import { Session } from '../../types';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
@@ -40,7 +40,7 @@ const getStatusBadge = (status: Session['status']) => {
     case 'cancelled':
       return <Badge variant="danger">Annulée</Badge>;
     case 'ready':
-        return <Badge variant="info">Prête</Badge>;
+        return <Badge variant="primary">Prête</Badge>; // Modifié: info -> primary
     default:
       return null;
   }

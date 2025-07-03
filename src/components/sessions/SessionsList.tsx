@@ -47,7 +47,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
       case 'cancelled':
         return <Badge variant="danger">Annulée</Badge>;
       default:
-        return <Badge variant="secondary">Non défini</Badge>;
+        return <Badge variant="default">Non défini</Badge>; // Modifié: secondary -> default
     }
   };
 
@@ -122,7 +122,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
                     {formatDate(session.dateSession)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant="info">{session.referentiel as CACESReferential || 'N/A'}</Badge>
+                    <Badge variant="primary">{session.referentiel as CACESReferential || 'N/A'}</Badge> {/* Modifié: info -> primary */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">
                     {session.participants?.length ?? 0}
@@ -132,8 +132,8 @@ const SessionsList: React.FC<SessionsListProps> = ({
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     {session.donneesOrs instanceof Blob ?
-                      <Badge variant="success" className="cursor-default" title={`Taille: ${Math.round(session.donneesOrs.size / 1024)} Ko`}>Oui</Badge> :
-                      <Badge variant="neutral">Non</Badge>}
+                      <Badge variant="success" className="cursor-default">Oui</Badge> : // Modifié: title supprimé
+                      <Badge variant="default">Non</Badge>} {/* Modifié: neutral -> default */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end space-x-2">
