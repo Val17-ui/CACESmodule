@@ -4,8 +4,8 @@ import SessionsList from '../components/sessions/SessionsList';
 import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
 import { Plus } from 'lucide-react';
-import { getAllSessions } from '../db';
-import { Session as DBSession } from '../types'; // Renommé pour éviter conflit avec l'interface Session globale si elle existait
+import { getAllSessions, getSessionById } from '../db'; // Ajout de getSessionById
+import { Session as DBSession } from '../types';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 
@@ -107,7 +107,8 @@ const periodFilters = [
 
 const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId }) => {
   const [isCreating, setIsCreating] = useState(false);
-  const [managingSessionId, setManagingSessionId] = useState<number | null>(null); // Initialisé à null, sera mis à jour par useEffect si sessionId est fourni
+  const [managingSessionId, setManagingSessionId] = useState<number | null>(null);
+  const [managingSessionName, setManagingSessionName] = useState<string | null>(null); // Nouvel état pour le nom
   const [rawSessions, setRawSessions] = useState<DBSession[]>([]);
   const [processedSessions, setProcessedSessions] = useState<DBSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -117,11 +118,18 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   useEffect(() => {
     if (sessionId !== undefined) {
       setManagingSessionId(sessionId);
-      setIsCreating(false); // On n'est pas en création si un ID est fourni pour gestion
+      setIsCreating(false);
+      // Charger le nom de la session pour le titre
+      getSessionById(sessionId).then(session => {
+        if (session) {
+          setManagingSessionName(session.nomSession);
+        } else {
+          setManagingSessionName(null);
+        }
+      });
     } else {
-      // Si on navigue vers la page Sessions sans ID spécifique (ex: depuis le menu),
-      // on s'assure qu'on n'est pas en mode gestion/création.
       setManagingSessionId(null);
+      setManagingSessionName(null); // Réinitialiser le nom
       setIsCreating(false);
     }
   }, [sessionId]);
@@ -268,14 +276,16 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
 
   const title = isCreating
     ? "Créer une nouvelle session"
+    : managingSessionName
+    ? `Gérer : ${managingSessionName}`
     : managingSessionId
-    ? `Gérer la session` // On pourrait afficher le nom de la session ici si chargé
+    ? `Gérer la session (ID: ${managingSessionId})` // Fallback si le nom n'est pas encore chargé
     : "Liste des Sessions";
 
   const subtitle = isCreating
     ? "Remplissez les informations pour créer une nouvelle session."
     : managingSessionId
-    ? "Modifiez les informations de la session."
+    ? "Modifiez les informations de la session, les participants, ou générez les fichiers."
     : "Consultez et gérez vos sessions enregistrées.";
 
   if (isLoading && !isCreating && !managingSessionId) {
