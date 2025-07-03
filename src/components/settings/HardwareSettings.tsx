@@ -8,12 +8,14 @@ import * as XLSX from 'xlsx';
 
 interface EditableVotingDevice extends VotingDevice {
   isEditing?: boolean;
-  currentPhysicalIdValue?: string; // Used for temporary input value during edit
+  currentNameValue?: string;
+  currentSerialNumberValue?: string;
 }
 
 const HardwareSettings: React.FC = () => {
   const [devices, setDevices] = useState<EditableVotingDevice[]>([]);
-  const [newDevicePhysicalId, setNewDevicePhysicalId] = useState('');
+  const [newDeviceName, setNewDeviceName] = useState('');
+  const [newDeviceSerialNumber, setNewDeviceSerialNumber] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,29 +24,35 @@ const HardwareSettings: React.FC = () => {
 
   const loadDevices = async () => {
     const allDevices = await getAllVotingDevices();
-    // Sort devices by their database ID to maintain a consistent order for "Numéro de boîtier"
     const sortedDevices = allDevices.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-    setDevices(sortedDevices.map(d => ({ ...d, isEditing: false, currentPhysicalIdValue: d.physicalId })));
+    setDevices(sortedDevices.map(d => ({
+      ...d,
+      isEditing: false,
+      currentNameValue: d.name,
+      currentSerialNumberValue: d.serialNumber
+    })));
     setError(null);
   };
 
-  const handleAddNewDeviceInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setNewDevicePhysicalId(e.target.value);
-  };
+  // Remplacé par des setters directs dans les Inputs onChange
 
   const handleAddDevice = async () => {
-    if (!newDevicePhysicalId.trim()) {
-      setError("L'ID boîtier OMBEA ne peut pas être vide.");
+    if (!newDeviceSerialNumber.trim()) {
+      setError("Le numéro de série ne peut pas être vide.");
       return;
     }
-    // Check for duplicates before adding
-    if (devices.some(d => d.physicalId === newDevicePhysicalId.trim())) {
-      setError("Cet ID boîtier OMBEA existe déjà.");
+    if (!newDeviceName.trim()) {
+      setError("Le nom du boîtier ne peut pas être vide.");
+      return;
+    }
+    if (devices.some(d => d.serialNumber === newDeviceSerialNumber.trim())) {
+      setError("Ce numéro de série existe déjà.");
       return;
     }
     try {
-      await addVotingDevice({ physicalId: newDevicePhysicalId.trim() });
-      setNewDevicePhysicalId('');
+      await addVotingDevice({ name: newDeviceName.trim(), serialNumber: newDeviceSerialNumber.trim() });
+      setNewDeviceName('');
+      setNewDeviceSerialNumber('');
       loadDevices();
     } catch (e: any) {
       console.error("Erreur ajout boîtier:", e);
@@ -52,16 +60,24 @@ const HardwareSettings: React.FC = () => {
     }
   };
 
-  const handleEditDeviceChange = (id: number, value: string) => {
-    setDevices(devices.map(d => d.id === id ? { ...d, currentPhysicalIdValue: value } : d));
+  const handleEditDeviceChange = (id: number, field: 'name' | 'serialNumber', value: string) => {
+    setDevices(devices.map(d => {
+      if (d.id === id) {
+        if (field === 'name') return { ...d, currentNameValue: value };
+        if (field === 'serialNumber') return { ...d, currentSerialNumberValue: value };
+      }
+      return d;
+    }));
   };
 
   const toggleEditMode = (id: number) => {
     setDevices(devices.map(d => {
       if (d.id === id) {
-        return { ...d, isEditing: !d.isEditing, currentPhysicalIdValue: d.physicalId }; // Reset temp value on toggle
+        // Reset temp values to actual values from device when entering edit mode
+        return { ...d, isEditing: !d.isEditing, currentNameValue: d.name, currentSerialNumberValue: d.serialNumber };
       }
-      return { ...d, isEditing: false }; // Close other editors
+      // Ensure other devices are not in edit mode
+      return { ...d, isEditing: false };
     }));
     setError(null);
   };
@@ -69,19 +85,25 @@ const HardwareSettings: React.FC = () => {
 
   const handleSaveEdit = async (id: number) => {
     const deviceToSave = devices.find(d => d.id === id);
-    if (!deviceToSave || !deviceToSave.currentPhysicalIdValue?.trim()) {
-      setError("L'ID boîtier OMBEA ne peut pas être vide pour la sauvegarde.");
+    if (!deviceToSave || !deviceToSave.currentSerialNumberValue?.trim()) {
+      setError("Le numéro de série ne peut pas être vide pour la sauvegarde.");
       return;
     }
-    // Check for duplicates, excluding the current device being edited
-    if (devices.some(d => d.id !== id && d.physicalId === deviceToSave.currentPhysicalIdValue?.trim())) {
-      setError("Cet ID boîtier OMBEA existe déjà.");
+    if (!deviceToSave.currentNameValue?.trim()) {
+      setError("Le nom du boîtier ne peut pas être vide pour la sauvegarde.");
+      return;
+    }
+    if (devices.some(d => d.id !== id && d.serialNumber === deviceToSave.currentSerialNumberValue?.trim())) {
+      setError("Ce numéro de série existe déjà.");
       return;
     }
 
     try {
-      await updateVotingDevice(id, { physicalId: deviceToSave.currentPhysicalIdValue.trim() });
-      loadDevices(); // Reload to reflect changes and exit edit mode
+      await updateVotingDevice(id, {
+        name: deviceToSave.currentNameValue.trim(),
+        serialNumber: deviceToSave.currentSerialNumberValue.trim()
+      });
+      loadDevices();
     } catch (e: any) {
       console.error("Erreur sauvegarde boîtier:", e);
       setError(e.message || "Erreur lors de la sauvegarde du boîtier.");
@@ -112,24 +134,46 @@ const HardwareSettings: React.FC = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        // Assume header: Name (optional), SerialNumber
+        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-        const existingPhysicalIds = new Set(devices.map(d => d.physicalId));
-        const devicesFromFile: { physicalId: string }[] = json
-          .slice(1) // Ignorer l'en-tête
-          .map(row => ({ physicalId: row[0]?.toString().trim() }))
-          .filter(d => d.physicalId && d.physicalId.length > 0);
-
-        if (devicesFromFile.length === 0) {
-          setError("Aucun boîtier valide trouvé dans le fichier.");
+        if (json.length < 2) { // At least one data row
+          setError("Le fichier est vide ou ne contient que des en-têtes.");
           return;
         }
 
-        const newDevicesToAdd = devicesFromFile.filter(d => !existingPhysicalIds.has(d.physicalId));
+        const headerRow = json[0].map(h => h.toString().toLowerCase());
+        const serialNumberIndex = headerRow.findIndex(h => h.includes('serial') || h.includes('série') || h.includes('id'));
+        const nameIndex = headerRow.findIndex(h => h.includes('name') || h.includes('nom'));
+
+        if (serialNumberIndex === -1) {
+          setError("Colonne 'Numéro de Série' (ou 'ID') introuvable dans l'en-tête du fichier Excel.");
+          return;
+        }
+
+        const existingSerialNumbers = new Set(devices.map(d => d.serialNumber));
+        const devicesFromFile: { name: string; serialNumber: string }[] = json
+          .slice(1) // Ignorer l'en-tête
+          .map((row, idx) => {
+            const serial = row[serialNumberIndex]?.toString().trim();
+            let name = nameIndex !== -1 ? row[nameIndex]?.toString().trim() : '';
+            if (!name && serial) {
+              name = `Boîtier Importé #${idx + 1} (${serial.slice(0,5)}...)`; // Default name if not provided
+            }
+            return { name, serialNumber: serial };
+          })
+          .filter(d => d.serialNumber && d.serialNumber.length > 0 && d.name);
+
+        if (devicesFromFile.length === 0) {
+          setError("Aucun boîtier valide (avec numéro de série et nom) trouvé dans le fichier après filtrage.");
+          return;
+        }
+
+        const newDevicesToAdd = devicesFromFile.filter(d => !existingSerialNumbers.has(d.serialNumber));
         const duplicateCount = devicesFromFile.length - newDevicesToAdd.length;
 
         if (newDevicesToAdd.length > 0) {
-          await bulkAddVotingDevices(newDevicesToAdd.map(d => ({physicalId: d.physicalId}))); // Ensure correct structure for DB
+          await bulkAddVotingDevices(newDevicesToAdd.map(d => ({name: d.name, serialNumber: d.serialNumber})));
           loadDevices();
           let importMessage = `${newDevicesToAdd.length} nouveaux boîtiers importés avec succès.`;
           if (duplicateCount > 0) {
@@ -165,15 +209,22 @@ const HardwareSettings: React.FC = () => {
       )}
       <div className="mb-6 p-4 border border-gray-200 rounded-lg">
         <h3 className="text-lg font-medium text-gray-800 mb-2">Ajouter un nouveau boîtier</h3>
-        <div className="flex items-center space-x-2">
-          {/* @ts-ignore */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <Input
-            placeholder="ID boîtier OMBEA du nouveau boîtier"
-            value={newDevicePhysicalId}
-            onChange={handleAddNewDeviceInputChange}
+            label="Nom du boîtier"
+            placeholder="Ex: Boîtier Salle A - #1"
+            value={newDeviceName}
+            onChange={(e) => setNewDeviceName(e.target.value)}
             className="flex-grow"
           />
-          <Button onClick={handleAddDevice} icon={<Plus size={16}/>}>Ajouter</Button>
+          <Input
+            label="Numéro de Série (ID OMBEA)"
+            placeholder="ID physique du boîtier"
+            value={newDeviceSerialNumber}
+            onChange={(e) => setNewDeviceSerialNumber(e.target.value)}
+            className="flex-grow"
+          />
+          <Button onClick={handleAddDevice} icon={<Plus size={16}/>} className="md:mt-auto h-10">Ajouter Boîtier</Button>
         </div>
       </div>
 
@@ -190,14 +241,15 @@ const HardwareSettings: React.FC = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Numéro de boîtier</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID boîtier OMBEA</th>
-              <th className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">#</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/6">Nom du boîtier</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/6">Numéro de Série (ID OMBEA)</th>
+              <th className="relative px-4 py-3 w-1/6"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {devices.length === 0 ? (
-              <tr><td className="px-4 py-4 text-center text-sm text-gray-500" colSpan={3}>Aucun boîtier configuré.</td></tr>
+              <tr><td className="px-4 py-4 text-center text-sm text-gray-500" colSpan={4}>Aucun boîtier configuré.</td></tr>
             ) : (
               devices.map((device, index) => (
                 <tr key={device.id}>
@@ -206,15 +258,27 @@ const HardwareSettings: React.FC = () => {
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap">
                     {device.isEditing && device.id ? (
-                      // @ts-ignore
                       <Input
-                        value={device.currentPhysicalIdValue || ''}
-                        onChange={(e) => handleEditDeviceChange(device.id!, e.target.value)}
+                        value={device.currentNameValue || ''}
+                        onChange={(e) => handleEditDeviceChange(device.id!, 'name', e.target.value)}
                         autoFocus
                         className="mb-0"
+                        placeholder="Nom du boîtier"
                       />
                     ) : (
-                      device.physicalId
+                      device.name
+                    )}
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    {device.isEditing && device.id ? (
+                      <Input
+                        value={device.currentSerialNumberValue || ''}
+                        onChange={(e) => handleEditDeviceChange(device.id!, 'serialNumber', e.target.value)}
+                        className="mb-0"
+                        placeholder="Numéro de série"
+                      />
+                    ) : (
+                      device.serialNumber
                     )}
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium space-x-2">

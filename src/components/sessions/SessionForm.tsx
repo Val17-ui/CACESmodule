@@ -122,16 +122,28 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setSelectedTrainerId(sessionData.trainerId || null);
           setModifiedAfterOrsGeneration(false);
           const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
-            let logicalDeviceId: number | null = null;
-            const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
-            if (physicalIdIndex !== -1) {
-              logicalDeviceId = physicalIdIndex + 1;
-            } else if (p_db.idBoitier && p_db.idBoitier.trim() !== '') {
-              console.warn( `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} n'est plus mappé.`);
-            }
+            // p_db est de type Participant from types/index.ts,
+            // il a donc p_db.assignedGlobalDeviceId et n'a plus p_db.idBoitier.
+            // hardwareDevices contient maintenant des VotingDevice {id, name, serialNumber}
+
+            // Le deviceId visuel est maintenant juste l'ordre dans la liste.
+            const visualDeviceId = loopIndex + 1;
+
+            // Le p_db.id (UI id) doit être unique, on peut utiliser l'index et la date.
+            // Attention: p_db n'a plus idBoitier, donc la clé d'unicité change.
+            // Si p_db a déjà un ID unique venant de la DB (pas le cas pour Participant dans un array Session), on l'utiliserait.
+            // Pour l'instant, on génère un ID pour le formulaire.
+            const formParticipantId = `loaded-${loopIndex}-${Date.now()}`;
+
             return {
-              ...p_db, id: `loaded-${loopIndex}-${p_db.idBoitier || Date.now()}`, firstName: p_db.prenom, lastName: p_db.nom,
-              deviceId: logicalDeviceId, organization: (p_db as any).organization || '', hasSigned: (p_db as any).hasSigned || false,
+              ...p_db, // Contient nom, prenom, assignedGlobalDeviceId, etc.
+              id: formParticipantId,
+              firstName: p_db.prenom,
+              lastName: p_db.nom,
+              deviceId: visualDeviceId, // Le numéro visuel (1, 2, 3...)
+              // assignedGlobalDeviceId est déjà dans p_db
+              organization: (p_db as any).organization || '', // Conserver si pertinent
+              hasSigned: (p_db as any).hasSigned || false,    // Conserver si pertinent
             };
           });
           setParticipants(formParticipants);
@@ -158,11 +170,40 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const handleAddParticipant = () => {
     if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+
+    const existingDeviceIds = participants
+      .map(p => p.deviceId)
+      .filter(id => id !== null) as number[];
+    existingDeviceIds.sort((a, b) => a - b);
+
+    let nextDeviceId = 1;
+    for (const id of existingDeviceIds) {
+      if (id === nextDeviceId) {
+        nextDeviceId++;
+      } else if (id > nextDeviceId) {
+        break;
+      }
+    }
+
     const newParticipant: FormParticipant = {
-      id: Date.now().toString(), idBoitier: '', nom: '', prenom: '',
-      firstName: '', lastName: '', organization: '', identificationCode: '',
-      deviceId: null,
-      hasSigned: false, score: undefined, reussite: undefined,
+      // ...p_db spread from DBParticipantType will implicitly carry assignedGlobalDeviceId if it's optional
+      // Explicitly ensure all fields from DBParticipantType are covered or intentionally omitted.
+      // DBParticipantType now has: nom, prenom, identificationCode?, score?, reussite?, assignedGlobalDeviceId?
+      nom: '',
+      prenom: '',
+      identificationCode: '',
+      score: undefined,
+      reussite: undefined,
+      // Auto-assign GlobalDevice based on visual deviceId order
+      assignedGlobalDeviceId: (hardwareDevices[nextDeviceId - 1]) ? hardwareDevices[nextDeviceId - 1].id! : null,
+
+      // FormParticipant specific fields
+      id: Date.now().toString(),
+      firstName: '',
+      lastName: '',
+      organization: '',
+      deviceId: nextDeviceId, // Visual/logical ID
+      hasSigned: false,
     };
     setParticipants([...participants, newParticipant]);
   };
@@ -300,19 +341,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const prepareSessionDataForDb = async (includeOrsBlob?: Blob | null): Promise<DBSession | null> => {
     const dbParticipants: DBParticipantType[] = participants.map((p_form) => {
-      let assignedPhysicalId = '';
-      const logicalDeviceId = p_form.deviceId;
-      if (logicalDeviceId && logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
-        assignedPhysicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
-      } else if (p_form.idBoitier && logicalDeviceId === null) {
-         assignedPhysicalId = p_form.idBoitier;
-         console.warn( `Participant ${p_form.lastName} (${p_form.firstName}) deviceId logique (${logicalDeviceId}) ne correspond plus. Ancien ID physique ${p_form.idBoitier} conservé.`);
-      } else if (logicalDeviceId) {
-         console.warn( `Participant ${p_form.lastName} (${p_form.firstName}) deviceId logique (${logicalDeviceId}) hors limites.`);
-      }
+      // p_form est FormParticipant. Il a p_form.assignedGlobalDeviceId.
+      // DBParticipantType (Participant from types/index.ts) a aussi assignedGlobalDeviceId.
+      // L'ancien idBoitier (serialNumber) n'est plus stocké directement sur le participant en DB.
+      // Le serialNumber sera récupéré via assignedGlobalDeviceId au moment de la génération de l'ORS.
+
+      // Les champs à copier directement de FormParticipant vers DBParticipantType
+      // (ceux définis dans DBParticipantType)
       return {
-        idBoitier: assignedPhysicalId, nom: p_form.lastName, prenom: p_form.firstName,
-        identificationCode: p_form.identificationCode, score: p_form.score, reussite: p_form.reussite,
+        nom: p_form.lastName, // ou p_form.nom si FormParticipant a été aligné
+        prenom: p_form.firstName, // ou p_form.prenom
+        identificationCode: p_form.identificationCode,
+        score: p_form.score,
+        reussite: p_form.reussite,
+        assignedGlobalDeviceId: p_form.assignedGlobalDeviceId, // C'est le champ clé ici
       };
     });
     const sessionToUpdate = editingSessionData;
@@ -350,15 +392,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
          if (reloadedSession) {
             setModifiedAfterOrsGeneration(false);
             const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => {
-              let logicalDeviceId: number | null = null;
-              const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
-              if (physicalIdIndex !== -1) { logicalDeviceId = physicalIdIndex + 1; }
-              else if (p_db.idBoitier && p_db.idBoitier.trim() !== '') { console.warn(`[handleSaveSession] ID boîtier "${p_db.idBoitier}" non trouvé pour ${p_db.prenom} ${p_db.nom}.`); }
+              // p_db est de type Participant from types/index.ts et a p_db.assignedGlobalDeviceId
+              // L'ancien idBoitier n'existe plus.
+              // participants[index] est l'état précédent du FormParticipant.
+
+              const visualDeviceId = index + 1; // Le deviceId visuel basé sur l'ordre
+
               return {
-                ...p_db, id: participants[index]?.id || `form-${index}-${Date.now()}`,
-                firstName: p_db.prenom, lastName: p_db.nom, deviceId: logicalDeviceId,
-                organization: (participants[index] as any)?.organization || '',
-                hasSigned: (participants[index] as any)?.hasSigned || false,
+                ...p_db, // Contient nom, prenom, assignedGlobalDeviceId, etc.
+                id: participants[index]?.id || `form-reloaded-${index}-${Date.now()}`, // Conserve l'ID de formulaire existant si possible
+                firstName: p_db.prenom,
+                lastName: p_db.nom,
+                deviceId: visualDeviceId, // Numéro visuel (1, 2, 3...)
+                // assignedGlobalDeviceId est déjà dans p_db
+                organization: participants[index]?.organization || (p_db as any).organization || '',
+                hasSigned: participants[index]?.hasSigned || (p_db as any).hasSigned || false,
               };
             });
             setParticipants(formParticipants);
@@ -405,10 +453,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     const upToDateSessionData = await getSessionById(currentSavedId);
     if (!upToDateSessionData) { setImportSummary("Erreur rechargement session après sauvegarde."); setIsGeneratingOrs(false); return; }
 
-    const participantsWithoutIdBoitier = upToDateSessionData.participants.filter(p => !p.idBoitier || p.idBoitier.trim() === '');
-    if (participantsWithoutIdBoitier.length > 0) {
-      const participantNames = participantsWithoutIdBoitier.map(p => `${p.prenom} ${p.nom}`).join(', ');
-      setImportSummary(`Erreur: Participants sans ID de boîtier valide: ${participantNames}. Configurez les boîtiers et assignez-les.`);
+    const participantsWithoutValidDevice = [];
+    for (const p of upToDateSessionData.participants) {
+      if (p.assignedGlobalDeviceId === null || p.assignedGlobalDeviceId === undefined) {
+        participantsWithoutValidDevice.push(`${p.prenom} ${p.nom} (aucun boîtier physique assigné)`);
+      } else {
+        const foundDevice = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
+        if (!foundDevice) {
+          participantsWithoutValidDevice.push(`${p.prenom} ${p.nom} (boîtier physique assigné introuvable - ID: ${p.assignedGlobalDeviceId})`);
+        }
+      }
+    }
+
+    if (participantsWithoutValidDevice.length > 0) {
+      const participantIssues = participantsWithoutValidDevice.join('; ');
+      setImportSummary(`Erreur: Participants avec problèmes d'assignation de boîtier: ${participantIssues}. Vérifiez les assignations.`);
       setIsGeneratingOrs(false); return;
     }
 
@@ -449,12 +508,34 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: prefPollCountdownStartMode,
         pollMultipleResponse: '1'
       };
-      const participantsForGenerator: DBParticipantType[] = upToDateSessionData.participants.map(p_db => ({
-        idBoitier: p_db.idBoitier, nom: p_db.nom, prenom: p_db.prenom, identificationCode: p_db.identificationCode,
-      }));
+
+      const participantsForGenerator = upToDateSessionData.participants.map(p_db => {
+        const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
+        return {
+          // idBoitier pour generatePresentation doit être le serialNumber
+          idBoitier: assignedDevice ? assignedDevice.serialNumber : '',
+          nom: p_db.nom,
+          prenom: p_db.prenom,
+          identificationCode: p_db.identificationCode,
+          // score et reussite ne sont pas nécessaires pour la génération ORS ici,
+          // mais DBParticipantType les a comme optionnels.
+          // On s'assure que ce qu'on passe à generatePresentation est conforme à ce qu'il attend.
+          // Si generatePresentation s'attend à DBParticipantType, alors on peut passer p_db directement
+          // après avoir modifié idBoitier.
+          // Pour l'instant, on construit un objet avec les champs attendus par generatePresentation.
+        };
+      });
+
+      // Vérification supplémentaire au cas où un device aurait été supprimé entre temps (improbable mais sécuritaire)
+      const stillMissingSerial = participantsForGenerator.find(p => !p.idBoitier);
+      if (stillMissingSerial) {
+          setImportSummary(`Erreur critique: Impossible de trouver le numéro de série pour ${stillMissingSerial.prenom} ${stillMissingSerial.nom} bien qu'un ID global ait été assigné. Vérifiez la configuration des boîtiers.`);
+          setIsGeneratingOrs(false); return;
+      }
 
       console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
-      const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator, allSelectedQuestionsForPptx, globalPptxTemplate, adminSettings);
+      // Assumons que generatePresentation attend un type compatible avec {idBoitier: string, nom: string, prenom: string, ...}
+      const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator as DBParticipantType[], allSelectedQuestionsForPptx, globalPptxTemplate, adminSettings);
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
         const { orsBlob, questionMappings } = generationOutput;
         try {
@@ -514,29 +595,47 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
                   const sessionQuestions = await getQuestionsByIds(questionIds);
                   if (sessionQuestions.length > 0) {
-                    const updatedParticipants = sessionDataForScores.participants.map((p) => {
-                      const participantResults = sessionResultsForScore.filter(r => r.participantIdBoitier === p.idBoitier);
+                    // Créer un map pour faciliter la recherche de globalDeviceId par serialNumber
+                    const deviceIdBySerialMap = new Map(hardwareDevices.map(hd => [hd.serialNumber, hd.id]));
+
+                    const updatedParticipants = sessionDataForScores.participants.map((p_db) => {
+                      // p_db a assignedGlobalDeviceId. Il faut trouver le serialNumber correspondant.
+                      const matchingGlobalDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
+                      if (!matchingGlobalDevice) {
+                        console.warn(`Participant ${p_db.nom} ${p_db.prenom} n'a pas de boîtier physique valide assigné pour le calcul des scores.`);
+                        return { ...p_db, score: p_db.score || 0, reussite: p_db.reussite || false }; // Garder les scores existants ou initialiser
+                      }
+                      const participantActualSerialNumber = matchingGlobalDevice.serialNumber;
+
+                      const participantResults = sessionResultsForScore.filter(r => r.participantIdBoitier === participantActualSerialNumber);
                       const score = calculateParticipantScore(participantResults, sessionQuestions);
                       const themeScores = calculateThemeScores(participantResults, sessionQuestions);
                       const reussite = determineIndividualSuccess(score, themeScores);
-                      return { ...p, score, reussite };
+                      return { ...p_db, score, reussite };
                     });
+
                     await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
                     message += "\nScores et réussite calculés et mis à jour.";
                     const finalUpdatedSession = await getSessionById(currentSessionDbId);
+
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
-                      const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db, index) => {
-                        let logicalDeviceId: number | null = null;
-                        const currentParticipantState = participants[index];
-                        const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
-                        if (physicalIdIndex !== -1) { logicalDeviceId = physicalIdIndex + 1; }
-                        else if (p_db.idBoitier && p_db.idBoitier.trim() !== '') { console.warn(`[ImportRésultats] ID Boîtier "${p_db.idBoitier}" non trouvé.`); }
+                      // Re-mapper vers FormParticipant, similaire à loadSession et handleSaveSession
+                      const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db_updated, index) => {
+                        const visualDeviceId = index + 1; // Basé sur l'ordre
+                        const currentFormParticipantState = participants.find(fp => fp.id.startsWith('loaded-') ?
+                                                                  fp.assignedGlobalDeviceId === p_db_updated.assignedGlobalDeviceId : // Heuristique pour retrouver par ID de boitier si possible
+                                                                  (fp.deviceId === visualDeviceId && fp.nom === p_db_updated.nom) // Sinon par ordre et nom
+                                                                ) || participants[index]; // Fallback plus simple
+
                         return {
-                          ...p_db, id: currentParticipantState?.id || `updated-${index}-${Date.now()}`,
-                          firstName: p_db.prenom, lastName: p_db.nom, deviceId: logicalDeviceId,
-                          organization: currentParticipantState?.organization || (p_db as any).organization,
-                          hasSigned: currentParticipantState?.hasSigned || (p_db as any).hasSigned,
+                          ...p_db_updated, // Contient nom, prenom, score, reussite, assignedGlobalDeviceId
+                          id: currentFormParticipantState?.id || `updated-${index}-${Date.now()}`,
+                          firstName: p_db_updated.prenom,
+                          lastName: p_db_updated.nom,
+                          deviceId: visualDeviceId,
+                          organization: currentFormParticipantState?.organization || (p_db_updated as any).organization || '',
+                          hasSigned: currentFormParticipantState?.hasSigned || (p_db_updated as any).hasSigned || false,
                         };
                       });
                       setParticipants(formParticipantsToUpdate);
@@ -598,7 +697,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 value={sessionName}
                 onChange={(e) => setSessionName(e.target.value)}
                 required
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
               />
               <Input
                 label="Date de la session"
@@ -606,7 +705,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 value={sessionDate}
                 onChange={(e) => setSessionDate(e.target.value)}
                 required
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -634,7 +733,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 placeholder="Ex: Centre de formation Paris Nord"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
               />
             </div>
             <div className="mt-4">
@@ -678,9 +777,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 <Button
                   variant="outline"
                   icon={<FileUp size={16} />}
-                  disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
+                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                   onClick={() => document.getElementById('participant-file-input')?.click()}
-                  title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Importer une liste de participants"}
+                  title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Importer une liste de participants"}
                 >
                   Importer Participants
                 </Button>
@@ -688,8 +787,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   variant="outline"
                   icon={<UserPlus size={16} />}
                   onClick={handleAddParticipant}
-                  disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
-                  title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Ajouter un participant"}
+                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                  title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Ajouter un participant"}
                 />
               </div>
             </div>
@@ -697,7 +796,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier (Logique)</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro de boîtier</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Assigné</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
@@ -709,7 +809,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {participants.length === 0 ? (
-                    <tr><td className="px-4 py-4 text-center text-sm text-gray-500" colSpan={8}>Aucun participant.</td></tr>
+                    <tr><td className="px-4 py-4 text-center text-sm text-gray-500" colSpan={9}>Aucun participant.</td></tr>
                   ) : (
                     participants.map((participant) => (
                       <tr key={participant.id}>
@@ -720,20 +820,32 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                             onChange={(e) => handleParticipantChange(participant.id, 'deviceId', e.target.value === '' ? null : (parseInt(e.target.value,10) || null))}
                             className="mb-0 w-24 text-center"
                             placeholder="N/A"
-                            readOnly={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                           />
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0" readOnly={isReadOnly} />
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
+                          {(() => {
+                            if (participant.assignedGlobalDeviceId === null || participant.assignedGlobalDeviceId === undefined) {
+                              return <span className="text-gray-500">Non assigné</span>;
+                            }
+                            const assignedDevice = hardwareDevices.find(hd => hd.id === participant.assignedGlobalDeviceId);
+                            if (assignedDevice) {
+                              return assignedDevice.serialNumber; // Afficher le numéro de série
+                            }
+                            return <span className="text-red-500">Boîtier introuvable (ID: {participant.assignedGlobalDeviceId})</span>;
+                          })()}
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.lastName} onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)} placeholder="Nom" className="mb-0" readOnly={isReadOnly} />
+                          <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0" disabled={isReadOnly} />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.organization || ''} onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)} placeholder="Organisation" className="mb-0" readOnly={isReadOnly} />
+                          <Input value={participant.lastName} onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)} placeholder="Nom" className="mb-0" disabled={isReadOnly} />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.identificationCode || ''} onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)} placeholder="Code" className="mb-0" readOnly={isReadOnly} />
+                          <Input value={participant.organization || ''} onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)} placeholder="Organisation" className="mb-0" disabled={isReadOnly} />
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <Input value={participant.identificationCode || ''} onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)} placeholder="Code" className="mb-0" disabled={isReadOnly} />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">
                           {participant.score !== undefined ? `${participant.score}%` : '-'}
@@ -746,11 +858,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
                           <Button
                             variant="ghost"
-                            disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                             size="sm"
                             icon={<Trash2 size={16} />}
                             onClick={() => handleRemoveParticipant(participant.id)}
-                            title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Supprimer participant"}
+                            title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Supprimer participant"}
                           />
                         </td>
                       </tr>

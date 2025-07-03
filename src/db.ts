@@ -23,7 +23,8 @@ export interface QuestionWithId {
 
 export interface VotingDevice {
   id?: number;
-  physicalId: string;
+  name: string;         // User-friendly name
+  serialNumber: string; // Unique physical/serial ID (formerly physicalId)
 }
 
 export class MySubClassedDexie extends Dexie {
@@ -69,6 +70,53 @@ export class MySubClassedDexie extends Dexie {
     this.version(8).stores({
       sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Ajout de trainerId
       trainers: '++id, name, &isDefault' // isDefault pourrait être un index unique si un seul peut être true, mais Dexie ne gère pas bien les booléens uniques. On gérera en logique applicative.
+    });
+
+    // Version 9: Mise à jour de votingDevices (name, serialNumber) et sessions (participants.assignedGlobalDeviceId)
+    this.version(9).stores({
+      votingDevices: '++id, name, &serialNumber', // physicalId -> serialNumber, ajout de name
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Le schéma de la table session elle-même ne change pas, mais la structure de ses objets participants oui. Dexie gère ça.
+      // Les autres tables restent inchangées par rapport à la v8
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      trainers: '++id, name, &isDefault'
+    }).upgrade(async tx => {
+      // 1. Migration pour votingDevices
+      await tx.table('votingDevices').toCollection().modify(device => {
+        // Renommer physicalId en serialNumber et ajouter un nom par défaut
+        // @ts-ignore
+        device.serialNumber = device.physicalId;
+        // @ts-ignore
+        delete device.physicalId;
+        device.name = `Boîtier SN: ${device.serialNumber}`; // Nom par défaut
+      });
+
+      // 2. Migration pour sessions (participants)
+      // On a besoin de la liste des votingDevices migrés pour trouver les IDs
+      const allMigratedVotingDevices = await tx.table('votingDevices').toArray();
+      const deviceMapBySerial = new Map(allMigratedVotingDevices.map(d => [d.serialNumber, d.id]));
+
+      await tx.table('sessions').toCollection().modify(session => {
+        if (session.participants && Array.isArray(session.participants)) {
+          session.participants.forEach((participant: any) => {
+            const oldIdBoitier = participant.idBoitier; // Ancien serialNumber
+            delete participant.idBoitier; // Supprimer l'ancien champ
+
+            if (oldIdBoitier) {
+              const globalDeviceId = deviceMapBySerial.get(oldIdBoitier);
+              if (globalDeviceId !== undefined) {
+                participant.assignedGlobalDeviceId = globalDeviceId;
+              } else {
+                participant.assignedGlobalDeviceId = null; // ou logguer une erreur si un idBoitier ne correspond plus
+                console.warn(`Impossible de trouver le GlobalDevice pour l'ancien idBoitier: ${oldIdBoitier} dans la session ${session.id}`);
+              }
+            } else {
+              participant.assignedGlobalDeviceId = null;
+            }
+          });
+        }
+      });
     });
   }
 }

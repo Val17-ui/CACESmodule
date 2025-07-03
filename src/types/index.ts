@@ -43,12 +43,13 @@ export interface QuestionMapping {
 
 // Nouvelle interface Participant pour les listes dans une Session
 export interface Participant {
-  idBoitier: string; // Identifiant du boîtier de vote
+  // idBoitier: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
   nom: string;
   prenom: string;
   identificationCode?: string; // Code d'identification optionnel
   score?: number; // Score total du participant pour cette session
   reussite?: boolean; // Statut de réussite du participant pour cette session
+  assignedGlobalDeviceId?: number | null; // Référence à GlobalDevice.id (VotingDevice.id)
 }
 
 // Nouvelle interface pour décrire un bloc thématique sélectionné
