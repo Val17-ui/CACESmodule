@@ -108,7 +108,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }, []);
 
   useEffect(() => {
-    if (sessionIdToLoad && hardwareLoaded && trainersList.length >= 0) { // Attendre trainersList aussi (>=0 pour cas où il n'y a pas de formateurs)
+    if (sessionIdToLoad && hardwareLoaded && trainersList.length >= 0) {
       const loadSession = async () => {
         const sessionData = await getSessionById(sessionIdToLoad);
         setEditingSessionData(sessionData || null);
@@ -215,7 +215,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (jsonData.length === 0) return newParticipantsExcel;
     let headers: string[] = [];
     let dataStartIndex = 0;
-    const potentialHeaders = jsonData[0].map(h => h.toString().toLowerCase()); // Assurer que h est une chaîne
+    const potentialHeaders = jsonData[0].map(h => h.toString().toLowerCase());
     const hasPrenom = potentialHeaders.includes('prénom') || potentialHeaders.includes('prenom');
     const hasNom = potentialHeaders.includes('nom');
     if (hasPrenom && hasNom) {
@@ -297,7 +297,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
   // --- Fin Logique Import Participants ---
-
 
   const prepareSessionDataForDb = async (includeOrsBlob?: Blob | null): Promise<DBSession | null> => {
     const dbParticipants: DBParticipantType[] = participants.map((p_form) => {
@@ -586,15 +585,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const renderTabContent = () => {
     const isReadOnly = editingSessionData?.status === 'completed';
-    // L'ORS peut être généré/régénéré si la session est 'planned' ou 'ready'.
-    // Une fois que des résultats sont importés, la session passe à 'completed', bloquant la (re)génération.
-    // Si l'ORS est généré (donneesOrs existe) ET que la session n'est plus 'planned' ou 'ready' (ex: 'in-progress' si on avait ce statut, ou 'cancelled'),
-    // on pourrait aussi bloquer certaines modifications des participants.
-    // Pour l'instant, la principale condition de blocage est `isReadOnly` (session complétée).
-    // Le bouton de génération ORS a sa propre logique `disabled`.
-    // `isOrsGeneratedAndNotEditable` est plus spécifique pour les actions sur les participants.
-    const isOrsGeneratedAndNotReadyForRegeneration = !!editingSessionData?.donneesOrs && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
-
+    const isOrsGeneratedAndNotEditable = !!editingSessionData?.donneesOrs && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
 
     switch (activeTab) {
       case 'details':
@@ -682,7 +673,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   id="participant-file-input"
                   className="hidden"
                   accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  onChange={handleParticipantFileSelect} // Assurez-vous que cette fonction est définie
+                  onChange={handleParticipantFileSelect}
                 />
                 <Button
                   variant="outline"
