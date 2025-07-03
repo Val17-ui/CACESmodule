@@ -4,7 +4,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Badge from '../ui/Badge';
-import { ReferentialType, referentials, QuestionTheme, questionThemes } from '../../types';
+import { referentials, QuestionTheme, questionThemes } from '../../types'; // ReferentialType supprimé
 import { mockQuestions } from '../../data/mockData';
 
 const QuestionStatistics: React.FC = () => {
@@ -36,7 +36,7 @@ const QuestionStatistics: React.FC = () => {
   ];
 
   const filteredQuestions = mockQuestions.filter(question => {
-    const matchesReferential = !selectedReferential || question.referential === selectedReferential;
+    const matchesReferential = !selectedReferential || question.referentiel === selectedReferential; // Corrigé: referential -> referentiel
     const matchesTheme = !selectedTheme || question.theme === selectedTheme;
     return matchesReferential && matchesTheme;
   });
@@ -199,10 +199,10 @@ const QuestionStatistics: React.FC = () => {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant="primary">{question.referential}</Badge>
+                    <Badge variant="primary">{question.referentiel}</Badge> {/* Corrigé: referential -> referentiel */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {questionThemes[question.theme]}
+                    {questionThemes[question.theme as QuestionTheme] || question.theme} {/* Corrigé: indexation avec assertion et fallback */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">

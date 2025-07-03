@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
+import React, { useState, useEffect, useCallback } from 'react'; // ChangeEvent supprimé
 import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -24,10 +24,10 @@ import {
   getAllVotingDevices,
   VotingDevice,
   getGlobalPptxTemplate,
-  getAdminSetting, // Import getAdminSetting to fetch preferences
-  db
+  getAdminSetting // Import getAdminSetting to fetch preferences
+  // db supprimé
 } from '../../db';
-import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
+import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator'; // QuestionMapping supprimé
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import JSZip from 'jszip';
@@ -371,7 +371,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const savedSessionId = await handleSaveSession(sessionDataForDb);
       if (!savedSessionId) { return; }
 
-      const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referentiel: sessionDataForDb.referentiel as CACESReferential };
+      const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referential: sessionDataForDb.referentiel as CACESReferential }; // Corrigé: referentiel -> referential
 
       // Fetch user preferences for AdminPPTXSettings
       const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
@@ -500,10 +500,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   // console.log("[SessionForm Import Log] SessionQuestions for score calculation (first 5):", sessionQuestions.slice(0,5)); // DEBUG
 
                   if (sessionQuestions.length > 0) {
-                    const updatedParticipants = sessionDataForScores.participants.map((p, pIndex) => {
+                    const updatedParticipants = sessionDataForScores.participants.map((p) => { // pIndex supprimé
                       /* DEBUG Start
-                      if (pIndex < 2) {
-                        console.log(`[SessionForm ScoreCalc Debug] Participant p (index ${pIndex}):`, JSON.stringify(p));
+                      if (pIndex < 2) { // Remplacer pIndex par une autre condition si le log est toujours nécessaire
+                        console.log(`[SessionForm ScoreCalc Debug] Participant p:`, JSON.stringify(p));
                         console.log(`[SessionForm ScoreCalc Debug] Valeur de p.idBoitier pour ce participant: ${p.idBoitier}`);
                         console.log(`[SessionForm ScoreCalc Debug] Comparaison : r.participantIdBoitier (ex: ${sessionResultsForScore[0]?.participantIdBoitier}) vs p.idBoitier (${p.idBoitier})`);
                       }
@@ -572,16 +572,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const handleBackToList = () => {
     if (!sessionIdToLoad && !currentSessionDbId) {
-        resetFormState();
+        resetFormTactic(); // Renommé pour éviter confusion potentielle avec un hook
     }
   };
 
-  const commonInputProps = (isCompletedOrReadOnly: boolean) => ({
-    readOnly: isCompletedOrReadOnly,
-  });
-  const fileInputProps = (isDisabled: boolean) => ({
-    disabled: isDisabled,
-  });
+  // commonInputProps et fileInputProps supprimées car non utilisées comme prévu
+  // Les props readOnly/disabled sont passées directement ou gérées par les composants Input/Select.
 
   return (
     <div>
@@ -594,7 +590,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             value={sessionName}
             onChange={(e) => setSessionName(e.target.value)}
             required
-            {...commonInputProps(editingSessionData?.status === 'completed')}
+            readOnly={editingSessionData?.status === 'completed'}
           />
           {/* @ts-ignore */}
           <Input
@@ -603,7 +599,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             value={sessionDate}
             onChange={(e) => setSessionDate(e.target.value)}
             required
-            {...commonInputProps(editingSessionData?.status === 'completed')}
+            readOnly={editingSessionData?.status === 'completed'}
           />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -624,7 +620,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             placeholder="Ex: Centre de formation Paris Nord"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            {...commonInputProps(editingSessionData?.status === 'completed')}
+            readOnly={editingSessionData?.status === 'completed'}
           />
         </div>
         <div className="mt-4">
