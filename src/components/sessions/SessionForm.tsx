@@ -414,7 +414,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         return;
       }
 
-
+      console.log('[SessionForm Gen .ors] AdminSettings being passed:', adminSettings); // DEBUG
       console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
 
       // Use globalPptxTemplate instead of templateFile

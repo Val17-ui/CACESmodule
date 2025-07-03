@@ -23,6 +23,7 @@ function generateOmbeaSessionXml(
   participants: Participant[],
   _questionMappings: QuestionMapping[] // Utiliser QuestionMapping ici, même si non utilisé dans ce XML particulier
 ): string {
+  console.log('[pptxOrchestrator] generateOmbeaSessionXml received participants:', JSON.stringify(participants.map(p => ({ idBoitier: p.idBoitier, nom: p.nom, prenom: p.prenom })), null, 2)); // DEBUG
   // Using a helper for escaping XML attribute/text values
   const esc = (unsafe: string | undefined | null): string => {
     if (unsafe === undefined || unsafe === null) return '';
@@ -34,17 +35,9 @@ function generateOmbeaSessionXml(
       .replace(/'/g, '&apos;');
   };
 
-  // Predefined list of known working Device IDs
-  const knownDeviceIDs = ["102494", "1017ED", "0FFB1C", "1027AC"];
-
-  const formatDeviceId = (participantIndex: number): string => {
-    if (participantIndex < knownDeviceIDs.length) {
-      return knownDeviceIDs[participantIndex];
-    }
-    // Fallback for participants exceeding the knownDeviceIDs list
-    console.warn(`Nombre de participants (${participants.length}) supérieur au nombre d'ID boîtiers pré-définis (${knownDeviceIDs.length}). Utilisation d'un ID numérique formaté pour le participant ${participantIndex + 1}.`);
-    return String(participantIndex + 1).padStart(6, '0');
-  };
+  // REMOVED Hardcoded device ID logic
+  // const knownDeviceIDs = ["102494", "1017ED", "0FFB1C", "1027AC"];
+  // const formatDeviceId = (participantIndex: number): string => { ... };
 
   let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n`;
   xml += `<ors:ORSession xmlns:rl="http://www.ombea.com/response/respondentlist" xmlns:ors="http://www.ombea.com/response/session" ORVersion="0" SessionVersion="4">\n`;
@@ -82,10 +75,10 @@ function generateOmbeaSessionXml(
 
   xml += `    <rl:Respondents>\n`;
   participants.forEach((p, index) => {
-    xml += `      <rl:Respondent ID="${index + 1}">\n`; // Sequential 1-based ID
+    xml += `      <rl:Respondent ID="${index + 1}">\n`; // Sequential 1-based ID for Respondent, not device
     xml += `        <rl:Devices>\n`;
-    // Use the participant's index for the placeholder Device ID for now
-    xml += `          <rl:Device>${formatDeviceId(index)}</rl:Device>\n`;
+    // Use the actual idBoitier from the participant data
+    xml += `          <rl:Device>${esc(p.idBoitier)}</rl:Device>\n`;
     xml += `        </rl:Devices>\n`;
 
     // Ajouter FirstName comme CustomProperty
