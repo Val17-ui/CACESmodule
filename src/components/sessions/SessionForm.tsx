@@ -598,7 +598,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 value={sessionName}
                 onChange={(e) => setSessionName(e.target.value)}
                 required
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
               />
               <Input
                 label="Date de la session"
@@ -606,7 +606,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 value={sessionDate}
                 onChange={(e) => setSessionDate(e.target.value)}
                 required
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -634,7 +634,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 placeholder="Ex: Centre de formation Paris Nord"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
               />
             </div>
             <div className="mt-4">
@@ -678,9 +678,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 <Button
                   variant="outline"
                   icon={<FileUp size={16} />}
-                  disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
+                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                   onClick={() => document.getElementById('participant-file-input')?.click()}
-                  title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Importer une liste de participants"}
+                  title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Importer une liste de participants"}
                 >
                   Importer Participants
                 </Button>
@@ -688,8 +688,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   variant="outline"
                   icon={<UserPlus size={16} />}
                   onClick={handleAddParticipant}
-                  disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
-                  title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Ajouter un participant"}
+                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                  title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Ajouter un participant"}
                 />
               </div>
             </div>
@@ -720,20 +720,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                             onChange={(e) => handleParticipantChange(participant.id, 'deviceId', e.target.value === '' ? null : (parseInt(e.target.value,10) || null))}
                             className="mb-0 w-24 text-center"
                             placeholder="N/A"
-                            readOnly={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                           />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0" readOnly={isReadOnly} />
+                          <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0" disabled={isReadOnly} />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.lastName} onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)} placeholder="Nom" className="mb-0" readOnly={isReadOnly} />
+                          <Input value={participant.lastName} onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)} placeholder="Nom" className="mb-0" disabled={isReadOnly} />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.organization || ''} onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)} placeholder="Organisation" className="mb-0" readOnly={isReadOnly} />
+                          <Input value={participant.organization || ''} onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)} placeholder="Organisation" className="mb-0" disabled={isReadOnly} />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.identificationCode || ''} onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)} placeholder="Code" className="mb-0" readOnly={isReadOnly} />
+                          <Input value={participant.identificationCode || ''} onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)} placeholder="Code" className="mb-0" disabled={isReadOnly} />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">
                           {participant.score !== undefined ? `${participant.score}%` : '-'}
@@ -746,11 +746,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
                           <Button
                             variant="ghost"
-                            disabled={isOrsGeneratedAndNotReadyForRegeneration || isReadOnly}
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                             size="sm"
                             icon={<Trash2 size={16} />}
                             onClick={() => handleRemoveParticipant(participant.id)}
-                            title={isOrsGeneratedAndNotReadyForRegeneration ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Supprimer participant"}
+                            title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Supprimer participant"}
                           />
                         </td>
                       </tr>
