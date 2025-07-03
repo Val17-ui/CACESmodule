@@ -32,38 +32,46 @@ const ActionItem: React.FC<ActionItemProps> = ({
   );
 };
 
-const QuickActions: React.FC = () => {
+type QuickActionsProps = {
+  onPageChange: (page: string, sessionId?: number) => void;
+};
+
+const QuickActions: React.FC<QuickActionsProps> = ({ onPageChange }) => {
   const actions = [
     {
       icon: <PlusCircle size={20} />,
       title: 'Nouvelle session',
       description: 'Planifier une nouvelle session CACES',
-      onClick: () => console.log('New session clicked'),
+      onClick: () => onPageChange('sessions'), // Navigue vers la page des sessions (pour création)
     },
-    {
-      icon: <FilePlus size={20} />,
-      title: 'Créer questionnaire',
-      description: 'Créer ou modifier un questionnaire',
-      onClick: () => console.log('Create questionnaire clicked'),
-    },
-    {
-      icon: <FileSpreadsheet size={20} />,
-      title: 'Démarrer examen',
-      description: 'Lancer une session d\'examen',
-      onClick: () => console.log('Start exam clicked'),
-    },
-    {
-      icon: <Download size={20} />,
-      title: 'Exporter rapport',
-      description: 'Générer un rapport d\'activité',
-      onClick: () => console.log('Export report clicked'),
-    },
+    // {
+    //   icon: <FilePlus size={20} />,
+    //   title: 'Créer questionnaire',
+    //   description: 'Créer ou modifier un questionnaire',
+    //   onClick: () => console.log('Create questionnaire clicked'), // Remplacer par onPageChange si nécessaire
+    // },
+    // {
+    //   icon: <FileSpreadsheet size={20} />,
+    //   title: 'Démarrer examen',
+    //   description: 'Lancer une session d\'examen',
+    //   onClick: () => console.log('Start exam clicked'), // Remplacer par onPageChange si nécessaire
+    // },
+    // {
+    //   icon: <Download size={20} />,
+    //   title: 'Exporter rapport',
+    //   description: 'Générer un rapport d\'activité',
+    //   onClick: () => console.log('Export report clicked'), // Remplacer par onPageChange si nécessaire
+    // },
   ];
+
+  // Filtrer les actions non commentées pour l'affichage
+  const activeActions = actions.filter(action => action !== null && action.title !== '');
+
 
   return (
     <Card title="Actions rapides" className="mb-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {actions.map((action, index) => (
+        {activeActions.map((action, index) => (
           <ActionItem
             key={index}
             icon={action.icon}

@@ -27,12 +27,12 @@ const Header: React.FC<HeaderProps> = ({ title, subtitle, actions }) => {
             </Button>
           </div>
           
-          <div className="flex items-center">
+          {/* <div className="flex items-center">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 mr-2">
               <User size={16} />
             </div>
             <span className="text-sm font-medium text-gray-700">Admin</span>
-          </div>
+          </div> */}
         </div>
       </div>
     </header>

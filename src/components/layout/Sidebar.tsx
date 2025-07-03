@@ -99,11 +99,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
             active={activePage === 'settings'}
             onClick={() => onPageChange('settings')}
           />
-          <SidebarItem
+          {/* <SidebarItem
             icon={<LogOut size={20} />}
             label="Déconnexion"
             onClick={() => console.log('Logout clicked')}
-          />
+          /> */}
         </ul>
       </div>
     </div>
