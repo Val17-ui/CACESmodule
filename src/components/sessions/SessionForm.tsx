@@ -285,6 +285,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       let sessionDataForDb = await prepareSessionDataForDb(null);
       if (!sessionDataForDb) { setImportSummary("Erreur préparation données session."); setIsGeneratingOrs(false); return; }
 
+      // Vérification des idBoitier des participants
+      const participantsWithoutIdBoitier = sessionDataForDb.participants.filter(p => !p.idBoitier || p.idBoitier.trim() === '');
+      if (participantsWithoutIdBoitier.length > 0) {
+        const participantNames = participantsWithoutIdBoitier.map(p => `${p.prenom} ${p.nom}`).join(', ');
+        setImportSummary(`Erreur: Les participants suivants n'ont pas d'ID de boîtier valide assigné (vérifiez la configuration matérielle et l'assignation des boîtiers aux participants) : ${participantNames}. L'ORS ne peut pas être généré.`);
+        setIsGeneratingOrs(false);
+        return;
+      }
+
       sessionDataForDb.selectionBlocs = Object.entries(tempSelectedBlocksSummary).map(([theme, blockId]) => ({ theme, blockId }));
       sessionDataForDb.status = 'planned';
 
@@ -293,6 +302,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
       const currentSessionData = await getSessionById(savedSessionId);
       if (!currentSessionData) { setImportSummary("Erreur: session non trouvée après sauvegarde."); setIsGeneratingOrs(false); return; }
+
+      // Re-vérifier les idBoitiers sur currentSessionData au cas où handleSaveSession les aurait modifiés de manière inattendue
+      // Normalement, ils devraient être les mêmes que dans sessionDataForDb.participants
+      const finalParticipantsWithoutIdBoitier = currentSessionData.participants.filter(p => !p.idBoitier || p.idBoitier.trim() === '');
+      if (finalParticipantsWithoutIdBoitier.length > 0) {
+        const participantNames = finalParticipantsWithoutIdBoitier.map(p => `${p.prenom} ${p.nom}`).join(', ');
+        setImportSummary(`Erreur (post-sauvegarde): Les participants suivants n'ont pas d'ID de boîtier valide : ${participantNames}. L'ORS ne peut pas être généré.`);
+        setIsGeneratingOrs(false);
+        return;
+      }
 
       const sessionInfoForPptx = { name: currentSessionData.nomSession, date: currentSessionData.dateSession, referential: currentSessionData.referentiel as CACESReferential };
       const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
