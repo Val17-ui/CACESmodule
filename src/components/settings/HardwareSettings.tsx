@@ -220,7 +220,7 @@ const HardwareSettings: React.FC = () => {
           <Input
             label="Numéro de Série (ID OMBEA)"
             placeholder="ID physique du boîtier"
-            value={newDevicePhysicalId}
+            value={newDeviceSerialNumber}
             onChange={(e) => setNewDeviceSerialNumber(e.target.value)}
             className="flex-grow"
           />
