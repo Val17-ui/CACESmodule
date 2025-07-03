@@ -158,10 +158,25 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const handleAddParticipant = () => {
     if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+
+    const existingDeviceIds = participants
+      .map(p => p.deviceId)
+      .filter(id => id !== null) as number[];
+    existingDeviceIds.sort((a, b) => a - b);
+
+    let nextDeviceId = 1;
+    for (const id of existingDeviceIds) {
+      if (id === nextDeviceId) {
+        nextDeviceId++;
+      } else if (id > nextDeviceId) {
+        break;
+      }
+    }
+
     const newParticipant: FormParticipant = {
       id: Date.now().toString(), idBoitier: '', nom: '', prenom: '',
       firstName: '', lastName: '', organization: '', identificationCode: '',
-      deviceId: null,
+      deviceId: nextDeviceId, // Assign next available ID
       hasSigned: false, score: undefined, reussite: undefined,
     };
     setParticipants([...participants, newParticipant]);
@@ -697,7 +712,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier (Logique)</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro de boîtier</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
