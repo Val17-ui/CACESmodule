@@ -194,7 +194,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       identificationCode: '',
       score: undefined,
       reussite: undefined,
-      assignedGlobalDeviceId: null, // Initialize as null, no device assigned yet
+      // Auto-assign GlobalDevice based on visual deviceId order
+      assignedGlobalDeviceId: (hardwareDevices[nextDeviceId - 1]) ? hardwareDevices[nextDeviceId - 1].id! : null,
 
       // FormParticipant specific fields
       id: Date.now().toString(),
@@ -796,7 +797,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro de boîtier</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Physique Assigné</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Assigné</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
@@ -822,20 +823,17 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                             disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                           />
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Select
-                            options={[
-                              { value: '', label: 'Non assigné' },
-                              ...hardwareDevices.map(hd => ({
-                                value: hd.id!.toString(), // Assurer que hd.id est bien un number
-                                label: `${hd.name} (SN: ${hd.serialNumber})`
-                              }))
-                            ]}
-                            value={participant.assignedGlobalDeviceId?.toString() || ''}
-                            onChange={(e) => handleParticipantChange(participant.id, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                            className="mb-0 min-w-[200px]"
-                          />
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
+                          {(() => {
+                            if (participant.assignedGlobalDeviceId === null || participant.assignedGlobalDeviceId === undefined) {
+                              return <span className="text-gray-500">Non assigné</span>;
+                            }
+                            const assignedDevice = hardwareDevices.find(hd => hd.id === participant.assignedGlobalDeviceId);
+                            if (assignedDevice) {
+                              return assignedDevice.name;
+                            }
+                            return <span className="text-red-500">Boîtier introuvable (ID: {participant.assignedGlobalDeviceId})</span>;
+                          })()}
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
                           <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0" disabled={isReadOnly} />
