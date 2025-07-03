@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import { CACESReferential, Session, Participant, SessionResult } from './types';
+import { CACESReferential, Session, Participant, SessionResult, Trainer } from './types'; // Ajout de Trainer
 
 // Interfaces pour la DB
 export interface QuestionWithId {
@@ -32,6 +32,7 @@ export class MySubClassedDexie extends Dexie {
   sessionResults!: Table<SessionResult, number>;
   adminSettings!: Table<{ key: string; value: any }, string>;
   votingDevices!: Table<VotingDevice, number>;
+  trainers!: Table<Trainer, number>; // Nouvelle table pour les formateurs
 
   constructor() {
     super('myDatabase');
@@ -63,6 +64,11 @@ export class MySubClassedDexie extends Dexie {
     });
     this.version(7).stores({
       votingDevices: '++id, &physicalId'
+    });
+    // Nouvelle version pour ajouter la table trainers et le champ trainerId à sessions
+    this.version(8).stores({
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Ajout de trainerId
+      trainers: '++id, name, &isDefault' // isDefault pourrait être un index unique si un seul peut être true, mais Dexie ne gère pas bien les booléens uniques. On gérera en logique applicative.
     });
   }
 }
@@ -429,5 +435,84 @@ export const bulkAddVotingDevices = async (devices: VotingDevice[]): Promise<voi
     await db.votingDevices.bulkAdd(devices, { allKeys: false });
   } catch (error) {
     console.error("Error bulk adding voting devices:", error);
+  }
+};
+
+// --- Fonctions CRUD pour Formateurs (Trainers) ---
+
+export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
+  try {
+    // S'assurer qu'aucun autre formateur n'est par défaut si celui-ci l'est
+    if (trainer.isDefault) {
+      await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
+    }
+    const id = await db.trainers.add(trainer as Trainer);
+    return id;
+  } catch (error) {
+    console.error("Error adding trainer: ", error);
+  }
+};
+
+export const getAllTrainers = async (): Promise<Trainer[]> => {
+  try {
+    return await db.trainers.toArray();
+  } catch (error) {
+    console.error("Error getting all trainers: ", error);
+    return [];
+  }
+};
+
+export const getTrainerById = async (id: number): Promise<Trainer | undefined> => {
+  try {
+    return await db.trainers.get(id);
+  } catch (error) {
+    console.error(`Error getting trainer with id ${id}: `, error);
+  }
+};
+
+export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> => {
+  try {
+    // Si on met à jour un formateur pour qu'il soit par défaut
+    if (updates.isDefault) {
+      await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
+    }
+    await db.trainers.update(id, updates);
+    return id;
+  } catch (error) {
+    console.error(`Error updating trainer with id ${id}: `, error);
+  }
+};
+
+export const deleteTrainer = async (id: number): Promise<void> => {
+  try {
+    // TODO: Que faire si on supprime le formateur par défaut ?
+    // Option 1: Le prochain formateur (par ordre alpha?) devient par défaut.
+    // Option 2: Aucun formateur n'est par défaut.
+    // Option 3: Interdire la suppression du formateur par défaut s'il en reste.
+    // Pour l'instant, suppression simple.
+    await db.trainers.delete(id);
+    // TODO: Mettre à jour les sessions qui utilisaient ce trainerId ? Mettre à undefined ?
+  } catch (error) {
+    console.error(`Error deleting trainer with id ${id}: `, error);
+  }
+};
+
+export const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
+  try {
+    // D'abord, s'assurer qu'aucun autre formateur n'est par défaut
+    await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
+    // Ensuite, définir le formateur spécifié comme par défaut
+    await db.trainers.update(id, { isDefault: true });
+    return id;
+  } catch (error) {
+    console.error(`Error setting default trainer for id ${id}:`, error);
+  }
+};
+
+export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
+  try {
+    return await db.trainers.where('isDefault').equals(true).first();
+  } catch (error) {
+    console.error("Error getting default trainer:", error);
   }
 };

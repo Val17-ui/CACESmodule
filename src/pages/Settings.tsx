@@ -12,13 +12,15 @@ import QuestionLibrary from '../components/library/QuestionLibrary'; // Réutili
 import QuestionForm from '../components/library/QuestionForm'; // Added missing import for QuestionForm
 import BackupRestore from '../components/settings/BackupRestore';
 import TechnicalSettings from '../components/settings/TechnicalSettings';
+import TrainerSettings from '../components/settings/TrainerSettings'; // Ajout de l'import
+import { Users2 } from 'lucide-react'; // Ajout d'une icône pour les formateurs
 
 type SettingsProps = {
   activePage: string;
   onPageChange: (page: string) => void;
 };
 
-type AdminTab = 'files' | 'hardware' | 'preferences' | 'library' | 'backup' | 'technical';
+type AdminTab = 'files' | 'hardware' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical'; // Ajout de 'trainers'
 
 // Removed duplicate import of React, useState, useEffect
 // import React, { useState, useEffect } from 'react';
@@ -56,6 +58,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
     { id: 'hardware', label: 'Matériel', icon: <HardDrive size={20} /> },
     { id: 'preferences', label: 'Préférences', icon: <User size={20} /> },
     { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
+    { id: 'trainers', label: 'Formateurs', icon: <Users2 size={20} /> }, // Nouvel onglet
     { id: 'backup', label: 'Sauvegarde & Restauration', icon: <Database size={20} /> },
     { id: 'technical', label: 'Paramètres Techniques', icon: <Wrench size={20} /> },
   ];
@@ -102,6 +105,8 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
       case 'technical':
         // setEditingQuestionId(null); // REMOVED
         return <TechnicalSettings />;
+      case 'trainers': // Ajout du cas pour les formateurs
+        return <TrainerSettings />;
       default:
         // setEditingQuestionId(null); // REMOVED
         return null;

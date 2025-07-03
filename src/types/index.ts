@@ -21,6 +21,14 @@ export interface Session {
   notes?: string; // Notes pour la session
   createdAt?: string;
   updatedAt?: string;
+  trainerId?: number; // ID du formateur assigné à la session (number pour correspondre à Trainer.id)
+}
+
+// Nouveau type pour les formateurs
+export interface Trainer {
+  id?: number; // Sera auto-incrémenté par Dexie
+  name: string;
+  isDefault?: boolean;
 }
 
 // Interface pour le mappage Question DB <-> Slide PPTX (par session)
