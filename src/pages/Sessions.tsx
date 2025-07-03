@@ -311,16 +311,19 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
               className="max-w-xs flex-grow"
             />
             <Select
+              options={periodFilters} // Passé periodFilters à la prop options
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
               className="max-w-xs flex-grow"
-            >
+              placeholder="Filtrer par période" // Optionnel: ajouter un placeholder
+            />
+            {/* Les <option> enfants ne sont plus nécessaires ici car gérés par le composant Select via la prop options
               {periodFilters.map(filter => (
                 <option key={filter.value} value={filter.value}>
                   {filter.label}
                 </option>
               ))}
-            </Select>
+            */}
           </div>
           <SessionsList
             sessions={processedSessions}
