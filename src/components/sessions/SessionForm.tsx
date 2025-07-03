@@ -830,7 +830,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                             }
                             const assignedDevice = hardwareDevices.find(hd => hd.id === participant.assignedGlobalDeviceId);
                             if (assignedDevice) {
-                              return assignedDevice.name;
+                              return assignedDevice.serialNumber; // Afficher le numéro de série
                             }
                             return <span className="text-red-500">Boîtier introuvable (ID: {participant.assignedGlobalDeviceId})</span>;
                           })()}
