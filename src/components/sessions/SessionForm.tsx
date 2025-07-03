@@ -92,8 +92,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     // Only proceed if sessionIdToLoad is present AND hardware devices are loaded
     if (sessionIdToLoad && hardwareLoaded) {
       const loadSession = async () => {
-        console.log('[SessionForm loadSession] Attempting to load session. hardwareLoaded:', hardwareLoaded);
-        console.log('[SessionForm loadSession] hardwareDevices available for mapping:', JSON.stringify(hardwareDevices.map(d => d.physicalId)));
+        // console.log('[SessionForm loadSession] Attempting to load session. hardwareLoaded:', hardwareLoaded); // DEBUG REMOVED
+        // console.log('[SessionForm loadSession] hardwareDevices available for mapping:', JSON.stringify(hardwareDevices.map(d => d.physicalId))); // DEBUG REMOVED
 
         const sessionData = await getSessionById(sessionIdToLoad);
         setEditingSessionData(sessionData || null);
@@ -106,7 +106,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setNotes(sessionData.notes || '');
 
           const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
-            console.log(`[SessionForm loadSession] Mapping participant ${p_db.prenom} ${p_db.nom} (DB idBoitier: ${p_db.idBoitier}) against current hardwareDevices.`);
+            // console.log(`[SessionForm loadSession] Mapping participant ${p_db.prenom} ${p_db.nom} (DB idBoitier: ${p_db.idBoitier}) against current hardwareDevices.`); // DEBUG REMOVED
             let logicalDeviceId = 0;
             const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
 
