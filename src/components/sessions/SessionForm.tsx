@@ -23,7 +23,8 @@ import {
   getQuestionsByIds,
   getAllVotingDevices,
   VotingDevice,
-  getGlobalPptxTemplate, // Import the new getter for the global template
+  getGlobalPptxTemplate,
+  getAdminSetting, // Import getAdminSetting to fetch preferences
   db
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
@@ -372,21 +373,47 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (!savedSessionId) { return; }
 
       const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referentiel: sessionDataForDb.referentiel as CACESReferential };
-      const adminSettings: AdminPPTXSettings = { defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod', pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1' };
 
-      const participantsForGenerator: DBParticipantType[] = participants.map((p_form, index) => {
-        let physicalId = ''; // Initialize with empty string
-        const logicalDeviceId = p_form.deviceId;
-        if (logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
-          physicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
-        } else if (logicalDeviceId !== 0) {
-          console.warn(`[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) invalide. L'ID physique sera vide.`);
-        }
-        return {
-          idBoitier: physicalId, nom: p_form.lastName, prenom: p_form.firstName,
-          identificationCode: p_form.identificationCode,
-        };
-      });
+      // Fetch user preferences for AdminPPTXSettings
+      const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
+      const prefAnswersBulletStyle = await getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
+      const prefPollTimeLimit = await getAdminSetting('pollTimeLimit'); // Can be number or undefined
+      const prefPollCountdownStartMode = await getAdminSetting('pollCountdownStartMode') || 'Automatic';
+      // defaultDuration might be different from pollTimeLimit, or it could be the same.
+      // For now, let's assume pollTimeLimit from prefs is the primary time limit.
+      // The AdminPPTXSettings interface has defaultDuration and pollTimeLimit.
+      // We will use prefPollTimeLimit for both if available, else default to 30.
+      const timeLimitFromPrefs = prefPollTimeLimit !== undefined ? Number(prefPollTimeLimit) : 30;
+
+
+      const adminSettings: AdminPPTXSettings = {
+        defaultDuration: timeLimitFromPrefs, // User preference or default
+        pollTimeLimit: timeLimitFromPrefs,   // User preference or default
+        answersBulletStyle: prefAnswersBulletStyle,
+        pollStartMode: prefPollStartMode,
+        chartValueLabelFormat: 'Response_Count', // This one seems not in user prefs yet
+        pollCountdownStartMode: prefPollCountdownStartMode,
+        pollMultipleResponse: '1' // This one seems not in user prefs yet
+      };
+
+      // Use the participants list from sessionDataForDb, which has correctly mapped physical IDs
+      const participantsForGenerator: DBParticipantType[] = sessionDataForDb.participants.map(p_db => ({
+        idBoitier: p_db.idBoitier, // This is already the physical ID
+        nom: p_db.nom,
+        prenom: p_db.prenom,
+        identificationCode: p_db.identificationCode,
+        // score and reussite are not needed for .ors generation itself, and might not be on sessionDataForDb if it's a new session
+      }));
+
+      // Ensure that if sessionDataForDb.participants is empty or undefined, we handle it.
+      // Though prepareSessionDataForDb should always return it if successful.
+      if (!sessionDataForDb.participants) {
+        console.error("[SessionForm Gen .ors] sessionDataForDb.participants is undefined. Cannot generate .ors.");
+        setImportSummary("Erreur: Données participants non trouvées pour la génération .ors.");
+        setIsGeneratingOrs(false);
+        return;
+      }
+
 
       console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
 
