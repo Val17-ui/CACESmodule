@@ -4,13 +4,14 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
-import { Save, FileUp, UserPlus, Trash2, PackagePlus, AlertTriangle } from 'lucide-react'; // Ajout AlertTriangle
+import { Save, FileUp, UserPlus, Trash2, PackagePlus, AlertTriangle } from 'lucide-react';
 import {
   CACESReferential,
   referentials,
   Session as DBSession,
   Participant as DBParticipantType,
-  SessionResult
+  SessionResult,
+  Trainer // Assurez-vous que Trainer est importé si vous l'utilisez comme type explicite
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import {
@@ -24,7 +25,9 @@ import {
   getAllVotingDevices,
   VotingDevice,
   getGlobalPptxTemplate,
-  getAdminSetting
+  getAdminSetting,
+  getAllTrainers,
+  getDefaultTrainer
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -37,7 +40,7 @@ interface FormParticipant extends DBParticipantType {
   firstName: string;
   lastName: string;
   organization?: string;
-  deviceId: number | null; // Modifié pour accepter null (non assigné)
+  deviceId: number | null;
   hasSigned?: boolean;
 }
 
@@ -64,16 +67,30 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('details');
   const [isGeneratingOrs, setIsGeneratingOrs] = useState(false);
   const [modifiedAfterOrsGeneration, setModifiedAfterOrsGeneration] = useState(false);
+  const [trainersList, setTrainersList] = useState<Trainer[]>([]); // Déclaration de trainersList
+  const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
 
 
   useEffect(() => {
-    const fetchHardwareDevices = async () => {
+    const fetchInitialData = async () => {
       const devicesFromDb = await getAllVotingDevices();
       setHardwareDevices(devicesFromDb.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
       setHardwareLoaded(true);
+
+      const allTrainers = await getAllTrainers();
+      setTrainersList(allTrainers.sort((a,b) => a.name.localeCompare(b.name)));
+
+      if (!sessionIdToLoad) {
+        const defaultTrainer = await getDefaultTrainer();
+        if (defaultTrainer && defaultTrainer.id) {
+          setSelectedTrainerId(defaultTrainer.id);
+        } else if (allTrainers.length > 0 && allTrainers[0].id) {
+          setSelectedTrainerId(allTrainers[0].id);
+        }
+      }
     };
-    fetchHardwareDevices();
-  }, []);
+    fetchInitialData();
+  }, [sessionIdToLoad]);
 
   const resetFormTactic = useCallback(() => {
     setCurrentSessionDbId(null);
@@ -89,10 +106,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setEditingSessionData(null);
     setActiveTab('details');
     setModifiedAfterOrsGeneration(false);
+    // Ne pas réinitialiser selectedTrainerId ici s'il doit persister pour un nouveau formulaire
+    // ou le réinitialiser au formateur par défaut si c'est le comportement souhaité.
+    // Pour l'instant, il est initialisé dans le useEffect ci-dessus.
   }, []);
 
   useEffect(() => {
-    if (sessionIdToLoad && hardwareLoaded) {
+    if (sessionIdToLoad && hardwareLoaded && trainersList.length > 0) { // Attendre aussi trainersList
       const loadSession = async () => {
         const sessionData = await getSessionById(sessionIdToLoad);
         setEditingSessionData(sessionData || null);
@@ -103,15 +123,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setSelectedReferential((sessionData.referentiel as CACESReferential) || '');
           setLocation(sessionData.location || '');
           setNotes(sessionData.notes || '');
-          setModifiedAfterOrsGeneration(false); // Réinitialiser lors du chargement
+          setSelectedTrainerId(sessionData.trainerId || null);
+          setModifiedAfterOrsGeneration(false);
           const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
-            let logicalDeviceId: number | null = null; // Modifié pour accepter null
+            let logicalDeviceId: number | null = null;
             const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
             if (physicalIdIndex !== -1) {
               logicalDeviceId = physicalIdIndex + 1;
-            } else if (p_db.idBoitier && p_db.idBoitier.trim() !== '') { // S'il y avait un idBoitier mais qu'il ne mappe plus
-              console.warn( `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} n'est plus mappé à un boîtier physique actuel. Veuillez réassigner.`);
-              // logicalDeviceId reste null pour forcer une nouvelle assignation
+            } else if (p_db.idBoitier && p_db.idBoitier.trim() !== '') {
+              console.warn( `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} n'est plus mappé.`);
             }
             return {
               ...p_db, id: `loaded-${loopIndex}-${p_db.idBoitier || Date.now()}`, firstName: p_db.prenom, lastName: p_db.nom,
@@ -133,7 +153,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     } else if (!sessionIdToLoad) {
       resetFormTactic();
     }
-  }, [sessionIdToLoad, hardwareLoaded, hardwareDevices, resetFormTactic]);
+  }, [sessionIdToLoad, hardwareLoaded, hardwareDevices, resetFormTactic, trainersList]); // Ajout de trainersList aux dépendances
 
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -141,28 +161,24 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }));
 
   const handleAddParticipant = () => {
-    if (editingSessionData?.donneesOrs) { setModifiedAfterOrsGeneration(true); }
+    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     const newParticipant: FormParticipant = {
       id: Date.now().toString(), idBoitier: '', nom: '', prenom: '',
       firstName: '', lastName: '', organization: '', identificationCode: '',
-      deviceId: null, // Initialiser à null pour forcer une sélection
+      deviceId: null,
       hasSigned: false, score: undefined, reussite: undefined,
     };
     setParticipants([...participants, newParticipant]);
   };
 
   const handleRemoveParticipant = (id: string) => {
-    if (editingSessionData?.donneesOrs) { setModifiedAfterOrsGeneration(true); }
+    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     const updatedParticipants = participants.filter(p => p.id !== id);
-    // Pas besoin de réindexer deviceId ici, car ils sont logiques et liés à l'ordre d'affichage/hardware.
-    // Si on supprime, les suivants ne devraient pas changer leur deviceId assigné automatiquement.
     setParticipants(updatedParticipants);
   };
 
   const handleParticipantChange = (id: string, field: keyof FormParticipant, value: string | number | boolean | null) => {
-    // Ne pas marquer comme modifié si seul deviceId change AVANT génération ORS,
-    // ou si le champ deviceId est modifié alors que l'ORS est déjà généré (car il sera bloqué)
-    if (editingSessionData?.donneesOrs && field !== 'deviceId') {
+    if (editingSessionData?.donneesOrs && field !== 'deviceId' && editingSessionData.status !== 'completed') {
       setModifiedAfterOrsGeneration(true);
     }
     setParticipants(participants.map(p => {
@@ -182,11 +198,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const logicalDeviceId = p_form.deviceId;
       if (logicalDeviceId && logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
         assignedPhysicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
-      } else if (p_form.idBoitier && p_form.deviceId === null) {
-         // Cas où un idBoitier existait, mais l'utilisateur a vidé le champ deviceId (donc null)
-         // On pourrait choisir de conserver l'ancien idBoitier ou de le vider. Pour l'instant, on le vide.
-         console.warn( `Participant ${p_form.lastName} (${p_form.firstName}) n'a plus de boîtier assigné.`);
-      } else if (logicalDeviceId) { // logicalDeviceId est non null, non 0, mais hors limites
+      } else if (p_form.idBoitier && logicalDeviceId === null) {
+         console.warn( `Participant ${p_form.lastName} (${p_form.firstName}) n'a plus de boîtier assigné, l'ancien ID ${p_form.idBoitier} est conservé s'il n'y a pas de nouveau deviceId.`);
+         assignedPhysicalId = p_form.idBoitier; // Conserver l'ancien si le deviceId est explicitement null
+      } else if (logicalDeviceId) {
          console.warn( `Participant ${p_form.lastName} (${p_form.firstName}) deviceId logique (${logicalDeviceId}) hors limites.`);
       }
       return {
@@ -205,6 +220,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       donneesOrs: includeOrsBlob !== undefined ? includeOrsBlob : sessionToUpdate?.donneesOrs,
       location: location, status: sessionToUpdate?.status || 'planned',
       questionMappings: sessionToUpdate?.questionMappings, notes: notes,
+      trainerId: selectedTrainerId ?? undefined,
       createdAt: sessionToUpdate?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -226,7 +242,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
          const reloadedSession = await getSessionById(savedId);
          setEditingSessionData(reloadedSession || null);
          if (reloadedSession) {
-            setModifiedAfterOrsGeneration(false); // Reset flag après sauvegarde réussie
+            setModifiedAfterOrsGeneration(false);
             const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, index) => {
               let logicalDeviceId: number | null = null;
               const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
@@ -259,10 +275,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     const sessionData = await prepareSessionDataForDb(editingSessionData?.donneesOrs);
     if (sessionData) {
       const savedId = await handleSaveSession(sessionData);
-      if (savedId) {
-        setImportSummary(`Session (ID: ${savedId}) sauvegardée avec succès !`);
-        // setModifiedAfterOrsGeneration(false); // Fait dans handleSaveSession
-      }
+      if (savedId) { setImportSummary(`Session (ID: ${savedId}) sauvegardée avec succès !`); }
     }
   };
 
@@ -275,8 +288,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setIsGeneratingOrs(true);
     setImportSummary("Préparation des données et vérification des boîtiers...");
 
-    // Sauvegarder l'état actuel pour s'assurer que les données des participants (avec idBoitier mappés) sont à jour
-    let sessionDataForDb = await prepareSessionDataForDb(editingSessionData?.donneesOrs); // Conserver l'ORS existant s'il y en a un
+    let sessionDataForDb = await prepareSessionDataForDb(editingSessionData?.donneesOrs);
     if (!sessionDataForDb) { setImportSummary("Erreur préparation données session pour vérification."); setIsGeneratingOrs(false); return; }
 
     const currentSavedId = await handleSaveSession(sessionDataForDb);
@@ -284,7 +296,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         setImportSummary("Erreur lors de la sauvegarde de la session avant génération ORS.");
         setIsGeneratingOrs(false); return;
     }
-    // Recharger les données après sauvegarde pour avoir les idBoitiers les plus à jour
     const upToDateSessionData = await getSessionById(currentSavedId);
     if (!upToDateSessionData) { setImportSummary("Erreur rechargement session après sauvegarde."); setIsGeneratingOrs(false); return; }
 
@@ -315,12 +326,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const questionsFromBlock = await StorageManager.getQuestionsForBlock(refToUse as CACESReferential, baseTheme, chosenBlockIdentifier);
         allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBlock);
       }
-      // setSelectedBlocksSummary(tempSelectedBlocksSummary); // Fait par handleSaveSession via prepareSessionDataForDb
+
       if (allSelectedQuestionsForPptx.length === 0) { setImportSummary("Aucune question sélectionnée."); setIsGeneratingOrs(false); return; }
 
-      // Utiliser upToDateSessionData qui a les blocs et participants à jour
       upToDateSessionData.selectionBlocs = Object.entries(tempSelectedBlocksSummary).map(([theme, blockId]) => ({ theme, blockId }));
-      // Le statut sera mis à 'ready' après génération réussie de l'ORS
 
       const sessionInfoForPptx = { name: upToDateSessionData.nomSession, date: upToDateSessionData.dateSession, referential: upToDateSessionData.referentiel as CACESReferential };
       const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
@@ -343,14 +352,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
         const { orsBlob, questionMappings } = generationOutput;
         try {
-          await updateSession(currentSavedId, { // Utiliser currentSavedId ici
+          await updateSession(currentSavedId, {
             donneesOrs: orsBlob, questionMappings: questionMappings,
             updatedAt: new Date().toISOString(), status: 'ready',
-            selectionBlocs: upToDateSessionData.selectionBlocs // S'assurer que les blocs sélectionnés sont aussi sauvegardés
+            selectionBlocs: upToDateSessionData.selectionBlocs
           });
           setEditingSessionData(await getSessionById(currentSavedId) || null);
           setImportSummary(`Session (ID: ${currentSavedId}) .ors et mappings générés. Statut: Prête.`);
-          setModifiedAfterOrsGeneration(false); // Reset flag après génération réussie
+          setModifiedAfterOrsGeneration(false);
         } catch (e: any) { setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`); console.error("Erreur sauvegarde .ors/mappings:", e); }
       } else { setImportSummary("Erreur génération .ors/mappings."); console.error("Erreur génération .ors/mappings. Output:", generationOutput); }
     } catch (error: any) { setImportSummary(`Erreur majeure génération: ${error.message}`); console.error("Erreur majeure génération:", error); }
@@ -374,7 +383,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const arrayBuffer = await resultsFile.arrayBuffer();
       const zip = await JSZip.loadAsync(arrayBuffer);
       const orSessionXmlFile = zip.file("ORSession.xml");
-      if (!orSessionXmlFile) { setImportSummary("Erreur: ORSession.xml introuvable dans le .zip."); return; } // Modifié pour .zip
+      if (!orSessionXmlFile) { setImportSummary("Erreur: ORSession.xml introuvable dans le .zip."); return; }
       const xmlString = await orSessionXmlFile.async("string");
       setImportSummary("Parsing XML...");
       const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
@@ -470,7 +479,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const renderTabContent = () => {
     const isReadOnly = editingSessionData?.status === 'completed';
-    const isOrsGenerated = !!editingSessionData?.donneesOrs;
+    const isOrsGeneratedAndNotEditable = !!editingSessionData?.donneesOrs && editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready';
+
 
     switch (activeTab) {
       case 'details':
@@ -502,7 +512,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 onChange={(e) => setSelectedReferential(e.target.value as CACESReferential | '')}
                 placeholder="Sélectionner un référentiel"
                 required
-                disabled={!!editingSessionData?.questionMappings || isReadOnly}
+                disabled={!!editingSessionData?.questionMappings || isReadOnly} // Bloqué si ORS généré ou session terminée
               />
                <Select
                 label="Formateur"
@@ -563,9 +573,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 <Button
                   variant="outline"
                   icon={<FileUp size={16} />}
-                  disabled={isOrsGenerated || isReadOnly}
+                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                   onClick={() => document.getElementById('participant-file-input')?.click()}
-                  title={isOrsGenerated ? "L'import est bloqué car l'ORS a été généré." : "Importer une liste de participants"}
+                  title={isOrsGeneratedAndNotEditable ? "L'import est bloqué car l'ORS a été généré et la session n'est plus modifiable à ce niveau." : "Importer une liste de participants"}
                 >
                   Importer Participants
                 </Button>
@@ -573,8 +583,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   variant="outline"
                   icon={<UserPlus size={16} />}
                   onClick={handleAddParticipant}
-                  disabled={isOrsGenerated || isReadOnly}
-                  title={isOrsGenerated ? "L'ajout est bloqué car l'ORS a été généré." : "Ajouter un participant"}
+                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                  title={isOrsGeneratedAndNotEditable ? "L'ajout est bloqué car l'ORS a été généré et la session n'est plus modifiable à ce niveau." : "Ajouter un participant"}
                 />
               </div>
             </div>
@@ -605,7 +615,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                             onChange={(e) => handleParticipantChange(participant.id, 'deviceId', e.target.value === '' ? null : (parseInt(e.target.value,10) || null))}
                             className="mb-0 w-24 text-center"
                             placeholder="N/A"
-                            readOnly={isOrsGenerated || isReadOnly}
+                            readOnly={isOrsGeneratedAndNotEditable || isReadOnly}
                           />
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap">
@@ -631,11 +641,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
                           <Button
                             variant="ghost"
-                            disabled={isOrsGenerated || isReadOnly}
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                             size="sm"
                             icon={<Trash2 size={16} />}
                             onClick={() => handleRemoveParticipant(participant.id)}
-                            title={isOrsGenerated ? "Suppression bloquée car l'ORS a été généré." : "Supprimer participant"}
+                            title={isOrsGeneratedAndNotEditable ? "Suppression bloquée car l'ORS a été généré et la session n'est plus modifiable à ce niveau." : "Supprimer participant"}
                           />
                         </td>
                       </tr>
@@ -668,7 +678,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       accept=".zip"
                       onChange={handleResultsFileSelect}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                      disabled={!editingSessionData?.donneesOrs || isReadOnly} // Désactivé si pas d'ORS ou session terminée
+                      disabled={!editingSessionData?.donneesOrs || isReadOnly}
                     />
                     {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
                   </div>
@@ -683,7 +693,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   {!editingSessionData?.donneesOrs && !isReadOnly && (
                      <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
                   )}
-                  {isReadOnly && ( // Si la session est terminée
+                  {isReadOnly && (
                        <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
                   )}
                   <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
@@ -714,7 +724,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                    {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentiel) && !isReadOnly && (
                      <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
                   )}
-                  {modifiedAfterOrsGeneration && isOrsGenerated && !isReadOnly && (
+                  {modifiedAfterOrsGeneration && !!editingSessionData?.donneesOrs && !isReadOnly && (
                     <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
                       <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
                       <span>
