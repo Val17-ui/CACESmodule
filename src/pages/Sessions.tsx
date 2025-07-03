@@ -4,24 +4,18 @@ import SessionsList from '../components/sessions/SessionsList';
 import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
 import { Plus } from 'lucide-react';
-// import { mockSessions } from '../data/mockData'; // Supprimer mockData
-import { getAllSessions } from '../db'; // Importer la fonction de la DB
-import { Session as DBSession } from '../types'; // Importer le type Session de la DB
+import { getAllSessions } from '../db';
+import { Session as DBSession } from '../types'; // Renommé pour éviter conflit avec l'interface Session globale si elle existait
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
 
 type SessionsProps = {
   activePage: string;
-  onPageChange: (page: string, sessionId?: number) => void; // sessionId est optionnel ici aussi
-  sessionId?: number; // Reçu de App.tsx
+  onPageChange: (page: string, sessionId?: number) => void;
+  sessionId?: number;
 };
 
-import Input from '../components/ui/Input'; // Importer le composant Input
-
-// import Input from '../components/ui/Input'; // Nettoyage du double import, déjà fait plus haut
-import Select from '../components/ui/Select'; // Importer le composant Select pour les filtres de période
-
-// --- Fonctions utilitaires pour les dates ---
-// ... (les fonctions de date restent les mêmes)
-
+// Fonctions utilitaires pour les dates (inchangées)
 const getTodayRange = () => {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -32,8 +26,8 @@ const getTodayRange = () => {
 
 const getThisWeekRange = () => {
   const today = new Date();
-  const dayOfWeek = today.getDay(); // 0 (Dim) - 6 (Sam)
-  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Ajuster pour que Lundi soit le début
+  const dayOfWeek = today.getDay();
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
 
   const start = new Date(today);
   start.setDate(today.getDate() + diffToMonday);
@@ -49,7 +43,7 @@ const getThisMonthRange = () => {
   const today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), 1);
   start.setHours(0, 0, 0, 0);
-  const end = new Date(today.getFullYear(), today.getMonth() + 1, 0); // Le jour 0 du mois suivant = dernier jour du mois actuel
+  const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
   end.setHours(23, 59, 59, 999);
   return { start, end };
 };
@@ -99,7 +93,6 @@ const getLastMonthRange = () => {
   return { start, end };
 };
 
-
 const periodFilters = [
   { value: 'all', label: 'Toutes les périodes' },
   { value: 'today', label: 'Aujourd’hui', getDateRange: getTodayRange },
@@ -114,22 +107,25 @@ const periodFilters = [
 
 const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId }) => {
   const [isCreating, setIsCreating] = useState(false);
-  const [managingSessionId, setManagingSessionId] = useState<number | null>(sessionId ?? null);
-  const [rawSessions, setRawSessions] = useState<DBSession[]>([]); // Sessions brutes de la DB
-  const [processedSessions, setProcessedSessions] = useState<DBSession[]>([]); // Sessions triées et filtrées
+  const [managingSessionId, setManagingSessionId] = useState<number | null>(null); // Initialisé à null, sera mis à jour par useEffect si sessionId est fourni
+  const [rawSessions, setRawSessions] = useState<DBSession[]>([]);
+  const [processedSessions, setProcessedSessions] = useState<DBSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
 
-  // Effet pour gérer le sessionId passé en prop (pour l'affichage direct d'un formulaire)
   useEffect(() => {
     if (sessionId !== undefined) {
       setManagingSessionId(sessionId);
+      setIsCreating(false); // On n'est pas en création si un ID est fourni pour gestion
+    } else {
+      // Si on navigue vers la page Sessions sans ID spécifique (ex: depuis le menu),
+      // on s'assure qu'on n'est pas en mode gestion/création.
+      setManagingSessionId(null);
       setIsCreating(false);
     }
   }, [sessionId]);
 
-  // Fetcher les sessions brutes
   const fetchRawSessions = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -143,23 +139,26 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     }
   }, []);
 
-  // Effet pour fetcher les sessions si on n'est pas en mode gestion/création, ou si la liste est vide
   useEffect(() => {
-    if (!managingSessionId) { // Si on n'est pas en train de gérer une session spécifique
-        fetchRawSessions();
+    // Charger les sessions brutes si on n'est pas en train de gérer/créer une session spécifique
+    // OU si la liste rawSessions est vide (ce qui peut arriver si on revient à la liste après une gestion)
+    if (!managingSessionId && !isCreating) {
+      fetchRawSessions();
     } else {
-        // Si on gère une session spécifique, on pourrait vouloir charger les données de cette session
-        // mais la liste complète n'est pas nécessaire immédiatement, donc on arrête le chargement de la liste.
-        // Si rawSessions est vide, il faudrait peut-être la charger quand même pour le cas où l'utilisateur
-        // annule la gestion et retourne à la liste.
-        if(rawSessions.length === 0) fetchRawSessions();
-        else setIsLoading(false);
+      // Si on est en mode gestion/création, on ne recharge pas la liste complète.
+      // On peut considérer que les données de la session gérée sont chargées par SessionForm.
+      // Ou si rawSessions est vide et qu'on annule pour revenir à la liste, il faudra re-fetch.
+      // fetchRawSessions s'occupe de setIsLoading(false)
+      if (rawSessions.length === 0 && (managingSessionId || isCreating)) {
+          // Ce cas est pour si on arrive sur un formulaire directement et qu'on annule,
+          // il faut que la liste soit chargée. fetchRawSessions est appelé par handleBackToList.
+          // Donc ici, on peut juste s'assurer que isLoading est false si on a un ID.
+          setIsLoading(false);
+      }
     }
-  }, [fetchRawSessions, managingSessionId]);
+  }, [fetchRawSessions, managingSessionId, isCreating, rawSessions.length]);
 
-
-  /* // Correction: Utilisation de /* ... */ pour commenter le bloc
-  // Effet pour trier et filtrer les sessions - TEMPORAIREMENT COMMENTÉ POUR DEBUG
+  // Effet pour trier et filtrer les sessions
   useEffect(() => {
     let sessionsToProcess = [...rawSessions];
 
@@ -201,9 +200,9 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
       if (filterOption && filterOption.getDateRange) {
         const { start, end } = filterOption.getDateRange();
         sessionsToProcess = sessionsToProcess.filter(session => {
-          if (!session.dateSession) return false;
+          if (!session.dateSession) return false; // Ne pas traiter les sessions sans date
           const sessionDate = new Date(session.dateSession);
-          sessionDate.setHours(0,0,0,0);
+          sessionDate.setHours(0,0,0,0); // Normaliser pour comparer uniquement le jour
           return sessionDate >= start && sessionDate <= end;
         });
       }
@@ -221,55 +220,28 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     setProcessedSessions(sessionsToProcess);
 
   }, [rawSessions, searchTerm, selectedPeriod]);
-  */ // Correction: Balise de fin de commentaire
-
-  // Utiliser rawSessions directement pour le debug, ou processedSessions s'il est initialisé
-  useEffect(() => {
-    // Cette condition est simplifiée : on copie rawSessions vers processedSessions
-    // dès que rawSessions change et qu'aucun filtre n'est actif.
-    // Si les filtres étaient actifs, ils seraient appliqués par l'autre useEffect (maintenant commenté).
-    if (!searchTerm && selectedPeriod === 'all') {
-       setProcessedSessions([...rawSessions]); // Copier pour éviter mutation directe si rawSessions est utilisé ailleurs
-    } else if (searchTerm || selectedPeriod !== 'all') {
-      // Si des filtres sont actifs mais l'effet de filtrage est commenté,
-      // pour le debug, on pourrait vouloir afficher la liste brute pour éviter la confusion.
-      // Ou, idéalement, l'effet de filtrage serait actif.
-      // Pour l'instant, avec l'effet de filtrage commenté, ceci assure que si on change un filtre,
-      // on ne voit plus juste rawSessions, mais il n'y aura pas de filtrage.
-      // Cela met en évidence que l'effet de filtrage est nécessaire.
-      // Alternativement, pour un debug strict où l'on veut voir les données brutes:
-      // setProcessedSessions([...rawSessions]);
-      // Mais pour tester l'absence de l'effet de filtrage, on ne fait rien ici si des filtres sont sélectionnés.
-      // La logique actuelle va juste copier rawSessions si aucun filtre n'est actif.
-      // Si on active un filtre (via UI), processedSessions ne sera pas mis à jour par CET effet.
-    }
-  }, [rawSessions, searchTerm, selectedPeriod]);
-
 
   const handleCreateNew = () => {
     setIsCreating(true);
     setManagingSessionId(null);
   };
 
-  // id est maintenant un nombre
   const handleManageSession = (id: number) => {
     setManagingSessionId(id);
-    setIsCreating(false); // On n'est pas en mode création pure, mais en mode édition/gestion
+    setIsCreating(false);
+    onPageChange(activePage, id); // S'assurer que App.tsx est au courant de la session gérée
   };
 
-  // id est maintenant un nombre
   const handleStartExam = (id: number) => {
     console.log(`Démarrage de l'examen pour la session ID: ${id}`);
-    // TODO: Logique pour démarrer l'examen, potentiellement passer l'ID de session à la page d'examen
-    onPageChange('exams'); // Navigue vers la page des examens
+    onPageChange('exams', id); // Navigue vers la page des examens avec l'ID de session
   };
 
   const handleBackToList = () => {
     setIsCreating(false);
     setManagingSessionId(null);
-    // fetchSessions(); // Rafraîchir la liste des sessions après création/modification - fetchSessions est déjà dans un useEffect dépendant de managingSessionId
-    // Notifier App.tsx qu'on n'est plus sur une session spécifique
-    onPageChange(activePage, undefined); // ou onPageChange('sessions', undefined) si on veut forcer la page sessions
+    onPageChange(activePage, undefined); // Notifier App.tsx qu'on n'est plus sur une session spécifique
+    fetchRawSessions(); // Recharger la liste au cas où des modifs auraient été faites
   };
 
   const headerActions = (
@@ -297,14 +269,14 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   const title = isCreating
     ? "Créer une nouvelle session"
     : managingSessionId
-    ? `Gérer la session (ID: ${managingSessionId})`
+    ? `Gérer la session` // On pourrait afficher le nom de la session ici si chargé
     : "Liste des Sessions";
 
   const subtitle = isCreating
-    ? "Remplissez les informations pour créer une nouvelle session de certification CACES."
+    ? "Remplissez les informations pour créer une nouvelle session."
     : managingSessionId
-    ? "Modifiez les informations de la session, les participants, ou générez le fichier .ors."
-    : "Consultez et gérez vos sessions de certification CACES enregistrées.";
+    ? "Modifiez les informations de la session."
+    : "Consultez et gérez vos sessions enregistrées.";
 
   if (isLoading && !isCreating && !managingSessionId) {
     return (
@@ -330,7 +302,6 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     >
       {!isCreating && !managingSessionId ? (
         <>
-          {/* SECTION FILTRES TEMPORAIREMENT COMMENTÉE POUR DEBUG
           <div className="flex flex-wrap gap-4 mb-4">
             <Input
               type="text"
@@ -351,41 +322,13 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
               ))}
             </Select>
           </div>
-          */}
           <SessionsList
-            sessions={processedSessions} // Pour le debug, processedSessions est maintenant une copie de rawSessions
-            onManageSession={handleManageSession}
-            onStartExam={handleStartExam}
-          />
-          {/* Ancien code de filtrage en ligne, maintenant géré dans useEffect
-            sessions={dbSessions
-              .filter(session => { // Filtre par période
-                if (selectedPeriod === 'all' || !session.dateSession) return true;
-                const filterOption = periodFilters.find(f => f.value === selectedPeriod);
-                if (filterOption && filterOption.getDateRange) {
-                  const { start, end } = filterOption.getDateRange();
-                  const sessionDate = new Date(session.dateSession);
-                  // Normaliser sessionDate à minuit pour comparer uniquement les jours
-                  sessionDate.setHours(0,0,0,0);
-                  // Les dates de début/fin de période sont déjà normalisées
-                  return sessionDate >= start && sessionDate <= end;
-                }
-                return true;
-              })
-              .filter(session => { // Filtre par terme de recherche
-                if (!searchTerm) return true;
-                const term = searchTerm.toLowerCase();
-                return (
-                  session.nomSession.toLowerCase().includes(term) ||
-                  (session.referentiel as string).toLowerCase().includes(term)
-                );
-              })}
+            sessions={processedSessions}
             onManageSession={handleManageSession}
             onStartExam={handleStartExam}
           />
         </>
       ) : (
-        // Passer managingSessionId (qui est un number ou null) à SessionForm
         <SessionForm sessionIdToLoad={managingSessionId ?? undefined} />
       )}
     </Layout>
