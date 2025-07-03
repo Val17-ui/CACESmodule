@@ -23,7 +23,7 @@ function generateOmbeaSessionXml(
   participants: Participant[],
   _questionMappings: QuestionMapping[] // Utiliser QuestionMapping ici, même si non utilisé dans ce XML particulier
 ): string {
-  console.log('[pptxOrchestrator] generateOmbeaSessionXml received participants:', JSON.stringify(participants.map(p => ({ idBoitier: p.idBoitier, nom: p.nom, prenom: p.prenom })), null, 2)); // DEBUG
+  // console.log('[pptxOrchestrator] generateOmbeaSessionXml received participants:', JSON.stringify(participants.map(p => ({ idBoitier: p.idBoitier, nom: p.nom, prenom: p.prenom })), null, 2)); // DEBUG REMOVED
   // Using a helper for escaping XML attribute/text values
   const esc = (unsafe: string | undefined | null): string => {
     if (unsafe === undefined || unsafe === null) return '';

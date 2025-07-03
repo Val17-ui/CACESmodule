@@ -62,12 +62,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
   const [hardwareDevices, setHardwareDevices] = useState<VotingDevice[]>([]); // State for hardware devices
+  const [hardwareLoaded, setHardwareLoaded] = useState(false); // New state for hardware load status
 
   useEffect(() => { // Effect to load hardware devices on component mount
     const fetchHardwareDevices = async () => {
       const devicesFromDb = await getAllVotingDevices();
-      // Sort by ID to ensure consistent order, similar to HardwareSettings
       setHardwareDevices(devicesFromDb.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
+      setHardwareLoaded(true); // Set hardware as loaded
     };
     fetchHardwareDevices();
   }, []);
@@ -88,9 +89,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }, []);
 
   useEffect(() => {
-    if (sessionIdToLoad) {
+    // Only proceed if sessionIdToLoad is present AND hardware devices are loaded
+    if (sessionIdToLoad && hardwareLoaded) {
       const loadSession = async () => {
-        const sessionData = await getSessionById(sessionIdToLoad); // Reverted to getSessionById
+        console.log('[SessionForm loadSession] Attempting to load session. hardwareLoaded:', hardwareLoaded);
+        console.log('[SessionForm loadSession] hardwareDevices available for mapping:', JSON.stringify(hardwareDevices.map(d => d.physicalId)));
+
+        const sessionData = await getSessionById(sessionIdToLoad);
         setEditingSessionData(sessionData || null);
         if (sessionData) {
           setCurrentSessionDbId(sessionData.id ?? null);
@@ -100,26 +105,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setLocation(sessionData.location || '');
           setNotes(sessionData.notes || '');
 
-          // p_db.idBoitier now stores the PHYSICAL Ombea ID
           const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
-            let logicalDeviceId = 0; // Default to 0 if not found, indicating an issue or unassigned
+            console.log(`[SessionForm loadSession] Mapping participant ${p_db.prenom} ${p_db.nom} (DB idBoitier: ${p_db.idBoitier}) against current hardwareDevices.`);
+            let logicalDeviceId = 0;
             const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
 
             if (physicalIdIndex !== -1) {
-              logicalDeviceId = physicalIdIndex + 1; // 1-based logical ID from the current hardware config
+              logicalDeviceId = physicalIdIndex + 1;
             } else if (p_db.idBoitier) {
-              // If the stored physical ID is not in the current hardware list
               console.warn(
                 `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} ` +
-                `n'a pas été trouvé dans la configuration matérielle actuelle. Le boîtier logique sera 0.`
+                `n'a pas été trouvé dans la configuration matérielle actuelle (hardwareDevices count: ${hardwareDevices.length}). Le boîtier logique sera ${logicalDeviceId}.`
               );
-              // Keep p_db.idBoitier as is (it's the stored physical ID)
-              // logicalDeviceId remains 0, user might need to re-assign or be alerted.
             } else {
-              // No physical ID was stored for this participant. Assign based on loop order if needed,
-              // but this scenario should ideally be less common with proper assignment.
-              // For now, this might mean the participant didn't have a device.
-              logicalDeviceId = 0; // Or handle as unassigned
                console.log(`Participant ${p_db.prenom} ${p_db.nom} n'avait pas d'ID boîtier physique stocké.`);
             }
 
@@ -148,10 +146,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         }
       };
       loadSession();
-    } else {
+    } else if (!sessionIdToLoad) { // If no sessionIdToLoad, reset form regardless of hardwareLoaded
       resetFormState();
     }
-  }, [sessionIdToLoad, resetFormState]);
+    // If sessionIdToLoad is present but hardware isn't loaded yet, this effect will re-run when hardwareLoaded becomes true.
+  }, [sessionIdToLoad, hardwareLoaded, hardwareDevices, resetFormState]); // Added hardwareDevices to dependency array
 
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -414,7 +413,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         return;
       }
 
-      console.log('[SessionForm Gen .ors] AdminSettings being passed:', adminSettings); // DEBUG
+      // console.log('[SessionForm Gen .ors] AdminSettings being passed:', adminSettings); // DEBUG REMOVED
       console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
 
       // Use globalPptxTemplate instead of templateFile
