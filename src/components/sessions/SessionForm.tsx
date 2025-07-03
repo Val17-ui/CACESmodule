@@ -23,7 +23,8 @@ import {
   getQuestionsByIds,
   getAllVotingDevices,
   VotingDevice,
-  getGlobalPptxTemplate, // Import the new getter for the global template
+  getGlobalPptxTemplate,
+  getAdminSetting, // Import getAdminSetting to fetch preferences
   db
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
@@ -61,12 +62,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
   const [hardwareDevices, setHardwareDevices] = useState<VotingDevice[]>([]); // State for hardware devices
+  const [hardwareLoaded, setHardwareLoaded] = useState(false); // New state for hardware load status
 
   useEffect(() => { // Effect to load hardware devices on component mount
     const fetchHardwareDevices = async () => {
       const devicesFromDb = await getAllVotingDevices();
-      // Sort by ID to ensure consistent order, similar to HardwareSettings
       setHardwareDevices(devicesFromDb.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
+      setHardwareLoaded(true); // Set hardware as loaded
     };
     fetchHardwareDevices();
   }, []);
@@ -87,9 +89,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }, []);
 
   useEffect(() => {
-    if (sessionIdToLoad) {
+    // Only proceed if sessionIdToLoad is present AND hardware devices are loaded
+    if (sessionIdToLoad && hardwareLoaded) {
       const loadSession = async () => {
-        const sessionData = await getSessionById(sessionIdToLoad); // Reverted to getSessionById
+        console.log('[SessionForm loadSession] Attempting to load session. hardwareLoaded:', hardwareLoaded);
+        console.log('[SessionForm loadSession] hardwareDevices available for mapping:', JSON.stringify(hardwareDevices.map(d => d.physicalId)));
+
+        const sessionData = await getSessionById(sessionIdToLoad);
         setEditingSessionData(sessionData || null);
         if (sessionData) {
           setCurrentSessionDbId(sessionData.id ?? null);
@@ -99,26 +105,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setLocation(sessionData.location || '');
           setNotes(sessionData.notes || '');
 
-          // p_db.idBoitier now stores the PHYSICAL Ombea ID
           const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
-            let logicalDeviceId = 0; // Default to 0 if not found, indicating an issue or unassigned
+            console.log(`[SessionForm loadSession] Mapping participant ${p_db.prenom} ${p_db.nom} (DB idBoitier: ${p_db.idBoitier}) against current hardwareDevices.`);
+            let logicalDeviceId = 0;
             const physicalIdIndex = hardwareDevices.findIndex(hd => hd.physicalId === p_db.idBoitier);
 
             if (physicalIdIndex !== -1) {
-              logicalDeviceId = physicalIdIndex + 1; // 1-based logical ID from the current hardware config
+              logicalDeviceId = physicalIdIndex + 1;
             } else if (p_db.idBoitier) {
-              // If the stored physical ID is not in the current hardware list
               console.warn(
                 `L'ID boîtier physique "${p_db.idBoitier}" pour ${p_db.prenom} ${p_db.nom} ` +
-                `n'a pas été trouvé dans la configuration matérielle actuelle. Le boîtier logique sera 0.`
+                `n'a pas été trouvé dans la configuration matérielle actuelle (hardwareDevices count: ${hardwareDevices.length}). Le boîtier logique sera ${logicalDeviceId}.`
               );
-              // Keep p_db.idBoitier as is (it's the stored physical ID)
-              // logicalDeviceId remains 0, user might need to re-assign or be alerted.
             } else {
-              // No physical ID was stored for this participant. Assign based on loop order if needed,
-              // but this scenario should ideally be less common with proper assignment.
-              // For now, this might mean the participant didn't have a device.
-              logicalDeviceId = 0; // Or handle as unassigned
                console.log(`Participant ${p_db.prenom} ${p_db.nom} n'avait pas d'ID boîtier physique stocké.`);
             }
 
@@ -147,10 +146,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         }
       };
       loadSession();
-    } else {
+    } else if (!sessionIdToLoad) { // If no sessionIdToLoad, reset form regardless of hardwareLoaded
       resetFormState();
     }
-  }, [sessionIdToLoad, resetFormState]);
+    // If sessionIdToLoad is present but hardware isn't loaded yet, this effect will re-run when hardwareLoaded becomes true.
+  }, [sessionIdToLoad, hardwareLoaded, hardwareDevices, resetFormState]); // Added hardwareDevices to dependency array
 
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
@@ -372,22 +372,48 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (!savedSessionId) { return; }
 
       const sessionInfoForPptx = { name: sessionDataForDb.nomSession, date: sessionDataForDb.dateSession, referentiel: sessionDataForDb.referentiel as CACESReferential };
-      const adminSettings: AdminPPTXSettings = { defaultDuration: 30, pollTimeLimit: 30, answersBulletStyle: 'ppBulletAlphaUCPeriod', pollStartMode: 'Automatic', chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: 'Automatic', pollMultipleResponse: '1' };
 
-      const participantsForGenerator: DBParticipantType[] = participants.map((p_form, index) => {
-        let physicalId = ''; // Initialize with empty string
-        const logicalDeviceId = p_form.deviceId;
-        if (logicalDeviceId > 0 && logicalDeviceId <= hardwareDevices.length) {
-          physicalId = hardwareDevices[logicalDeviceId - 1].physicalId;
-        } else if (logicalDeviceId !== 0) {
-          console.warn(`[SessionForm Gen .ors] Participant ${p_form.lastName} (${p_form.firstName}) a un deviceId logique (${logicalDeviceId}) invalide. L'ID physique sera vide.`);
-        }
-        return {
-          idBoitier: physicalId, nom: p_form.lastName, prenom: p_form.firstName,
-          identificationCode: p_form.identificationCode,
-        };
-      });
+      // Fetch user preferences for AdminPPTXSettings
+      const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
+      const prefAnswersBulletStyle = await getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
+      const prefPollTimeLimit = await getAdminSetting('pollTimeLimit'); // Can be number or undefined
+      const prefPollCountdownStartMode = await getAdminSetting('pollCountdownStartMode') || 'Automatic';
+      // defaultDuration might be different from pollTimeLimit, or it could be the same.
+      // For now, let's assume pollTimeLimit from prefs is the primary time limit.
+      // The AdminPPTXSettings interface has defaultDuration and pollTimeLimit.
+      // We will use prefPollTimeLimit for both if available, else default to 30.
+      const timeLimitFromPrefs = prefPollTimeLimit !== undefined ? Number(prefPollTimeLimit) : 30;
 
+
+      const adminSettings: AdminPPTXSettings = {
+        defaultDuration: timeLimitFromPrefs, // User preference or default
+        pollTimeLimit: timeLimitFromPrefs,   // User preference or default
+        answersBulletStyle: prefAnswersBulletStyle,
+        pollStartMode: prefPollStartMode,
+        chartValueLabelFormat: 'Response_Count', // This one seems not in user prefs yet
+        pollCountdownStartMode: prefPollCountdownStartMode,
+        pollMultipleResponse: '1' // This one seems not in user prefs yet
+      };
+
+      // Use the participants list from sessionDataForDb, which has correctly mapped physical IDs
+      const participantsForGenerator: DBParticipantType[] = sessionDataForDb.participants.map(p_db => ({
+        idBoitier: p_db.idBoitier, // This is already the physical ID
+        nom: p_db.nom,
+        prenom: p_db.prenom,
+        identificationCode: p_db.identificationCode,
+        // score and reussite are not needed for .ors generation itself, and might not be on sessionDataForDb if it's a new session
+      }));
+
+      // Ensure that if sessionDataForDb.participants is empty or undefined, we handle it.
+      // Though prepareSessionDataForDb should always return it if successful.
+      if (!sessionDataForDb.participants) {
+        console.error("[SessionForm Gen .ors] sessionDataForDb.participants is undefined. Cannot generate .ors.");
+        setImportSummary("Erreur: Données participants non trouvées pour la génération .ors.");
+        setIsGeneratingOrs(false);
+        return;
+      }
+
+      // console.log('[SessionForm Gen .ors] AdminSettings being passed:', adminSettings); // DEBUG REMOVED
       console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
 
       // Use globalPptxTemplate instead of templateFile
