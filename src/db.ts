@@ -143,17 +143,42 @@ export class MySubClassedDexie extends Dexie {
       votingDevices: '++id, name, &serialNumber',
       trainers: '++id, name, isDefault' // Assurer que isDefault n'est pas unique ('&')
     }).upgrade(async tx => {
-      // Aucune migration de données spécifique n'est nécessaire pour ce changement d'index,
-      // Dexie devrait reconstruire l'index correctement basé sur la nouvelle définition.
-      // On peut logguer pour confirmer que la migration a lieu.
-      console.log("Migrating to DB version 10: Ensuring 'trainers.isDefault' index is not unique.");
-      // Si on voulait être extra prudent, on pourrait essayer de lire et réécrire les formateurs,
-      // mais ce n'est généralement pas nécessaire pour un changement d'index.
-      // Exemple (non nécessaire ici) :
-      // const allTrainers = await tx.table('trainers').toArray();
-      // await tx.table('trainers').clear();
-      // await tx.table('trainers').bulkAdd(allTrainers);
-      return tx.done;
+      console.log("Migrating to DB version 10: Ensuring 'trainers.isDefault' index is not unique and cleaning data.");
+      const trainersTable = tx.table('trainers');
+      const allTrainers = await trainersTable.toArray();
+      const updatesToPerform: Promise<any>[] = [];
+      let cleanedEntriesCount = 0;
+
+      allTrainers.forEach(trainer => {
+        if (typeof trainer.isDefault !== 'boolean') {
+          // Si isDefault n'est pas un booléen (ex: undefined), le mettre à false.
+          updatesToPerform.push(trainersTable.update(trainer.id, { isDefault: false }));
+          cleanedEntriesCount++;
+        }
+      });
+
+      if (cleanedEntriesCount > 0) {
+        console.log(`Corrected ${cleanedEntriesCount} trainer entries with non-boolean 'isDefault' values.`);
+      }
+      await Promise.all(updatesToPerform);
+
+      // Après le nettoyage, vérifier s'il existe un formateur par défaut.
+      // S'il n'y en a pas et que la table n'est pas vide, définir le premier comme par défaut.
+      const trainersPostCleaning = await trainersTable.toArray();
+      if (trainersPostCleaning.length > 0) {
+        const hasDefaultTrainer = trainersPostCleaning.some(t => t.isDefault === true);
+        if (!hasDefaultTrainer) {
+          console.log("No default trainer found after v10 data cleaning. Setting the first trainer as default.");
+          // Trier par ID pour la cohérence, bien que l'ordre puisse ne pas être garanti sans tri explicite.
+          // Dexie ne garantit pas l'ordre de toArray() sans un orderBy() explicite.
+          // Pour choisir le "premier", il est plus sûr de trier par ID.
+          const sortedTrainers = trainersPostCleaning.sort((a, b) => (a.id || 0) - (b.id || 0));
+          if (sortedTrainers.length > 0 && sortedTrainers[0].id !== undefined) {
+            await trainersTable.update(sortedTrainers[0].id, { isDefault: true });
+          }
+        }
+      }
+      return tx.done; // Important pour finaliser la transaction de migration
     });
   }
 }
