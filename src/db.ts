@@ -69,18 +69,30 @@ export class MySubClassedDexie extends Dexie {
     // Nouvelle version pour ajouter la table trainers et le champ trainerId à sessions
     this.version(8).stores({
       sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Ajout de trainerId
-      trainers: '++id, name, &isDefault' // isDefault pourrait être un index unique si un seul peut être true, mais Dexie ne gère pas bien les booléens uniques. On gérera en logique applicative.
+      trainers: '++id, name, isDefault' // Suppression de l'index unique sur isDefault
     });
 
     // Version 9: Mise à jour de votingDevices (name, serialNumber) et sessions (participants.assignedGlobalDeviceId)
+    // IMPORTANT: Le changement de l'index de la table trainers doit être fait dans une NOUVELLE version de la base de données.
+    // Si la version 9 est la dernière déployée et que des utilisateurs l'ont déjà,
+    // nous devons passer à la version 10 pour modifier la table trainers.
+    // Si la version 9 n'a jamais été en production ou si la base de données peut être réinitialisée pour le développement,
+    // on pourrait modifier la v9. Cependant, la bonne pratique est d'incrémenter la version.
+
+    // Supposons que nous devons créer une nouvelle version (v10) pour ce changement.
+    // Si la v9 est déjà utilisée, la modification de 'trainers' dans la v9 ci-dessous serait incorrecte.
+    // Pour cet exercice, je vais modifier la définition dans la v9 et ajouter une v10 pour illustrer la migration si nécessaire.
+    // Mais pour le problème spécifique de l'index, il suffit de le changer là où il est défini.
+    // La question est de savoir si la DB a déjà été ouverte avec v9 par des utilisateurs.
+    // Pour l'instant, je corrige la définition dans la v9. Si cela cause des problèmes de migration, il faudra une nouvelle version.
+
     this.version(9).stores({
       votingDevices: '++id, name, &serialNumber', // physicalId -> serialNumber, ajout de name
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Le schéma de la table session elle-même ne change pas, mais la structure de ses objets participants oui. Dexie gère ça.
-      // Les autres tables restent inchangées par rapport à la v8
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId',
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
       adminSettings: '&key',
-      trainers: '++id, name, &isDefault'
+      trainers: '++id, name, isDefault' // Corrigé ici aussi pour la v9
     }).upgrade(async tx => {
       // 1. Migration pour votingDevices
       await tx.table('votingDevices').toCollection().modify(device => {

@@ -11,8 +11,8 @@ import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
-import { getAllSessions, getSessionById, getResultsForSession } from '../db';
-import { Session, Participant, CACESReferential } from '../types';
+import { getAllSessions, getSessionById, getAllTrainers } from '../db'; // Ajout de getAllTrainers
+import { Session, Participant, CACESReferential, Trainer } from '../types'; // Ajout de Trainer
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 
@@ -28,13 +28,18 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const [sessionParticipants, setSessionParticipants] = useState<Participant[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [referentialFilter, setReferentialFilter] = useState<string>('all');
+  const [trainerFilter, setTrainerFilter] = useState<string>('all'); // Nouvel état pour le filtre formateur
+  const [trainersListForFilter, setTrainersListForFilter] = useState<Trainer[]>([]); // Nouvel état pour la liste des formateurs
 
   useEffect(() => {
-    const fetchSessions = async () => {
+    const fetchInitialData = async () => {
       const allSessions = await getAllSessions();
-      setSessions(allSessions);
+      setSessions(allSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+
+      const allTrainers = await getAllTrainers(); // Charger les formateurs
+      setTrainersListForFilter(allTrainers.sort((a,b) => a.name.localeCompare(b.name)));
     };
-    fetchSessions();
+    fetchInitialData();
   }, []);
 
   const handleSelectReport = (reportType: ReportType) => {
@@ -63,10 +68,13 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
       .filter(session => 
         referentialFilter === 'all' || session.referentiel === referentialFilter
       )
+      .filter(session =>
+        trainerFilter === 'all' || (session.trainerId !== undefined && session.trainerId?.toString() === trainerFilter)
+      )
       .filter(session => 
         session.nomSession.toLowerCase().includes(searchTerm.toLowerCase())
       );
-  }, [sessions, searchTerm, referentialFilter]);
+  }, [sessions, searchTerm, referentialFilter, trainerFilter]);
 
   const renderContent = () => {
     if (selectedSession) {
@@ -82,7 +90,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 placeholder="Rechercher par nom..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-1/3"
+                className="w-2/5"
                 icon={<Search size={16} className="text-gray-400"/>}
               />
               <Select
@@ -93,6 +101,16 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                   { value: 'all', label: 'Tous les référentiels' },
                   ...Object.values(CACESReferential).map(ref => ({ value: ref, label: ref }))
                 ]}
+              />
+              <Select
+                value={trainerFilter}
+                onChange={(e) => setTrainerFilter(e.target.value)}
+                className="w-1/4"
+                options={[
+                  { value: 'all', label: 'Tous les formateurs' },
+                  ...trainersListForFilter.map(trainer => ({ value: trainer.id?.toString() || '', label: trainer.name }))
+                ]}
+                disabled={trainersListForFilter.length === 0}
               />
             </div>
             <ReportsList sessions={filteredSessions} onViewReport={handleViewSessionReport} />
