@@ -1620,24 +1620,42 @@ export async function generatePPTXVal17(
 
           if (graphicFrameMatch && graphicFrameMatch[0]) {
             layoutGraphicFrameXml = graphicFrameMatch[0];
-            console.log("[DEBUG_TABLE_LAYOUT] Found graphicFrame containing a table in layout:", layoutGraphicFrameXml.substring(0, 300) + "...");
-
-            const tblPrRegex = /<a:tblPr>[\s\S]*?<\/a:tblPr>/;
-            const tblPrMatch = layoutGraphicFrameXml.match(tblPrRegex);
-            if (tblPrMatch && tblPrMatch[0]) {
-              layoutTblPrXml = tblPrMatch[0];
-              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblPr from layout:", layoutTblPrXml);
+            // Log plus complet de layoutGraphicFrameXml pour inspection
+            if (layoutGraphicFrameXml.length < 2000) { // Limiter la taille du log si trop grand
+                 console.log("[DEBUG_TABLE_LAYOUT] Full layoutGraphicFrameXml:", layoutGraphicFrameXml);
             } else {
-              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblPr from layout's table.");
+                 console.log("[DEBUG_TABLE_LAYOUT] Found graphicFrame (snippet):", layoutGraphicFrameXml.substring(0, 1000) + "...");
+            }
+            console.log(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblPr' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblPr')}`);
+            console.log(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblGrid' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblGrid')}`);
+
+            // Tentative avec une regex très simple pour tblPr
+            const simpleTblPrRegex = /<a:tblPr/;
+            const simpleTblPrMatch = layoutGraphicFrameXml.match(simpleTblPrRegex);
+            if (simpleTblPrMatch) {
+              console.log("[DEBUG_TABLE_LAYOUT] Found '<a:tblPr' using simple regex. Match object:", simpleTblPrMatch);
+            } else {
+              console.warn("[DEBUG_TABLE_LAYOUT] Did NOT find '<a:tblPr' using simple regex.");
             }
 
-            const tblGridRegex = /<a:tblGrid>[\s\S]*?<\/a:tblGrid>/;
+            // Regex pour tblPr:
+            const tblPrRegex = /<a:tblPr([^>]*)>([\s\S]*?)<\/a:tblPr>/;
+            const tblPrMatch = layoutGraphicFrameXml.match(tblPrRegex);
+            if (tblPrMatch && tblPrMatch[0]) { // tblPrMatch[0] est la balise complète, tblPrMatch[1] les attributs, tblPrMatch[2] le contenu interne
+              layoutTblPrXml = tblPrMatch[0];
+              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblPr from layout (v2):", layoutTblPrXml);
+            } else {
+              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblPr from layout's table within graphicFrame (v2).");
+            }
+
+            // Regex pour tblGrid:
+            const tblGridRegex = /<a:tblGrid([^>]*)>([\s\S]*?)<\/a:tblGrid>/;
             const tblGridMatch = layoutGraphicFrameXml.match(tblGridRegex);
             if (tblGridMatch && tblGridMatch[0]) {
               layoutTblGridXml = tblGridMatch[0];
-              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblGrid from layout:", layoutTblGridXml);
+              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblGrid from layout (v2):", layoutTblGridXml);
             } else {
-              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table.");
+              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table within graphicFrame (v2).");
             }
           } else {
             console.warn("[DEBUG_TABLE_LAYOUT] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
