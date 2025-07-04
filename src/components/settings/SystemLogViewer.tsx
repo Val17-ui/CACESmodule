@@ -48,7 +48,7 @@ const SystemLogViewer: React.FC = () => {
           <p className="text-gray-500 text-center py-4">Aucun log disponible.</p>
         ) : (
           <ul className="divide-y divide-gray-200">
-            {logs.map((log, index) => (
+            {[...logs].reverse().map((log, index) => ( // Inverser l'ordre des logs ici
               <li key={index} className="py-2 px-1 text-sm">
                 <span className={`font-semibold ${getLogLevelColor(log.level)}`}>[{log.level}]</span>
                 <span className="text-gray-500 ml-2 mr-2">{log.timestamp}</span>
