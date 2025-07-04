@@ -683,14 +683,78 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (!orSessionXmlFile) { setImportSummary("Erreur: ORSession.xml introuvable dans le .zip."); return; }
       const xmlString = await orSessionXmlFile.async("string");
       setImportSummary("Parsing XML...");
-      const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
-      if (extractedResults.length === 0) { setImportSummary("Aucune réponse extraite."); return; }
-      setImportSummary(`${extractedResults.length} réponses extraites. Transformation...`);
+      let extractedResultsFromXml: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
+
+      if (extractedResultsFromXml.length === 0) {
+        setImportSummary("Aucune réponse trouvée dans le fichier XML.");
+        return;
+      }
+      logger.info(`[Import Results] ${extractedResultsFromXml.length} réponses initialement extraites du XML.`);
+
+      // 2.2. Filtrer la "question test"
+      const testSlideGuid = editingSessionData.testSlideGuid;
+      if (testSlideGuid) {
+        const countBeforeFilteringTest = extractedResultsFromXml.length;
+        extractedResultsFromXml = extractedResultsFromXml.filter(
+          (result) => result.questionSlideGuid !== testSlideGuid
+        );
+        const countAfterFilteringTest = extractedResultsFromXml.length;
+        if (countBeforeFilteringTest > countAfterFilteringTest) {
+          logger.info(`[Import Results] ${countBeforeFilteringTest - countAfterFilteringTest} réponses à la question test (GUID: ${testSlideGuid}) ont été filtrées.`);
+        }
+      }
+
+      // 2.3. Grouper les réponses par (serialNumber, slideGuid) et ne retenir que la dernière (timestamp le plus élevé)
+      const latestResultsMap = new Map<string, ExtractedResultFromXml>();
+      for (const result of extractedResultsFromXml) {
+        const key = `${result.participantDeviceID}-${result.questionSlideGuid}`;
+        const existingResult = latestResultsMap.get(key);
+
+        if (!existingResult) {
+          latestResultsMap.set(key, result);
+        } else {
+          // Si les timestamps sont disponibles, comparer. Sinon, la dernière vue écrase (ce qui est le comportement si OMBEA ne donne que la dernière)
+          // Pour une comparaison de timestamp plus robuste, s'assurer qu'ils sont dans un format comparable (ex: ISO string ou objets Date)
+          if (result.timestamp && existingResult.timestamp) {
+            if (new Date(result.timestamp) > new Date(existingResult.timestamp)) {
+              latestResultsMap.set(key, result);
+            }
+          } else if (result.timestamp && !existingResult.timestamp) { // La nouvelle a un timestamp, l'ancienne non
+            latestResultsMap.set(key, result);
+          }
+          // Si la nouvelle n'a pas de timestamp et que l'ancienne en a un, on garde l'ancienne.
+          // Si les deux n'ont pas de timestamp, la dernière vue (actuelle 'result') est implicitement ignorée si on ne fait rien,
+          // ou on peut choisir de la prendre: if (!result.timestamp && !existingResult.timestamp) { latestResultsMap.set(key, result); }
+          // Pour l'instant, si pas de timestamp, on garde la première rencontrée. Pour changer, ajouter une condition.
+        }
+      }
+      const finalExtractedResults = Array.from(latestResultsMap.values());
+      logger.info(`[Import Results] ${finalExtractedResults.length} réponses retenues après déduplication (conservation de la dernière réponse par timestamp).`);
+
+
+      if (finalExtractedResults.length === 0) {
+        setImportSummary("Aucune réponse valide à importer après filtrage et déduplication.");
+        return;
+      }
+
+      setImportSummary(`${finalExtractedResults.length} réponses prêtes pour transformation et import...`);
+
       const currentQuestionMappings = editingSessionData.questionMappings;
-      if (!currentQuestionMappings || currentQuestionMappings.length === 0) { setImportSummary("Erreur: Mappages questions manquants."); return; }
-      const sessionResultsToSave = transformParsedResponsesToSessionResults(extractedResults, currentQuestionMappings, currentSessionDbId);
+      if (!currentQuestionMappings || currentQuestionMappings.length === 0) {
+        setImportSummary("Erreur: Mappages de questions manquants pour la session. Impossible de lier les résultats.");
+        return;
+      }
+
+      const sessionResultsToSave = transformParsedResponsesToSessionResults(
+        finalExtractedResults, // Utiliser les résultats filtrés et dédupliqués
+        currentQuestionMappings,
+        currentSessionDbId
+      );
+
       if (sessionResultsToSave.length > 0) {
         try {
+          // Avant d'ajouter, il pourrait être pertinent de supprimer les anciens résultats pour cette session si c'est un ré-import.
+          // await deleteResultsForSession(currentSessionDbId); // A décommenter si nécessaire. Pour l'instant, on ajoute.
           const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats sauvegardés !`;
