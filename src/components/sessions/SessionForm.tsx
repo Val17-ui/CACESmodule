@@ -11,7 +11,9 @@ import {
   Session as DBSession,
   Participant as DBParticipantType,
   SessionResult,
-  Trainer
+  Trainer,
+  SessionQuestion,
+  SessionBoitier
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import {
@@ -27,9 +29,13 @@ import {
   getGlobalPptxTemplate,
   getAdminSetting,
   getAllTrainers,
-  getDefaultTrainer
+  getDefaultTrainer,
+  addBulkSessionQuestions,
+  deleteSessionQuestionsBySessionId,
+  addBulkSessionBoitiers,
+  deleteSessionBoitiersBySessionId
 } from '../../db';
-import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
+import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator'; // Added QuestionMapping
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import { logger } from '../../utils/logger'; // Importer le logger
@@ -537,29 +543,115 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
       // Assumons que generatePresentation attend un type compatible avec {idBoitier: string, nom: string, prenom: string, ...}
       const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator as DBParticipantType[], allSelectedQuestionsForPptx, globalPptxTemplate, adminSettings);
-      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
+      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && upToDateSessionData) {
         const { orsBlob, questionMappings } = generationOutput;
         try {
+          // 1. Mettre à jour la session principale avec l'ORS et les mappings
           await updateSession(currentSavedId, {
-            donneesOrs: orsBlob, questionMappings: questionMappings,
-            updatedAt: new Date().toISOString(), status: 'ready',
-            selectionBlocs: upToDateSessionData.selectionBlocs
+            donneesOrs: orsBlob,
+            questionMappings: questionMappings,
+            updatedAt: new Date().toISOString(),
+            status: 'ready',
+            selectionBlocs: upToDateSessionData.selectionBlocs,
+            // testSlideGuid sera mis à jour ci-dessous si applicable
           });
-          setEditingSessionData(await getSessionById(currentSavedId) || null);
-          setImportSummary(`Session (ID: ${currentSavedId}) .ors et mappings générés. Statut: Prête.`);
-          logger.info(`Fichier .ors et mappings générés/mis à jour pour la session "${upToDateSessionData.nomSession}"`, {
-            eventType: 'ORS_UPDATED',
+
+          // Recharger les données de session pour avoir la version la plus à jour
+          const freshlyUpdatedSessionData = await getSessionById(currentSavedId);
+          if (!freshlyUpdatedSessionData) {
+            throw new Error("Impossible de recharger la session après la mise à jour avec l'ORS.");
+          }
+          setEditingSessionData(freshlyUpdatedSessionData);
+
+          // 2. Nettoyer les anciennes métadonnées pour cette session
+          await deleteSessionQuestionsBySessionId(currentSavedId);
+          await deleteSessionBoitiersBySessionId(currentSavedId);
+
+          // 3. Stocker les SessionQuestions
+          const sessionQuestionsToSave: SessionQuestion[] = [];
+          for (const qMap of questionMappings) {
+            if (qMap.slideGuid && qMap.dbQuestionId !== undefined) {
+              const originalQuestion = allSelectedQuestionsForPptx.find(q => q.id === qMap.dbQuestionId);
+              if (originalQuestion) {
+                // Déterminer blockId
+                let blockId = 'N/A';
+                const questionThemeParts = originalQuestion.theme.split('_');
+                const baseTheme = questionThemeParts[0];
+                const selectedBlock = freshlyUpdatedSessionData.selectionBlocs?.find(sb => sb.theme === baseTheme);
+                if (selectedBlock) {
+                  blockId = selectedBlock.blockId;
+                } else if (questionThemeParts.length > 1) {
+                  // Fallback si selectionBlocs n'est pas parfaitement aligné, mais que le theme de la question a un blockId
+                  blockId = questionThemeParts[1];
+                }
+
+                sessionQuestionsToSave.push({
+                  sessionId: currentSavedId,
+                  dbQuestionId: originalQuestion.id!,
+                  slideGuid: qMap.slideGuid,
+                  text: originalQuestion.text,
+                  options: originalQuestion.options,
+                  correctAnswer: originalQuestion.correctAnswer,
+                  blockId: blockId,
+                });
+              }
+            }
+          }
+          if (sessionQuestionsToSave.length > 0) {
+            await addBulkSessionQuestions(sessionQuestionsToSave);
+          }
+
+          // 4. Stocker les SessionBoitiers
+          const sessionBoitiersToSave: SessionBoitier[] = [];
+          freshlyUpdatedSessionData.participants.forEach((p_db, p_idx) => {
+            const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
+            if (assignedDevice) {
+              // Trouver le visualId (deviceId du FormParticipant)
+              // On fait correspondre le participant de la DB (p_db) avec celui du formulaire (participants)
+              // via assignedGlobalDeviceId car c'est l'identifiant le plus stable.
+              const formP = participants.find(fp => fp.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId);
+              const visualId = formP?.deviceId ?? (p_idx + 1); // Fallback à l'index + 1 si non trouvé
+
+              sessionBoitiersToSave.push({
+                sessionId: currentSavedId,
+                participantId: `P${p_idx + 1}`, // Utilisation de l'index comme ID simple pour le moment
+                visualId: visualId,
+                serialNumber: assignedDevice.serialNumber,
+                participantName: `${p_db.prenom} ${p_db.nom}`,
+              });
+            }
+          });
+          if (sessionBoitiersToSave.length > 0) {
+            await addBulkSessionBoitiers(sessionBoitiersToSave);
+          }
+
+          // 5. Gérer testSlideGuid (logique d'identification à définir)
+          // TODO: Implémenter la logique pour identifier la question test et son dbQuestionId
+          const testQuestionDbId: number | null = null; // Mettre l'ID de la question test ici
+          if (testQuestionDbId) {
+            const testMapping = questionMappings.find(qm => qm.dbQuestionId === testQuestionDbId);
+            if (testMapping && testMapping.slideGuid) {
+              await updateSession(currentSavedId, { testSlideGuid: testMapping.slideGuid });
+              // Re-mettre à jour editingSessionData si nécessaire
+              setEditingSessionData(await getSessionById(currentSavedId) || null);
+            }
+          }
+
+          setImportSummary(`Session (ID: ${currentSavedId}) .ors, mappings et métadonnées générés. Statut: Prête.`);
+          logger.info(`Fichier .ors, mappings et métadonnées générés/mis à jour pour la session "${freshlyUpdatedSessionData.nomSession}"`, {
+            eventType: 'ORS_METADATA_UPDATED',
             sessionId: currentSavedId,
-            sessionName: upToDateSessionData.nomSession
+            sessionName: freshlyUpdatedSessionData.nomSession
           });
           setModifiedAfterOrsGeneration(false);
+
         } catch (e: any) {
-          setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`);
-          console.error("Erreur sauvegarde .ors/mappings:", e);
-          logger.error(`Erreur lors de la sauvegarde .ors/mappings pour la session "${upToDateSessionData.nomSession}"`, { eventType: 'ORS_UPDATE_SAVE_ERROR', sessionId: currentSavedId, error: e });
+          setImportSummary(`Erreur sauvegarde .ors/mappings/métadonnées: ${e.message}`);
+          console.error("Erreur sauvegarde .ors/mappings/métadonnées:", e);
+          logger.error(`Erreur lors de la sauvegarde .ors/mappings/métadonnées pour la session "${upToDateSessionData.nomSession}"`, { eventType: 'ORS_METADATA_SAVE_ERROR', sessionId: currentSavedId, error: e });
         }
       } else {
-        setImportSummary("Erreur génération .ors/mappings.");
+        setImportSummary("Erreur génération .ors/mappings ou données de session manquantes.");
         console.error("Erreur génération .ors/mappings. Output:", generationOutput);
         logger.error(`Erreur lors de la génération .ors/mappings pour la session "${upToDateSessionData.nomSession}"`, { eventType: 'ORS_GENERATION_ERROR', sessionId: currentSavedId, output: generationOutput });
       }
