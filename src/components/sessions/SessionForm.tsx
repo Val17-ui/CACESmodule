@@ -70,18 +70,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [trainersList, setTrainersList] = useState<Trainer[]>([]);
   const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
 
-  // États pour la modale d'anomalies de boîtiers
-  interface AnomalyDetail {
-    type: 'supplementaire' | 'nonRepondant';
-    boitierId: string;
-    participantInfo?: string;
-  }
-  const [detectedAnomalies, setDetectedAnomalies] = useState<AnomalyDetail[]>([]);
-  const [showAnomalyResolutionModal, setShowAnomalyResolutionModal] = useState<boolean>(false);
-  const extractedResultsRef = React.useRef<ExtractedResultFromXml[]>([]);
-  const [isLoadingImport, setIsLoadingImport] = useState(false); // Pour gérer l'état de chargement de l'import
-
-
   useEffect(() => {
     const fetchInitialData = async () => {
       const devicesFromDb = await getAllVotingDevices();
@@ -584,105 +572,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const orSessionXmlFile = zip.file("ORSession.xml");
       if (!orSessionXmlFile) { setImportSummary("Erreur: ORSession.xml introuvable dans le .zip."); return; }
       const xmlString = await orSessionXmlFile.async("string");
-      setIsLoadingImport(true); // Indiquer le début du chargement/traitement
-      setImportSummary("Lecture du fichier .ors...");
-      const arrayBuffer = await resultsFile.arrayBuffer();
-      const zip = await JSZip.loadAsync(arrayBuffer);
-      const orSessionXmlFile = zip.file("ORSession.xml");
-
-      if (!orSessionXmlFile) {
-        setImportSummary("Erreur: ORSession.xml introuvable dans le fichier .zip.");
-        setIsLoadingImport(false);
-        return;
-      }
-      const xmlString = await orSessionXmlFile.async("string");
-      setImportSummary("Parsing du fichier XML des résultats...");
-
-      extractedResultsRef.current = parseOmbeaResultsXml(xmlString);
-
-      if (extractedResultsRef.current.length === 0) {
-        setImportSummary("Aucune réponse n'a été extraite du fichier. Veuillez vérifier le contenu du fichier ORSession.xml.");
-        setIsLoadingImport(false);
-        return;
-      }
-
-      setImportSummary(`${extractedResultsRef.current.length} réponses extraites. Vérification des boîtiers...`);
-
-      if (editingSessionData && editingSessionData.participants && hardwareDevices.length > 0) {
-        const boitiersAttendusMap = new Map<string, { nom: string, prenom: string }>();
-        editingSessionData.participants.forEach(p => {
-          const device = hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId);
-          if (device && device.serialNumber) {
-            boitiersAttendusMap.set(device.serialNumber, { nom: p.nom, prenom: p.prenom });
-          }
-        });
-
-        const boitiersAyantRepondu = new Set(extractedResultsRef.current.map(r => r.participantDeviceID));
-        const supplementaires = [...boitiersAyantRepondu].filter(id => !boitiersAttendusMap.has(id));
-        const nonRepondantsDetails: { nom: string, prenom: string, serialNumber: string }[] = [];
-        boitiersAttendusMap.forEach((participantInfo, serial) => {
-          if (!boitiersAyantRepondu.has(serial)) {
-            nonRepondantsDetails.push({ ...participantInfo, serialNumber: serial });
-          }
-        });
-
-        const currentAnomalies: AnomalyDetail[] = [];
-        supplementaires.forEach(suppId => {
-          currentAnomalies.push({ type: 'supplementaire', boitierId: suppId });
-        });
-        nonRepondantsDetails.forEach(nr => {
-          currentAnomalies.push({ type: 'nonRepondant', boitierId: nr.serialNumber, participantInfo: `${nr.prenom} ${nr.nom} (attendu sur ${nr.serialNumber})` });
-        });
-
-        if (currentAnomalies.length > 0) {
-          setDetectedAnomalies(currentAnomalies);
-          setShowAnomalyResolutionModal(true);
-          // L'import s'arrête ici, la suite est gérée par handleAnomalyResolution
-          setIsLoadingImport(false);
-          return;
-        }
-      } else {
-        // Logique si pas de données pour vérifier (peut-être juste continuer)
-         if (!hardwareDevices || hardwareDevices.length === 0) {
-          console.warn("Liste des boîtiers matériels non chargée, vérification des boîtiers ignorée.");
-          setImportSummary(prev => (prev || '') + "\nAttention: Liste des boîtiers matériels non disponible, la vérification détaillée n'a pas pu être effectuée.");
-        } else {
-          console.warn("Données de session ou participants manquants, vérification des boîtiers ignorée.");
-          setImportSummary(prev => (prev || '') + "\nAttention: Données de session incomplètes, la vérification détaillée n'a pas pu être effectuée.");
-        }
-      }
-      // Si pas d'anomalies, ou si la vérification n'a pas pu être faite mais on continue
-      await continueImportProcess(extractedResultsRef.current);
-
-    } catch (error: any) {
-      setImportSummary(`Erreur traitement fichier: ${error.message}`);
-      console.error("Erreur handleImportResults:", error);
-    } finally {
-      setIsLoadingImport(false);
-    }
-  };
-
-  const continueImportProcess = async (resultsToProcess: ExtractedResultFromXml[]) => {
-    if (!currentSessionDbId || !editingSessionData) {
-      setImportSummary("Erreur: Session non disponible pour continuer l'import.");
-      setIsLoadingImport(false);
-      return;
-    }
-    if (resultsToProcess.length === 0) {
-        setImportSummary("Aucun résultat à importer après la gestion des anomalies.");
-        setIsLoadingImport(false);
-        return;
-    }
-
-    setImportSummary(prev => (prev ? prev.split('\nTransformation de')[0] : '') + `\nTransformation de ${resultsToProcess.length} réponses...`);
-
-    const currentQuestionMappings = editingSessionData.questionMappings;
-    if (!currentQuestionMappings || currentQuestionMappings.length === 0) {
-      setImportSummary("Erreur: Mappages questions manquants pour la session.");
-      setIsLoadingImport(false);
-      return;
-    }
-    const sessionResultsToSave = transformParsedResponsesToSessionResults(resultsToProcess, currentQuestionMappings, currentSessionDbId);
+      setImportSummary("Parsing XML...");
+      const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
+      if (extractedResults.length === 0) { setImportSummary("Aucune réponse extraite."); return; }
+      setImportSummary(`${extractedResults.length} réponses extraites. Transformation...`);
+      const currentQuestionMappings = editingSessionData.questionMappings;
+      if (!currentQuestionMappings || currentQuestionMappings.length === 0) { setImportSummary("Erreur: Mappages questions manquants."); return; }
+      const sessionResultsToSave = transformParsedResponsesToSessionResults(extractedResults, currentQuestionMappings, currentSessionDbId);
       if (sessionResultsToSave.length > 0) {
         try {
           const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
@@ -724,15 +620,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
+                      // Re-mapper vers FormParticipant, similaire à loadSession et handleSaveSession
                       const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db_updated, index) => {
-                        const visualDeviceId = index + 1;
+                        const visualDeviceId = index + 1; // Basé sur l'ordre
                         const currentFormParticipantState = participants.find(fp => fp.id.startsWith('loaded-') ?
-                                                                  fp.assignedGlobalDeviceId === p_db_updated.assignedGlobalDeviceId :
-                                                                  (fp.deviceId === visualDeviceId && fp.nom === p_db_updated.nom)
-                                                                ) || participants[index];
+                                                                  fp.assignedGlobalDeviceId === p_db_updated.assignedGlobalDeviceId : // Heuristique pour retrouver par ID de boitier si possible
+                                                                  (fp.deviceId === visualDeviceId && fp.nom === p_db_updated.nom) // Sinon par ordre et nom
+                                                                ) || participants[index]; // Fallback plus simple
 
                         return {
-                          ...p_db_updated,
+                          ...p_db_updated, // Contient nom, prenom, score, reussite, assignedGlobalDeviceId
                           id: currentFormParticipantState?.id || `updated-${index}-${Date.now()}`,
                           firstName: p_db_updated.prenom,
                           lastName: p_db_updated.nom,
@@ -743,50 +640,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       });
                       setParticipants(formParticipantsToUpdate);
                     }
-                  } else { message += "\nImpossible de charger les questions pour le calcul des scores."; }
-                } else { message += "\nImpossible de calculer les scores (données de session ou mappings manquants)."; }
+                  } else { message += "\nImpossible charger questions pour scores."; }
+                } else { message += "\nImpossible calculer scores."; }
               }
-            } catch (processingError: any) {
-              sessionProcessError = processingError.message;
-              console.error("Erreur post-traitement des résultats:", processingError);
-            }
-            if(sessionProcessError) { message += `\nErreur lors du post-traitement des résultats: ${sessionProcessError}`; }
+            } catch (processingError: any) { sessionProcessError = processingError.message; }
+            if(sessionProcessError) { message += `\nErreur post-traitement: ${sessionProcessError}`; }
             setImportSummary(message);
-            setResultsFile(null); // Réinitialiser le fichier après import
-          } else {
-            setImportSummary("Échec de la sauvegarde des résultats en base de données.");
-          }
-        } catch (dbError: any) {
-          setImportSummary(`Erreur base de données lors de la sauvegarde des résultats: ${dbError.message}`);
-          console.error("Erreur DB sauvegarde résultats:", dbError);
-        }
-      } else {
-        setImportSummary("Aucun résultat transformé à sauvegarder.");
-      }
-    setIsLoadingImport(false);
+            setResultsFile(null);
+          } else { setImportSummary("Echec sauvegarde résultats."); }
+        } catch (dbError: any) { setImportSummary(`Erreur DB sauvegarde résultats: ${dbError.message}`);}
+      } else { setImportSummary("Aucun résultat transformé."); }
+    } catch (error: any) { setImportSummary(`Erreur traitement fichier: ${error.message}`); }
   };
-
-  const handleAnomalyResolution = (action: 'ignoreSupplementaires' | 'continuerSansModifier' | 'annuler') => {
-    setShowAnomalyResolutionModal(false);
-    let resultsToProcess = [...extractedResultsRef.current];
-
-    if (action === 'annuler') {
-      setImportSummary("Import annulé par l'utilisateur.");
-      setResultsFile(null);
-      setDetectedAnomalies([]);
-      return;
-    }
-
-    if (action === 'ignoreSupplementaires') {
-      const supplementairesIds = detectedAnomalies.filter(a => a.type === 'supplementaire').map(a => a.boitierId);
-      resultsToProcess = resultsToProcess.filter(r => !supplementairesIds.includes(r.participantDeviceID));
-      setImportSummary(prev => (prev || '').split('\nTransformation de')[0] + "\nRéponses des boîtiers supplémentaires ignorées.");
-    }
-
-    setDetectedAnomalies([]); // Nettoyer les anomalies après résolution
-    continueImportProcess(resultsToProcess);
-  };
-
 
   const renderTabNavigation = () => (
     <div className="mb-6 border-b border-gray-200">
@@ -1102,73 +967,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           Enregistrer Brouillon
         </Button>
       </div>
-
-      {showAnomalyResolutionModal && detectedAnomalies.length > 0 && (
-        <BoitierAnomalyModal
-          isOpen={showAnomalyResolutionModal}
-          anomalies={detectedAnomalies}
-          onResolve={handleAnomalyResolution}
-        />
-      )}
     </div>
   );
 };
-
-// Simplified Anomaly Modal Component (can be moved to its own file later)
-interface BoitierAnomalyModalProps {
-  isOpen: boolean;
-  anomalies: AnomalyDetail[]; // Assuming AnomalyDetail is defined in SessionForm's scope
-  onResolve: (action: 'ignoreSupplementaires' | 'continuerSansModifier' | 'annuler') => void;
-}
-
-const BoitierAnomalyModal: React.FC<BoitierAnomalyModalProps> = ({ isOpen, anomalies, onResolve }) => {
-  if (!isOpen) return null;
-
-  const supplementaires = anomalies.filter(a => a.type === 'supplementaire');
-  const nonRepondants = anomalies.filter(a => a.type === 'nonRepondant');
-
-  return (
-    <div className="fixed inset-0 bg-gray-800 bg-opacity-75 overflow-y-auto h-full w-full flex justify-center items-center z-50 transition-opacity duration-300 ease-in-out">
-      <div className="p-6 bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 sm:mx-0 transform transition-all duration-300 ease-in-out scale-100">
-        <h3 className="text-xl font-bold text-gray-800 mb-5 border-b pb-3">Anomalies Boîtiers Détectées</h3>
-
-        {supplementaires.length > 0 && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <p className="font-semibold text-red-700 mb-1">Boîtiers supplémentaires ayant répondu:</p>
-            <ul className="list-disc list-inside pl-4 text-sm text-red-600">
-              {supplementaires.map(s => <li key={s.boitierId}>{s.boitierId}</li>)}
-            </ul>
-          </div>
-        )}
-
-        {nonRepondants.length > 0 && (
-          <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-md">
-            <p className="font-semibold text-orange-700 mb-1">Participants attendus n'ayant pas répondu:</p>
-            <ul className="list-disc list-inside pl-4 text-sm text-orange-600">
-              {nonRepondants.map(nr => <li key={nr.boitierId}>{nr.participantInfo}</li>)}
-            </ul>
-          </div>
-        )}
-
-        <p className="text-sm text-gray-700 my-5">Comment souhaitez-vous procéder ?</p>
-
-        <div className="mt-6 flex flex-col space-y-3 sm:flex-row-reverse sm:space-y-0 sm:space-x-reverse sm:space-x-3">
-          <Button variant="danger" onClick={() => onResolve('annuler')} className="w-full sm:w-auto">
-            Annuler l'Import
-          </Button>
-          <Button variant="secondary" onClick={() => onResolve('continuerSansModifier')} className="w-full sm:w-auto">
-            Continuer Sans Modifier
-          </Button>
-          {supplementaires.length > 0 && (
-            <Button variant="warning" onClick={() => onResolve('ignoreSupplementaires')} className="w-full sm:w-auto">
-              Ignorer Supp. & Continuer
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 
 export default SessionForm;
