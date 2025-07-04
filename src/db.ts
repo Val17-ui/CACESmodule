@@ -130,6 +130,31 @@ export class MySubClassedDexie extends Dexie {
         }
       });
     });
+
+    // Version 10: S'assurer que l'index sur trainers.isDefault n'est pas unique.
+    // Cette version est ajoutée pour forcer une mise à jour du schéma si les modifications
+    // précédentes dans v8 et v9 n'ont pas été correctement appliquées à cause du caching du schéma par Dexie.
+    this.version(10).stores({
+      // On reprend toutes les tables de la v9
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      votingDevices: '++id, name, &serialNumber',
+      trainers: '++id, name, isDefault' // Assurer que isDefault n'est pas unique ('&')
+    }).upgrade(async tx => {
+      // Aucune migration de données spécifique n'est nécessaire pour ce changement d'index,
+      // Dexie devrait reconstruire l'index correctement basé sur la nouvelle définition.
+      // On peut logguer pour confirmer que la migration a lieu.
+      console.log("Migrating to DB version 10: Ensuring 'trainers.isDefault' index is not unique.");
+      // Si on voulait être extra prudent, on pourrait essayer de lire et réécrire les formateurs,
+      // mais ce n'est généralement pas nécessaire pour un changement d'index.
+      // Exemple (non nécessaire ici) :
+      // const allTrainers = await tx.table('trainers').toArray();
+      // await tx.table('trainers').clear();
+      // await tx.table('trainers').bulkAdd(allTrainers);
+      return tx.done;
+    });
   }
 }
 
