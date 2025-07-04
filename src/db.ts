@@ -69,18 +69,30 @@ export class MySubClassedDexie extends Dexie {
     // Nouvelle version pour ajouter la table trainers et le champ trainerId à sessions
     this.version(8).stores({
       sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Ajout de trainerId
-      trainers: '++id, name, &isDefault' // isDefault pourrait être un index unique si un seul peut être true, mais Dexie ne gère pas bien les booléens uniques. On gérera en logique applicative.
+      trainers: '++id, name, isDefault' // Suppression de l'index unique sur isDefault
     });
 
     // Version 9: Mise à jour de votingDevices (name, serialNumber) et sessions (participants.assignedGlobalDeviceId)
+    // IMPORTANT: Le changement de l'index de la table trainers doit être fait dans une NOUVELLE version de la base de données.
+    // Si la version 9 est la dernière déployée et que des utilisateurs l'ont déjà,
+    // nous devons passer à la version 10 pour modifier la table trainers.
+    // Si la version 9 n'a jamais été en production ou si la base de données peut être réinitialisée pour le développement,
+    // on pourrait modifier la v9. Cependant, la bonne pratique est d'incrémenter la version.
+
+    // Supposons que nous devons créer une nouvelle version (v10) pour ce changement.
+    // Si la v9 est déjà utilisée, la modification de 'trainers' dans la v9 ci-dessous serait incorrecte.
+    // Pour cet exercice, je vais modifier la définition dans la v9 et ajouter une v10 pour illustrer la migration si nécessaire.
+    // Mais pour le problème spécifique de l'index, il suffit de le changer là où il est défini.
+    // La question est de savoir si la DB a déjà été ouverte avec v9 par des utilisateurs.
+    // Pour l'instant, je corrige la définition dans la v9. Si cela cause des problèmes de migration, il faudra une nouvelle version.
+
     this.version(9).stores({
       votingDevices: '++id, name, &serialNumber', // physicalId -> serialNumber, ajout de name
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Le schéma de la table session elle-même ne change pas, mais la structure de ses objets participants oui. Dexie gère ça.
-      // Les autres tables restent inchangées par rapport à la v8
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId',
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
       adminSettings: '&key',
-      trainers: '++id, name, &isDefault'
+      trainers: '++id, name, isDefault' // Corrigé ici aussi pour la v9
     }).upgrade(async tx => {
       // 1. Migration pour votingDevices
       await tx.table('votingDevices').toCollection().modify(device => {
@@ -117,6 +129,77 @@ export class MySubClassedDexie extends Dexie {
           });
         }
       });
+    });
+
+    // Version 10: S'assurer que l'index sur trainers.isDefault n'est pas unique.
+    // Cette version est ajoutée pour forcer une mise à jour du schéma si les modifications
+    // précédentes dans v8 et v9 n'ont pas été correctement appliquées à cause du caching du schéma par Dexie.
+    this.version(10).stores({
+      // On reprend toutes les tables de la v9
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      votingDevices: '++id, name, &serialNumber',
+      trainers: '++id, name, isDefault' // Assurer que isDefault n'est pas unique ('&')
+    }).upgrade(async tx => {
+      console.log("Migrating to DB version 10: Rebuilding 'trainers' table to ensure data integrity for 'isDefault' index.");
+      const trainersTable = tx.table('trainers');
+      let allTrainersFromOldSchema = await trainersTable.toArray(); // Lire les données AVANT de potentiellement modifier la table.
+
+      // Étape 1: Nettoyer les données en mémoire et s'assurer de l'unicité de isDefault
+      // et que isDefault est toujours un booléen.
+      let defaultTrainerId: number | undefined = undefined; // Utiliser undefined pour être clair qu'aucun ID n'a été trouvé
+
+      // Première passe pour convertir isDefault en 0 ou 1 et trouver un candidat par défaut
+      let cleanedTrainers = allTrainersFromOldSchema.map(trainer => {
+        let numericIsDefault: 0 | 1 = 0;
+        if (trainer.isDefault === true || trainer.isDefault === 1) {
+          numericIsDefault = 1;
+        }
+        // Conserver le premier ID de formateur marqué comme défaut (booléen ou numérique)
+        if (numericIsDefault === 1 && defaultTrainerId === undefined) {
+          defaultTrainerId = trainer.id;
+        }
+        return { ...trainer, name: trainer.name || "Nom Inconnu", isDefault: numericIsDefault };
+      });
+
+      // Deuxième passe pour forcer un seul par défaut, en utilisant la valeur numérique 1
+      let foundActiveDefault = false;
+      cleanedTrainers = cleanedTrainers.map(trainer => {
+        if (trainer.id === defaultTrainerId && trainer.id !== undefined) { // S'assurer que defaultTrainerId a été trouvé et est valide
+          foundActiveDefault = true;
+          return { ...trainer, isDefault: 1 as const };
+        }
+        return { ...trainer, isDefault: 0 as const };
+      });
+
+      // S'il n'y avait aucun formateur par défaut valablement identifié,
+      // et que la liste n'est pas vide, définir le premier (trié par ID) comme par défaut.
+      if (!foundActiveDefault && cleanedTrainers.length > 0) {
+        const sortedTrainers = cleanedTrainers.sort((a, b) => (a.id || 0) - (b.id || 0));
+        if (sortedTrainers.length > 0 && sortedTrainers[0].id !== undefined) {
+            sortedTrainers[0].isDefault = 1; // Définir comme 1
+             console.log(`No default trainer was clearly identified or valid. Setting trainer ID ${sortedTrainers[0].id} as default (1) during v10 migration.`);
+        }
+      }
+
+      // Filtrer les trainers sans ID valide avant bulkAdd, car `id` est la clé primaire.
+      const validTrainersForBulkAdd = cleanedTrainers.filter(trainer => trainer.id !== undefined);
+
+      // Étape 2: Vider la table et la repeupler
+      // Note: La table est déjà en cours de transaction (tx), donc les opérations sont atomiques pour cette version.
+      await trainersTable.clear();
+      console.log("'trainers' table cleared during v10 migration.");
+
+      if (validTrainersForBulkAdd.length > 0) {
+        await trainersTable.bulkAdd(validTrainersForBulkAdd);
+        console.log(`'trainers' table repopulated with ${validTrainersForBulkAdd.length} entries after v10 cleaning.`);
+      } else {
+        console.log("'trainers' table is empty after v10 cleaning or all entries had invalid IDs.");
+      }
+
+      return tx.done;
     });
   }
 }
@@ -489,12 +572,13 @@ export const bulkAddVotingDevices = async (devices: VotingDevice[]): Promise<voi
 // --- Fonctions CRUD pour Formateurs (Trainers) ---
 
 export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
+  // s'assurer que trainer.isDefault est 0 ou 1. Le type Omit<Trainer, 'id'> le garantit déjà.
   try {
-    // S'assurer qu'aucun autre formateur n'est par défaut si celui-ci l'est
-    if (trainer.isDefault) {
-      await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
+    // S'assurer qu'aucun autre formateur n'est par défaut si celui-ci l'est (isDefault === 1)
+    if (trainer.isDefault === 1) {
+      await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
     }
-    const id = await db.trainers.add(trainer as Trainer);
+    const id = await db.trainers.add(trainer as Trainer); // trainer contient déjà isDefault: 0 ou 1
     return id;
   } catch (error) {
     console.error("Error adding trainer: ", error);
@@ -519,11 +603,17 @@ export const getTrainerById = async (id: number): Promise<Trainer | undefined> =
 };
 
 export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> => {
+  // updates.isDefault peut être 0, 1, ou undefined.
+  // Si undefined, on ne touche pas à isDefault.
+  // Si 0 ou 1, on met à jour.
   try {
-    // Si on met à jour un formateur pour qu'il soit par défaut
-    if (updates.isDefault) {
-      await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
+    // Si on met à jour un formateur pour qu'il soit par défaut (isDefault === 1)
+    if (updates.isDefault === 1) {
+      await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
     }
+    // Si updates.isDefault est undefined, il ne sera pas inclus dans l'objet d'update pour Dexie,
+    // donc la valeur existante de isDefault pour ce formateur ne sera pas modifiée.
+    // Si updates.isDefault est 0, il mettra isDefault à 0.
     await db.trainers.update(id, updates);
     return id;
   } catch (error) {
@@ -547,10 +637,10 @@ export const deleteTrainer = async (id: number): Promise<void> => {
 
 export const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
   try {
-    // D'abord, s'assurer qu'aucun autre formateur n'est par défaut
-    await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
-    // Ensuite, définir le formateur spécifié comme par défaut
-    await db.trainers.update(id, { isDefault: true });
+    // D'abord, s'assurer qu'aucun autre formateur n'est par défaut (isDefault === 1)
+    await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
+    // Ensuite, définir le formateur spécifié comme par défaut (isDefault === 1)
+    await db.trainers.update(id, { isDefault: 1 });
     return id;
   } catch (error) {
     console.error(`Error setting default trainer for id ${id}:`, error);
@@ -559,8 +649,12 @@ export const setDefaultTrainer = async (id: number): Promise<number | undefined>
 
 export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
   try {
-    return await db.trainers.where('isDefault').equals(true).first();
+    // Récupérer le formateur où isDefault est 1
+    return await db.trainers.where('isDefault').equals(1).first();
   } catch (error) {
     console.error("Error getting default trainer:", error);
+    // En cas d'erreur (par exemple, si l'index est toujours problématique),
+    // on pourrait retourner le premier formateur par ID comme fallback,
+    // mais il vaut mieux que l'erreur soit visible pour diagnostic.
   }
 };
