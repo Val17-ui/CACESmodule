@@ -69,11 +69,12 @@ const TrainerSettings: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const trainer: Omit<Trainer, 'id'> = {
+      // Convertir l'état booléen de la case à cocher en 0 ou 1
+      const trainerPayload: Omit<Trainer, 'id'> = {
         name: newTrainerName.trim(),
-        isDefault,
+        isDefault: isDefault ? 1 : 0,
       };
-      const id = await addTrainer(trainer);
+      const id = await addTrainer(trainerPayload);
       if (id !== undefined) {
         setSuccess(`Formateur "${newTrainerName}" ajouté avec succès.`);
         setNewTrainerName('');
@@ -92,7 +93,8 @@ const TrainerSettings: React.FC = () => {
     setError(null);
     setSuccess(null);
     const trainerToDelete = trainers.find(t => t.id === id);
-    if (trainerToDelete && trainerToDelete.isDefault && trainers.length > 1) {
+    // Utiliser === 1 pour vérifier si le formateur est par défaut
+    if (trainerToDelete && trainerToDelete.isDefault === 1 && trainers.length > 1) {
       setError('Vous ne pouvez pas supprimer le formateur par défaut s\'il en existe d\'autres. Veuillez d\'abord désigner un autre formateur par défaut.');
       return;
     }
@@ -109,10 +111,11 @@ const TrainerSettings: React.FC = () => {
       // Une meilleure approche serait de re-fetcher la liste, puis de vérifier.
       // Cependant, `fetchTrainers` est déjà appelé, donc `trainers` sera la liste mise à jour *après* suppression.
       const currentTrainers = await getAllTrainers(); // Re-fetch pour la logique de défaut
-      if (trainerToDelete?.isDefault && currentTrainers.length > 0) {
+      // Utiliser === 1 pour la condition
+      if (trainerToDelete?.isDefault === 1 && currentTrainers.length > 0) {
          const defaultCandidate = currentTrainers.sort((a,b) => (a.id ?? 0) - (b.id ?? 0))[0];
-         if(defaultCandidate.id) {
-            await setDefaultTrainer(defaultCandidate.id);
+         if(defaultCandidate.id) { // s'assurer que defaultCandidate.id est défini
+            await setDefaultTrainer(defaultCandidate.id); // setDefaultTrainer gère déjà les 0/1 en interne
             await fetchTrainers(); // Re-fetch final pour UI
          }
       } else if (currentTrainers.length === 0) {
@@ -162,6 +165,8 @@ const TrainerSettings: React.FC = () => {
           setError("Formateur non trouvé pour la mise à jour.");
           return;
       }
+      // Assurer que trainerToUpdate.isDefault est bien 0 ou 1. Le type Trainer le garantit déjà.
+      // updateTrainer s'attend à 0 | 1 | undefined pour isDefault.
       await updateTrainer(id, { name: newName.trim(), isDefault: trainerToUpdate.isDefault });
       setSuccess('Nom du formateur mis à jour avec succès.');
       await fetchTrainers();
@@ -231,7 +236,7 @@ const TrainerSettings: React.FC = () => {
                   // Pour l'instant, defaultValue est utilisé.
                 />
                 <div className="flex items-center space-x-2">
-                  {trainer.isDefault ? (
+                  {trainer.isDefault === 1 ? ( // Comparer avec 1
                     <Badge variant="success" className="cursor-default">
                       <Star size={14} className="mr-1 inline-block" /> Par défaut
                     </Badge>

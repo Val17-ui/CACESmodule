@@ -151,32 +151,36 @@ export class MySubClassedDexie extends Dexie {
       // et que isDefault est toujours un booléen.
       let defaultTrainerId: number | undefined = undefined; // Utiliser undefined pour être clair qu'aucun ID n'a été trouvé
 
-      // Première passe pour s'assurer que isDefault est un booléen et trouver un candidat par défaut
+      // Première passe pour convertir isDefault en 0 ou 1 et trouver un candidat par défaut
       let cleanedTrainers = allTrainersFromOldSchema.map(trainer => {
-        const isCurrentlyDefault = typeof trainer.isDefault === 'boolean' ? trainer.isDefault : false;
-        if (isCurrentlyDefault && defaultTrainerId === undefined) {
+        let numericIsDefault: 0 | 1 = 0;
+        if (trainer.isDefault === true || trainer.isDefault === 1) {
+          numericIsDefault = 1;
+        }
+        // Conserver le premier ID de formateur marqué comme défaut (booléen ou numérique)
+        if (numericIsDefault === 1 && defaultTrainerId === undefined) {
           defaultTrainerId = trainer.id;
         }
-        return { ...trainer, name: trainer.name || "Nom Inconnu", isDefault: isCurrentlyDefault }; // Assurer un nom et isDefault booléen
+        return { ...trainer, name: trainer.name || "Nom Inconnu", isDefault: numericIsDefault };
       });
 
-      // Deuxième passe pour forcer un seul par défaut
+      // Deuxième passe pour forcer un seul par défaut, en utilisant la valeur numérique 1
       let foundActiveDefault = false;
       cleanedTrainers = cleanedTrainers.map(trainer => {
-        if (trainer.id === defaultTrainerId) {
+        if (trainer.id === defaultTrainerId && trainer.id !== undefined) { // S'assurer que defaultTrainerId a été trouvé et est valide
           foundActiveDefault = true;
-          return { ...trainer, isDefault: true };
+          return { ...trainer, isDefault: 1 as const };
         }
-        return { ...trainer, isDefault: false };
+        return { ...trainer, isDefault: 0 as const };
       });
 
-      // S'il n'y avait aucun formateur par défaut (ou si celui trouvé avait un ID undefined),
-      // et que la liste n'est pas vide, définir le premier (trié par ID).
+      // S'il n'y avait aucun formateur par défaut valablement identifié,
+      // et que la liste n'est pas vide, définir le premier (trié par ID) comme par défaut.
       if (!foundActiveDefault && cleanedTrainers.length > 0) {
         const sortedTrainers = cleanedTrainers.sort((a, b) => (a.id || 0) - (b.id || 0));
         if (sortedTrainers.length > 0 && sortedTrainers[0].id !== undefined) {
-            sortedTrainers[0].isDefault = true;
-             console.log(`No default trainer was clearly identified or valid. Setting trainer ID ${sortedTrainers[0].id} as default during v10 migration.`);
+            sortedTrainers[0].isDefault = 1; // Définir comme 1
+             console.log(`No default trainer was clearly identified or valid. Setting trainer ID ${sortedTrainers[0].id} as default (1) during v10 migration.`);
         }
       }
 
@@ -568,12 +572,13 @@ export const bulkAddVotingDevices = async (devices: VotingDevice[]): Promise<voi
 // --- Fonctions CRUD pour Formateurs (Trainers) ---
 
 export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
+  // s'assurer que trainer.isDefault est 0 ou 1. Le type Omit<Trainer, 'id'> le garantit déjà.
   try {
-    // S'assurer qu'aucun autre formateur n'est par défaut si celui-ci l'est
-    if (trainer.isDefault) {
-      await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
+    // S'assurer qu'aucun autre formateur n'est par défaut si celui-ci l'est (isDefault === 1)
+    if (trainer.isDefault === 1) {
+      await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
     }
-    const id = await db.trainers.add(trainer as Trainer);
+    const id = await db.trainers.add(trainer as Trainer); // trainer contient déjà isDefault: 0 ou 1
     return id;
   } catch (error) {
     console.error("Error adding trainer: ", error);
@@ -598,11 +603,17 @@ export const getTrainerById = async (id: number): Promise<Trainer | undefined> =
 };
 
 export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> => {
+  // updates.isDefault peut être 0, 1, ou undefined.
+  // Si undefined, on ne touche pas à isDefault.
+  // Si 0 ou 1, on met à jour.
   try {
-    // Si on met à jour un formateur pour qu'il soit par défaut
-    if (updates.isDefault) {
-      await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
+    // Si on met à jour un formateur pour qu'il soit par défaut (isDefault === 1)
+    if (updates.isDefault === 1) {
+      await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
     }
+    // Si updates.isDefault est undefined, il ne sera pas inclus dans l'objet d'update pour Dexie,
+    // donc la valeur existante de isDefault pour ce formateur ne sera pas modifiée.
+    // Si updates.isDefault est 0, il mettra isDefault à 0.
     await db.trainers.update(id, updates);
     return id;
   } catch (error) {
@@ -626,10 +637,10 @@ export const deleteTrainer = async (id: number): Promise<void> => {
 
 export const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
   try {
-    // D'abord, s'assurer qu'aucun autre formateur n'est par défaut
-    await db.trainers.where('isDefault').equals(true).modify({ isDefault: false });
-    // Ensuite, définir le formateur spécifié comme par défaut
-    await db.trainers.update(id, { isDefault: true });
+    // D'abord, s'assurer qu'aucun autre formateur n'est par défaut (isDefault === 1)
+    await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
+    // Ensuite, définir le formateur spécifié comme par défaut (isDefault === 1)
+    await db.trainers.update(id, { isDefault: 1 });
     return id;
   } catch (error) {
     console.error(`Error setting default trainer for id ${id}:`, error);
@@ -638,8 +649,12 @@ export const setDefaultTrainer = async (id: number): Promise<number | undefined>
 
 export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
   try {
-    return await db.trainers.where('isDefault').equals(true).first();
+    // Récupérer le formateur où isDefault est 1
+    return await db.trainers.where('isDefault').equals(1).first();
   } catch (error) {
     console.error("Error getting default trainer:", error);
+    // En cas d'erreur (par exemple, si l'index est toujours problématique),
+    // on pourrait retourner le premier formateur par ID comme fallback,
+    // mais il vaut mieux que l'erreur soit visible pour diagnostic.
   }
 };

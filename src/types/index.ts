@@ -28,7 +28,7 @@ export interface Session {
 export interface Trainer {
   id?: number; // Sera auto-incrémenté par Dexie
   name: string;
-  isDefault?: boolean;
+  isDefault?: 0 | 1; // 0 pour false, 1 pour true
 }
 
 // Interface pour le mappage Question DB <-> Slide PPTX (par session)
