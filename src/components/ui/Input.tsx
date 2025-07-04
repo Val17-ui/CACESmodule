@@ -5,6 +5,7 @@ type InputProps = {
   type?: string;
   placeholder?: string;
   value?: string | number;
+  defaultValue?: string | number; // Ajout de defaultValue
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   name?: string;
   id?: string;
@@ -25,6 +26,7 @@ const Input: React.FC<InputProps> = ({
   type = 'text',
   placeholder,
   value,
+  defaultValue, // Déstructurer defaultValue
   onChange,
   name,
   id,
@@ -63,6 +65,7 @@ const Input: React.FC<InputProps> = ({
           name={name}
           id={inputId}
           value={value}
+          defaultValue={defaultValue} // Utiliser defaultValue ici
           onChange={onChange}
           placeholder={placeholder}
           className={`
