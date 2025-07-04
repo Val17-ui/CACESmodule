@@ -487,168 +487,242 @@ function createIntroTitleSlideXml(
   </p:sld>`;
 }
 
-function createIntroParticipantsSlideXml(
-  participants: ParticipantForGenerator[], // Utilise la nouvelle interface alignée
-  slideNumber: number
+// Nouvelle fonction pour encapsuler la génération du <p:graphicFrame> du tableau
+// (essentiellement le contenu de l'ancien `tableXml` dans `createIntroParticipantsSlideXml`)
+function generateTableRowsXml(
+  participants: ParticipantForGenerator[],
+  // La logique pour hasOrganizationData sera gérée en amont ou passée en argument si besoin pour le nombre de colonnes d'en-tête
+  // Pour l'instant, on la recalcule ici pour déterminer les en-têtes.
+  // Idéalement, le nombre de colonnes devrait correspondre à celles définies dans le tblGrid du layout.
+  rowHeightEMU: number = 370840 // Hauteur de ligne par défaut, pourrait être passée en argument si lue du layout
 ): string {
-  // console.log("[DEBUG_PARTICIPANTS_SLIDE] Données participants reçues par createIntroParticipantsSlideXml:", JSON.stringify(participants)); // DEBUG
-  const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
-  const baseSpId = slideNumber * 1000; // Base pour les ID des formes sur la diapositive
-
-  // Déterminer si la colonne Organisation est nécessaire
+  let tableRowsXml = "";
   const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
-  const columnCount = hasOrganizationData ? 5 : 4;
-
-  // Dimensions et position du tableau (ajuster selon besoin)
-  // Ces valeurs sont en EMUs (English Metric Units). 1 pouce = 914400 EMUs.
-  // Dimensions de la diapositive 16:9 standard
-  const slideWidthEMU = 12192000;
-  const slideHeightEMU = 6858000;
-
-  // Dimensions et position du tableau
-  const tableWidthRatio = 0.85; // Utiliser 85% de la largeur de la diapositive
-  const tableCx = Math.round(slideWidthEMU * tableWidthRatio);
-
-  const rowHeightEMU = 370840; // Hauteur d'une ligne (en-tête ou donnée) ~0.4 pouces
-  const headerRowCount = 1;
-  let tableCy = rowHeightEMU * (participants.length + headerRowCount);
-
-  const tableX = Math.round((slideWidthEMU - tableCx) / 2); // Centré horizontalement
-  let tableY = Math.round((slideHeightEMU - tableCy) / 2); // Centré verticalement
-
-  // Ajustement pour ne pas empiéter sur un titre potentiel en haut
-  const minTableY = 1200000; // Espace minimum pour un titre (environ 1.3 pouces)
-  if (tableY < minTableY) {
-    tableY = minTableY;
-    // Si la table est trop haute pour être centrée sous le titre, elle pourrait déborder en bas.
-    // On pourrait recalculer tableCy pour qu'elle tienne, mais cela réduirait la hauteur des lignes.
-    // Pour l'instant, on la laisse déborder si elle est trop grande.
-    // Une alternative serait : tableCy = slideHeightEMU - minTableY - someBottomMargin;
-  }
-  if (tableY + tableCy > slideHeightEMU) {
-      tableCy = slideHeightEMU - tableY - 182880; // Laisse une petite marge en bas (0.2 pouce)
-      if (tableCy < rowHeightEMU * (participants.length + headerRowCount) && participants.length > 0) {
-          // Si la hauteur dispo est trop petite pour toutes les lignes, on ne fait rien de plus pour l'instant
-          // Le tableau dépassera ou le contenu des cellules sera coupé par PPT.
-      }
-  }
-
-
-  // Définition des colonnes et de leurs largeurs (approximatives, en EMUs)
-  const colWidths = [];
-  const numCols = hasOrganizationData ? 5 : 4;
-  if (numCols === 5) {
-    colWidths.push(Math.round(tableCx * 0.06)); // N°
-    colWidths.push(Math.round(tableCx * 0.20)); // ID Boîtier
-    colWidths.push(Math.round(tableCx * 0.27)); // Nom
-    colWidths.push(Math.round(tableCx * 0.27)); // Prénom
-    colWidths.push(Math.round(tableCx * 0.20)); // Organisation
-  } else {
-    colWidths.push(Math.round(tableCx * 0.08)); // N°
-    colWidths.push(Math.round(tableCx * 0.25)); // ID Boîtier
-    colWidths.push(Math.round(tableCx * 0.335)); // Nom
-    colWidths.push(Math.round(tableCx * 0.335)); // Prénom
-  }
-  // S'assurer que la somme des largeurs de colonnes = tableCx
-  let sumWidths = colWidths.reduce((a, b) => a + b, 0);
-  if (sumWidths !== tableCx && colWidths.length > 0) {
-      colWidths[colWidths.length - 1] += (tableCx - sumWidths);
-  }
-
-
-  let tableXml = `<p:graphicFrame>
-    <p:nvGraphicFramePr>
-      <p:cNvPr id="${baseSpId + 2}" name="Tableau Participants"/>
-      <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>
-      <p:nvPr/>
-    </p:nvGraphicFramePr>
-    <p:xfrm>
-      <a:off x="${tableX}" y="${tableY}"/>
-      <a:ext cx="${tableCx}" cy="${tableCy}"/>
-    </p:xfrm>
-    <a:graphic>
-      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
-        <a:tbl>
-          <a:tblPr firstRow="1" bandRow="1">
-            <a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>
-          </a:tblPr>
-          <a:tblGrid>`;
-  colWidths.forEach(w => { tableXml += `<a:gridCol w="${w}"/>`; });
-  tableXml += `</a:tblGrid>`;
 
   // Ligne d'en-tête
-  tableXml += `<a:tr h="370840">`; // Hauteur de ligne exemple
+  tableRowsXml += `<a:tr h="${rowHeightEMU}">`;
   const headers = ["N°", "ID Boîtier", "Nom", "Prénom"];
-  if (hasOrganizationData) headers.push("Organisation");
+  if (hasOrganizationData) {
+    headers.push("Organisation");
+  }
 
   headers.forEach(headerText => {
-    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    // Note: Le style (gras, etc.) de l'en-tête pourrait aussi venir du layout.
+    // Pour l'instant, on le garde simple ici.
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
   });
-  tableXml += `</a:tr>`;
+  tableRowsXml += `</a:tr>`;
 
   // Lignes de données pour chaque participant
   participants.forEach((participant, index) => {
-    // console.log(`[DEBUG_PARTICIPANT_DATA_IN_TABLE_LOOP] Index: ${index}, ID Boîtier: ${participant.idBoitier}, Nom: ${participant.nom}, Prénom: ${participant.prenom}, Org: ${participant.organization}`); // DEBUG
-    tableXml += `<a:tr h="370840">`;
-    // N°
-    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    // ID Boîtier
-    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    // Nom
-    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    // Prénom
-    tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    // Organisation (si applicable)
+    tableRowsXml += `<a:tr h="${rowHeightEMU}">`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     if (hasOrganizationData) {
-      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     }
-    tableXml += `</a:tr>`;
+    tableRowsXml += `</a:tr>`;
   });
 
-  tableXml += `</a:tbl>
-      </a:graphicData>
-    </a:graphic>
-  </p:graphicFrame>`;
+  return tableRowsXml;
+}
 
-  // console.log("[DEBUG_PARTICIPANTS_SLIDE] Table XML généré (premiers 500 chars):", tableXml.substring(0,500)); // DEBUG
+function generateTableGraphicFrame(participants: ParticipantForGenerator[], baseSpId: number): string {
+    const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
 
-  // Titre de la diapositive (reste similaire)
-  const titleText = "Participants";
-  const titlePlaceholder = `<p:sp>
-    <p:nvSpPr>
-      <p:cNvPr id="${baseSpId + 1}" name="Title Placeholder"/>
-      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-      <p:nvPr><p:ph type="title"/></p:nvPr>
-    </p:nvSpPr>
-    <p:spPr/>
-    <p:txBody>
-      <a:bodyPr/><a:lstStyle/>
-      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleText)}</a:t></a:r></a:p>
-    </p:txBody>
-  </p:sp>`;
+    // Les calculs de dimensions et position sont conservés pour l'instant.
+    // Idéalement, ils viendraient du placeholder du layout.
+    const slideWidthEMU = 12192000;
+    const slideHeightEMU = 6858000;
+    const tableWidthRatio = 0.85;
+    const tableCx = Math.round(slideWidthEMU * tableWidthRatio);
+    const rowHeightEMU = 370840;
+    const headerRowCount = 1;
+    let tableCy = rowHeightEMU * (participants.length + headerRowCount);
+    const tableX = Math.round((slideWidthEMU - tableCx) / 2);
+    let tableY = Math.round((slideHeightEMU - tableCy) / 2);
+    const minTableY = 1200000;
+    if (tableY < minTableY) {
+        tableY = minTableY;
+    }
+    if (tableY + tableCy > slideHeightEMU) {
+        tableCy = slideHeightEMU - tableY - 182880;
+    }
 
-  // Assemblage final de la diapositive
-  // Note: On insère le tableau directement dans spTree. Le layout doit avoir un placeholder de titre,
-  // mais le tableau est ajouté comme un graphicFrame séparé.
-  // Si le layout a un placeholder de corps et qu'on veut que le tableau s'y insère,
-  // il faudrait mettre le <p:graphicFrame> à l'intérieur du <p:sp> du placeholder de corps,
-  // mais cela complique la gestion des dimensions. Pour l'instant, on le met en absolu.
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-  ${slideComment}
-  <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-    <p:cSld>
-      <p:spTree>
-        <p:nvGrpSpPr>
-          <p:cNvPr id="${baseSpId}" name="Intro Participants Content Group"/>
-          <p:cNvGrpSpPr/><p:nvPr/>
-        </p:nvGrpSpPr>
-        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-        ${titlePlaceholder}
-        ${tableXml}
-      </p:spTree>
-    </p:cSld>
-    <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-  </p:sld>`;
+    const colWidths = [];
+    if (hasOrganizationData) {
+        colWidths.push(Math.round(tableCx * 0.06));
+        colWidths.push(Math.round(tableCx * 0.20));
+        colWidths.push(Math.round(tableCx * 0.27));
+        colWidths.push(Math.round(tableCx * 0.27));
+        colWidths.push(Math.round(tableCx * 0.20));
+    } else {
+        colWidths.push(Math.round(tableCx * 0.08));
+        colWidths.push(Math.round(tableCx * 0.25));
+        colWidths.push(Math.round(tableCx * 0.335));
+        colWidths.push(Math.round(tableCx * 0.335));
+    }
+    let sumWidths = colWidths.reduce((a, b) => a + b, 0);
+    if (sumWidths !== tableCx && colWidths.length > 0) {
+        colWidths[colWidths.length - 1] += (tableCx - sumWidths);
+    }
+
+    let tableXml = `<p:graphicFrame>
+      <p:nvGraphicFramePr>
+        <p:cNvPr id="${baseSpId}" name="Tableau Participants"/>
+        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>
+        <p:nvPr/>
+      </p:nvGraphicFramePr>
+      <p:xfrm>
+        <a:off x="${tableX}" y="${tableY}"/>
+        <a:ext cx="${tableCx}" cy="${tableCy}"/>
+      </p:xfrm>
+      <a:graphic>
+        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+          <a:tbl>
+            <a:tblPr firstRow="1" bandRow="1">
+              <a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>
+            </a:tblPr>
+            <a:tblGrid>`;
+    colWidths.forEach(w => { tableXml += `<a:gridCol w="${w}"/>`; });
+    tableXml += `</a:tblGrid>`;
+
+    const headers = ["N°", "ID Boîtier", "Nom", "Prénom"];
+    if (hasOrganizationData) headers.push("Organisation");
+    tableXml += `<a:tr h="${rowHeightEMU}">`;
+    headers.forEach(headerText => {
+      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    });
+    tableXml += `</a:tr>`;
+
+    participants.forEach((participant, index) => {
+      tableXml += `<a:tr h="${rowHeightEMU}">`;
+      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      if (hasOrganizationData) {
+        tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      }
+      tableXml += `</a:tr>`;
+    });
+    tableXml += `</a:tbl>
+        </a:graphicData>
+      </a:graphic>
+    </p:graphicFrame>`;
+    return tableXml;
+}
+
+function createIntroParticipantsSlideXml(
+  participants: ParticipantForGenerator[],
+  slideNumber: number,
+  layoutPptxFilePath: string | null, // Chemin vers le fichier slideLayoutX.xml (ex: "ppt/slideLayouts/slideLayout1.xml")
+                                     // Sert à créer le .rels de la diapositive.
+  layoutXmlAsSlideBase: string | null, // Contenu XML du fichier slideLayoutX.xml, à utiliser comme base pour le <p:sld>
+  layoutGraphicFrameTarget: string | null, // XML du <p:graphicFrame> spécifique du layout qui contient la table
+  layoutTblPr: string | null, // XML du <a:tblPr> extrait du layout
+  layoutTblGrid: string | null // XML du <a:tblGrid> extrait du layout
+): string {
+  const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
+  const titleTextToSet = "Participants";
+
+  let finalSlideXml = "";
+
+  if (layoutXmlAsSlideBase && layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
+    // CAS 1: Utiliser le tableau et le layout fournis
+    console.log("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
+
+    // 1. Générer les lignes de données
+    const tableRows = generateTableRowsXml(participants);
+
+    // 2. Reconstruire la balise <a:tbl> avec les propriétés du layout et les nouvelles lignes
+    // On enlève la balise fermante et ouvrante de tbl pour injecter le contenu
+    const newTblContent = `${layoutTblPr}${layoutTblGrid}${tableRows}`;
+    const newFullTblXml = `<a:tbl>${newTblContent}</a:tbl>`;
+
+    // 3. Remplacer l'ancien <a:tbl> dans le layoutGraphicFrameTarget par le nouveau
+    const graphicFrameWithNewTable = layoutGraphicFrameTarget.replace(
+      /<a:tbl>[\s\S]*?<\/a:tbl>/,
+      newFullTblXml
+    );
+
+    // 4. Construire le XML de la diapositive en utilisant layoutXmlAsSlideBase.
+    //    Il faut remplacer le <p:graphicFrame> original par graphicFrameWithNewTable.
+    //    Et s'assurer que le layoutXmlAsSlideBase est transformé en un <p:sld>
+    //    Cette partie est la plus délicate car layoutXmlAsSlideBase est un <p:sldLayout>.
+    //    Nous devons créer un <p:sld> qui *utilise* ce layout.
+
+    //    Simplification pour cette étape: On va prendre la structure de base d'un slide
+    //    et y insérer le graphicFrame modifié. Le layout est lié via le .rels.
+
+    let baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    ${slideComment}
+    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">
+        <p:spTree>
+          <p:nvGrpSpPr>
+            <p:cNvPr id="${slideNumber * 1000 + 0}" name="Group Shape"/> <p:cNvGrpSpPr/><p:nvPr/>
+          </p:nvGrpSpPr>
+          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+
+          <!-- Placeholder pour le Titre -->
+          <p:sp>
+            <p:nvSpPr>
+              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>
+              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+              <p:nvPr><p:ph type="title"/></p:nvPr>
+            </p:nvSpPr>
+            <p:spPr/>
+            <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p></p:txBody>
+          </p:sp>
+
+          <!-- Ici, on insère le graphicFrame (qui contient notre table modifiée) -->
+          ${graphicFrameWithNewTable}
+
+        </p:spTree>
+      </p:cSld>
+      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+    </p:sld>`;
+    finalSlideXml = baseSlideStructure;
+
+  } else {
+    // CAS 2: Fallback - Générer le tableau et son graphicFrame dynamiquement
+    console.log("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
+    const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2);
+
+    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    ${slideComment}
+    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">
+        <p:spTree>
+          <p:nvGrpSpPr>
+            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>
+            <p:cNvGrpSpPr/><p:nvPr/>
+          </p:nvGrpSpPr>
+          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+
+          <p:sp>
+            <p:nvSpPr>
+              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>
+              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+              <p:nvPr><p:ph type="title"/></p:nvPr>
+            </p:nvSpPr>
+            <p:spPr/>
+            <p:txBody>
+              <a:bodyPr/><a:lstStyle/>
+              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p>
+            </p:txBody>
+          </p:sp>
+
+          ${dynamicTableGraphicFrame}
+        </p:spTree>
+      </p:cSld>
+      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+    </p:sld>`;
+  }
+  return finalSlideXml;
 }
 
 function createIntroInstructionsSlideXml(
@@ -1650,19 +1724,181 @@ export async function generatePPTXVal17(
       }
     }
 
-    if (participants && participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
-      const targetParticipantsLayoutName = options.introSlideLayouts.participantsLayoutName;
-      // Utiliser la nouvelle fonction de recherche
-      const actualParticipantsLayoutFileName = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants");
+async function getLayoutXml(zip: JSZip, layoutFileName: string): Promise<string | null> {
+  const layoutFile = zip.file(layoutFileName); // layoutFileName est le chemin complet, ex: "ppt/slideLayouts/slideLayout1.xml"
+  if (layoutFile) {
+    return layoutFile.async("string");
+  }
+  console.warn(`[getLayoutXml] Fichier layout non trouvé: ${layoutFileName}`);
+  return null;
+}
 
-      if (actualParticipantsLayoutFileName) {
+export async function generatePPTXVal17(
+  templateFile: File | null,
+  questions: Val17Question[],
+  options: GenerationOptions = {},
+  sessionInfo?: SessionInfo,
+  // participants est maintenant attendu comme ParticipantForGenerator[] par cette fonction,
+  // le mapping depuis le type de l'orchestrateur doit être fait par l'appelant (pptxOrchestrator)
+  participants?: ParticipantForGenerator[]
+): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[] } | null> {
+  try {
+    const executionId = Date.now();
+    validateQuestions(questions);
+    let currentTemplateFile: File;
+    if (templateFile) {
+      currentTemplateFile = templateFile;
+    } else {
+      console.warn("Aucun fichier modèle fourni.");
+      throw new Error("Template file is required by generatePPTXVal17.");
+    }
+    const templateZip = await JSZip.loadAsync(currentTemplateFile);
+
+    let slideSizeAttrs: SlideSizeAttributes | null = null;
+    const presentationXmlFileFromTemplate = templateZip.file(
+      "ppt/presentation.xml"
+    );
+    if (presentationXmlFileFromTemplate) {
+      const presentationXmlContent =
+        await presentationXmlFileFromTemplate.async("string");
+      const sldSzMatch = presentationXmlContent.match(
+        /<p:sldSz\s+cx="(\d+)"\s+cy="(\d+)"(?:\s+type="(\w+)")?/
+      );
+      if (sldSzMatch) {
+        slideSizeAttrs = { cx: sldSzMatch[1], cy: sldSzMatch[2] };
+        if (sldSzMatch[3]) {
+          slideSizeAttrs.type = sldSzMatch[3];
+        }
+      } else {
+        console.warn(
+          "<p:sldSz> non trouvé dans le presentation.xml du modèle."
+        );
+      }
+    } else {
+      console.warn("ppt/presentation.xml non trouvé dans le ZIP du modèle.");
+    }
+
+    const existingTagsCount = findHighestExistingTagNumber(templateZip);
+    let maxTagNumberUsed = existingTagsCount;
+
+    const outputZip = new JSZip();
+    const copyPromises: Promise<void>[] = [];
+    templateZip.forEach((relativePath, file) => {
+      if (!file.dir) {
+        const copyPromise: Promise<void> = file
+          .async("blob")
+          .then((content) => {
+            outputZip.file(relativePath, content);
+          });
+        copyPromises.push(copyPromise);
+      } else {
+        outputZip.folder(relativePath);
+      }
+    });
+    await Promise.all(copyPromises);
+
+    const initialExistingSlideCount = countExistingSlides(templateZip);
+    let introSlidesAddedCount = 0;
+    const newIntroSlideDetails: {
+      slideNumber: number;
+      layoutRIdInSlide: string;
+      layoutFileName: string; // Chemin complet du layout, ex: ppt/slideLayouts/slideLayout1.xml
+    }[] = [];
+
+    if (sessionInfo && options.introSlideLayouts?.titleLayoutName) {
+      const targetTitleLayoutName = options.introSlideLayouts.titleLayoutName;
+      const actualTitleLayoutPath = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title");
+
+      if (actualTitleLayoutPath) {
         const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
-        const participantsSlideXml = createIntroParticipantsSlideXml(participants, currentIntroSlideNumber);
-        outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, participantsSlideXml);
-        // console.log(`[DEBUG_INTRO_SLIDE_ADD] Ajouté ppt/slides/slide${currentIntroSlideNumber}.xml (Participants)`); // DEBUG
+        // On ne passe pas le contenu XML du layout à createIntroTitleSlideXml car il génère son propre XML
+        const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber);
+        outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
 
         const layoutRIdInSlide = "rId1";
-        const participantsLayoutBaseName = actualParticipantsLayoutFileName.substring(actualParticipantsLayoutFileName.lastIndexOf('/') + 1);
+        const titleLayoutBaseName = actualTitleLayoutPath.substring(actualTitleLayoutPath.lastIndexOf('/') + 1);
+        const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${titleLayoutBaseName}"/>
+</Relationships>`;
+        outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
+
+        newIntroSlideDetails.push({
+          slideNumber: currentIntroSlideNumber,
+          layoutRIdInSlide,
+          layoutFileName: actualTitleLayoutPath,
+        });
+        introSlidesAddedCount++;
+      } else {
+        console.warn(`Layout de titre avec nom approchant "${targetTitleLayoutName}" non trouvé. Slide de titre non ajoutée.`);
+      }
+    }
+
+    if (participants && participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
+      const targetParticipantsLayoutName = options.introSlideLayouts.participantsLayoutName;
+      const actualParticipantsLayoutPath = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants");
+
+      if (actualParticipantsLayoutPath) {
+        let layoutTblPrXml: string | null = null;
+        let layoutTblGridXml: string | null = null;
+        let layoutGraphicFrameXml: string | null = null; // Pour stocker le XML du graphicFrame contenant la table
+        // let slideXmlToUseAsBase = ""; // Soit le layout lui-même, soit un slide standard
+
+        const layoutFileXmlContent = await getLayoutXml(outputZip, actualParticipantsLayoutPath);
+
+        if (layoutFileXmlContent) {
+          // Essayer de trouver le premier graphicFrame avec une table dans le layout
+          const graphicFrameRegex = /<p:graphicFrame>([\s\S]*?<a:tbl>[\s\S]*?<\/a:tbl>[\s\S]*?)<\/p:graphicFrame>/;
+          const graphicFrameMatch = layoutFileXmlContent.match(graphicFrameRegex);
+
+          if (graphicFrameMatch && graphicFrameMatch[0]) {
+            layoutGraphicFrameXml = graphicFrameMatch[0]; // Le graphicFrame complet
+            console.log("[DEBUG_TABLE_LAYOUT] Found graphicFrame containing a table in layout:", layoutGraphicFrameXml.substring(0, 300) + "...");
+
+            const tblPrRegex = /<a:tblPr>[\s\S]*?<\/a:tblPr>/;
+            const tblPrMatch = layoutGraphicFrameXml.match(tblPrRegex);
+            if (tblPrMatch && tblPrMatch[0]) {
+              layoutTblPrXml = tblPrMatch[0];
+              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblPr from layout:", layoutTblPrXml);
+            } else {
+              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblPr from layout's table.");
+            }
+
+            const tblGridRegex = /<a:tblGrid>[\s\S]*?<\/a:tblGrid>/;
+            const tblGridMatch = layoutGraphicFrameXml.match(tblGridRegex);
+            if (tblGridMatch && tblGridMatch[0]) {
+              layoutTblGridXml = tblGridMatch[0];
+              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblGrid from layout:", layoutTblGridXml);
+            } else {
+              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table.");
+            }
+            // À ce stade, nous avons layoutTblPrXml et layoutTblGridXml si le tableau du layout est bien structuré.
+            // slideXmlToUseAsBase = layoutFileXmlContent; // On utilisera le contenu du layout comme base de la diapo
+          } else {
+            console.warn("[DEBUG_TABLE_LAYOUT] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
+          }
+        } else {
+          console.warn(`[DEBUG_TABLE_LAYOUT] Could not read content of layout file: ${actualParticipantsLayoutPath}`);
+        }
+
+        console.log(`[TEST_PPTX_GEN] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
+        const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
+
+        // Appel à createIntroParticipantsSlideXml sera modifié plus tard pour utiliser ces infos
+        const participantsSlideXml = createIntroParticipantsSlideXml(
+          participants,
+          currentIntroSlideNumber,
+          actualParticipantsLayoutPath, // Chemin vers le fichier slideLayoutX.xml
+          layoutFileXmlContent,      // Contenu XML du layout (pourra servir de base)
+          layoutGraphicFrameXml,     // Le <p:graphicFrame> du layout contenant la table
+          layoutTblPrXml,            // <a:tblPr> extrait
+          layoutTblGridXml           // <a:tblGrid> extrait
+        );
+
+        outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, participantsSlideXml);
+
+        const layoutRIdInSlide = "rId1"; // Hypothèse standard
+        const participantsLayoutBaseName = actualParticipantsLayoutPath.substring(actualParticipantsLayoutPath.lastIndexOf('/') + 1);
         const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${participantsLayoutBaseName}"/>
@@ -1677,7 +1913,7 @@ export async function generatePPTXVal17(
         });
         introSlidesAddedCount++;
       } else {
-        console.warn(`Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé. Slide des participants non ajoutée.`);
+        console.warn(`[TEST_PPTX_GEN] Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé.`);
       }
     }
 
