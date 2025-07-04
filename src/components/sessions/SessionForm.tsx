@@ -77,6 +77,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [trainersList, setTrainersList] = useState<Trainer[]>([]);
   const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
 
+  // États pour la résolution des anomalies d'importation
+  const [detectedAnomalies, setDetectedAnomalies] = useState<{
+    muets: Array<{ serialNumber: string; visualId: number; participantName: string; responses: ExtractedResultFromXml[] }>;
+    inconnus: Array<{ serialNumber: string; responses: ExtractedResultFromXml[] }>;
+  } | null>(null);
+  const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
+  const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
+
   useEffect(() => {
     const fetchInitialData = async () => {
       const devicesFromDb = await getAllVotingDevices();
@@ -731,22 +739,111 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const finalExtractedResults = Array.from(latestResultsMap.values());
       logger.info(`[Import Results] ${finalExtractedResults.length} réponses retenues après déduplication (conservation de la dernière réponse par timestamp).`);
 
-
       if (finalExtractedResults.length === 0) {
         setImportSummary("Aucune réponse valide à importer après filtrage et déduplication.");
         return;
       }
 
-      setImportSummary(`${finalExtractedResults.length} réponses prêtes pour transformation et import...`);
+      // Étape 1.1: Charger les données de référence de la session
+      const sessionQuestions = await getSessionQuestionsBySessionId(currentSessionDbId);
+      const sessionBoitiers = await getSessionBoitiersBySessionId(currentSessionDbId);
 
-      const currentQuestionMappings = editingSessionData.questionMappings;
-      if (!currentQuestionMappings || currentQuestionMappings.length === 0) {
-        setImportSummary("Erreur: Mappages de questions manquants pour la session. Impossible de lier les résultats.");
+      if (!sessionQuestions || sessionQuestions.length === 0) {
+        setImportSummary("Erreur: Impossible de charger les questions de référence pour cette session. L'import ne peut continuer.");
+        logger.error(`[Import Results] Impossible de charger sessionQuestions pour sessionId: ${currentSessionDbId}`);
+        return;
+      }
+      if (!sessionBoitiers) { // sessionBoitiers peut être vide si aucun participant n'a été configuré avec boîtier.
+        logger.warn(`[Import Results] Aucune information de boîtier (sessionBoitiers) trouvée pour sessionId: ${currentSessionDbId}. Les vérifications de boîtiers seront limitées.`);
+        // Ne pas bloquer ici, car une session pourrait ne pas avoir de participants pré-assignés.
+      }
+
+      // Étape 3.1: Vérification des questions
+      const validSlideGuids = new Set(sessionQuestions.map(sq => sq.slideGuid));
+      // Note: testSlideGuid a déjà été filtré de finalExtractedResults, donc pas besoin de l'exclure ici explicitement.
+
+      for (const result of finalExtractedResults) {
+        if (!validSlideGuids.has(result.questionSlideGuid)) {
+          const errorMessage = `Certains GUID de question (ex: ${result.questionSlideGuid}) dans le fichier de résultats ne correspondent pas à cette session. Vérifiez votre fichier ORS.`;
+          setImportSummary(errorMessage);
+          logger.error(`[Import Results - Anomaly] ${errorMessage}`, {
+            importedGuid: result.questionSlideGuid,
+            expectedGuids: Array.from(validSlideGuids)
+          });
+          return; // Arrêter le processus d'import
+        }
+      }
+      logger.info("[Import Results] Vérification des GUID de questions terminée. Tous les GUID importés sont valides pour cette session.");
+
+      // Étape 3.2: Correspondance des boîtiers et préparation des listes d'anomalies
+      const prevusSerialNumbers = new Set(sessionBoitiers.map(b => b.serialNumber));
+      // Clonage pour pouvoir modifier muetsAttendus sans affecter sessionBoitiers directement
+      let muetsAttendus: { serialNumber: string; visualId: number; participantName: string; responses: ExtractedResultFromXml[] }[] = sessionBoitiers.map(b => ({
+        serialNumber: b.serialNumber,
+        visualId: b.visualId,
+        participantName: b.participantName,
+        responses: [] // Initialisé vide, pour le cas partiel plus tard
+      }));
+
+      const inconnusDetectes: { serialNumber: string, responses: ExtractedResultFromXml[] }[] = [];
+      const reponsesDesAttendus: ExtractedResultFromXml[] = []; // Pour stocker les réponses des boîtiers attendus
+
+      for (const result of finalExtractedResults) {
+        const serialNumberRepondant = result.participantDeviceID;
+        if (prevusSerialNumbers.has(serialNumberRepondant)) {
+          // Le boîtier est attendu
+          reponsesDesAttendus.push(result); // Garder cette réponse
+
+          // Retirer de la liste des muets (s'il y est encore)
+          muetsAttendus = muetsAttendus.filter(muet => muet.serialNumber !== serialNumberRepondant);
+
+          // (Optionnel pour cas partiel - ajout de la réponse au boîtier attendu)
+          // Pour cela, il faudrait modifier l'objet dans sessionBoitiers ou une copie.
+          // Pour l'instant, on se contente de le retirer des muets.
+          // La logique pour le cas partiel sera plus complexe et nécessitera de savoir quelles questions ont été répondues.
+
+        } else {
+          // Le boîtier est inconnu
+          let inconnuEntry = inconnusDetectes.find(inc => inc.serialNumber === serialNumberRepondant);
+          if (!inconnuEntry) {
+            inconnuEntry = { serialNumber: serialNumberRepondant, responses: [] };
+            inconnusDetectes.push(inconnuEntry);
+          }
+          inconnuEntry.responses.push(result);
+        }
+      }
+
+      logger.info(`[Import Results] Correspondance des boîtiers terminée. ${muetsAttendus.length} boîtier(s) attendu(s) sont muets. ${inconnusDetectes.length} boîtier(s) inconnu(s) ont répondu.`);
+
+      // À ce point, nous avons:
+      // - reponsesDesAttendus: ExtractedResultFromXml[] des boîtiers prévus
+      // - muetsAttendus: SessionBoitier[] (avec un champ 'responses' vide pour l'instant)
+      // - inconnusDetectes: { serialNumber: string, responses: ExtractedResultFromXml[] }[]
+
+      // Si anomalies (muets ou inconnus), on ne procède pas à la sauvegarde directe.
+      // On stocke ces listes pour l'UI de résolution.
+      if (muetsAttendus.length > 0 || inconnusDetectes.length > 0) {
+        setImportSummary(`Anomalies détectées: ${muetsAttendus.length} boîtier(s) muet(s), ${inconnusDetectes.length} boîtier(s) inconnu(s). Résolution nécessaire.`);
+        setDetectedAnomalies({ muets: muetsAttendus, inconnus: inconnusDetectes });
+        setPendingValidResults(reponsesDesAttendus); // Stocker les réponses valides qui ne posent pas de problème de boîtier
+        setShowAnomalyResolutionUI(true); // Déclencheur pour afficher l'UI de résolution
+        logger.info("[Import Results] Des anomalies de boîtiers ont été détectées. Affichage de l'interface de résolution.");
         return;
       }
 
+      // Si aucune anomalie de boîtier, procéder à la transformation et sauvegarde des reponsesDesAttendus
+      logger.info("[Import Results] Aucune anomalie de boîtier détectée. Procédure d'import direct.");
+      setImportSummary(`${reponsesDesAttendus.length} réponses valides prêtes pour transformation et import...`);
+
+      const currentQuestionMappings = editingSessionData.questionMappings;
+      if (!currentQuestionMappings || currentQuestionMappings.length === 0) {
+        setImportSummary("Erreur: Mappages de questions manquants pour la session (editingSessionData.questionMappings). Impossible de lier les résultats.");
+        return;
+      }
+
+      // Utiliser reponsesDesAttendus car il ne contient que les réponses des boîtiers prévus et validés jusqu'ici
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
-        finalExtractedResults, // Utiliser les résultats filtrés et dédupliqués
+        reponsesDesAttendus,
         currentQuestionMappings,
         currentSessionDbId
       );
