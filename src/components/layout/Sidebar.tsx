@@ -88,11 +88,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
       
       <div className="border-t border-gray-200 px-4 py-4">
         <ul className="space-y-1">
-          <SidebarItem
-            icon={<FileText size={20} />}
-            label="Journal système"
-            onClick={openLogViewer}
-          />
+          {/* Lien "Journal système" retiré d'ici */}
           <SidebarItem
             icon={<Settings size={20} />}
             label="Paramètres"
