@@ -1,5 +1,6 @@
 import Dexie, { Table } from 'dexie';
-import { CACESReferential, Session, Participant, SessionResult, Trainer } from './types'; // Ajout de Trainer
+import { CACESReferential, Session, Participant, SessionResult, Trainer } from './types';
+import { logger } from './utils/logger'; // Importer le logger
 
 // Interfaces pour la DB
 export interface QuestionWithId {
@@ -371,8 +372,18 @@ export const deleteQuestion = async (id: number): Promise<void> => {
 export const addSession = async (session: Session): Promise<number | undefined> => {
   try {
     const id = await db.sessions.add(session);
+    if (id !== undefined) {
+      logger.info(`Session créée : "${session.nomSession}"`, {
+        eventType: 'SESSION_CREATED',
+        sessionId: id,
+        sessionName: session.nomSession,
+        referential: session.referentiel,
+        participantsCount: session.participants?.length || 0
+      });
+    }
     return id;
   } catch (error) {
+    logger.error(`Erreur lors de la création de la session "${session.nomSession}"`, { error, sessionDetails: session });
     console.error("Error adding session: ", error);
   }
 };
@@ -396,9 +407,25 @@ export const getSessionById = async (id: number): Promise<Session | undefined> =
 
 export const updateSession = async (id: number, updates: Partial<Session>): Promise<number | undefined> => {
   try {
-    await db.sessions.update(id, updates);
-    return id;
+    const numAffected = await db.sessions.update(id, updates);
+    if (numAffected > 0) {
+      // Pour obtenir le nom de la session, il faudrait soit le passer dans `updates` (s'il change),
+      // soit le récupérer. Pour l'instant, on logue avec l'ID.
+      // Si `updates.nomSession` existe, on peut l'utiliser.
+      const sessionName = updates.nomSession || (await db.sessions.get(id))?.nomSession || `ID ${id}`;
+      const logDetails: any = {
+        eventType: 'SESSION_UPDATED',
+        sessionId: id,
+        updatedFields: Object.keys(updates)
+      };
+      if (updates.participants) {
+        logDetails.participantsCount = updates.participants.length;
+      }
+      logger.info(`Session modifiée : "${sessionName}"`, logDetails);
+    }
+    return id; // update ne retourne pas l'id directement, mais on le passe en argument
   } catch (error) {
+    logger.error(`Erreur lors de la modification de la session ID ${id}`, { error, updates });
     console.error(`Error updating session with id ${id}: `, error);
   }
 };

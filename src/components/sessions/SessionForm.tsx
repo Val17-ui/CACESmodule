@@ -32,6 +32,7 @@ import {
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
+import { logger } from '../../utils/logger'; // Importer le logger
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 
@@ -546,10 +547,27 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           });
           setEditingSessionData(await getSessionById(currentSavedId) || null);
           setImportSummary(`Session (ID: ${currentSavedId}) .ors et mappings générés. Statut: Prête.`);
+          logger.info(`Fichier .ors et mappings générés/mis à jour pour la session "${upToDateSessionData.nomSession}"`, {
+            eventType: 'ORS_UPDATED',
+            sessionId: currentSavedId,
+            sessionName: upToDateSessionData.nomSession
+          });
           setModifiedAfterOrsGeneration(false);
-        } catch (e: any) { setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`); console.error("Erreur sauvegarde .ors/mappings:", e); }
-      } else { setImportSummary("Erreur génération .ors/mappings."); console.error("Erreur génération .ors/mappings. Output:", generationOutput); }
-    } catch (error: any) { setImportSummary(`Erreur majeure génération: ${error.message}`); console.error("Erreur majeure génération:", error); }
+        } catch (e: any) {
+          setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`);
+          console.error("Erreur sauvegarde .ors/mappings:", e);
+          logger.error(`Erreur lors de la sauvegarde .ors/mappings pour la session "${upToDateSessionData.nomSession}"`, { eventType: 'ORS_UPDATE_SAVE_ERROR', sessionId: currentSavedId, error: e });
+        }
+      } else {
+        setImportSummary("Erreur génération .ors/mappings.");
+        console.error("Erreur génération .ors/mappings. Output:", generationOutput);
+        logger.error(`Erreur lors de la génération .ors/mappings pour la session "${upToDateSessionData.nomSession}"`, { eventType: 'ORS_GENERATION_ERROR', sessionId: currentSavedId, output: generationOutput });
+      }
+    } catch (error: any) {
+      setImportSummary(`Erreur majeure génération: ${error.message}`);
+      console.error("Erreur majeure génération:", error);
+      logger.error(`Erreur majeure lors de la génération ORS pour la session "${upToDateSessionData?.nomSession || `ID ${currentSavedId}`}"`, { eventType: 'ORS_MAJOR_GENERATION_ERROR', sessionId: currentSavedId, error });
+    }
     finally { setIsGeneratingOrs(false); }
   };
 
@@ -647,10 +665,28 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             if(sessionProcessError) { message += `\nErreur post-traitement: ${sessionProcessError}`; }
             setImportSummary(message);
             setResultsFile(null);
-          } else { setImportSummary("Echec sauvegarde résultats."); }
-        } catch (dbError: any) { setImportSummary(`Erreur DB sauvegarde résultats: ${dbError.message}`);}
-      } else { setImportSummary("Aucun résultat transformé."); }
-    } catch (error: any) { setImportSummary(`Erreur traitement fichier: ${error.message}`); }
+            logger.info(`Résultats importés pour la session ID ${currentSessionDbId}`, {
+              eventType: 'RESULTS_IMPORTED',
+              sessionId: currentSessionDbId,
+              fileName: resultsFile.name,
+              resultsCount: savedResultIds.length
+            });
+          } else {
+            setImportSummary("Echec sauvegarde résultats.");
+            logger.warning(`Échec de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FAILED_DB_SAVE', sessionId: currentSessionDbId, fileName: resultsFile.name });
+          }
+        } catch (dbError: any) {
+          setImportSummary(`Erreur DB sauvegarde résultats: ${dbError.message}`);
+          logger.error(`Erreur DB lors de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_ERROR_DB_SAVE', sessionId: currentSessionDbId, error: dbError, fileName: resultsFile.name });
+        }
+      } else {
+        setImportSummary("Aucun résultat transformé.");
+        logger.warning(`Aucun résultat transformé après parsing du fichier pour la session ID ${currentSessionDbId}`, {eventType: 'RESULTS_IMPORT_NO_TRANSFORMED_DATA', sessionId: currentSessionDbId, fileName: resultsFile.name});
+      }
+    } catch (error: any) {
+      setImportSummary(`Erreur traitement fichier: ${error.message}`);
+      logger.error(`Erreur lors du traitement du fichier de résultats pour la session ID ${currentSessionDbId}`, {eventType: 'RESULTS_IMPORT_FILE_PROCESSING_ERROR', sessionId: currentSessionDbId, error, fileName: resultsFile?.name});
+    }
   };
 
   const renderTabNavigation = () => (

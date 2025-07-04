@@ -12,15 +12,16 @@ import QuestionLibrary from '../components/library/QuestionLibrary'; // Réutili
 import QuestionForm from '../components/library/QuestionForm'; // Added missing import for QuestionForm
 import BackupRestore from '../components/settings/BackupRestore';
 import TechnicalSettings from '../components/settings/TechnicalSettings';
-import TrainerSettings from '../components/settings/TrainerSettings'; // Ajout de l'import
-import { Users2 } from 'lucide-react'; // Ajout d'une icône pour les formateurs
+import TrainerSettings from '../components/settings/TrainerSettings';
+import SystemLogViewer from '../components/settings/SystemLogViewer'; // Importer SystemLogViewer
+import { Users2, FileText as LogIcon } from 'lucide-react'; // Renommer FileText pour éviter conflit, ou utiliser directement
 
 type SettingsProps = {
   activePage: string;
   onPageChange: (page: string) => void;
 };
 
-type AdminTab = 'files' | 'hardware' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical'; // Ajout de 'trainers'
+type AdminTab = 'files' | 'hardware' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical' | 'systemLog'; // Ajout de 'systemLog'
 
 // Removed duplicate import of React, useState, useEffect
 // import React, { useState, useEffect } from 'react';
@@ -58,8 +59,9 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
     { id: 'hardware', label: 'Matériel', icon: <HardDrive size={20} /> },
     { id: 'preferences', label: 'Préférences', icon: <User size={20} /> },
     { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
-    { id: 'trainers', label: 'Formateurs', icon: <Users2 size={20} /> }, // Nouvel onglet
+    { id: 'trainers', label: 'Formateurs', icon: <Users2 size={20} /> },
     { id: 'backup', label: 'Sauvegarde & Restauration', icon: <Database size={20} /> },
+    { id: 'systemLog', label: 'Journal Système', icon: <LogIcon size={20} /> }, // Nouvel onglet Journal Système
     { id: 'technical', label: 'Paramètres Techniques', icon: <Wrench size={20} /> },
   ];
 
@@ -105,10 +107,11 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
       case 'technical':
         // setEditingQuestionId(null); // REMOVED
         return <TechnicalSettings />;
-      case 'trainers': // Ajout du cas pour les formateurs
+      case 'trainers':
         return <TrainerSettings />;
+      case 'systemLog': // Ajout du cas pour le journal système
+        return <SystemLogViewer />;
       default:
-        // setEditingQuestionId(null); // REMOVED
         return null;
     }
   };
