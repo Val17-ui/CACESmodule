@@ -231,8 +231,6 @@ function getImageDimensions(
   });
 }
 
-// Removed unused function createDefaultTemplate
-
 async function downloadImageFromCloudWithDimensions(url: string): Promise<{
   data: ArrayBuffer;
   extension: string;
@@ -487,19 +485,13 @@ function createIntroTitleSlideXml(
   </p:sld>`;
 }
 
-// Nouvelle fonction pour encapsuler la génération du <p:graphicFrame> du tableau
-// (essentiellement le contenu de l'ancien `tableXml` dans `createIntroParticipantsSlideXml`)
 function generateTableRowsXml(
   participants: ParticipantForGenerator[],
-  // La logique pour hasOrganizationData sera gérée en amont ou passée en argument si besoin pour le nombre de colonnes d'en-tête
-  // Pour l'instant, on la recalcule ici pour déterminer les en-têtes.
-  // Idéalement, le nombre de colonnes devrait correspondre à celles définies dans le tblGrid du layout.
-  rowHeightEMU: number = 370840 // Hauteur de ligne par défaut, pourrait être passée en argument si lue du layout
+  rowHeightEMU: number = 370840
 ): string {
   let tableRowsXml = "";
   const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
 
-  // Ligne d'en-tête
   tableRowsXml += `<a:tr h="${rowHeightEMU}">`;
   const headers = ["N°", "ID Boîtier", "Nom", "Prénom"];
   if (hasOrganizationData) {
@@ -507,13 +499,10 @@ function generateTableRowsXml(
   }
 
   headers.forEach(headerText => {
-    // Note: Le style (gras, etc.) de l'en-tête pourrait aussi venir du layout.
-    // Pour l'instant, on le garde simple ici.
     tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
   });
   tableRowsXml += `</a:tr>`;
 
-  // Lignes de données pour chaque participant
   participants.forEach((participant, index) => {
     tableRowsXml += `<a:tr h="${rowHeightEMU}">`;
     tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
@@ -532,8 +521,6 @@ function generateTableRowsXml(
 function generateTableGraphicFrame(participants: ParticipantForGenerator[], baseSpId: number): string {
     const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
 
-    // Les calculs de dimensions et position sont conservés pour l'instant.
-    // Idéalement, ils viendraient du placeholder du layout.
     const slideWidthEMU = 12192000;
     const slideHeightEMU = 6858000;
     const tableWidthRatio = 0.85;
@@ -569,6 +556,8 @@ function generateTableGraphicFrame(participants: ParticipantForGenerator[], base
         colWidths[colWidths.length - 1] += (tableCx - sumWidths);
     }
 
+    const tableRows = generateTableRowsXml(participants, rowHeightEMU);
+
     let tableXml = `<p:graphicFrame>
       <p:nvGraphicFramePr>
         <p:cNvPr id="${baseSpId}" name="Tableau Participants"/>
@@ -587,28 +576,7 @@ function generateTableGraphicFrame(participants: ParticipantForGenerator[], base
             </a:tblPr>
             <a:tblGrid>`;
     colWidths.forEach(w => { tableXml += `<a:gridCol w="${w}"/>`; });
-    tableXml += `</a:tblGrid>`;
-
-    const headers = ["N°", "ID Boîtier", "Nom", "Prénom"];
-    if (hasOrganizationData) headers.push("Organisation");
-    tableXml += `<a:tr h="${rowHeightEMU}">`;
-    headers.forEach(headerText => {
-      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    });
-    tableXml += `</a:tr>`;
-
-    participants.forEach((participant, index) => {
-      tableXml += `<a:tr h="${rowHeightEMU}">`;
-      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-      tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-      if (hasOrganizationData) {
-        tableXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-      }
-      tableXml += `</a:tr>`;
-    });
-    tableXml += `</a:tbl>
+    tableXml += `</a:tblGrid>${tableRows}</a:tbl>
         </a:graphicData>
       </a:graphic>
     </p:graphicFrame>`;
@@ -618,12 +586,11 @@ function generateTableGraphicFrame(participants: ParticipantForGenerator[], base
 function createIntroParticipantsSlideXml(
   participants: ParticipantForGenerator[],
   slideNumber: number,
-  layoutPptxFilePath: string | null, // Chemin vers le fichier slideLayoutX.xml (ex: "ppt/slideLayouts/slideLayout1.xml")
-                                     // Sert à créer le .rels de la diapositive.
-  layoutXmlAsSlideBase: string | null, // Contenu XML du fichier slideLayoutX.xml, à utiliser comme base pour le <p:sld>
-  layoutGraphicFrameTarget: string | null, // XML du <p:graphicFrame> spécifique du layout qui contient la table
-  layoutTblPr: string | null, // XML du <a:tblPr> extrait du layout
-  layoutTblGrid: string | null // XML du <a:tblGrid> extrait du layout
+  layoutPptxFilePath: string | null,
+  layoutXmlAsSlideBase: string | null,
+  layoutGraphicFrameTarget: string | null,
+  layoutTblPr: string | null,
+  layoutTblGrid: string | null
 ): string {
   const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
   const titleTextToSet = "Participants";
@@ -631,31 +598,14 @@ function createIntroParticipantsSlideXml(
   let finalSlideXml = "";
 
   if (layoutXmlAsSlideBase && layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
-    // CAS 1: Utiliser le tableau et le layout fournis
     console.log("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
-
-    // 1. Générer les lignes de données
     const tableRows = generateTableRowsXml(participants);
-
-    // 2. Reconstruire la balise <a:tbl> avec les propriétés du layout et les nouvelles lignes
-    // On enlève la balise fermante et ouvrante de tbl pour injecter le contenu
     const newTblContent = `${layoutTblPr}${layoutTblGrid}${tableRows}`;
     const newFullTblXml = `<a:tbl>${newTblContent}</a:tbl>`;
-
-    // 3. Remplacer l'ancien <a:tbl> dans le layoutGraphicFrameTarget par le nouveau
     const graphicFrameWithNewTable = layoutGraphicFrameTarget.replace(
       /<a:tbl>[\s\S]*?<\/a:tbl>/,
       newFullTblXml
     );
-
-    // 4. Construire le XML de la diapositive en utilisant layoutXmlAsSlideBase.
-    //    Il faut remplacer le <p:graphicFrame> original par graphicFrameWithNewTable.
-    //    Et s'assurer que le layoutXmlAsSlideBase est transformé en un <p:sld>
-    //    Cette partie est la plus délicate car layoutXmlAsSlideBase est un <p:sldLayout>.
-    //    Nous devons créer un <p:sld> qui *utilise* ce layout.
-
-    //    Simplification pour cette étape: On va prendre la structure de base d'un slide
-    //    et y insérer le graphicFrame modifié. Le layout est lié via le .rels.
 
     let baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     ${slideComment}
@@ -666,8 +616,6 @@ function createIntroParticipantsSlideXml(
             <p:cNvPr id="${slideNumber * 1000 + 0}" name="Group Shape"/> <p:cNvGrpSpPr/><p:nvPr/>
           </p:nvGrpSpPr>
           <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-
-          <!-- Placeholder pour le Titre -->
           <p:sp>
             <p:nvSpPr>
               <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>
@@ -677,10 +625,7 @@ function createIntroParticipantsSlideXml(
             <p:spPr/>
             <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p></p:txBody>
           </p:sp>
-
-          <!-- Ici, on insère le graphicFrame (qui contient notre table modifiée) -->
           ${graphicFrameWithNewTable}
-
         </p:spTree>
       </p:cSld>
       <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
@@ -688,7 +633,6 @@ function createIntroParticipantsSlideXml(
     finalSlideXml = baseSlideStructure;
 
   } else {
-    // CAS 2: Fallback - Générer le tableau et son graphicFrame dynamiquement
     console.log("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
     const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2);
 
@@ -702,7 +646,6 @@ function createIntroParticipantsSlideXml(
             <p:cNvGrpSpPr/><p:nvPr/>
           </p:nvGrpSpPr>
           <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-
           <p:sp>
             <p:nvSpPr>
               <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>
@@ -715,7 +658,6 @@ function createIntroParticipantsSlideXml(
               <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p>
             </p:txBody>
           </p:sp>
-
           ${dynamicTableGraphicFrame}
         </p:spTree>
       </p:cSld>
@@ -869,31 +811,24 @@ function findHighestExistingTagNumber(zip: JSZip): number {
       const match = relativePath.match(/tag(\d+)\.xml$/);
       if (match && match[1]) {
         const tagNum = parseInt(match[1], 10);
-        // console.log(`[TAG_DEBUG] Found existing tag: ${relativePath}, number: ${tagNum}`); // DEBUG
         if (tagNum > maxTagNumber) maxTagNumber = tagNum;
       }
     });
   }
-  // console.log(`[TAG_DEBUG] findHighestExistingTagNumber returning: ${maxTagNumber}`); // DEBUG
   return maxTagNumber;
 }
 
-// Nouvelle fonction pour trouver un layout par son attribut <p:cSld name="...">
 async function findLayoutByCSldName(
   zip: JSZip,
   targetName: string,
-  layoutType: "title" | "participants" // Pour affiner la recherche et les alias
+  layoutType: "title" | "participants"
 ): Promise<string | null> {
-  // console.log(`[ULTRA_DEBUG] Entrée findLayoutByCSldName. Target: ${targetName}, Type: ${layoutType}. ZIP object keys:`, Object.keys(zip.files)); // DEBUG
   const layoutsFolder = zip.folder("ppt/slideLayouts");
   if (!layoutsFolder) {
-    // console.warn("[DEBUG] Dossier ppt/slideLayouts non trouvé dans le template."); // DEBUG
     return null;
   }
 
   const normalizedTargetName = targetName.toLowerCase().replace(/\s+/g, "");
-  // console.log(`[DEBUG] Recherche layout pour targetName: "${targetName}", normalisé: "${normalizedTargetName}", type: ${layoutType}`); // DEBUG
-
   let aliases: string[] = [];
   if (layoutType === "title") {
     aliases = [
@@ -903,42 +838,29 @@ async function findLayoutByCSldName(
     ];
   } else if (layoutType === "participants") {
     aliases = [
-      "participant", "participants", // Inclut la forme avec 's'
+      "participant", "participants",
       "participantlayout", "participantslayout",
-      "participantslidelayout","participantsslidelayout", // Nom exact fourni par l'utilisateur
+      "participantslidelayout","participantsslidelayout",
       "participantsslidelayout"
     ];
   }
-  // console.log(`[DEBUG] Alias pour ${layoutType}:`, aliases); // DEBUG
 
   const files = layoutsFolder.filter((relativePathEntry) => relativePathEntry.endsWith(".xml") && !relativePathEntry.includes("/_rels/"));
-  // console.log(`[DEBUG] Fichiers .xml trouvés dans ppt/slideLayouts/: ${files.map(f => f.name).join(', ')}`); // DEBUG
 
-  // chaque fileEntry est un JSZipObject
   for (const fileEntry of files) {
-    // console.log(`[DEBUG_STEP_1] Examen de fileEntry.name: ${fileEntry.name}`); // DEBUG
-    // fileEntry EST déjà l'objet JSZipObject, pas besoin de refaire zip.file()
-    // On vérifie juste qu'il n'est pas null ou undefined, bien que filter ne devrait pas en retourner.
     if (fileEntry) {
-      // console.log(`[DEBUG_STEP_2] fileEntry (JSZipObject) est valide pour ${fileEntry.name}`); // DEBUG
       try {
-        // console.log(`[DEBUG_STEP_3] Tentative de lecture async de ${fileEntry.name} directement depuis fileEntry`); // DEBUG
-        const content = await fileEntry.async("string"); // On appelle async directement sur le JSZipObject
-        // console.log(`[DEBUG_STEP_4] Contenu lu pour ${fileEntry.name}, longueur: ${content.length}. Début: ${content.substring(0,100)}`); // DEBUG
+        const content = await fileEntry.async("string");
         const nameMatch = content.match(/<p:cSld[^>]*name="([^"]+)"/);
 
         if (nameMatch && nameMatch[1]) {
-          const cSldNameAttr = nameMatch[1]; // Nom exact de l'attribut name dans le XML
+          const cSldNameAttr = nameMatch[1];
           const normalizedCSldNameAttr = cSldNameAttr.toLowerCase().replace(/\s+/g, "");
-          // console.log(`[DEBUG] Layout: ${fileEntry.name}, cSld name attr: "${cSldNameAttr}", normalisé: "${normalizedCSldNameAttr}"`); // DEBUG
 
-          // 1. Vérification directe du nom normalisé
           if (normalizedCSldNameAttr === normalizedTargetName) {
-            // console.log(`[DEBUG] MATCH DIRECT! Layout trouvé: "${cSldNameAttr}" dans ${fileEntry.name} pour la cible "${targetName}"`); // DEBUG
-            return fileEntry.name;  // Retourne le nom complet du fichier, ex: "ppt/slideLayouts/slideLayout1.xml"
+            return fileEntry.name;
           }
 
-          // 2. Vérification par alias
           for (const alias of aliases) {
             const normalizedAlias = alias.toLowerCase().replace(/\s+/g,"");
             if (normalizedCSldNameAttr.includes(normalizedAlias)) {
@@ -954,29 +876,18 @@ async function findLayoutByCSldName(
               }
 
               if (targetMatchesAliasOrType) {
-                // console.log(`[DEBUG] MATCH ALIAS! Layout: "${cSldNameAttr}" (${fileEntry.name}) via alias "${alias}" pour cible "${targetName}" (type: ${layoutType})`); // DEBUG
-                return fileEntry.name; // Retourne le nom complet du fichier
+                return fileEntry.name;
               }
             }
           }
-        } else {
-          // console.log(`[DEBUG] Layout: ${fileEntry.name}, pas d'attribut name trouvé dans <p:cSld>.`); // DEBUG
         }
       } catch (error) {
-        // console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${fileEntry.name}:`, error); // DEBUG
-        if (error instanceof Error) {
-          // console.error(`[DEBUG_ERREUR_STACK] Stack: ${error.stack}`); // DEBUG
-        }
+        // console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${fileEntry.name}:`, error);
       }
-    } else {
-      // console.warn(`[DEBUG_WARN] fileEntry est null/undefined pour un chemin listé, très étrange.`); // DEBUG
     }
   }
-
-  // console.warn(`[DEBUG] Layout avec le nom (ou alias pour ${layoutType}) approchant "${targetName}" NON TROUVÉ après examen de tous les fichiers.`); // DEBUG
   return null;
 }
-
 
 function ensureTagContinuity(
   zip: JSZip,
@@ -991,8 +902,6 @@ function ensureTagContinuity(
   }
   return warnings;
 }
-
-// Removed unused function isOmbeaSlide
 
 function createSlideTagFiles(
   questionIndexInBatch: number,
@@ -1086,7 +995,6 @@ function getNextAvailableRId(existingRIds: string[]): string {
   return `rId${maxId + 1}`;
 }
 
-// Refactored updatePresentationRelsWithMappings
 function updatePresentationRelsWithMappings(
   originalContent: string,
   initialExistingSlideCount: number,
@@ -1102,15 +1010,14 @@ function updatePresentationRelsWithMappings(
   oldToNewRIdMap: { [oldRId: string]: string };
 } {
   const existingRels = extractExistingRIds(originalContent);
-  const finalRelsOutput: RIdMapping[] = []; // For constructing the final XML content
-  const slideRIdMappings: { slideNumber: number; rId: string }[] = []; // For presentation.xml sldIdLst
+  const finalRelsOutput: RIdMapping[] = [];
+  const slideRIdMappings: { slideNumber: number; rId: string }[] = [];
   const oldToNewRIdMap: { [oldRId: string]: string } = {};
   let rIdCounter = 1;
 
   const slideType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
   const slideMasterType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 
-  // 1. SlideMaster is rId1
   const originalSlideMaster = existingRels.find(r => r.type === slideMasterType);
   if (originalSlideMaster) {
     finalRelsOutput.push({ ...originalSlideMaster, rId: "rId1" });
@@ -1121,28 +1028,19 @@ function updatePresentationRelsWithMappings(
   }
   rIdCounter = 2;
 
-  // 2. Construire la liste des slides dans le NOUVEL ordre souhaité: Intro -> Template -> Questions
-
-  // Intro slides (Titre, Participants)
-  // Les `detail.slideNumber` dans introSlideDetails sont les numéros *finaux* des diapos d'intro.
-  // Pour la réorganisation, on a besoin de savoir combien il y en a.
   introSlideDetails.forEach((detail, index) => {
     const newRId = `rId${rIdCounter++}`;
-    // Le slideNumber pour slideRIdMappings doit être l'ordre final dans la présentation.
-    // Ici, les diapos d'intro sont les premières.
     const finalSlideOrderIndex = index + 1;
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
-      target: `slides/slide${detail.slideNumber}.xml`, // detail.slideNumber est le numéro de fichier (ex: slide2.xml si template a 1 slide)
+      target: `slides/slide${detail.slideNumber}.xml`,
     });
     slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   });
 
-  // Template slides
-  // Les slides du template commencent après les slides d'intro dans l'ordre final.
   for (let i = 0; i < initialExistingSlideCount; i++) {
-    const templateSlideFileNumber = i + 1; // Les fichiers du template sont slide1.xml, slide2.xml ...
+    const templateSlideFileNumber = i + 1;
     const slideTarget = `slides/slide${templateSlideFileNumber}.xml`;
     const originalRel = existingRels.find(m => m.target === slideTarget && m.type === slideType);
     const newRId = `rId${rIdCounter++}`;
@@ -1158,13 +1056,7 @@ function updatePresentationRelsWithMappings(
     if (originalRel) oldToNewRIdMap[originalRel.rId] = newRId;
   }
 
-  // OMBEA question slides
-  // Elles viennent après les diapos d'intro et les diapos du template.
-  // Leurs `slide${slideNum}.xml` sont déjà numérotés correctement par rapport à leur position de création.
   for (let i = 0; i < newOmbeaQuestionCount; i++) {
-    // slideNum est le numéro de fichier de la diapo de question,
-    // calculé comme initialExistingSlideCount + introSlideDetails.length + 1 + i
-    // lors de la création de la diapo de question.
     const questionSlideFileNumber = initialExistingSlideCount + introSlideDetails.length + 1 + i;
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = introSlideDetails.length + initialExistingSlideCount + 1 + i;
@@ -1177,31 +1069,21 @@ function updatePresentationRelsWithMappings(
     slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   }
 
-  // 3. All other existing relationships
   existingRels.forEach((origRel) => {
     if (origRel.type !== slideMasterType && origRel.type !== slideType) {
-      // Si le rId original a déjà été mappé (parce que c'était un slideMaster par ex.), on ne le remappe pas.
       if (!oldToNewRIdMap[origRel.rId]) {
         const newRId = `rId${rIdCounter++}`;
         finalRelsOutput.push({ ...origRel, rId: newRId });
         oldToNewRIdMap[origRel.rId] = newRId;
       } else {
-        // Si le rId original est déjà dans oldToNewRIdMap, on le réutilise.
-        // Cela peut arriver si un rId est partagé ou si on a déjà traité ce type de relation.
-        // Pour les types non-slide et non-slideMaster, on s'attend à ce qu'ils soient uniques.
-        // Mais pour être sûr, on récupère le rId déjà assigné.
         finalRelsOutput.push({ ...origRel, rId: oldToNewRIdMap[origRel.rId] });
       }
     }
   });
 
-  // S'assurer que slideRIdMappings est trié par le numéro de diapositive final pour rebuildPresentationXml
   slideRIdMappings.sort((a, b) => a.slideNumber - b.slideNumber);
-    // console.log("[DEBUG_ORDER] slideRIdMappings final:", JSON.stringify(slideRIdMappings)); // DEBUG
-
 
   let updatedContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
-  // Sort finalRels by the numeric part of rId for a consistent output
   finalRelsOutput
     .sort((a, b) => parseInt(a.rId.substring(3)) - parseInt(b.rId.substring(3)))
     .forEach((rel) => {
@@ -1226,7 +1108,6 @@ async function rebuildPresentationXml(
   }
   let content = await presentationFile.async("string");
 
-  // Update all r:id attributes in presentation.xml using the oldToNewRIdMap
   content = content.replace(/r:id="(rId\d+)"/g, (match, oldRId) => {
     const newRId = oldToNewRIdMap[oldRId];
     if (newRId) {
@@ -1239,7 +1120,6 @@ async function rebuildPresentationXml(
   });
 
   let newSldIdLstContent = `<p:sldIdLst>`;
-  // slideRIdMappings should already be sorted by slideNumber from updatePresentationRelsWithMappings
   slideRIdMappings.forEach((mapping, index) => {
     const sldIdValue = 256 + index;
     newSldIdLstContent += `\n    <p:sldId id="${sldIdValue}" r:id="${mapping.rId}"/>`;
@@ -1294,28 +1174,22 @@ async function rebuildPresentationXml(
 
 function updateContentTypesComplete(
   originalContent: string,
-  introSlideDetails: { slideNumber: number; layoutFileName: string }[], // layoutFileName est le nom de fichier réel (ex: slideLayout1.xml)
+  introSlideDetails: { slideNumber: number; layoutFileName: string }[],
   newOmbeaQuestionCount: number,
   totalSlidesInFinalPptx: number,
-  ombeaQuestionLayoutFileName: string, // C'est le layout créé dynamiquement pour les questions OMBEA
+  ombeaQuestionLayoutFileName: string,
   totalTagsUsed: number
 ): string {
   let updatedContent = originalContent;
   let newOverrides = "";
 
-  // Ajouter les Overrides pour les NOUVELLES slides d'introduction
   introSlideDetails.forEach((detail) => {
     const slidePartName = `/ppt/slides/slide${detail.slideNumber}.xml`;
     if (!updatedContent.includes(`PartName="${slidePartName}"`)) {
       newOverrides += `\n  <Override PartName="${slidePartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
     }
-    // NE PAS ajouter d'Override pour detail.layoutFileName ici, car ces layouts proviennent du template
-    // et sont donc supposés être déjà déclarés dans [Content_Types].xml.
-    // Ajouter un Override en double pour un PartName existant corrompt le PPTX.
   });
 
-  // S'assurer que le layout spécifique aux questions OMBEA (celui généré par ensureOmbeaSlideLayoutExists) est déclaré.
-  // Ce layout EST nouveau et n'est pas censé exister dans le template original.
   const ombeaLayoutPartName = `/ppt/slideLayouts/${ombeaQuestionLayoutFileName}`;
   if (!updatedContent.includes(`PartName="${ombeaLayoutPartName}"`)) {
     const lastLayoutIdx = updatedContent.lastIndexOf("slideLayout");
@@ -1621,111 +1495,9 @@ async function updateCoreXml(
   }
 }
 
-export async function generatePPTXVal17(
-  templateFile: File | null,
-  questions: Val17Question[],
-  options: GenerationOptions = {},
-  sessionInfo?: SessionInfo,
-  // participants est maintenant attendu comme ParticipantForGenerator[] par cette fonction,
-  // le mapping depuis le type de l'orchestrateur doit être fait par l'appelant (pptxOrchestrator)
-  participants?: ParticipantForGenerator[]
-): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[] } | null> {
-  try {
-    const executionId = Date.now();
-    validateQuestions(questions);
-    let currentTemplateFile: File;
-    if (templateFile) {
-      currentTemplateFile = templateFile;
-    } else {
-      console.warn("Aucun fichier modèle fourni.");
-      throw new Error("Template file is required by generatePPTXVal17.");
-    }
-    const templateZip = await JSZip.loadAsync(currentTemplateFile);
-
-    let slideSizeAttrs: SlideSizeAttributes | null = null;
-    const presentationXmlFileFromTemplate = templateZip.file(
-      "ppt/presentation.xml"
-    );
-    if (presentationXmlFileFromTemplate) {
-      const presentationXmlContent =
-        await presentationXmlFileFromTemplate.async("string");
-      const sldSzMatch = presentationXmlContent.match(
-        /<p:sldSz\s+cx="(\d+)"\s+cy="(\d+)"(?:\s+type="(\w+)")?/
-      );
-      if (sldSzMatch) {
-        slideSizeAttrs = { cx: sldSzMatch[1], cy: sldSzMatch[2] };
-        if (sldSzMatch[3]) {
-          slideSizeAttrs.type = sldSzMatch[3];
-        }
-      } else {
-        console.warn(
-          "<p:sldSz> non trouvé dans le presentation.xml du modèle."
-        );
-      }
-    } else {
-      console.warn("ppt/presentation.xml non trouvé dans le ZIP du modèle.");
-    }
-
-    const existingTagsCount = findHighestExistingTagNumber(templateZip);
-    let maxTagNumberUsed = existingTagsCount;
-
-    const outputZip = new JSZip();
-    const copyPromises: Promise<void>[] = [];
-    templateZip.forEach((relativePath, file) => {
-      if (!file.dir) {
-        const copyPromise: Promise<void> = file
-          .async("blob")
-          .then((content) => {
-            outputZip.file(relativePath, content);
-          });
-        copyPromises.push(copyPromise);
-      } else {
-        outputZip.folder(relativePath);
-      }
-    });
-    await Promise.all(copyPromises);
-
-    const initialExistingSlideCount = countExistingSlides(templateZip);
-    let introSlidesAddedCount = 0;
-    const newIntroSlideDetails: {
-      slideNumber: number;
-      layoutRIdInSlide: string;
-      layoutFileName: string;
-    }[] = [];
-
-    if (sessionInfo && options.introSlideLayouts?.titleLayoutName) {
-      const targetTitleLayoutName = options.introSlideLayouts.titleLayoutName;
-      // Utiliser la nouvelle fonction de recherche par nom de cSld
-      const actualTitleLayoutFileName = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title");
-
-      if (actualTitleLayoutFileName) {
-        const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
-        const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber);
-        outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
-        // console.log(`[DEBUG_INTRO_SLIDE_ADD] Ajouté ppt/slides/slide${currentIntroSlideNumber}.xml`); // DEBUG
-
-        const layoutRIdInSlide = "rId1"; // Généralement, la relation vers le layout est rId1 dans les .rels des slides simples
-        const titleLayoutBaseName = actualTitleLayoutFileName.substring(actualTitleLayoutFileName.lastIndexOf('/') + 1);
-        const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${titleLayoutBaseName}"/>
-</Relationships>`;
-        outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
-        // console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels avec Target: ../slideLayouts/${titleLayoutBaseName}`); // DEBUG
-
-        newIntroSlideDetails.push({
-          slideNumber: currentIntroSlideNumber,
-          layoutRIdInSlide,
-          layoutFileName: actualTitleLayoutFileName, // Nom de fichier réel trouvé
-        });
-        introSlidesAddedCount++;
-      } else {
-        console.warn(`Layout de titre avec nom approchant "${targetTitleLayoutName}" non trouvé. Slide de titre non ajoutée.`);
-      }
-    }
-
+// Helper function to get XML content of a layout file
 async function getLayoutXml(zip: JSZip, layoutFileName: string): Promise<string | null> {
-  const layoutFile = zip.file(layoutFileName); // layoutFileName est le chemin complet, ex: "ppt/slideLayouts/slideLayout1.xml"
+  const layoutFile = zip.file(layoutFileName);
   if (layoutFile) {
     return layoutFile.async("string");
   }
@@ -1733,13 +1505,12 @@ async function getLayoutXml(zip: JSZip, layoutFileName: string): Promise<string 
   return null;
 }
 
+// Fonction principale exportée
 export async function generatePPTXVal17(
   templateFile: File | null,
   questions: Val17Question[],
   options: GenerationOptions = {},
   sessionInfo?: SessionInfo,
-  // participants est maintenant attendu comme ParticipantForGenerator[] par cette fonction,
-  // le mapping depuis le type de l'orchestrateur doit être fait par l'appelant (pptxOrchestrator)
   participants?: ParticipantForGenerator[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[] } | null> {
   try {
@@ -1797,24 +1568,22 @@ export async function generatePPTXVal17(
     });
     await Promise.all(copyPromises);
 
-    const initialExistingSlideCount = countExistingSlides(templateZip);
+    const initialExistingSlideCount = countExistingSlides(outputZip);
     let introSlidesAddedCount = 0;
     const newIntroSlideDetails: {
       slideNumber: number;
       layoutRIdInSlide: string;
-      layoutFileName: string; // Chemin complet du layout, ex: ppt/slideLayouts/slideLayout1.xml
+      layoutFileName: string;
     }[] = [];
 
+    // Gestion de la diapositive de titre
     if (sessionInfo && options.introSlideLayouts?.titleLayoutName) {
       const targetTitleLayoutName = options.introSlideLayouts.titleLayoutName;
       const actualTitleLayoutPath = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title");
-
       if (actualTitleLayoutPath) {
         const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
-        // On ne passe pas le contenu XML du layout à createIntroTitleSlideXml car il génère son propre XML
         const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber);
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
-
         const layoutRIdInSlide = "rId1";
         const titleLayoutBaseName = actualTitleLayoutPath.substring(actualTitleLayoutPath.lastIndexOf('/') + 1);
         const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1822,7 +1591,6 @@ export async function generatePPTXVal17(
   <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${titleLayoutBaseName}"/>
 </Relationships>`;
         outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
-
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
           layoutRIdInSlide,
@@ -1834,6 +1602,7 @@ export async function generatePPTXVal17(
       }
     }
 
+    // Gestion de la diapositive des participants
     if (participants && participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
       const targetParticipantsLayoutName = options.introSlideLayouts.participantsLayoutName;
       const actualParticipantsLayoutPath = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants");
@@ -1841,18 +1610,16 @@ export async function generatePPTXVal17(
       if (actualParticipantsLayoutPath) {
         let layoutTblPrXml: string | null = null;
         let layoutTblGridXml: string | null = null;
-        let layoutGraphicFrameXml: string | null = null; // Pour stocker le XML du graphicFrame contenant la table
-        // let slideXmlToUseAsBase = ""; // Soit le layout lui-même, soit un slide standard
+        let layoutGraphicFrameXml: string | null = null;
 
         const layoutFileXmlContent = await getLayoutXml(outputZip, actualParticipantsLayoutPath);
 
         if (layoutFileXmlContent) {
-          // Essayer de trouver le premier graphicFrame avec une table dans le layout
           const graphicFrameRegex = /<p:graphicFrame>([\s\S]*?<a:tbl>[\s\S]*?<\/a:tbl>[\s\S]*?)<\/p:graphicFrame>/;
           const graphicFrameMatch = layoutFileXmlContent.match(graphicFrameRegex);
 
           if (graphicFrameMatch && graphicFrameMatch[0]) {
-            layoutGraphicFrameXml = graphicFrameMatch[0]; // Le graphicFrame complet
+            layoutGraphicFrameXml = graphicFrameMatch[0];
             console.log("[DEBUG_TABLE_LAYOUT] Found graphicFrame containing a table in layout:", layoutGraphicFrameXml.substring(0, 300) + "...");
 
             const tblPrRegex = /<a:tblPr>[\s\S]*?<\/a:tblPr>/;
@@ -1872,8 +1639,6 @@ export async function generatePPTXVal17(
             } else {
               console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table.");
             }
-            // À ce stade, nous avons layoutTblPrXml et layoutTblGridXml si le tableau du layout est bien structuré.
-            // slideXmlToUseAsBase = layoutFileXmlContent; // On utilisera le contenu du layout comme base de la diapo
           } else {
             console.warn("[DEBUG_TABLE_LAYOUT] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
           }
@@ -1884,41 +1649,36 @@ export async function generatePPTXVal17(
         console.log(`[TEST_PPTX_GEN] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
         const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
 
-        // Appel à createIntroParticipantsSlideXml sera modifié plus tard pour utiliser ces infos
         const participantsSlideXml = createIntroParticipantsSlideXml(
           participants,
           currentIntroSlideNumber,
-          actualParticipantsLayoutPath, // Chemin vers le fichier slideLayoutX.xml
-          layoutFileXmlContent,      // Contenu XML du layout (pourra servir de base)
-          layoutGraphicFrameXml,     // Le <p:graphicFrame> du layout contenant la table
-          layoutTblPrXml,            // <a:tblPr> extrait
-          layoutTblGridXml           // <a:tblGrid> extrait
+          actualParticipantsLayoutPath,
+          layoutFileXmlContent,
+          layoutGraphicFrameXml,
+          layoutTblPrXml,
+          layoutTblGridXml
         );
 
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, participantsSlideXml);
 
-        const layoutRIdInSlide = "rId1"; // Hypothèse standard
+        const layoutRIdInSlide = "rId1";
         const participantsLayoutBaseName = actualParticipantsLayoutPath.substring(actualParticipantsLayoutPath.lastIndexOf('/') + 1);
         const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${participantsLayoutBaseName}"/>
 </Relationships>`;
         outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
-        // console.log(`[DEBUG_INTRO_RELS_ADD] Ajouté ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels (Participants) avec Target: ../slideLayouts/${participantsLayoutBaseName}`); // DEBUG
 
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
           layoutRIdInSlide,
-          layoutFileName: actualParticipantsLayoutFileName, // Nom de fichier réel trouvé
+          layoutFileName: actualParticipantsLayoutPath,
         });
         introSlidesAddedCount++;
       } else {
         console.warn(`[TEST_PPTX_GEN] Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé.`);
       }
     }
-
-    // La logique pour la diapositive d'instructions a été retirée car elle est maintenant dans le template
-    // if (options.introSlideLayouts?.instructionsLayoutName) { ... }
 
     const effectiveExistingSlideCount =
       initialExistingSlideCount + introSlidesAddedCount;
@@ -1940,7 +1700,6 @@ export async function generatePPTXVal17(
       extension: string;
     }
     const downloadedImages = new Map<number, DownloadedImage>();
-    // Renommer finalQuestionDataList en questionMappingsInternal pour mieux refléter son rôle
     const questionMappingsInternal: QuestionMapping[] = [];
 
     if (questions.some((q) => q.imageUrl)) {
@@ -2016,36 +1775,12 @@ export async function generatePPTXVal17(
         i + 1,
         existingTagsCount
       );
-      /* DEBUG Start
-      if (i === 0) {
-        console.log(
-          `[TAG_DEBUG] First new question (index ${
-            i + 1
-          }), baseTagNumberForSlide: ${baseTagNumberForSlide} (calculated with offset: ${existingTagsCount})`
-        );
-      }
-      DEBUG End */
-      // Construction de slideRelsXml en respectant l'ordre observé chez OMBEA
-      // Les Id (rId1, rId2, etc.) sont ceux utilisés par slideX.xml pour référencer les targets.
       let slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
-
-      // Ordre OMBEA (basé sur l'exemple fourni pour un slideX.xml.rels) :
-      // 1. Tag Réponses (référencé par r:id="rId3" dans slideX.xml)
       slideRelsXml += `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide + 2}.xml"/>`;
-
-      // 2. Tag Titre (référencé par r:id="rId2" dans slideX.xml)
       slideRelsXml += `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide + 1}.xml"/>`;
-
-      // 3. Tag Principal de la diapositive (référencé par r:id="rId1" dans slideX.xml)
       slideRelsXml += `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide}.xml"/>`;
-
-      // 4. Layout (référencé par r:id="rId5" dans slideX.xml)
       slideRelsXml += `<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${ombeaLayoutFileName}"/>`;
-
-      // 5. Tag Countdown (référencé par r:id="rId4" dans slideX.xml)
       slideRelsXml += `<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide + 3}.xml"/>`;
-
-      // 6. Image (si présente, référencée par r:id="rId6" dans slideX.xml)
       if (downloadedImage) {
         slideRelsXml += `<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${downloadedImage.fileName}"/>`;
       }
@@ -2081,8 +1816,6 @@ export async function generatePPTXVal17(
           slideGuid = guidMatch[1];
         }
       }
-      // Utiliser questionData.dbQuestionId ici
-      // questionData.theme contient le theme complet (ex: "securite_A")
       let baseTheme = '';
       let blockIdentifier = '';
       if (questionData.theme) {
@@ -2091,9 +1824,6 @@ export async function generatePPTXVal17(
         if (parts.length > 1) {
           blockIdentifier = parts[1];
         } else {
-          // Cas où le thème n'a pas de suffixe de bloc explicite, pourrait être un thème général
-          // ou une question non assignée à un bloc spécifique A, B, C...
-          // Pour l'instant, on laisse blockIdentifier vide ou on pourrait mettre une valeur par défaut.
           console.warn(`[val17PptxGenerator] Question avec dbQuestionId ${questionData.dbQuestionId} a un thème "${questionData.theme}" sans suffixe de bloc identifiable (_X).`);
         }
       }
@@ -2101,9 +1831,9 @@ export async function generatePPTXVal17(
       questionMappingsInternal.push({
         dbQuestionId: questionData.dbQuestionId,
         slideGuid: slideGuid,
-        orderInPptx: i + 1, // Ordre basé sur l'itération des questions pour cette session
-        theme: baseTheme,        // AJOUTÉ
-        blockId: blockIdentifier // AJOUTÉ
+        orderInPptx: i + 1,
+        theme: baseTheme,
+        blockId: blockIdentifier
       });
     }
     if (existingTagsCount > 0 && questions.length > 0) {
@@ -2190,7 +1920,7 @@ export async function generatePPTXVal17(
     );
     return null;
   }
-}
+} // Fin de generatePPTXVal17
 
 export async function testConsistency(
   templateFile: File,
@@ -2260,6 +1990,3 @@ export const handleGeneratePPTXFromVal17Tool = async (
 };
 
 export type { TagInfo, RIdMapping, AppXmlMetadata };
-
-// Les interfaces FinalQuestionData et GeneratedPptxData sont maintenant remplacées
-// par QuestionMapping et le type de retour direct de generatePPTXVal17.
