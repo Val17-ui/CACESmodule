@@ -143,42 +143,59 @@ export class MySubClassedDexie extends Dexie {
       votingDevices: '++id, name, &serialNumber',
       trainers: '++id, name, isDefault' // Assurer que isDefault n'est pas unique ('&')
     }).upgrade(async tx => {
-      console.log("Migrating to DB version 10: Ensuring 'trainers.isDefault' index is not unique and cleaning data.");
+      console.log("Migrating to DB version 10: Rebuilding 'trainers' table to ensure data integrity for 'isDefault' index.");
       const trainersTable = tx.table('trainers');
-      const allTrainers = await trainersTable.toArray();
-      const updatesToPerform: Promise<any>[] = [];
-      let cleanedEntriesCount = 0;
+      let allTrainersFromOldSchema = await trainersTable.toArray(); // Lire les données AVANT de potentiellement modifier la table.
 
-      allTrainers.forEach(trainer => {
-        if (typeof trainer.isDefault !== 'boolean') {
-          // Si isDefault n'est pas un booléen (ex: undefined), le mettre à false.
-          updatesToPerform.push(trainersTable.update(trainer.id, { isDefault: false }));
-          cleanedEntriesCount++;
+      // Étape 1: Nettoyer les données en mémoire et s'assurer de l'unicité de isDefault
+      // et que isDefault est toujours un booléen.
+      let defaultTrainerId: number | undefined = undefined; // Utiliser undefined pour être clair qu'aucun ID n'a été trouvé
+
+      // Première passe pour s'assurer que isDefault est un booléen et trouver un candidat par défaut
+      let cleanedTrainers = allTrainersFromOldSchema.map(trainer => {
+        const isCurrentlyDefault = typeof trainer.isDefault === 'boolean' ? trainer.isDefault : false;
+        if (isCurrentlyDefault && defaultTrainerId === undefined) {
+          defaultTrainerId = trainer.id;
         }
+        return { ...trainer, name: trainer.name || "Nom Inconnu", isDefault: isCurrentlyDefault }; // Assurer un nom et isDefault booléen
       });
 
-      if (cleanedEntriesCount > 0) {
-        console.log(`Corrected ${cleanedEntriesCount} trainer entries with non-boolean 'isDefault' values.`);
-      }
-      await Promise.all(updatesToPerform);
+      // Deuxième passe pour forcer un seul par défaut
+      let foundActiveDefault = false;
+      cleanedTrainers = cleanedTrainers.map(trainer => {
+        if (trainer.id === defaultTrainerId) {
+          foundActiveDefault = true;
+          return { ...trainer, isDefault: true };
+        }
+        return { ...trainer, isDefault: false };
+      });
 
-      // Après le nettoyage, vérifier s'il existe un formateur par défaut.
-      // S'il n'y en a pas et que la table n'est pas vide, définir le premier comme par défaut.
-      const trainersPostCleaning = await trainersTable.toArray();
-      if (trainersPostCleaning.length > 0) {
-        const hasDefaultTrainer = trainersPostCleaning.some(t => t.isDefault === true);
-        if (!hasDefaultTrainer) {
-          console.log("No default trainer found after v10 data cleaning. Setting the first trainer as default.");
-          // Trier par ID pour la cohérence, bien que l'ordre puisse ne pas être garanti sans tri explicite.
-          // Dexie ne garantit pas l'ordre de toArray() sans un orderBy() explicite.
-          // Pour choisir le "premier", il est plus sûr de trier par ID.
-          const sortedTrainers = trainersPostCleaning.sort((a, b) => (a.id || 0) - (b.id || 0));
-          if (sortedTrainers.length > 0 && sortedTrainers[0].id !== undefined) {
-            await trainersTable.update(sortedTrainers[0].id, { isDefault: true });
-          }
+      // S'il n'y avait aucun formateur par défaut (ou si celui trouvé avait un ID undefined),
+      // et que la liste n'est pas vide, définir le premier (trié par ID).
+      if (!foundActiveDefault && cleanedTrainers.length > 0) {
+        const sortedTrainers = cleanedTrainers.sort((a, b) => (a.id || 0) - (b.id || 0));
+        if (sortedTrainers.length > 0 && sortedTrainers[0].id !== undefined) {
+            sortedTrainers[0].isDefault = true;
+             console.log(`No default trainer was clearly identified or valid. Setting trainer ID ${sortedTrainers[0].id} as default during v10 migration.`);
         }
       }
-      return tx.done; // Important pour finaliser la transaction de migration
+
+      // Filtrer les trainers sans ID valide avant bulkAdd, car `id` est la clé primaire.
+      const validTrainersForBulkAdd = cleanedTrainers.filter(trainer => trainer.id !== undefined);
+
+      // Étape 2: Vider la table et la repeupler
+      // Note: La table est déjà en cours de transaction (tx), donc les opérations sont atomiques pour cette version.
+      await trainersTable.clear();
+      console.log("'trainers' table cleared during v10 migration.");
+
+      if (validTrainersForBulkAdd.length > 0) {
+        await trainersTable.bulkAdd(validTrainersForBulkAdd);
+        console.log(`'trainers' table repopulated with ${validTrainersForBulkAdd.length} entries after v10 cleaning.`);
+      } else {
+        console.log("'trainers' table is empty after v10 cleaning or all entries had invalid IDs.");
+      }
+
+      return tx.done;
     });
   }
 }

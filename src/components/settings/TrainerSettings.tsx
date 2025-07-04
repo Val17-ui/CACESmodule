@@ -30,11 +30,24 @@ const TrainerSettings: React.FC = () => {
 
   useEffect(() => {
     // Vérifier la version de la base de données
-    const checkDbVersion = async () => {
-      const version = await db.version;
-      console.log(`Version de la base de données : ${version}`);
-      if (version < 10) {
-        setError('La base de données n\'est pas à la dernière version (10). Essayez de rafraîchir l\'application.');
+    const checkDbVersion = () => { // Plus besoin d'async ici si db.verno est utilisé après ouverture
+      if (db.isOpen()) {
+        const version = db.verno;
+        console.log(`Version de la base de données : ${version}`);
+        if (version < 10) {
+          setError('La base de données n\'est pas à la dernière version (10). La version actuelle est '+ version +'. Essayez de vider le cache et de rafraîchir l\'application, ou contactez le support si le problème persiste.');
+        }
+      } else {
+        // La base de données n'est pas encore ouverte, on pourrait attendre l'événement "ready"
+        // ou simplement supposer qu'elle s'ouvrira correctement.
+        // Pour ce log, il est préférable qu'elle soit ouverte.
+        db.on('ready', () => {
+          const version = db.verno;
+          console.log(`Version de la base de données (après ready event) : ${version}`);
+          if (version < 10) {
+             setError('La base de données n\'est pas à la dernière version (10). La version actuelle est '+ version +'. Essayez de vider le cache et de rafraîchir l\'application, ou contactez le support si le problème persiste.');
+          }
+        });
       }
     };
     checkDbVersion();
