@@ -1533,6 +1533,7 @@ export async function generatePPTXVal17(
       const slideProcessingPromises: Promise<void>[] = [];
       slideFilesFolder.forEach((relativePath, slideFileEntry) => {
         if (relativePath.startsWith("slide") && relativePath.endsWith(".xml") && !slideFileEntry.dir) {
+          // Pour chaque diapositive, lire son fichier de relations .rels
           const slideNumberMatch = relativePath.match(/slide(\d+)\.xml/);
           if (slideNumberMatch && slideNumberMatch[1]) {
             const slideNumPart = slideNumberMatch[1];
@@ -2068,5 +2069,3 @@ export const handleGeneratePPTXFromVal17Tool = async (
 };
 
 export type { TagInfo, RIdMapping, AppXmlMetadata };
-
-[end of src/lib/val17-pptx-generator/val17PptxGenerator.ts]
