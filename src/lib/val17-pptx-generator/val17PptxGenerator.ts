@@ -1525,74 +1525,49 @@ export async function generatePPTXVal17(
     }
     const templateZip = await JSZip.loadAsync(currentTemplateFile);
 
-    // ---> DÉBUT : Logique d'extraction exhaustive des GUIDs des questions préexistantes avec logs <---
+    // ---> DÉBUT : Logique d'extraction exhaustive des GUIDs des questions préexistantes (sans logs internes excessifs) <---
     const preExistingQuestionSlideGuids: string[] = [];
     const slideFilesFolder = templateZip.folder("ppt/slides");
-    console.log("[val17DebugExhaustive] Initialisation. slideFilesFolder:", slideFilesFolder ? 'obtenu' : 'non obtenu');
 
     if (slideFilesFolder) {
       const slideProcessingPromises: Promise<void>[] = [];
       slideFilesFolder.forEach((relativePath, slideFileEntry) => {
         if (relativePath.startsWith("slide") && relativePath.endsWith(".xml") && !slideFileEntry.dir) {
-          // Pour chaque diapositive, lire son fichier de relations .rels
           const slideNumberMatch = relativePath.match(/slide(\d+)\.xml/);
           if (slideNumberMatch && slideNumberMatch[1]) {
             const slideNumPart = slideNumberMatch[1];
             const relsPath = `ppt/slides/_rels/slide${slideNumPart}.xml.rels`;
             const relsFile = templateZip.file(relsPath);
-            console.log(`[val17DebugExhaustive] Traitement diapositive ${relativePath}, recherche de .rels: ${relsPath}`, relsFile ? 'Trouvé' : 'Non trouvé');
 
             if (relsFile) {
               const promise = relsFile.async("string").then(async (relsContent) => {
-                console.log(`[val17DebugExhaustive] Contenu .rels pour slide ${slideNumPart} (premiers 200 chars): ${relsContent.substring(0,200)}`);
                 const tagRelationshipRegex = /<Relationship[^>]*Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/tags"[^>]*Target="..\/tags\/(tag\d+\.xml)"[^>]*\/>/g;
                 let relMatch;
-                let foundGuidInThisSlide = false;
                 while ((relMatch = tagRelationshipRegex.exec(relsContent)) !== null) {
-                  const tagFileName = relMatch[1]; // ex: "tag1.xml"
-                  console.log(`[val17DebugExhaustive] Relation de tag trouvée dans ${relsPath} pointant vers: ${tagFileName}`);
+                  const tagFileName = relMatch[1];
                   const tagFilePath = `ppt/tags/${tagFileName}`;
                   const tagFile = templateZip.file(tagFilePath);
 
                   if (tagFile) {
                     try {
                       const tagContent = await tagFile.async("string");
-                      console.log(`[val17DebugExhaustive] Contenu de ${tagFilePath} (premiers 200 chars): ${tagContent.substring(0,200)}`);
                       const guidMatch = tagContent.match(/<p:tag name="OR_SLIDE_GUID" val="([^"]+)"\/>/);
                       if (guidMatch && guidMatch[1]) {
                         const foundGuid = guidMatch[1];
-                        console.log(`[val17DebugExhaustive] OR_SLIDE_GUID trouvé dans ${tagFileName}: ${foundGuid}`);
                         if (!preExistingQuestionSlideGuids.includes(foundGuid)) {
                           preExistingQuestionSlideGuids.push(foundGuid);
-                          console.log(`[val17DebugExhaustive] GUID AJOUTÉ: ${foundGuid} (provenant de la diapositive ${relativePath} via ${tagFileName})`);
-                        } else {
-                           console.log(`[val17DebugExhaustive] GUID ${foundGuid} déjà dans la liste (provenant de la diapositive ${relativePath} via ${tagFileName})`);
                         }
-                        foundGuidInThisSlide = true;
-                        // On pourrait 'break' ici si on assume qu'un seul tag OR_SLIDE_GUID est pertinent par slide,
-                        // mais itérer sur tous les tags liés est plus sûr pour trouver celui qui contient OR_SLIDE_GUID.
-                      } else {
-                        console.log(`[val17DebugExhaustive] Pas de tag OR_SLIDE_GUID trouvé dans ${tagFileName}`);
                       }
                     } catch (e) {
-                      console.warn(`[val17DebugExhaustive] Erreur lors de la lecture du fichier tag ${tagFileName}: ${(e as Error).message}`);
+                      // Silently ignore errors for individual tag files
                     }
-                  } else {
-                     console.warn(`[val17DebugExhaustive] Fichier tag ${tagFilePath} listé dans .rels mais non trouvé dans le zip.`);
                   }
                 }
-                if (!relsContent.match(tagRelationshipRegex)) { // Check if any tag relationships were found at all
-                    console.log(`[val17DebugExhaustive] Aucune relation de type 'tags' trouvée dans ${relsPath}`);
-                }
               }).catch(err => {
-                console.warn(`[val17DebugExhaustive] Erreur lors de la lecture du fichier .rels ${relsPath}: ${err.message}`);
+                // Silently ignore errors for individual rels files
               });
               slideProcessingPromises.push(promise);
-            } else {
-              console.log(`[val17DebugExhaustive] Fichier .rels non trouvé pour ${relativePath}`);
             }
-          } else {
-            console.log(`[val17DebugExhaustive] Impossible d'extraire le numéro de diapositive de ${relativePath}`);
           }
         }
       });
@@ -1600,14 +1575,14 @@ export async function generatePPTXVal17(
       await Promise.all(slideProcessingPromises);
 
       if (preExistingQuestionSlideGuids.length > 0) {
-        console.log("[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle (logique exhaustive):", preExistingQuestionSlideGuids);
+        console.log("[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle:", preExistingQuestionSlideGuids);
       } else {
-        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID) trouvée dans le modèle (logique exhaustive).");
+        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID) trouvée dans le modèle.");
       }
     } else {
-        console.log("[val17DebugExhaustive] Dossier ppt/slides non trouvé dans le templateZip.");
+        console.log("[val17PptxGenerator] Dossier ppt/slides non trouvé dans le templateZip.");
     }
-    // ---> FIN : Logique d'extraction exhaustive des GUIDs des questions préexistantes avec logs <---
+    // ---> FIN : Logique d'extraction exhaustive des GUIDs des questions préexistantes <---
 
 
     let slideSizeAttrs: SlideSizeAttributes | null = null;
@@ -2093,3 +2068,5 @@ export const handleGeneratePPTXFromVal17Tool = async (
 };
 
 export type { TagInfo, RIdMapping, AppXmlMetadata };
+
+[end of src/lib/val17-pptx-generator/val17PptxGenerator.ts]
