@@ -43,6 +43,7 @@ import { calculateParticipantScore, calculateThemeScores, determineIndividualSuc
 import { logger } from '../../utils/logger'; // Importer le logger
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
+import AnomalyResolutionModal, { AnomalyDataForModal } from './AnomalyResolutionModal'; // Importation
 
 interface FormParticipant extends DBParticipantType {
   id: string;
@@ -1241,6 +1242,181 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
+import AnomalyResolutionModal, { AnomalyDataForModal, MuetResolution, InconnuResolution } from './AnomalyResolutionModal'; // Importation MAJ
+
+// ... autres imports ...
+
+// Fonctions pour le modal de résolution d'anomalies
+const handleResolveAnomalies = async (
+    resolvedResultsFromModal: ExtractedResultFromXml[],
+    muetResolutions: MuetResolution[],
+    inconnuResolutions: InconnuResolution[]
+  ) => {
+
+    logger.info(`[AnomalyResolution] Reprise de l'import. ${resolvedResultsFromModal.length} résultats reçus du modal.`);
+    logger.info('[AnomalyResolution] Décisions pour les muets:', muetResolutions);
+    logger.info('[AnomalyResolution] Décisions pour les inconnus:', inconnuResolutions);
+
+    setShowAnomalyResolutionUI(false);
+    setDetectedAnomalies(null);
+    setPendingValidResults([]);
+
+    if (!currentSessionDbId || !editingSessionData || !editingSessionData.questionMappings) {
+      setImportSummary("Erreur critique : Données de session manquantes pour finaliser l'import après résolution.");
+      logger.error("[AnomalyResolution] Données de session critiques manquantes pour finaliser l'import.");
+      return;
+    }
+
+    // Préparer une copie des participants de la session pour y ajouter les nouveaux si nécessaire
+    let updatedParticipantsList = [...editingSessionData.participants];
+    let participantsChanged = false;
+
+    // Gérer les inconnus marqués pour ajout
+    for (const inconnuRes of inconnuResolutions) {
+      if (inconnuRes.action === 'add_participant') {
+        const inconnuData = detectedAnomalies?.inconnus.find(i => i.serialNumber === inconnuRes.serialNumber);
+        if (inconnuData) {
+          // Vérifier si un participant avec ce serialNumber (via hardwareDevices) existe déjà pour éviter doublons
+          const existingHdDevice = hardwareDevices.find(hd => hd.serialNumber === inconnuData.serialNumber);
+          let globalDeviceIdToAssign: number | null | undefined = existingHdDevice?.id;
+
+          if (!existingHdDevice) {
+            // Créer un nouveau boîtier "virtuel" ou logguer une erreur si on ne veut pas créer de boîtier à la volée
+            // Pour l'instant, on ne crée pas de nouveau VotingDevice ici, on assume qu'il doit exister.
+            // On pourrait aussi créer un participant sans boîtier assigné si c'est permis.
+            // Alternative: créer un nouveau VotingDevice.
+            // Pour ce TODO, on va juste logguer et le participant n'aura pas de assignedGlobalDeviceId s'il n'existe pas.
+            logger.warn(`[AnomalyResolution] Boîtier inconnu S/N ${inconnuData.serialNumber} n'existe pas dans hardwareDevices. Le nouveau participant n'aura pas de boîtier assigné.`);
+            globalDeviceIdToAssign = null;
+          }
+
+          // Créer un nouveau participant
+          const newParticipant: DBParticipantType = {
+            nom: `Inconnu ${inconnuData.serialNumber.slice(-4)}`, // Nom placeholder
+            prenom: 'Participant', // Prénom placeholder
+            assignedGlobalDeviceId: globalDeviceIdToAssign,
+            // score et reussite seront calculés plus tard
+          };
+          updatedParticipantsList.push(newParticipant);
+          participantsChanged = true;
+          logger.info(`[AnomalyResolution] Participant ajouté pour boîtier inconnu S/N ${inconnuData.serialNumber}.`);
+        }
+      }
+      // TODO: Gérer 'assign_to_muet' en modifiant le participantIdBoitier dans resolvedResultsFromModal
+      // et potentiellement en ajustant updatedParticipantsList si cela change le participant assigné à un boîtier.
+    }
+
+    // Mettre à jour la session avec les nouveaux participants si nécessaire
+    if (participantsChanged) {
+        try {
+            await updateSession(currentSessionDbId, { participants: updatedParticipantsList });
+            // Recharger editingSessionData pour que les calculs de score se basent sur la liste à jour
+            const reloadedSessionForScore = await getSessionById(currentSessionDbId);
+            if (reloadedSessionForScore) {
+                setEditingSessionData(reloadedSessionForScore);
+            } else {
+                throw new Error("Impossible de recharger la session après ajout de participants.")
+            }
+            logger.info(`[AnomalyResolution] Liste des participants mise à jour dans la session ${currentSessionDbId}.`);
+        } catch (error) {
+            logger.error(`[AnomalyResolution] Erreur lors de la mise à jour des participants pour la session ${currentSessionDbId}.`, error);
+            setImportSummary("Erreur lors de la mise à jour des participants après résolution. L'import est stoppé.");
+            return;
+        }
+    }
+
+
+    // TODO: Gérer les muets marqués 'mark_absent'.
+    // Cela pourrait impliquer de mettre à jour une propriété sur l'objet participant dans la DB
+    // ou de les exclure du calcul de score. Pour l'instant, on ne fait rien de plus que de ne pas importer leurs réponses
+    // (ce qui est déjà le cas car ils sont "muets").
+
+    // La suite est la logique de traitement des résultats, similaire à handleImportResults
+    try {
+      const sessionResultsToSave = transformParsedResponsesToSessionResults(
+        resolvedResultsFromModal, // Utilise les résultats potentiellement modifiés par la résolution
+        editingSessionData.questionMappings, // Assure-toi que c'est bien le questionMappings de la session actuelle
+        currentSessionDbId
+      );
+
+      if (sessionResultsToSave.length > 0) {
+        await addBulkSessionResults(sessionResultsToSave); // Sauvegarde des résultats
+
+        // Logique de finalisation de la session et calcul des scores
+        // (Cette partie est une simplification et devrait être factorisée avec celle dans handleImportResults)
+        let message = `${sessionResultsToSave.length} résultats (après résolution) sauvegardés !`;
+        await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+        message += "\nStatut session: 'Terminée'.";
+
+        // Recharger les données pour le calcul des scores (surtout si les participants ont été modifiés)
+        const sessionDataForScores = await getSessionById(currentSessionDbId);
+        if (sessionDataForScores && sessionDataForScores.questionMappings) {
+            const sessionQuestionsForScores = await getQuestionsByIds(
+              sessionDataForScores.questionMappings.map(qm => qm.dbQuestionId)
+            );
+            const allSessionResultsForScores = await getResultsForSession(currentSessionDbId);
+
+            if (sessionQuestionsForScores.length > 0 && allSessionResultsForScores.length > 0) {
+                const finalParticipantsWithScores = sessionDataForScores.participants.map(p => {
+                    const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
+                    if (!device) return { ...p, score: p.score || 0, reussite: p.reussite || false };
+
+                    const participantResults = allSessionResultsForScores.filter(r => r.participantIdBoitier === device.serialNumber);
+                    const score = calculateParticipantScore(participantResults, sessionQuestionsForScores);
+                    const themeScores = calculateThemeScores(participantResults, sessionQuestionsForScores); // Supposons que cette fonction existe
+                    const reussite = determineIndividualSuccess(score, themeScores); // Supposons que cette fonction existe
+                    return { ...p, score, reussite };
+                });
+                await updateSession(currentSessionDbId, { participants: finalParticipantsWithScores });
+                message += "\nScores et réussite calculés et mis à jour.";
+            } else {
+                 message += "\nImpossible de charger toutes les données pour le calcul des scores.";
+            }
+        } else {
+            message += "\nImpossible de calculer les scores (données de session manquantes).";
+        }
+
+        setImportSummary(message);
+        setResultsFile(null);
+        logger.info(`Résultats importés et résolus pour la session ID ${currentSessionDbId}`, {
+          eventType: 'RESULTS_IMPORTED_RESOLVED',
+          sessionId: currentSessionDbId,
+          resultsCount: sessionResultsToSave.length
+        });
+        const reloadedSession = await getSessionById(currentSessionDbId);
+        setEditingSessionData(reloadedSession || null);
+        if (reloadedSession) { // Mise à jour de l'UI des participants si les scores ont changé
+            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, loopIndex) => ({
+                ...p_db,
+                id: participants[loopIndex]?.id || `form-reloaded-${loopIndex}-${Date.now()}`,
+                firstName: p_db.prenom,
+                lastName: p_db.nom,
+                deviceId: participants[loopIndex]?.deviceId ?? (loopIndex + 1),
+                organization: participants[loopIndex]?.organization || (p_db as any).organization || '',
+                hasSigned: participants[loopIndex]?.hasSigned || (p_db as any).hasSigned || false,
+            }));
+            setParticipants(formParticipants);
+        }
+
+      } else {
+        setImportSummary("Aucun résultat à sauvegarder après résolution.");
+        logger.info(`[AnomalyResolution] Aucun résultat à sauvegarder pour session ID ${currentSessionDbId} après résolution.`);
+      }
+    } catch (error: any) {
+        setImportSummary(`Erreur lors de la finalisation de l'import après résolution: ${error.message}`);
+        logger.error(`Erreur lors de la finalisation de l'import après résolution pour session ID ${currentSessionDbId}`, { error });
+    }
+  };
+
+  const handleCancelAnomalyResolution = () => {
+    setShowAnomalyResolutionUI(false);
+    setDetectedAnomalies(null);
+    setPendingValidResults([]);
+    setImportSummary("Importation des résultats annulée par l'utilisateur en raison d'anomalies.");
+    setResultsFile(null); // Effacer le fichier pour que l'utilisateur doive le resélectionner s'il veut réessayer
+  };
+
+
   return (
     <div>
       {renderTabNavigation()}
@@ -1250,6 +1426,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           Enregistrer Brouillon
         </Button>
       </div>
+
+      {showAnomalyResolutionUI && detectedAnomalies && (
+        <AnomalyResolutionModal
+          isOpen={showAnomalyResolutionUI}
+          detectedAnomalies={detectedAnomalies}
+          pendingValidResultsCount={pendingValidResults.length}
+          onResolve={handleResolveAnomalies}
+          onCancel={handleCancelAnomalyResolution}
+        />
+      )}
     </div>
   );
 };
