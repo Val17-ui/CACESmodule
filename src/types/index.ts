@@ -22,7 +22,7 @@ export interface Session {
   createdAt?: string;
   updatedAt?: string;
   trainerId?: number; // ID du formateur assigné à la session (number pour correspondre à Trainer.id)
-  testSlideGuid?: string | null; // GUID de la slide de la question test pour cette session
+  ignoredSlideGuids?: string[] | null; // GUIDs des slides pré-existantes dans le modèle à ignorer
 }
 
 // Interface pour stocker les métadonnées des questions d'une session

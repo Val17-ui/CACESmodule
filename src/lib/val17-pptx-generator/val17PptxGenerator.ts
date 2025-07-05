@@ -1512,7 +1512,7 @@ export async function generatePPTXVal17(
   options: GenerationOptions = {},
   sessionInfo?: SessionInfo,
   participants?: ParticipantForGenerator[]
-): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[] } | null> {
+): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
   try {
     const executionId = Date.now();
     validateQuestions(questions);
@@ -1524,6 +1524,61 @@ export async function generatePPTXVal17(
       throw new Error("Template file is required by generatePPTXVal17.");
     }
     const templateZip = await JSZip.loadAsync(currentTemplateFile);
+
+    // ---> NOUVELLE LOGIQUE POUR EXTRAIRE LES GUIDs DES QUESTIONS PRÉEXISTANTES <---
+    const preExistingQuestionSlideGuids: string[] = [];
+    const slideFilesFolder = templateZip.folder("ppt/slides");
+    if (slideFilesFolder) {
+      const slideProcessingPromises: Promise<void>[] = [];
+      slideFilesFolder.forEach((relativePath, slideFileEntry) => {
+        // S'assurer que c'est bien un fichier XML de diapositive et non un dossier _rels
+        if (relativePath.startsWith("slide") && relativePath.endsWith(".xml") && !slideFileEntry.dir) {
+          const slideNumberMatch = relativePath.match(/slide(\d+)\.xml/);
+          if (slideNumberMatch && slideNumberMatch[1]) {
+            const slideNumPart = slideNumberMatch[1];
+            const relsPath = `ppt/slides/_rels/slide${slideNumPart}.xml.rels`;
+            const relsFile = templateZip.file(relsPath);
+
+            if (relsFile) {
+              const promise = relsFile.async("string").then(async (relsContent) => {
+                // Chercher toutes les relations vers des fichiers de tags
+                const tagFileMatches = Array.from(relsContent.matchAll(
+                  /<Relationship[^>]*Target="..\/tags\/(tag\d+\.xml)"[^>]*Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/tags"/g
+                ));
+
+                for (const tagFileMatch of tagFileMatches) {
+                  const tagFileName = tagFileMatch[1]; // ex: "tag1.xml"
+                  const tagFile = templateZip.file(`ppt/tags/${tagFileName}`);
+                  if (tagFile) {
+                    try {
+                      const tagContent = await tagFile.async("string");
+                      const guidMatch = tagContent.match(/<p:tag name="OR_SLIDE_GUID" val="([^"]+)"\/>/);
+                      if (guidMatch && guidMatch[1]) {
+                        if (!preExistingQuestionSlideGuids.includes(guidMatch[1])) {
+                           preExistingQuestionSlideGuids.push(guidMatch[1]);
+                        }
+                      }
+                    } catch (e) {
+                      console.warn(`Erreur lors de la lecture du fichier tag ${tagFileName}: ${(e as Error).message}`);
+                    }
+                  }
+                }
+              }).catch(err => {
+                console.warn(`Erreur lors de la lecture des relations pour ${relativePath}: ${err.message}`);
+              });
+              slideProcessingPromises.push(promise);
+            }
+          }
+        }
+      });
+      await Promise.all(slideProcessingPromises);
+      if (preExistingQuestionSlideGuids.length > 0) {
+        console.log("[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle:", preExistingQuestionSlideGuids);
+      } else {
+        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante trouvée dans le modèle.");
+      }
+    }
+    // ---> FIN DE LA NOUVELLE LOGIQUE <---
 
     let slideSizeAttrs: SlideSizeAttributes | null = null;
     const presentationXmlFileFromTemplate = templateZip.file(
@@ -1929,7 +1984,7 @@ export async function generatePPTXVal17(
     });
 
     console.log(`PPTX Blob et mappings de questions générés.`);
-    return { pptxBlob: outputBlob, questionMappings: questionMappingsInternal };
+    return { pptxBlob: outputBlob, questionMappings: questionMappingsInternal, preExistingQuestionSlideGuids };
   } catch (error: any) {
     console.error(`=== ERREUR GÉNÉRATION VAL17 ===`);
     console.error(error.message);

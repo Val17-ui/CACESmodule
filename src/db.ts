@@ -223,11 +223,38 @@ export class MySubClassedDexie extends Dexie {
       // Pour l'instant, Dexie gérera l'ajout de nouvelles tables et champs avec des valeurs undefined par défaut.
       // Si testSlideGuid doit être explicitement null pour les anciennes sessions:
       await tx.table('sessions').toCollection().modify(session => {
-        if (session.testSlideGuid === undefined) {
+        if (session.testSlideGuid === undefined) { // Champ de la v10 et avant
           session.testSlideGuid = null;
         }
       });
-      console.log("DB version 11 upgrade: Added sessionQuestions, sessionBoitiers tables and testSlideGuid to sessions. Ensured testSlideGuid is null for existing sessions.");
+      console.log("DB version 11 upgrade: Added sessionQuestions, sessionBoitiers tables and testSlideGuid to sessions. Ensured testSlideGuid is null for existing sessions if it was undefined.");
+    });
+
+    // Version 12: Remplacement de testSlideGuid par ignoredSlideGuids[] dans la table sessions
+    this.version(12).stores({
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids', // Remplacement et indexation de ignoredSlideGuids
+      // Reprise des autres tables pour que Dexie sache qu'elles existent toujours
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      votingDevices: '++id, name, &serialNumber',
+      trainers: '++id, name, isDefault',
+      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
+      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
+    }).upgrade(async tx => {
+      await tx.table('sessions').toCollection().modify(session => {
+        // @ts-ignore (pour accéder à l'ancien champ testSlideGuid qui n'est plus dans le type Session)
+        const oldTestSlideGuid = session.testSlideGuid;
+
+        if (typeof oldTestSlideGuid === 'string' && oldTestSlideGuid.trim() !== '') {
+          session.ignoredSlideGuids = [oldTestSlideGuid];
+        } else {
+          session.ignoredSlideGuids = []; // Initialiser comme tableau vide si pas de testSlideGuid précédent ou s'il était invalide
+        }
+        // @ts-ignore
+        delete session.testSlideGuid; // Supprimer l'ancien champ
+      });
+      console.log("DB version 12 upgrade: Replaced testSlideGuid with ignoredSlideGuids (array) in sessions table. Migrated existing testSlideGuid values.");
     });
   }
 }

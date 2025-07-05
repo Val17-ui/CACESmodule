@@ -554,16 +554,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       // Assumons que generatePresentation attend un type compatible avec {idBoitier: string, nom: string, prenom: string, ...}
       const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator as DBParticipantType[], allSelectedQuestionsForPptx, globalPptxTemplate, adminSettings);
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && upToDateSessionData) {
-        const { orsBlob, questionMappings } = generationOutput;
+        const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput; // Récupérer ignoredSlideGuids
         try {
-          // 1. Mettre à jour la session principale avec l'ORS et les mappings
+          // 1. Mettre à jour la session principale avec l'ORS, les mappings, et les ignoredSlideGuids
           await updateSession(currentSavedId, {
             donneesOrs: orsBlob,
             questionMappings: questionMappings,
+            ignoredSlideGuids: newlyIgnoredSlideGuids || [], // S'assurer que c'est un tableau
             updatedAt: new Date().toISOString(),
             status: 'ready',
             selectionBlocs: upToDateSessionData.selectionBlocs,
-            // testSlideGuid sera mis à jour ci-dessous si applicable
           });
 
           // Recharger les données de session pour avoir la version la plus à jour
@@ -635,17 +635,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             await addBulkSessionBoitiers(sessionBoitiersToSave);
           }
 
-          // 5. Gérer testSlideGuid (logique d'identification à définir)
-          // TODO: Implémenter la logique pour identifier la question test et son dbQuestionId
-          const testQuestionDbId: number | null = null; // Mettre l'ID de la question test ici
-          if (testQuestionDbId) {
-            const testMapping = questionMappings.find(qm => qm.dbQuestionId === testQuestionDbId);
-            if (testMapping && testMapping.slideGuid) {
-              await updateSession(currentSavedId, { testSlideGuid: testMapping.slideGuid });
-              // Re-mettre à jour editingSessionData si nécessaire
-              setEditingSessionData(await getSessionById(currentSavedId) || null);
-            }
-          }
+          // Le testSlideGuid est maintenant géré via ignoredSlideGuids directement depuis generationOutput
+          // et stocké lors de la première mise à jour de la session avec l'ORS.
+          // Donc, plus besoin de logique spécifique ici pour un 'testQuestionDbId'.
 
           setImportSummary(`Session (ID: ${currentSavedId}) .ors, mappings et métadonnées générés. Statut: Prête.`);
           logger.info(`Fichier .ors, mappings et métadonnées générés/mis à jour pour la session "${freshlyUpdatedSessionData.nomSession}"`, {
@@ -701,20 +693,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       }
       logger.info(`[Import Results] ${extractedResultsFromXml.length} réponses initialement extraites du XML.`);
 
-      // 2.2. Filtrer la "question test"
-      const testSlideGuid = editingSessionData.testSlideGuid;
-      if (testSlideGuid) {
-        const countBeforeFilteringTest = extractedResultsFromXml.length;
+      // Filtrer les questions ignorées (anciennement question test)
+      const slideGuidsToIgnore = editingSessionData.ignoredSlideGuids;
+      if (slideGuidsToIgnore && slideGuidsToIgnore.length > 0) {
+        const countBeforeFilteringIgnored = extractedResultsFromXml.length;
         extractedResultsFromXml = extractedResultsFromXml.filter(
-          (result) => result.questionSlideGuid !== testSlideGuid
+          (result) => !slideGuidsToIgnore.includes(result.questionSlideGuid)
         );
-        const countAfterFilteringTest = extractedResultsFromXml.length;
-        if (countBeforeFilteringTest > countAfterFilteringTest) {
-          logger.info(`[Import Results] ${countBeforeFilteringTest - countAfterFilteringTest} réponses à la question test (GUID: ${testSlideGuid}) ont été filtrées.`);
+        const countAfterFilteringIgnored = extractedResultsFromXml.length;
+        if (countBeforeFilteringIgnored > countAfterFilteringIgnored) {
+          logger.info(`[Import Results] ${countBeforeFilteringIgnored - countAfterFilteringIgnored} réponses correspondant à ${slideGuidsToIgnore.length} GUID(s) ignoré(s) ont été filtrées.`);
         }
       }
 
-      // 2.3. Grouper les réponses par (serialNumber, slideGuid) et ne retenir que la dernière (timestamp le plus élevé)
+      // Grouper les réponses par (serialNumber, slideGuid) et ne retenir que la dernière (timestamp le plus élevé)
       const latestResultsMap = new Map<string, ExtractedResultFromXml>();
       for (const result of extractedResultsFromXml) {
         const key = `${result.participantDeviceID}-${result.questionSlideGuid}`;

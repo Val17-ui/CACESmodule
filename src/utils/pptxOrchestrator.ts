@@ -174,7 +174,7 @@ export async function generatePresentation(
   storedQuestions: StoredQuestion[], // Ce sont les QuestionWithId (de la DB)
   templateFileFromUser: File,
   adminSettings: AdminPPTXSettings
-): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null }> {
+): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
 
   // console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`); // DEBUG
   // console.log('[DEBUG_ORCHESTRATOR] _participants reçus dans generatePresentation:', JSON.stringify(_participants)); // DEBUG
@@ -247,33 +247,32 @@ export async function generatePresentation(
       participantsForGenerator // Utiliser les participants mappés
     );
 
-    // Correction: Utiliser generatedData au lieu de generationResult
-    if (generatedData && generatedData.pptxBlob && generatedData.questionMappings) {
-      // console.log("PPTX Blob et mappings de questions reçus de generatePPTXVal17."); // DEBUG
-
+    if (generatedData && generatedData.pptxBlob && generatedData.questionMappings && generatedData.preExistingQuestionSlideGuids) {
       const orSessionXmlContent = generateOmbeaSessionXml(
         val17SessionInfo,
-        _participants, // Passer les participants (FormParticipant) pour le XML
-        generatedData.questionMappings // Utiliser generatedData ici
+        _participants,
+        generatedData.questionMappings
       );
 
       const outputOrsZip = new JSZip();
       const pptxFileNameInZip = generationOptions.fileName || `presentation.pptx`;
-      outputOrsZip.file(pptxFileNameInZip, generatedData.pptxBlob); // Utiliser generatedData ici
+      outputOrsZip.file(pptxFileNameInZip, generatedData.pptxBlob);
       outputOrsZip.file("ORSession.xml", orSessionXmlContent);
 
       const orsBlob = await outputOrsZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
 
-      const orsFileName = `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}.ors`;
-      // console.log(`Fichier .ors "${orsFileName}" (Blob) et questionMappings générés.`); // DEBUG
-      return { orsBlob: orsBlob, questionMappings: generatedData.questionMappings }; // Utiliser generatedData ici
+      return {
+        orsBlob: orsBlob,
+        questionMappings: generatedData.questionMappings,
+        ignoredSlideGuids: generatedData.preExistingQuestionSlideGuids // Transmettre les GUIDs ignorés
+      };
 
     } else {
-      console.error("Échec de la génération des données PPTX, du Blob ou des questionMappings à partir de generatePPTXVal17.");
+      console.error("Échec de la génération des données PPTX complètes (blob, mappings, ou preExistingGuids) à partir de generatePPTXVal17.");
       if (!alertAlreadyShown(new Error("generatePPTXVal17 returned null or incomplete data."))) {
          alert("La génération du fichier PPTX ou des données de mappage a échoué. Le fichier .ors ne peut pas être créé.");
       }
-      return { orsBlob: null, questionMappings: null };
+      return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
     }
 
   } catch (error) {
@@ -281,7 +280,7 @@ export async function generatePresentation(
     if (!alertAlreadyShown(error as Error)) {
         alert("Une erreur est survenue lors de la création du fichier .ors.");
     }
-    return { orsBlob: null, questionMappings: null };
+    return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
   } finally {
     tempImageUrls.forEach(url => {
       try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for generatePresentation (direct call):", url, e); }
