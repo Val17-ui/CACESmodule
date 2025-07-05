@@ -1242,10 +1242,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
-import AnomalyResolutionModal, { AnomalyDataForModal, MuetResolution, InconnuResolution } from './AnomalyResolutionModal'; // Importation MAJ
-
-// ... autres imports ...
-
 // Fonctions pour le modal de résolution d'anomalies
 const handleResolveAnomalies = async (
     resolvedResultsFromModal: ExtractedResultFromXml[],
