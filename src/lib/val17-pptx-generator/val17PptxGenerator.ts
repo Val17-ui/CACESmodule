@@ -1525,60 +1525,80 @@ export async function generatePPTXVal17(
     }
     const templateZip = await JSZip.loadAsync(currentTemplateFile);
 
-    // ---> NOUVELLE LOGIQUE POUR EXTRAIRE LES GUIDs DES QUESTIONS PRÉEXISTANTES <---
+    // ---> NOUVELLE LOGIQUE CORRIGÉE POUR EXTRAIRE LES GUIDs DES QUESTIONS PRÉEXISTANTES <---
     const preExistingQuestionSlideGuids: string[] = [];
     const slideFilesFolder = templateZip.folder("ppt/slides");
+
     if (slideFilesFolder) {
       const slideProcessingPromises: Promise<void>[] = [];
       slideFilesFolder.forEach((relativePath, slideFileEntry) => {
-        // S'assurer que c'est bien un fichier XML de diapositive et non un dossier _rels
         if (relativePath.startsWith("slide") && relativePath.endsWith(".xml") && !slideFileEntry.dir) {
-          const slideNumberMatch = relativePath.match(/slide(\d+)\.xml/);
-          if (slideNumberMatch && slideNumberMatch[1]) {
-            const slideNumPart = slideNumberMatch[1];
-            const relsPath = `ppt/slides/_rels/slide${slideNumPart}.xml.rels`;
-            const relsFile = templateZip.file(relsPath);
+          const slideFileReadPromise = slideFileEntry.async("string").then(async slideXmlContent => {
+            // 1. Extraire le r:id du tag <p:tags> au niveau de la diapositive
+            // Ce tag est sous <p:cSld><p:custDataLst><p:tags r:id="rIdX"/></p:custDataLst></p:cSld>
+            // ou <p:sld><p:custDataLst><p:tags r:id="rIdX"/></p:custDataLst></p:sld>
+            // Regex pour capturer le contenu de custDataLst directemennt sous cSld
+            const cSldCustDataLstMatch = slideXmlContent.match(/<p:cSld(?:[^>]*)>[\s\S]*?<p:custDataLst>([\s\S]*?)<\/p:custDataLst>/);
+            let targetRIdForSlideGuid: string | null = null;
 
-            if (relsFile) {
-              const promise = relsFile.async("string").then(async (relsContent) => {
-                // Chercher toutes les relations vers des fichiers de tags
-                const tagFileMatches = Array.from(relsContent.matchAll(
-                  /<Relationship[^>]*Target="..\/tags\/(tag\d+\.xml)"[^>]*Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/tags"/g
-                ));
+            if (cSldCustDataLstMatch && cSldCustDataLstMatch[1]) {
+              const custDataLstContent = cSldCustDataLstMatch[1];
+              const tagsNodeMatch = custDataLstContent.match(/<p:tags\s+r:id="([^"]+)"\s*\/>/);
+              if (tagsNodeMatch && tagsNodeMatch[1]) {
+                targetRIdForSlideGuid = tagsNodeMatch[1];
+              }
+            }
 
-                for (const tagFileMatch of tagFileMatches) {
-                  const tagFileName = tagFileMatch[1]; // ex: "tag1.xml"
-                  const tagFile = templateZip.file(`ppt/tags/${tagFileName}`);
-                  if (tagFile) {
-                    try {
-                      const tagContent = await tagFile.async("string");
-                      const guidMatch = tagContent.match(/<p:tag name="OR_SLIDE_GUID" val="([^"]+)"\/>/);
-                      if (guidMatch && guidMatch[1]) {
-                        if (!preExistingQuestionSlideGuids.includes(guidMatch[1])) {
-                           preExistingQuestionSlideGuids.push(guidMatch[1]);
+            if (targetRIdForSlideGuid) {
+              // 2. Lire le fichier de relations de la diapositive
+              const slideNumberMatch = relativePath.match(/slide(\d+)\.xml/);
+              if (slideNumberMatch && slideNumberMatch[1]) {
+                const slideNumPart = slideNumberMatch[1];
+                const relsPath = `ppt/slides/_rels/slide${slideNumPart}.xml.rels`;
+                const relsFile = templateZip.file(relsPath);
+
+                if (relsFile) {
+                  try {
+                    const relsContent = await relsFile.async("string");
+                    // 3. Trouver la Relationship avec l'Id correspondant au targetRIdForSlideGuid
+                    const relRegex = new RegExp(`<Relationship[^>]*Id="${targetRIdForSlideGuid}"[^>]*Target="..\/tags\/(tag\\d+\\.xml)"`);
+                    const specificTagRelMatch = relsContent.match(relRegex);
+
+                    if (specificTagRelMatch && specificTagRelMatch[1]) {
+                      const tagFileName = specificTagRelMatch[1]; // ex: "tag2.xml"
+                      const tagFile = templateZip.file(`ppt/tags/${tagFileName}`);
+                      if (tagFile) {
+                        const tagContent = await tagFile.async("string");
+                        const guidMatch = tagContent.match(/<p:tag name="OR_SLIDE_GUID" val="([^"]+)"\/>/);
+                        if (guidMatch && guidMatch[1]) {
+                          if (!preExistingQuestionSlideGuids.includes(guidMatch[1])) {
+                            preExistingQuestionSlideGuids.push(guidMatch[1]);
+                          }
                         }
                       }
-                    } catch (e) {
-                      console.warn(`Erreur lors de la lecture du fichier tag ${tagFileName}: ${(e as Error).message}`);
                     }
+                  } catch (err) {
+                    console.warn(`Erreur lors du traitement des relations/tags pour ${relativePath}: ${(err as Error).message}`);
                   }
                 }
-              }).catch(err => {
-                console.warn(`Erreur lors de la lecture des relations pour ${relativePath}: ${err.message}`);
-              });
-              slideProcessingPromises.push(promise);
+              }
             }
-          }
+          }).catch(err => {
+            console.warn(`Erreur lors de la lecture du fichier slide ${relativePath}: ${(err as Error).message}`);
+          });
+          slideProcessingPromises.push(slideFileReadPromise);
         }
       });
+
       await Promise.all(slideProcessingPromises);
+
       if (preExistingQuestionSlideGuids.length > 0) {
         console.log("[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle:", preExistingQuestionSlideGuids);
       } else {
-        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante trouvée dans le modèle.");
+        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID dans les tags de diapositive) trouvée dans le modèle.");
       }
     }
-    // ---> FIN DE LA NOUVELLE LOGIQUE <---
+    // ---> FIN DE LA NOUVELLE LOGIQUE CORRIGÉE <---
 
     let slideSizeAttrs: SlideSizeAttributes | null = null;
     const presentationXmlFileFromTemplate = templateZip.file(
