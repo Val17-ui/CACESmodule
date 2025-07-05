@@ -1525,108 +1525,89 @@ export async function generatePPTXVal17(
     }
     const templateZip = await JSZip.loadAsync(currentTemplateFile);
 
-    // ---> DÉBUT : Logique d'extraction des GUIDs des questions préexistantes avec logs <---
+    // ---> DÉBUT : Logique d'extraction exhaustive des GUIDs des questions préexistantes avec logs <---
     const preExistingQuestionSlideGuids: string[] = [];
     const slideFilesFolder = templateZip.folder("ppt/slides");
-    console.log("[val17Debug] Initialisation. slideFilesFolder:", slideFilesFolder ? 'obtenu' : 'non obtenu');
+    console.log("[val17DebugExhaustive] Initialisation. slideFilesFolder:", slideFilesFolder ? 'obtenu' : 'non obtenu');
 
     if (slideFilesFolder) {
       const slideProcessingPromises: Promise<void>[] = [];
       slideFilesFolder.forEach((relativePath, slideFileEntry) => {
         if (relativePath.startsWith("slide") && relativePath.endsWith(".xml") && !slideFileEntry.dir) {
-          console.log(`[val17Debug] Début traitement pour ${relativePath}`);
-          const slideFileReadPromise = slideFileEntry.async("string").then(async slideXmlContent => {
-            console.log(`[val17Debug] Contenu XML (premiers 200 chars) pour ${relativePath}: ${slideXmlContent.substring(0, 200)}`);
+          // Pour chaque diapositive, lire son fichier de relations .rels
+          const slideNumberMatch = relativePath.match(/slide(\d+)\.xml/);
+          if (slideNumberMatch && slideNumberMatch[1]) {
+            const slideNumPart = slideNumberMatch[1];
+            const relsPath = `ppt/slides/_rels/slide${slideNumPart}.xml.rels`;
+            const relsFile = templateZip.file(relsPath);
+            console.log(`[val17DebugExhaustive] Traitement diapositive ${relativePath}, recherche de .rels: ${relsPath}`, relsFile ? 'Trouvé' : 'Non trouvé');
 
-            // Regex pour trouver <p:custDataLst> directement sous <p:cSld> ou <p:sld>
-            // Le groupe de capture 1 est le contenu de <p:custDataLst>
-            const custDataLstMatch = slideXmlContent.match(/<(?:p:cSld|p:sld)(?:[^>]*)>[\s\S]*?<p:custDataLst>([\s\S]*?)<\/p:custDataLst>/);
-            let targetRIdForSlideGuid: string | null = null;
-            console.log(`[val17Debug] custDataLstMatch pour ${relativePath}:`, custDataLstMatch ? 'Trouvé' : 'Non trouvé');
+            if (relsFile) {
+              const promise = relsFile.async("string").then(async (relsContent) => {
+                console.log(`[val17DebugExhaustive] Contenu .rels pour slide ${slideNumPart} (premiers 200 chars): ${relsContent.substring(0,200)}`);
+                const tagRelationshipRegex = /<Relationship[^>]*Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/tags"[^>]*Target="..\/tags\/(tag\d+\.xml)"[^>]*\/>/g;
+                let relMatch;
+                let foundGuidInThisSlide = false;
+                while ((relMatch = tagRelationshipRegex.exec(relsContent)) !== null) {
+                  const tagFileName = relMatch[1]; // ex: "tag1.xml"
+                  console.log(`[val17DebugExhaustive] Relation de tag trouvée dans ${relsPath} pointant vers: ${tagFileName}`);
+                  const tagFilePath = `ppt/tags/${tagFileName}`;
+                  const tagFile = templateZip.file(tagFilePath);
 
-            if (custDataLstMatch && custDataLstMatch[1]) {
-              const custDataLstContent = custDataLstMatch[1];
-              console.log(`[val17Debug] custDataLstContent (premiers 100 chars) pour ${relativePath}: ${custDataLstContent.substring(0,100)}`);
-              const tagsNodeMatch = custDataLstContent.match(/<p:tags\s+r:id="([^"]+)"\s*\/>/);
-              console.log(`[val17Debug] tagsNodeMatch pour ${relativePath}:`, tagsNodeMatch ? (tagsNodeMatch[1] || 'Match sans groupe 1') : 'Non trouvé');
-              if (tagsNodeMatch && tagsNodeMatch[1]) {
-                targetRIdForSlideGuid = tagsNodeMatch[1];
-                console.log(`[val17Debug] targetRIdForSlideGuid trouvé pour ${relativePath}: ${targetRIdForSlideGuid}`);
-              } else {
-                console.log(`[val17Debug] Pas de <p:tags r:id="..."> trouvé dans custDataLst pour ${relativePath}`);
-              }
-            } else {
-                console.log(`[val17Debug] Pas de <p:custDataLst> trouvé directement sous <p:cSld> ou <p:sld> pour ${relativePath}`);
-            }
-
-            if (targetRIdForSlideGuid) {
-              const slideNumberMatch = relativePath.match(/slide(\d+)\.xml/);
-              if (slideNumberMatch && slideNumberMatch[1]) {
-                const slideNumPart = slideNumberMatch[1];
-                const relsPath = `ppt/slides/_rels/slide${slideNumPart}.xml.rels`;
-                const relsFile = templateZip.file(relsPath);
-                console.log(`[val17Debug] Recherche du fichier .rels: ${relsPath}`, relsFile ? 'Trouvé' : 'Non trouvé');
-
-                if (relsFile) {
-                  try {
-                    const relsContent = await relsFile.async("string");
-                    console.log(`[val17Debug] relsContent (premiers 150 chars) pour slide ${slideNumPart}: ${relsContent.substring(0,150)}`);
-                    // Regex pour trouver la relation avec l'Id spécifique et le Target pointant vers un fichier tag
-                    const relRegex = new RegExp(`<Relationship[^>]*Id="${targetRIdForSlideGuid}"[^>]*Target="\\.\\.\\/tags\\/(tag\\d+\\.xml)"`);
-                    const specificTagRelMatch = relsContent.match(relRegex);
-                    console.log(`[val17Debug] specificTagRelMatch pour Id "${targetRIdForSlideGuid}" dans slide ${slideNumPart}:`, specificTagRelMatch ? (specificTagRelMatch[1] || 'Match sans groupe 1') : 'Non trouvé');
-
-                    if (specificTagRelMatch && specificTagRelMatch[1]) {
-                      const tagFileName = specificTagRelMatch[1];
-                      console.log(`[val17Debug] tagFileName trouvé: ${tagFileName}`);
-                      const tagFile = templateZip.file(`ppt/tags/${tagFileName}`);
-                      console.log(`[val17Debug] Recherche du fichier tag: ppt/tags/${tagFileName}`, tagFile ? 'Trouvé' : 'Non trouvé');
-
-                      if (tagFile) {
-                        const tagContent = await tagFile.async("string");
-                        console.log(`[val17Debug] tagContent (premiers 150 chars) pour ${tagFileName}: ${tagContent.substring(0,150)}`);
-                        const guidMatch = tagContent.match(/<p:tag name="OR_SLIDE_GUID" val="([^"]+)"\/>/);
-                        console.log(`[val17Debug] guidMatch dans ${tagFileName}:`, guidMatch ? (guidMatch[1] || 'Match sans groupe 1') : 'Non trouvé');
-                        if (guidMatch && guidMatch[1]) {
-                          if (!preExistingQuestionSlideGuids.includes(guidMatch[1])) {
-                            preExistingQuestionSlideGuids.push(guidMatch[1]);
-                            console.log(`[val17Debug] GUID ajouté: ${guidMatch[1]} (depuis ${relativePath})`);
-                          } else {
-                            console.log(`[val17Debug] GUID ${guidMatch[1]} déjà présent (depuis ${relativePath})`);
-                          }
+                  if (tagFile) {
+                    try {
+                      const tagContent = await tagFile.async("string");
+                      console.log(`[val17DebugExhaustive] Contenu de ${tagFilePath} (premiers 200 chars): ${tagContent.substring(0,200)}`);
+                      const guidMatch = tagContent.match(/<p:tag name="OR_SLIDE_GUID" val="([^"]+)"\/>/);
+                      if (guidMatch && guidMatch[1]) {
+                        const foundGuid = guidMatch[1];
+                        console.log(`[val17DebugExhaustive] OR_SLIDE_GUID trouvé dans ${tagFileName}: ${foundGuid}`);
+                        if (!preExistingQuestionSlideGuids.includes(foundGuid)) {
+                          preExistingQuestionSlideGuids.push(foundGuid);
+                          console.log(`[val17DebugExhaustive] GUID AJOUTÉ: ${foundGuid} (provenant de la diapositive ${relativePath} via ${tagFileName})`);
+                        } else {
+                           console.log(`[val17DebugExhaustive] GUID ${foundGuid} déjà dans la liste (provenant de la diapositive ${relativePath} via ${tagFileName})`);
                         }
+                        foundGuidInThisSlide = true;
+                        // On pourrait 'break' ici si on assume qu'un seul tag OR_SLIDE_GUID est pertinent par slide,
+                        // mais itérer sur tous les tags liés est plus sûr pour trouver celui qui contient OR_SLIDE_GUID.
+                      } else {
+                        console.log(`[val17DebugExhaustive] Pas de tag OR_SLIDE_GUID trouvé dans ${tagFileName}`);
                       }
-                    } else {
-                       console.log(`[val17Debug] Pas de Relationship correspondante trouvée pour rId ${targetRIdForSlideGuid} pointant vers un fichier tag dans ${relsPath}`);
+                    } catch (e) {
+                      console.warn(`[val17DebugExhaustive] Erreur lors de la lecture du fichier tag ${tagFileName}: ${(e as Error).message}`);
                     }
-                  } catch (err) {
-                    console.warn(`[val17Debug] Erreur traitement rels/tags pour ${relativePath}: ${(err as Error).message}`);
+                  } else {
+                     console.warn(`[val17DebugExhaustive] Fichier tag ${tagFilePath} listé dans .rels mais non trouvé dans le zip.`);
                   }
                 }
-              } else {
-                 console.log(`[val17Debug] Impossible d'extraire slideNumPart de ${relativePath}`);
-              }
+                if (!relsContent.match(tagRelationshipRegex)) { // Check if any tag relationships were found at all
+                    console.log(`[val17DebugExhaustive] Aucune relation de type 'tags' trouvée dans ${relsPath}`);
+                }
+              }).catch(err => {
+                console.warn(`[val17DebugExhaustive] Erreur lors de la lecture du fichier .rels ${relsPath}: ${err.message}`);
+              });
+              slideProcessingPromises.push(promise);
             } else {
-              console.log(`[val17Debug] Pas de targetRIdForSlideGuid pour la diapositive ${relativePath}, donc pas de recherche de GUID OMBEA.`);
+              console.log(`[val17DebugExhaustive] Fichier .rels non trouvé pour ${relativePath}`);
             }
-          }).catch(err => {
-            console.warn(`[val17Debug] Erreur lecture slide ${relativePath}: ${(err as Error).message}`);
-          });
-          slideProcessingPromises.push(slideFileReadPromise);
+          } else {
+            console.log(`[val17DebugExhaustive] Impossible d'extraire le numéro de diapositive de ${relativePath}`);
+          }
         }
       });
 
       await Promise.all(slideProcessingPromises);
 
       if (preExistingQuestionSlideGuids.length > 0) {
-        console.log("[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle (après logs détaillés):", preExistingQuestionSlideGuids);
+        console.log("[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle (logique exhaustive):", preExistingQuestionSlideGuids);
       } else {
-        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID dans les tags de diapositive) trouvée dans le modèle (après logs détaillés).");
+        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID) trouvée dans le modèle (logique exhaustive).");
       }
     } else {
-        console.log("[val17Debug] Dossier ppt/slides non trouvé dans le templateZip.");
+        console.log("[val17DebugExhaustive] Dossier ppt/slides non trouvé dans le templateZip.");
     }
-    // ---> FIN : Logique d'extraction des GUIDs des questions préexistantes avec logs <---
+    // ---> FIN : Logique d'extraction exhaustive des GUIDs des questions préexistantes avec logs <---
 
 
     let slideSizeAttrs: SlideSizeAttributes | null = null;
