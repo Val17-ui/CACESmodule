@@ -33,7 +33,9 @@ import {
   addBulkSessionQuestions,
   deleteSessionQuestionsBySessionId,
   addBulkSessionBoitiers,
-  deleteSessionBoitiersBySessionId
+  deleteSessionBoitiersBySessionId,
+  getSessionQuestionsBySessionId, // Importation ajoutée
+  getSessionBoitiersBySessionId // Importation ajoutée
 } from '../../db';
 import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator'; // Added QuestionMapping
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
