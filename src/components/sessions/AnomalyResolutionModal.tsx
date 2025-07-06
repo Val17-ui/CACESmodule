@@ -114,7 +114,7 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
           </p>
         </div>
 
-        {detectedAnomalies.muets.length > 0 && (
+        {detectedAnomalies.muets && detectedAnomalies.muets.length > 0 && (
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-red-600 mb-2">Boîtiers Attendus Muets ({detectedAnomalies.muets.length})</h3>
             <div className="overflow-x-auto">
@@ -155,7 +155,7 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
           </div>
         )}
 
-        {detectedAnomalies.inconnus.length > 0 && (
+        {detectedAnomalies.inconnus && detectedAnomalies.inconnus.length > 0 && (
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-orange-600 mb-2">Boîtiers Inconnus Ayant Répondu ({detectedAnomalies.inconnus.length})</h3>
             <div className="overflow-x-auto">
