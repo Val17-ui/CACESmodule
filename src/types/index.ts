@@ -23,7 +23,44 @@ export interface Session {
   updatedAt?: string;
   trainerId?: number; // ID du formateur assigné à la session (number pour correspondre à Trainer.id)
   ignoredSlideGuids?: string[] | null; // GUIDs des slides pré-existantes dans le modèle à ignorer
+  resolvedImportAnomalies?: {
+    expectedIssues: ExpectedIssueResolution[];
+    unknownDevices: UnknownDeviceResolution[];
+    resolvedAt: string;
+  } | null;
 }
+
+// --- Types pour la résolution des anomalies d'import (partagés) ---
+
+// Actions pour un boîtier ATTENDU AYANT DES PROBLÈMES (muet total/partiel)
+export type ExpectedIssueAction =
+  | 'pending'
+  | 'mark_absent'
+  | 'aggregate_with_unknown'
+  | 'ignore_device';
+
+// Actions pour un boîtier INCONNU
+export type UnknownDeviceAction =
+  | 'pending'
+  | 'ignore_responses'
+  | 'add_as_new_participant';
+
+// Résolution pour un boîtier attendu ayant des problèmes
+export interface ExpectedIssueResolution {
+  serialNumber: string; // Du boîtier attendu
+  action: ExpectedIssueAction;
+  // Si action est 'aggregate_with_unknown', ceci est le S/N de l'inconnu à utiliser
+  sourceUnknownSerialNumber?: string;
+}
+
+// Résolution pour un boîtier inconnu
+export interface UnknownDeviceResolution {
+  serialNumber: string; // Du boîtier inconnu
+  action: UnknownDeviceAction;
+  // Si action est 'add_as_new_participant', nom du nouveau participant
+  newParticipantName?: string;
+}
+
 
 // Interface pour stocker les métadonnées des questions d'une session
 export interface SessionQuestion {
@@ -73,6 +110,7 @@ export interface Participant {
   score?: number; // Score total du participant pour cette session
   reussite?: boolean; // Statut de réussite du participant pour cette session
   assignedGlobalDeviceId?: number | null; // Référence à GlobalDevice.id (VotingDevice.id)
+  statusInSession?: 'present' | 'absent'; // Statut du participant pour cette session spécifique
 }
 
 // Nouvelle interface pour décrire un bloc thématique sélectionné
