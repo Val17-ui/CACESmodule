@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Image as ImageIconLucide } from 'lucide-react'; // Removed Upload
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, Save, Image as ImageIconLucide } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-// import Badge from '../ui/Badge'; // Removed Badge
-// Removed Question, questionTypes
-// QuestionTheme and questionThemes removed to ensure no validation is based on them here
-import { QuestionType, CACESReferential, referentials } from '../../types';
+import { QuestionType, CACESReferential, Referential, Theme, Bloc } from '../../types'; // Removed referentials
 import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
@@ -15,28 +12,32 @@ interface QuestionFormProps {
   onSave: (question: StoredQuestion) => void;
   onCancel: () => void;
   questionId?: number | null;
-  forcedReferential?: CACESReferential; // New prop
-  initialData?: Partial<Omit<StoredQuestion, 'id'>>; // New prop for pre-filling
+  forcedReferential?: CACESReferential; // This might need to be an ID if we want to force a specific referential
+  initialData?: Partial<Omit<StoredQuestion, 'id'>>;
+}
+
+// Helper type for select options
+interface SelectOption {
+  value: string;
+  label: string;
 }
 
 const QuestionForm: React.FC<QuestionFormProps> = ({
   onSave,
   onCancel,
   questionId,
-  forcedReferential, // Destructure new prop
-  initialData // Destructure new prop
+  forcedReferential,
+  initialData
 }) => {
-  const getInitialState = (): StoredQuestion => {
-    // Default base state using string literal types as required by StoredQuestion
-    let baseState: StoredQuestion = {
+  const getInitialState = useCallback((): StoredQuestion => {
+    let baseState: Omit<StoredQuestion, 'referential' | 'theme'> & { blocId?: number } = { // Removed referential and theme from base
       text: '',
       type: 'multiple-choice',
       options: ['', '', '', ''],
-      correctAnswer: '', // Default for 'multiple-choice' should be an index string e.g. "0"
+      correctAnswer: '',
       timeLimit: 30,
       isEliminatory: false,
-      referential: CACESReferential.R489,
-      theme: '', // Default to empty string for free text input
+      // referential and theme are removed, blocId will be set based on selections
       image: undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -45,38 +46,87 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     };
 
     if (initialData) {
-      const { type: initialDataType, ...restInitialData } = initialData;
-      let mappedType = baseState.type; // Default to baseState's type
+      const { type: initialDataType, blocId: initialBlocId, ...restInitialData } = initialData;
+      let mappedType = baseState.type;
 
-      if (initialDataType !== undefined) { // Check if type is actually provided in initialData
+      if (initialDataType !== undefined) {
         if (initialDataType === QuestionType.QCM || initialDataType === QuestionType.QCU) {
           mappedType = 'multiple-choice';
-        } else if (initialDataType === QuestionType.TrueFalse) { // Corrected enum member
+        } else if (initialDataType === QuestionType.TrueFalse) {
           mappedType = 'true-false';
         } else {
-          logger.info(`WARN: Initial data has unmapped or incompatible question type: ${initialDataType}. Using default type '${mappedType}'.`); // Changed logger
+          logger.info(`WARN: Initial data has unmapped or incompatible question type: ${initialDataType}. Using default type '${mappedType}'.`);
         }
       }
-      baseState = { ...baseState, ...restInitialData, type: mappedType };
-    }
+      // Ensure 'referential' and 'theme' are not spread from restInitialData if they exist
+      const { referential, theme, ...validRestInitialData } = restInitialData as any;
 
-    if (forcedReferential) { // `forcedReferential` overrides any other referential
-      baseState.referential = forcedReferential;
+      baseState = { ...baseState, ...validRestInitialData, type: mappedType, blocId: initialBlocId };
     }
-    return baseState;
-  };
+    // forcedReferential logic will be handled by setting selectedReferentialId state and disabling the select
+    return baseState as StoredQuestion; // Cast as StoredQuestion, blocId might be undefined initially
+  }, [initialData]);
 
   const [question, setQuestion] = useState<StoredQuestion>(getInitialState);
-  // Initialize hasImage, imageFile, imagePreview based on the 'question' state,
-  // which is now correctly initialized by getInitialState().
-  // This will be handled by the useEffect hook that depends on 'questionId' and 'initialData'
-  // or might need a separate useEffect for 'question.image' if 'question' itself is the source of truth.
-  // For now, let's rely on the main useEffect to set these up after 'question' state is stable.
   const [hasImage, setHasImage] = useState(false);
   const [imageFile, setImageFile] = useState<Blob | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  // States for cascading selects
+  const [referentiels, setReferentiels] = useState<Referential[]>([]);
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [blocs, setBlocs] = useState<Bloc[]>([]);
+
+  const [selectedReferentialId, setSelectedReferentialId] = useState<string>('');
+  const [selectedThemeId, setSelectedThemeId] = useState<string>('');
+  const [selectedBlocId, setSelectedBlocId] = useState<string>(''); // This will hold the final Bloc.id for question.blocId
+
+  // Load referentiels on mount
+  useEffect(() => {
+    StorageManager.db.getAllReferentiels().then(data => {
+      setReferentiels(data);
+      // If there's a forcedReferential (by code, e.g., "R489"), find its ID
+      if (forcedReferential) {
+        const forcedRef = data.find(r => r.code === forcedReferential);
+        if (forcedRef && forcedRef.id !== undefined) {
+          setSelectedReferentialId(forcedRef.id.toString());
+        }
+      }
+    });
+  }, [forcedReferential]);
+
+  // Load themes when selectedReferentialId changes
+  useEffect(() => {
+    if (selectedReferentialId) {
+      StorageManager.db.getThemesByReferentialId(parseInt(selectedReferentialId,10)).then(data => {
+        setThemes(data);
+        setSelectedThemeId(''); // Reset theme selection
+        setBlocs([]); // Reset blocs
+        setSelectedBlocId(''); // Reset bloc selection
+      });
+    } else {
+      setThemes([]);
+      setBlocs([]);
+      setSelectedThemeId('');
+      setSelectedBlocId('');
+    }
+  }, [selectedReferentialId]);
+
+  // Load blocs when selectedThemeId changes
+  useEffect(() => {
+    if (selectedThemeId) {
+      StorageManager.db.getBlocsByThemeId(parseInt(selectedThemeId,10)).then(data => {
+        setBlocs(data);
+        setSelectedBlocId(''); // Reset bloc selection
+      });
+    } else {
+      setBlocs([]);
+      setSelectedBlocId('');
+    }
+  }, [selectedThemeId]);
+
 
   useEffect(() => {
     return () => {
@@ -86,88 +136,128 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     };
   }, [imagePreview]);
 
-  const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
-    value,
-    label: `${value} - ${label}`,
-  }));
-
-  // themeOptions removed as theme is now a free text input
-
-  // Removed the first, older useEffect that was causing issues with 'initialQuestionState'
-
-  // Effect to initialize/reset form based on questionId, initialData, and forcedReferential
+  // Effect to initialize/reset form based on questionId or initialData
   useEffect(() => {
-    if (questionId) { // Editing existing question
-      setIsLoading(true);
-      StorageManager.getQuestionById(questionId)
-        .then(existingQuestion => {
+    const loadQuestionData = async () => {
+      if (questionId) { // Editing existing question
+        setIsLoading(true);
+        try {
+          const existingQuestion = await StorageManager.getQuestionById(questionId);
           if (existingQuestion) {
-            // Ensure all fields from getInitialState() are present as defaults if not in existingQuestion
-            let questionToSet = { ...getInitialState(), ...existingQuestion };
-            if (forcedReferential) {
-              questionToSet.referential = forcedReferential;
-            }
-            setQuestion(questionToSet);
+            setQuestion(existingQuestion); // This is StoredQuestion, so it has blocId
 
-            if (questionToSet.image instanceof Blob) {
+            if (existingQuestion.blocId) {
+              // Need to find the referential, theme, and bloc from blocId
+              // This is a bit complex as we need to go up the chain:
+              // Bloc -> Theme -> Referential
+              const bloc = await StorageManager.db.getAllBlocs().then(allBlocs => allBlocs.find(b => b.id === existingQuestion.blocId));
+              if (bloc && bloc.theme_id) {
+                const theme = await StorageManager.db.getAllThemes().then(allThemes => allThemes.find(t => t.id === bloc.theme_id));
+                if (theme && theme.referentiel_id) {
+                  // Now set the select values. This will trigger downstream useEffects to load options.
+                  setSelectedReferentialId(theme.referentiel_id.toString());
+                  // Need to wait for themes to load for this referential before setting themeId
+                  // and for blocs to load for this theme before setting blocId
+                  // This can be handled by chaining promises or by allowing useEffects to populate them.
+                  // For simplicity, we'll set them and let the dependent useEffects populate the lists.
+                  // The actual selection will be set in subsequent effects after lists are populated.
+
+                  // Store these to be set after dependent data loads
+                  sessionStorage.setItem('pendingThemeId', theme.id!.toString());
+                  sessionStorage.setItem('pendingBlocId', bloc.id!.toString());
+                }
+              }
+            }
+
+            if (existingQuestion.image instanceof Blob) {
               if (imagePreview) URL.revokeObjectURL(imagePreview);
               setHasImage(true);
-              setImageFile(questionToSet.image);
-              setImagePreview(URL.createObjectURL(questionToSet.image));
+              setImageFile(existingQuestion.image);
+              setImagePreview(URL.createObjectURL(existingQuestion.image));
             } else {
               if (imagePreview) URL.revokeObjectURL(imagePreview);
-              setHasImage(false);
-              setImageFile(null);
-              setImagePreview(null);
+              setHasImage(false); setImageFile(null); setImagePreview(null);
             }
           } else {
             logger.error(`Question with id ${questionId} not found. Resetting form.`);
-            setQuestion(getInitialState());
+            setQuestion(getInitialState()); // Reset to new initial state
+            setSelectedReferentialId(''); setSelectedThemeId(''); setSelectedBlocId('');
             if (imagePreview) URL.revokeObjectURL(imagePreview);
             setHasImage(false); setImageFile(null); setImagePreview(null);
           }
-        })
-        .catch(error => {
+        } catch (error) {
           logger.error("Error fetching question: ", error);
           setQuestion(getInitialState());
+          setSelectedReferentialId(''); setSelectedThemeId(''); setSelectedBlocId('');
           if (imagePreview) URL.revokeObjectURL(imagePreview);
           setHasImage(false); setImageFile(null); setImagePreview(null);
-        })
-        .finally(() => setIsLoading(false));
-    } else { // Creating a new question or re-initializing
-      const newInitialState = getInitialState(); // Recalculate initial state
-      setQuestion(newInitialState);
+        } finally {
+          setIsLoading(false);
+        }
+      } else { // Creating a new question or re-initializing
+        const newInitialState = getInitialState();
+        setQuestion(newInitialState);
+        // Reset selections unless forcedReferential dictates the first one
+        if (!forcedReferential) {
+            setSelectedReferentialId('');
+        }
+        setSelectedThemeId('');
+        setSelectedBlocId('');
 
-      if (imagePreview) URL.revokeObjectURL(imagePreview); // Clean up previous preview
 
-      if (newInitialState.image instanceof Blob) {
-        setHasImage(true);
-        setImageFile(newInitialState.image);
-        setImagePreview(URL.createObjectURL(newInitialState.image));
-      } else {
-        setHasImage(false);
-        setImageFile(null);
-        setImagePreview(null);
+        if (imagePreview) URL.revokeObjectURL(imagePreview);
+
+        if (newInitialState.image instanceof Blob) {
+          setHasImage(true); setImageFile(newInitialState.image); setImagePreview(URL.createObjectURL(newInitialState.image));
+        } else {
+          setHasImage(false); setImageFile(null); setImagePreview(null);
+        }
       }
-    }
-  // Adding initialData to dependencies is tricky as it's an object.
-  // getInitialState is stable due to useCallback or being defined outside if props don't change.
-  // However, getInitialState itself depends on initialData and forcedReferential from the closure.
-  // Keying the component or using a more sophisticated effect dependency management might be needed if initialData could change dynamically for an *open* form for a new question.
-  // For now, assuming initialData is primarily for the *first* setup of a new question form.
+    };
+    loadQuestionData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionId, forcedReferential]); // Note: initialData is not listed to avoid re-runs if its reference changes but content is same.
+  }, [questionId, getInitialState]); // forcedReferential is handled by referential load effect
+
+  // Effect to set theme selection once themes are loaded (for editing)
+  useEffect(() => {
+    if (themes.length > 0) {
+        const pendingThemeId = sessionStorage.getItem('pendingThemeId');
+        if (pendingThemeId && themes.some(t => t.id?.toString() === pendingThemeId)) {
+            setSelectedThemeId(pendingThemeId);
+            sessionStorage.removeItem('pendingThemeId'); // Clean up
+        }
+    }
+  }, [themes]);
+
+  // Effect to set bloc selection once blocs are loaded (for editing)
+  useEffect(() => {
+    if (blocs.length > 0) {
+        const pendingBlocId = sessionStorage.getItem('pendingBlocId');
+        if (pendingBlocId && blocs.some(b => b.id?.toString() === pendingBlocId)) {
+            setSelectedBlocId(pendingBlocId);
+            sessionStorage.removeItem('pendingBlocId'); // Clean up
+        }
+    }
+  }, [blocs]);
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    // Prevent changing referential if it's forced
-    if (name === 'referential' && forcedReferential) {
-      return;
-    }
-    if (name === 'theme') {
-      logger.info(`handleInputChange - theme changed to: "${value}"`);
-    }
     setQuestion(prev => ({ ...prev, [name]: name === 'timeLimit' ? parseInt(value, 10) : value }));
+  };
+
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    if (name === 'selectedReferentialId') {
+      setSelectedReferentialId(value);
+    } else if (name === 'selectedThemeId') {
+      setSelectedThemeId(value);
+    } else if (name === 'selectedBlocId') {
+      setSelectedBlocId(value);
+    } else {
+      // For other selects like question.type
+      setQuestion(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {

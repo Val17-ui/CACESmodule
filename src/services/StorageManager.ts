@@ -115,69 +115,35 @@ export const StorageManager = {
    * @param referential - The CACES referential.
    * @returns A promise that resolves to an array of unique base theme names.
    */
-  async getAllBaseThemesForReferential(referential: CACESReferential): Promise<string[]> {
-    try {
-      const questions = await db.questions.where({ referential }).toArray();
-      const themesWithBlocks = questions.map(q => q.theme);
-      const baseThemes = new Set<string>();
-      themesWithBlocks.forEach(themeWithBlock => {
-        // Assuming theme format is 'baseTheme_BLOCK' e.g. 'securite_A'
-        // Or just 'baseTheme' if no block is specified (e.g. during import before blocks are assigned)
-        const parts = themeWithBlock.split('_');
-        if (parts.length > 0) {
-          baseThemes.add(parts[0]);
-        }
-      });
-      return Array.from(baseThemes);
-    } catch (error) {
-      console.error(`StorageManager: Error getting base themes for referential ${referential}`, error);
-      return [];
-    }
-  },
+  // getAllBaseThemesForReferential has been removed.
+  // Use StorageManager.db.getThemesByReferentialId(referentialId: number) instead.
+  // Example:
+  // const referential = await StorageManager.db.getReferentialByCode("R489");
+  // if (referential && referential.id) {
+  //   const themes = await StorageManager.db.getThemesByReferentialId(referential.id);
+  //   // themes will be an array of Theme objects
+  // }
+
+  // getAllBlockIdentifiersForTheme has been removed.
+  // Use StorageManager.db.getBlocsByThemeId(themeId: number) instead.
+  // Example:
+  // const theme = await StorageManager.db.getThemeByCodeAndReferentialId("R489PR", referentialId);
+  // if (theme && theme.id) {
+  //   const blocs = await StorageManager.db.getBlocsByThemeId(theme.id);
+  //   // blocs will be an array of Bloc objects
+  // }
 
   /**
-   * Retrieves all block identifiers (e.g., 'A', 'B', 'C') for a given referential and base theme.
-   * @param referential - The CACES referential.
-   * @param baseTheme - The base theme name (e.g., 'securite').
-   * @returns A promise that resolves to an array of block identifiers.
-   */
-  async getAllBlockIdentifiersForTheme(referential: CACESReferential, baseTheme: string): Promise<string[]> {
-    try {
-      const questions = await db.questions
-        .where({ referential })
-        .filter(question => question.theme.startsWith(baseTheme + '_'))
-        .toArray();
-
-      const blockIdentifiers = new Set<string>();
-      questions.forEach(question => {
-        const parts = question.theme.split('_');
-        if (parts.length === 2 && parts[0] === baseTheme) {
-          blockIdentifiers.add(parts[1]);
-        }
-      });
-      return Array.from(blockIdentifiers).sort(); // Sort for consistent order e.g. A, B, C
-    } catch (error) {
-      console.error(`StorageManager: Error getting block identifiers for theme ${baseTheme} in referential ${referential}`, error);
-      return [];
-    }
-  },
-
-  /**
-   * Retrieves all questions for a specific block within a referential and base theme.
-   * @param referential - The CACES referential.
-   * @param baseTheme - The base theme name (e.g., 'securite').
-   * @param blockIdentifier - The block identifier (e.g., 'A').
+   * Retrieves all questions for a specific blocId.
+   * @param blocId - The ID of the bloc.
    * @returns A promise that resolves to an array of StoredQuestion objects.
    */
-  async getQuestionsForBlock(referential: CACESReferential, baseTheme: string, blockIdentifier: string): Promise<StoredQuestion[]> {
-    const compositeTheme = `${baseTheme}_${blockIdentifier}`;
+  async getQuestionsForBloc(blocId: number): Promise<StoredQuestion[]> {
     try {
-      const questions = await db.questions
-        .where({ referential, theme: compositeTheme })
-        .toArray();
+      const questions = await db.questions.where({ blocId }).toArray();
       return questions;
     } catch (error) {
-      console.error(`StorageManager: Error getting questions for block ${compositeTheme} in referential ${referential}`, error);
+      console.error(`StorageManager: Error getting questions for blocId ${blocId}`, error);
       return [];
     }
   }
