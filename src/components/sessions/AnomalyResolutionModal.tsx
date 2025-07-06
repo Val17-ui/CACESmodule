@@ -29,7 +29,6 @@ interface DetectedAnomalies {
 interface AnomalyResolutionModalProps {
   isOpen: boolean;
   detectedAnomalies: DetectedAnomalies | null;
-  // Passer tous les pendingValidResults pour pouvoir les inclure dans le onResolve
   pendingValidResults: ExtractedResultFromXml[];
   onResolve: (resolvedResults: ExtractedResultFromXml[], muetResolutions: MuetResolution[], inconnuResolutions: InconnuResolution[]) => void;
   onCancel: () => void;
@@ -38,7 +37,7 @@ interface AnomalyResolutionModalProps {
 const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
   isOpen,
   detectedAnomalies,
-  pendingValidResults,
+  pendingValidResults, // Reçoit le tableau complet
   onResolve,
   onCancel,
 }) => {
@@ -121,7 +120,7 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
             Veuillez choisir une action pour chaque anomalie listée ci-dessous.
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            {pendingValidResults.length} réponses de boîtiers attendus ont été traitées sans problème direct de boîtier et seront importées.
+            {pendingValidResults.length} réponses de boîtiers attendus (sans anomalie de boîtier) seront incluses si vous validez.
           </p>
         </div>
 
@@ -220,4 +219,4 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
 };
 
 export default AnomalyResolutionModal;
-export type { DetectedAnomalies as AnomalyDataForModal }; // Exporter le type pour SessionForm
+export type { DetectedAnomalies as AnomalyDataForModal, MuetResolution, InconnuResolution }; // Exporter les types pour SessionForm

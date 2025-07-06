@@ -37,13 +37,15 @@ import {
   getSessionQuestionsBySessionId, // Importation ajoutée
   getSessionBoitiersBySessionId // Importation ajoutée
 } from '../../db';
-import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator'; // Added QuestionMapping
+// QuestionMapping n'est plus utilisé directement ici, mais generatePresentation le retourne. On le garde pour l'instant.
+import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import { logger } from '../../utils/logger'; // Importer le logger
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
-import AnomalyResolutionModal, { AnomalyDataForModal } from './AnomalyResolutionModal'; // Importation
+// AnomalyDataForModal n'est plus nécessaire ici car le type est inféré ou non utilisé directement
+import AnomalyResolutionModal, { MuetResolution, InconnuResolution } from './AnomalyResolutionModal';
 
 interface FormParticipant extends DBParticipantType {
   id: string;
@@ -749,7 +751,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         return;
       }
       if (!sessionBoitiers) { // sessionBoitiers peut être vide si aucun participant n'a été configuré avec boîtier.
-        logger.warn(`[Import Results] Aucune information de boîtier (sessionBoitiers) trouvée pour sessionId: ${currentSessionDbId}. Les vérifications de boîtiers seront limitées.`);
+        logger.warning(`[Import Results] Aucune information de boîtier (sessionBoitiers) trouvée pour sessionId: ${currentSessionDbId}. Les vérifications de boîtiers seront limitées.`);
         // Ne pas bloquer ici, car une session pourrait ne pas avoir de participants pré-assignés.
       }
 
@@ -861,8 +863,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
                   const sessionQuestions = await getQuestionsByIds(questionIds);
                   if (sessionQuestions.length > 0) {
-                    // Créer un map pour faciliter la recherche de globalDeviceId par serialNumber
-                    const deviceIdBySerialMap = new Map(hardwareDevices.map(hd => [hd.serialNumber, hd.id]));
+                    // const deviceIdBySerialMap = new Map(hardwareDevices.map(hd => [hd.serialNumber, hd.id])); // Non utilisé actuellement
 
                     const updatedParticipants = sessionDataForScores.participants.map((p_db) => {
                       // p_db a assignedGlobalDeviceId. Il faut trouver le serialNumber correspondant.
@@ -1282,7 +1283,7 @@ const handleResolveAnomalies = async (
             // On pourrait aussi créer un participant sans boîtier assigné si c'est permis.
             // Alternative: créer un nouveau VotingDevice.
             // Pour ce TODO, on va juste logguer et le participant n'aura pas de assignedGlobalDeviceId s'il n'existe pas.
-            logger.warn(`[AnomalyResolution] Boîtier inconnu S/N ${inconnuData.serialNumber} n'existe pas dans hardwareDevices. Le nouveau participant n'aura pas de boîtier assigné.`);
+            logger.warning(`[AnomalyResolution] Boîtier inconnu S/N ${inconnuData.serialNumber} n'existe pas dans hardwareDevices. Le nouveau participant n'aura pas de boîtier assigné.`);
             globalDeviceIdToAssign = null;
           }
 
@@ -1427,7 +1428,7 @@ const handleResolveAnomalies = async (
         <AnomalyResolutionModal
           isOpen={showAnomalyResolutionUI}
           detectedAnomalies={detectedAnomalies}
-          pendingValidResultsCount={pendingValidResults.length}
+          pendingValidResults={pendingValidResults} // Changé de pendingValidResultsCount à pendingValidResults
           onResolve={handleResolveAnomalies}
           onCancel={handleCancelAnomalyResolution}
         />
