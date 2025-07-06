@@ -290,11 +290,12 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
            continue;
         }
 
-        const referentialRaw = (row[headerMap['referential']] || '').toString().toUpperCase();
-        if (!Object.values(CACESReferential).includes(referentialRaw as CACESReferential)) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel "${referentialRaw}" invalide.`);
-            continue;
-        }
+        // OBSOLETE VALIDATION BLOCK - referential is now determined by referentiel_code, theme_code, bloc_code
+        // const referentialRaw = (row[headerMap['referential']] || '').toString().toUpperCase();
+        // if (!Object.values(CACESReferential).includes(referentialRaw as CACESReferential)) {
+        //     errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel "${referentialRaw}" invalide.`);
+        //     continue;
+        // }
 
         const isEliminatoryRaw = (row[headerMap['isEliminatory']] || 'Non').toString().trim().toUpperCase();
         let isEliminatoryBool = false;
