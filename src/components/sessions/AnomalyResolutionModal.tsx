@@ -29,7 +29,6 @@ interface DetectedAnomalies {
 interface AnomalyResolutionModalProps {
   isOpen: boolean;
   detectedAnomalies: DetectedAnomalies | null;
-  // Passer tous les pendingValidResults pour pouvoir les inclure dans le onResolve
   pendingValidResults: ExtractedResultFromXml[];
   onResolve: (resolvedResults: ExtractedResultFromXml[], muetResolutions: MuetResolution[], inconnuResolutions: InconnuResolution[]) => void;
   onCancel: () => void;
@@ -38,7 +37,7 @@ interface AnomalyResolutionModalProps {
 const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
   isOpen,
   detectedAnomalies,
-  pendingValidResults,
+  pendingValidResults, // Reçoit le tableau complet
   onResolve,
   onCancel,
 }) => {
@@ -49,23 +48,34 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
   useEffect(() => {
     if (detectedAnomalies) {
       setMuetResolutions(
-        detectedAnomalies.muets.map(m => ({ serialNumber: m.serialNumber, action: 'pending' }))
+        (detectedAnomalies.muets || []).map(m => ({ serialNumber: m.serialNumber, action: 'pending' }))
       );
       setInconnuResolutions(
-        detectedAnomalies.inconnus.map(i => ({ serialNumber: i.serialNumber, action: 'pending' }))
+        (detectedAnomalies.inconnus || []).map(i => ({ serialNumber: i.serialNumber, action: 'pending' }))
       );
     }
   }, [detectedAnomalies]);
 
   useEffect(() => {
-    const allMuetsResolved = muetResolutions.every(r => r.action !== 'pending');
-    const allInconnusResolved = inconnuResolutions.every(r => r.action !== 'pending');
-    setIsConfirmDisabled(!(allMuetsResolved && allInconnusResolved));
-  }, [muetResolutions, inconnuResolutions]);
+    // Vérifier si detectedAnomalies est non null avant d'accéder à ses propriétés
+    const totalAnomalies = (detectedAnomalies?.muets?.length || 0) + (detectedAnomalies?.inconnus?.length || 0);
+    const resolvedAnomalies = muetResolutions.filter(r => r.action !== 'pending').length +
+                              inconnuResolutions.filter(r => r.action !== 'pending').length;
+
+    if (totalAnomalies === 0) { // S'il n'y a pas d'anomalies à résoudre (cas peu probable si le modal est ouvert)
+        setIsConfirmDisabled(false);
+    } else {
+        setIsConfirmDisabled(resolvedAnomalies !== totalAnomalies);
+    }
+  }, [muetResolutions, inconnuResolutions, detectedAnomalies]);
 
   if (!isOpen || !detectedAnomalies) {
     return null;
   }
+
+  // Initialisation défensive des listes d'anomalies pour le rendu
+  const muets = detectedAnomalies.muets || [];
+  const inconnus = detectedAnomalies.inconnus || [];
 
   const handleMuetActionChange = (serialNumber: string, action: MuetAction) => {
     setMuetResolutions(prev =>
@@ -110,13 +120,13 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
             Veuillez choisir une action pour chaque anomalie listée ci-dessous.
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            {pendingValidResults.length} réponses de boîtiers attendus ont été traitées sans problème direct de boîtier et seront importées.
+            {pendingValidResults.length} réponses de boîtiers attendus (sans anomalie de boîtier) seront incluses si vous validez.
           </p>
         </div>
 
-        {detectedAnomalies.muets && detectedAnomalies.muets.length > 0 && (
+        {muets.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-red-600 mb-2">Boîtiers Attendus Muets ({detectedAnomalies.muets.length})</h3>
+            <h3 className="text-lg font-semibold text-red-600 mb-2">Boîtiers Attendus Muets ({muets.length})</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -129,7 +139,7 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {detectedAnomalies.muets.map((muet) => (
+                  {muets.map((muet) => (
                     <tr key={`muet-${muet.serialNumber}`}>
                       <td className="px-4 py-2 whitespace-nowrap text-sm">{muet.visualId}</td>
                       <td className="px-4 py-2 whitespace-nowrap text-sm">{muet.participantName}</td>
@@ -155,9 +165,9 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
           </div>
         )}
 
-        {detectedAnomalies.inconnus && detectedAnomalies.inconnus.length > 0 && (
+        {inconnus.length > 0 && (
           <div className="mb-4">
-            <h3 className="text-lg font-semibold text-orange-600 mb-2">Boîtiers Inconnus Ayant Répondu ({detectedAnomalies.inconnus.length})</h3>
+            <h3 className="text-lg font-semibold text-orange-600 mb-2">Boîtiers Inconnus Ayant Répondu ({inconnus.length})</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -169,7 +179,7 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {detectedAnomalies.inconnus.map((inconnu) => (
+                  {inconnus.map((inconnu) => (
                     <tr key={`inconnu-${inconnu.serialNumber}`}>
                       <td className="px-4 py-2 whitespace-nowrap text-sm">{inconnu.serialNumber}</td>
                       <td className="px-4 py-2 whitespace-nowrap text-sm">{inconnu.responses.length}</td>
@@ -209,4 +219,4 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
 };
 
 export default AnomalyResolutionModal;
-export type { DetectedAnomalies as AnomalyDataForModal }; // Exporter le type pour SessionForm
+export type { DetectedAnomalies as AnomalyDataForModal, MuetResolution, InconnuResolution }; // Exporter les types pour SessionForm
