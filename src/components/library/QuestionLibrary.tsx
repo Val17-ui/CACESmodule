@@ -6,27 +6,47 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
-import { QuestionTheme, referentials, questionThemes, CACESReferential } from '../../types'; // Added CACESReferential
-import { StorageManager, StoredQuestion } from '../../services/StorageManager'; // Import StorageManager
+// Removed CACESReferential, referentials, questionThemes from here as they will be dynamic
+import { QuestionTheme, CACESReferential, Referential, Theme, Bloc } from '../../types';
+import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 type QuestionLibraryProps = {
   onEditQuestion: (id: string) => void;
 };
 
 const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
-  const [selectedReferential, setSelectedReferential] = useState<string>('');
-  const [selectedTheme, setSelectedTheme] = useState<string>('');
+  const [selectedReferential, setSelectedReferential] = useState<string>(''); // Store ID
+  const [selectedTheme, setSelectedTheme] = useState<string>(''); // Store ID
+  const [selectedBloc, setSelectedBloc] = useState<string>(''); // Store ID, New filter
   const [selectedEliminatory, setSelectedEliminatory] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const [sortBy, setSortBy] = useState<string>('recent');
-  const [questions, setQuestions] = useState<StoredQuestion[]>([]); // Changed to StoredQuestion[]
+  const [questions, setQuestions] = useState<StoredQuestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Data for filters
+  const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
+  const [themesData, setThemesData] = useState<Theme[]>([]);
+  const [blocsData, setBlocsData] = useState<Bloc[]>([]);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
 
   const [isImporting, setIsImporting] = useState(false);
   const [importStatusMessage, setImportStatusMessage] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Refs pour les nouveaux imports
+  const referentialFileInputRef = useRef<HTMLInputElement>(null);
+  const themeFileInputRef = useRef<HTMLInputElement>(null);
+
+  // États pour les messages d'import spécifiques
+  const [isImportingReferentiels, setIsImportingReferentiels] = useState(false);
+  const [importReferentielsStatusMessage, setImportReferentielsStatusMessage] = useState<string | null>(null);
+  const [importReferentielsError, setImportReferentielsError] = useState<string | null>(null);
+
+  const [isImportingThemes, setIsImportingThemes] = useState(false);
+  const [importThemesStatusMessage, setImportThemesStatusMessage] = useState<string | null>(null);
+  const [importThemesError, setImportThemesError] = useState<string | null>(null);
+
 
   const fetchQuestions = async () => { // Made fetchQuestions a standalone function
     setIsLoading(true);
@@ -45,7 +65,47 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
   useEffect(() => {
     fetchQuestions();
+    loadFilterData();
   }, []);
+
+  const loadFilterData = async () => {
+    try {
+      const refs = await StorageManager.getAllReferentiels();
+      setReferentielsData(refs);
+      // Initial load for themes and blocs can be empty or based on a default selection if any
+      setThemesData([]);
+      setBlocsData([]);
+    } catch (error) {
+      console.error("Error loading filter data:", error);
+      // Handle error (e.g., show a notification to the user)
+    }
+  };
+
+  useEffect(() => {
+    // Load themes when selectedReferential changes
+    if (selectedReferential) {
+      StorageManager.getThemesByReferentialId(parseInt(selectedReferential, 10))
+        .then(setThemesData)
+        .catch(console.error);
+      setSelectedTheme(''); // Reset theme selection
+      setBlocsData([]); // Clear blocs
+    } else {
+      setThemesData([]);
+      setBlocsData([]);
+    }
+  }, [selectedReferential]);
+
+  useEffect(() => {
+    // Load blocs when selectedTheme changes
+    if (selectedTheme) {
+      StorageManager.getBlocsByThemeId(parseInt(selectedTheme, 10))
+        .then(setBlocsData)
+        .catch(console.error);
+      setSelectedBloc(''); // Reset bloc selection
+    } else {
+      setBlocsData([]);
+    }
+  }, [selectedTheme]);
 
   const handleFileImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -70,8 +130,11 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       // Define expected headers based on user's list (keys are normalized for internal use)
       const expectedHeaders: Record<string, string> = {
         texte: 'texte',
-        referential: 'referential',
-        theme: 'theme',
+        // referential: 'referential', // Remplacé
+        // theme: 'theme', // Remplacé
+        referentiel_code: 'referentiel_code', // Nouveau
+        theme_code: 'theme_code',         // Nouveau
+        bloc_code: 'bloc_code',           // Nouveau
         optiona: 'optionA',
         optionb: 'optionB',
         optionc: 'optionC',
@@ -99,11 +162,18 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       });
 
       // Validate required headers (using internal keys) - 'type' is removed from here
-      const requiredImportKeys = ['texte', 'referential', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory'];
+      const requiredImportKeys = ['texte', 'referentiel_code', 'theme_code', 'bloc_code', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory'];
       for (const key of requiredImportKeys) {
         if (headerMap[key] === undefined) {
-          const displayName = Object.keys(expectedHeaders).find(k => expectedHeaders[k] === key) || key;
-          throw new Error(`Colonne manquante ou mal nommée dans le fichier Excel : "${displayName}"`);
+          // Try to find the display name for the error message
+          let displayNameForKey = key;
+          for (const k in expectedHeaders) {
+            if (expectedHeaders[k] === key) {
+              displayNameForKey = k; // Use the original key from expectedHeaders if found (e.g. 'referentiel_code')
+              break;
+            }
+          }
+          throw new Error(`Colonne manquante ou mal nommée dans le fichier Excel : "${displayNameForKey}"`);
         }
       }
 
@@ -144,6 +214,55 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
             continue;
         }
 
+        // Get referentiel_code, theme_code, bloc_code
+        const referentielCode = (row[headerMap['referentiel_code']] || '').toString().trim();
+        const themeCode = (row[headerMap['theme_code']] || '').toString().trim();
+        const blocCode = (row[headerMap['bloc_code']] || '').toString().trim();
+
+        if (!referentielCode || !themeCode || !blocCode) {
+          errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): 'referentiel_code', 'theme_code', et 'bloc_code' sont requis.`);
+          continue;
+        }
+
+        let blocIdToStore: number | undefined = undefined;
+        try {
+          const referentiel = await StorageManager.getReferentialByCode(referentielCode);
+          if (!referentiel || !referentiel.id) {
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel avec code "${referentielCode}" non trouvé.`);
+            continue;
+          }
+          const theme = await StorageManager.getThemeByCodeAndReferentialId(themeCode, referentiel.id);
+          if (!theme || !theme.id) {
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Thème avec code "${themeCode}" non trouvé pour le référentiel "${referentielCode}".`);
+            continue;
+          }
+          const bloc = await StorageManager.getBlocByCodeAndThemeId(blocCode, theme.id);
+          if (!bloc || !bloc.id) {
+            // MODIFICATION: Tentative de création de n'importe quel bloc (GEN ou non-GEN) s'il n'existe pas.
+            console.log(`Bloc "${blocCode}" non trouvé pour le thème "${themeCode}". Tentative de création...`);
+            const newBlocId = await StorageManager.addBloc({ code_bloc: blocCode, theme_id: theme.id });
+            if (newBlocId) {
+              blocIdToStore = newBlocId;
+              console.log(`Bloc "${blocCode}" créé automatiquement pour le thème "${themeCode}" avec ID: ${newBlocId}.`);
+            } else {
+              errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Création automatique du bloc "${blocCode}" pour le thème "${themeCode}" a échoué.`);
+              continue;
+            }
+          } else {
+            blocIdToStore = bloc.id;
+          }
+        } catch (dbError: any) {
+          errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Erreur DB lors de la recherche/création de référentiel/thème/bloc: ${dbError.message}`);
+          continue;
+        }
+
+        if (blocIdToStore === undefined) {
+            // This should ideally be caught by earlier checks, but as a safeguard:
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Impossible de déterminer le blocId.`);
+            continue;
+        }
+
+
         const correctAnswerLetter = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
         if (correctAnswerLetter === 'A') correctAnswerStr = "0";
         else if (correctAnswerLetter === 'B') correctAnswerStr = "1";
@@ -171,11 +290,12 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
            continue;
         }
 
-        const referentialRaw = (row[headerMap['referential']] || '').toString().toUpperCase();
-        if (!Object.values(CACESReferential).includes(referentialRaw as CACESReferential)) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel "${referentialRaw}" invalide.`);
-            continue;
-        }
+        // OBSOLETE VALIDATION BLOCK - referential is now determined by referentiel_code, theme_code, bloc_code
+        // const referentialRaw = (row[headerMap['referential']] || '').toString().toUpperCase();
+        // if (!Object.values(CACESReferential).includes(referentialRaw as CACESReferential)) {
+        //     errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel "${referentialRaw}" invalide.`);
+        //     continue;
+        // }
 
         const isEliminatoryRaw = (row[headerMap['isEliminatory']] || 'Non').toString().trim().toUpperCase();
         let isEliminatoryBool = false;
@@ -186,17 +306,17 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
             continue;
         }
 
-
+        // Construire l'objet newQuestionData avec blocIdToStore
         const newQuestionData: Omit<StoredQuestion, 'id'> = {
           text: questionText.toString(),
           type: StoredQuestionType,
           options: options,
           correctAnswer: correctAnswerStr,
-          referential: referentialRaw as CACESReferential,
-          theme: (row[headerMap['theme']] || '').toString(),
+          blocId: blocIdToStore, // Utiliser le blocId trouvé ou créé
           isEliminatory: isEliminatoryBool,
           timeLimit: parseInt(row[headerMap['timelimit']], 10) || 30,
           imageName: (row[headerMap['imagename']] || '').toString().trim() || undefined,
+          // referential et theme sont supprimés de StoredQuestion et gérés via blocId
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           usageCount: 0,
@@ -241,21 +361,208 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     fileInputRef.current?.click();
   };
 
-  const referentialOptions = [
-    { value: '', label: 'Toutes les recommandations' },
-    ...Object.entries(referentials).map(([value, label]) => ({
-      value,
-      label: `${value} - ${label}`,
-    }))
-  ];
+  const triggerReferentialFileInput = () => {
+    referentialFileInputRef.current?.click();
+  };
 
-  const themeOptions = [
+  const triggerThemeFileInput = () => {
+    themeFileInputRef.current?.click();
+  };
+
+  // Placeholder import handlers for referentiels and themes
+  const handleReferentialFileImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingReferentiels(true);
+    setImportReferentielsStatusMessage(`Importation des référentiels du fichier ${file.name}...`);
+    setImportReferentielsError(null);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      if (jsonRows.length < 2) {
+        throw new Error("Le fichier est vide ou ne contient pas de données de référentiel.");
+      }
+
+      const headerRow = jsonRows[0] as string[];
+      const expectedHeaders = { code: 'code', nom_complet: 'nom_complet' };
+      const headerMap: Record<string, number> = {};
+
+      headerRow.forEach((header, index) => {
+        const normalizedHeader = (header || '').toString().toLowerCase().trim();
+        if (normalizedHeader === expectedHeaders.code) headerMap.code = index;
+        if (normalizedHeader === expectedHeaders.nom_complet) headerMap.nom_complet = index;
+      });
+
+      if (headerMap.code === undefined || headerMap.nom_complet === undefined) {
+        throw new Error(`Colonnes manquantes ou mal nommées. Attendu: "${expectedHeaders.code}", "${expectedHeaders.nom_complet}".`);
+      }
+
+      let addedCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 1; i < jsonRows.length; i++) {
+        const row = jsonRows[i] as any[];
+        if (row.every(cell => cell === null || cell === undefined || cell.toString().trim() === '')) continue;
+
+        const code = row[headerMap.code]?.toString().trim();
+        const nom_complet = row[headerMap.nom_complet]?.toString().trim();
+
+        if (!code || !nom_complet) {
+          errors.push(`Ligne ${i + 1}: Les champs 'code' et 'nom_complet' sont requis.`);
+          continue;
+        }
+
+        try {
+          // Vérifier si le référentiel existe déjà par son code
+          const existing = await StorageManager.getReferentialByCode(code);
+          if (existing) {
+            errors.push(`Ligne ${i + 1}: Le référentiel avec le code "${code}" existe déjà (ID: ${existing.id}). Pas d'ajout.`);
+            continue;
+          }
+          await StorageManager.addReferential({ code, nom_complet });
+          addedCount++;
+        } catch (e: any) {
+          errors.push(`Ligne ${i + 1} (Code: ${code}): Erreur DB - ${e.message}`);
+        }
+      }
+
+      let summaryMessage = `${addedCount} référentiel(s) importé(s) avec succès.`;
+      if (errors.length > 0) {
+        summaryMessage += ` ${errors.length} erreur(s) rencontrée(s).`;
+        setImportReferentielsError(errors.join('\n'));
+      } else {
+        setImportReferentielsError(null);
+      }
+      setImportReferentielsStatusMessage(summaryMessage);
+      // TODO: Rafraîchir la liste des référentiels si elle est affichée quelque part dynamiquement.
+      // Pour l'instant, les filtres de questions sont statiques ou basés sur 'types/index.ts'
+
+    } catch (err: any) {
+      setImportReferentielsError(`Erreur lors de l'importation des référentiels: ${err.message}`);
+      setImportReferentielsStatusMessage(null);
+    } finally {
+      setIsImportingReferentiels(false);
+      if (referentialFileInputRef.current) referentialFileInputRef.current.value = "";
+    }
+  };
+
+  const handleThemeFileImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingThemes(true);
+    setImportThemesStatusMessage(`Importation des thèmes du fichier ${file.name}...`);
+    setImportThemesError(null);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      if (jsonRows.length < 2) {
+        throw new Error("Le fichier est vide ou ne contient pas de données de thème.");
+      }
+
+      const headerRow = jsonRows[0] as string[];
+      const expectedHeaders = {
+        code_theme: 'code_theme',
+        nom_complet: 'nom_complet',
+        referentiel_code: 'referentiel_code'
+      };
+      const headerMap: Record<string, number> = {};
+
+      headerRow.forEach((header, index) => {
+        const normalizedHeader = (header || '').toString().toLowerCase().trim();
+        if (normalizedHeader === expectedHeaders.code_theme) headerMap.code_theme = index;
+        if (normalizedHeader === expectedHeaders.nom_complet) headerMap.nom_complet = index;
+        if (normalizedHeader === expectedHeaders.referentiel_code) headerMap.referentiel_code = index;
+      });
+
+      if (headerMap.code_theme === undefined || headerMap.nom_complet === undefined || headerMap.referentiel_code === undefined) {
+        throw new Error(`Colonnes manquantes ou mal nommées. Attendu: "${expectedHeaders.code_theme}", "${expectedHeaders.nom_complet}", "${expectedHeaders.referentiel_code}".`);
+      }
+
+      let addedCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 1; i < jsonRows.length; i++) {
+        const row = jsonRows[i] as any[];
+        if (row.every(cell => cell === null || cell === undefined || cell.toString().trim() === '')) continue;
+
+        const code_theme = row[headerMap.code_theme]?.toString().trim();
+        const nom_complet = row[headerMap.nom_complet]?.toString().trim();
+        const referentiel_code = row[headerMap.referentiel_code]?.toString().trim();
+
+        if (!code_theme || !nom_complet || !referentiel_code) {
+          errors.push(`Ligne ${i + 1}: Les champs 'code_theme', 'nom_complet', et 'referentiel_code' sont requis.`);
+          continue;
+        }
+
+        try {
+          const parentReferentiel = await StorageManager.getReferentialByCode(referentiel_code);
+          if (!parentReferentiel || parentReferentiel.id === undefined) {
+            errors.push(`Ligne ${i + 1}: Référentiel parent avec code "${referentiel_code}" non trouvé pour le thème "${code_theme}".`);
+            continue;
+          }
+
+          const existingTheme = await StorageManager.getThemeByCodeAndReferentialId(code_theme, parentReferentiel.id);
+          if (existingTheme) {
+            errors.push(`Ligne ${i + 1}: Le thème avec le code "${code_theme}" existe déjà pour le référentiel "${referentiel_code}". Pas d'ajout.`);
+            continue;
+          }
+
+          await StorageManager.addTheme({ // Corrected: Call addTheme directly
+            code_theme,
+            nom_complet,
+            referentiel_id: parentReferentiel.id
+          });
+          addedCount++;
+        } catch (e: any) {
+          errors.push(`Ligne ${i + 1} (Code Thème: ${code_theme}): Erreur DB - ${e.message}`);
+        }
+      }
+
+      let summaryMessage = `${addedCount} thème(s) importé(s) avec succès (et bloc(s) par défaut "_GEN" créé(s)).`;
+      if (errors.length > 0) {
+        summaryMessage += ` ${errors.length} erreur(s) rencontrée(s).`;
+        setImportThemesError(errors.join('\n'));
+      } else {
+        setImportThemesError(null);
+      }
+      setImportThemesStatusMessage(summaryMessage);
+      // TODO: Rafraîchir la liste des thèmes si nécessaire
+
+    } catch (err: any) {
+      setImportThemesError(`Erreur lors de l'importation des thèmes: ${err.message}`);
+      setImportThemesStatusMessage(null);
+    } finally {
+      setIsImportingThemes(false);
+      if (themeFileInputRef.current) themeFileInputRef.current.value = "";
+    }
+  };
+
+  const referentialOptions = useMemo(() => [
+    { value: '', label: 'Tous les référentiels' },
+    ...referentielsData.map(r => ({ value: r.id!.toString(), label: `${r.code} - ${r.nom_complet}` }))
+  ], [referentielsData]);
+
+  const themeOptions = useMemo(() => [
     { value: '', label: 'Tous les thèmes' },
-    ...Object.entries(questionThemes).map(([value, label]) => ({
-      value,
-      label
-    }))
-  ];
+    ...themesData.map(t => ({ value: t.id!.toString(), label: `${t.code_theme} - ${t.nom_complet}` }))
+  ], [themesData]);
+
+  const blocOptions = useMemo(() => [
+    { value: '', label: 'Tous les blocs' },
+    ...blocsData.map(b => ({ value: b.id!.toString(), label: b.code_bloc })) // Supposant que code_bloc est suffisant pour l'affichage
+  ], [blocsData]);
 
   const eliminatoryOptions = [
     { value: '', label: 'Toutes les questions' },
@@ -272,19 +579,29 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
   const filteredQuestions = useMemo(() => {
     return questions.filter(question => {
-      const matchesReferential = !selectedReferential || question.referential === selectedReferential;
-      const matchesTheme = !selectedTheme || question.theme === selectedTheme;
+      const matchesReferential = !selectedReferential ||
+        (question.blocId && referentielsData.some(r =>
+          r.id?.toString() === selectedReferential &&
+          themesData.some(t => t.referentiel_id === r.id && blocsData.some(b => b.theme_id === t.id && b.id === question.blocId))
+        ));
+      const matchesTheme = !selectedTheme ||
+        (question.blocId && themesData.some(t =>
+          t.id?.toString() === selectedTheme && blocsData.some(b => b.theme_id === t.id && b.id === question.blocId)
+        ));
+      const matchesBloc = !selectedBloc || (question.blocId?.toString() === selectedBloc);
+
       const matchesEliminatory = !selectedEliminatory ||
         (selectedEliminatory === 'true' && question.isEliminatory) ||
         (selectedEliminatory === 'false' && !question.isEliminatory);
       const matchesSearch = !searchText ||
         (question.text && question.text.toLowerCase().includes(searchText.toLowerCase()));
-      return matchesReferential && matchesTheme && matchesEliminatory && matchesSearch;
+
+      return matchesReferential && matchesTheme && matchesBloc && matchesEliminatory && matchesSearch;
     });
-  }, [questions, selectedReferential, selectedTheme, selectedEliminatory, searchText]);
+  }, [questions, selectedReferential, selectedTheme, selectedBloc, selectedEliminatory, searchText, referentielsData, themesData, blocsData]);
 
   const sortedQuestions = useMemo(() => {
-    let sortableItems: StoredQuestion[] = [...filteredQuestions]; // Type will be StoredQuestion[] due to filteredQuestions
+    let sortableItems: StoredQuestion[] = [...filteredQuestions];
     sortableItems.sort((a, b) => {
       switch (sortBy) {
         case 'usage':
@@ -301,11 +618,47 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     return sortableItems;
   }, [filteredQuestions, sortBy]);
 
+  // Enrichir les questions avec les noms de référentiel, thème, bloc
+  const enrichedQuestions = useMemo(() => {
+    if (isLoading || !referentielsData.length || !themesData.length || !blocsData.length) {
+        // If data isn't fully loaded, or if we are in an initial loading state for questions,
+        // return the questions as is, or an empty array if questions themselves haven't loaded.
+        // The table rendering will need to handle potentially missing enriched data gracefully (e.g., show IDs or 'Loading...').
+        return sortedQuestions.map(q => ({
+            ...q,
+            referentialName: q.blocId ? `BlocID: ${q.blocId}` : 'N/A', // Placeholder
+            themeName: 'Chargement...',
+            blocName: 'Chargement...'
+        }));
+    }
+
+    return sortedQuestions.map(question => {
+      if (!question.blocId) return { ...question, referentialName: 'N/A', themeName: 'N/A', blocName: 'N/A' };
+
+      const bloc = blocsData.find(b => b.id === question.blocId);
+      if (!bloc) return { ...question, referentialName: 'Erreur', themeName: 'Erreur', blocName: `ID Bloc: ${question.blocId}` };
+
+      const theme = themesData.find(t => t.id === bloc.theme_id);
+      if (!theme) return { ...question, referentialName: 'Erreur', themeName: `ID Thème: ${bloc.theme_id}`, blocName: bloc.code_bloc };
+
+      const referentiel = referentielsData.find(r => r.id === theme.referentiel_id);
+      if (!referentiel) return { ...question, referentialName: `ID Réf: ${theme.referentiel_id}`, themeName: theme.nom_complet, blocName: bloc.code_bloc };
+
+      return {
+        ...question,
+        referentialName: referentiel.nom_complet,
+        themeName: theme.nom_complet,
+        blocName: bloc.code_bloc,
+      };
+    });
+  }, [sortedQuestions, referentielsData, themesData, blocsData, isLoading]);
+
+
   useEffect(() => {
     const newPreviews: Record<string, string> = {};
     const urlsCreatedInThisRun: string[] = [];
 
-    sortedQuestions.forEach(question => {
+    enrichedQuestions.forEach(question => { // Use enrichedQuestions here
       if (question.id && question.image instanceof Blob) {
         const url = URL.createObjectURL(question.image);
         newPreviews[question.id.toString()] = url;
@@ -369,6 +722,14 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                         options={themeOptions}
                         value={selectedTheme}
                         onChange={(e) => setSelectedTheme(e.target.value)}
+                        disabled={!selectedReferential || themesData.length === 0} // Désactiver si aucun référentiel sélectionné ou pas de thèmes
+                    />
+                    <Select
+                        label="Bloc" // Nouveau filtre
+                        options={blocOptions}
+                        value={selectedBloc}
+                        onChange={(e) => setSelectedBloc(e.target.value)}
+                        disabled={!selectedTheme || blocsData.length === 0} // Désactiver si aucun thème sélectionné ou pas de blocs
                     />
                     <Select
                         label="Type"
@@ -392,36 +753,102 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                     />
                 </div>
             </div>
-            <div className="ml-4 flex-shrink-0 mt-6"> {/* Adjusted margin for button alignment */}
+            <div className="ml-4 flex-shrink-0 mt-6 space-y-2"> {/* Adjusted margin and added space-y-2 for button stacking */}
+                {/* Input pour l'import de questions */}
                 <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileImport}
                     className="hidden"
-                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                    accept=".xlsx, .xls, .csv"
                 />
                 <Button
                     variant="primary"
                     icon={<Upload size={16}/>}
                     onClick={triggerFileInput}
                     disabled={isImporting}
+                    className="w-full" // Make button full width
                 >
-                    {isImporting ? 'Importation...' : 'Importer des Questions'}
+                    {isImporting ? 'Importation Questions...' : 'Importer Questions'}
+                </Button>
+
+                {/* Input pour l'import de référentiels */}
+                <input
+                    type="file"
+                    ref={referentialFileInputRef}
+                    onChange={handleReferentialFileImport}
+                    className="hidden"
+                    accept=".xlsx, .xls, .csv"
+                />
+                <Button
+                    variant="secondary" // Different color for distinction
+                    icon={<Upload size={16}/>}
+                    onClick={triggerReferentialFileInput}
+                    disabled={isImportingReferentiels}
+                    className="w-full" // Make button full width
+                >
+                    {isImportingReferentiels ? 'Importation Référentiels...' : 'Importer Référentiels'}
+                </Button>
+
+                {/* Input pour l'import de thèmes */}
+                <input
+                    type="file"
+                    ref={themeFileInputRef}
+                    onChange={handleThemeFileImport}
+                    className="hidden"
+                    accept=".xlsx, .xls, .csv"
+                />
+                <Button
+                    variant="secondary" // Different color for distinction
+                    icon={<Upload size={16}/>}
+                    onClick={triggerThemeFileInput}
+                    disabled={isImportingThemes}
+                    className="w-full" // Make button full width
+                >
+                    {isImportingThemes ? 'Importation Thèmes...' : 'Importer Thèmes'}
                 </Button>
             </div>
         </div>
 
-        {/* Display Import Status */}
+        {/* Display Import Status for Questions */}
         {importStatusMessage && (
           <div className="mt-4 p-3 rounded-md bg-blue-100 text-blue-700 flex items-center">
             <CheckCircle size={20} className="mr-2" />
-            {importStatusMessage}
+            <span>Questions: {importStatusMessage}</span>
           </div>
         )}
         {importError && (
           <div className="mt-4 p-3 rounded-md bg-red-100 text-red-700 flex items-center">
             <XCircle size={20} className="mr-2" />
-            {importError}
+            <span>Questions: {importError}</span>
+          </div>
+        )}
+
+        {/* Display Import Status for Referentiels */}
+        {importReferentielsStatusMessage && (
+          <div className={`mt-2 p-3 rounded-md ${importReferentielsError ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'} flex items-center`}>
+            {importReferentielsError ? <XCircle size={20} className="mr-2" /> : <CheckCircle size={20} className="mr-2" />}
+            <span>Référentiels: {importReferentielsStatusMessage}</span>
+          </div>
+        )}
+         {importReferentielsError && !importReferentielsStatusMessage && ( // Cas où il y a une erreur mais pas de message de statut (erreur initiale)
+          <div className="mt-2 p-3 rounded-md bg-red-100 text-red-700 flex items-center">
+            <XCircle size={20} className="mr-2" />
+            <span>Référentiels: {importReferentielsError}</span>
+          </div>
+        )}
+
+        {/* Display Import Status for Themes */}
+        {importThemesStatusMessage && (
+          <div className={`mt-2 p-3 rounded-md ${importThemesError ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'} flex items-center`}>
+            {importThemesError ? <XCircle size={20} className="mr-2" /> : <CheckCircle size={20} className="mr-2" />}
+            <span>Thèmes: {importThemesStatusMessage}</span>
+          </div>
+        )}
+        {importThemesError && !importThemesStatusMessage && ( // Cas où il y a une erreur mais pas de message de statut
+          <div className="mt-2 p-3 rounded-md bg-red-100 text-red-700 flex items-center">
+            <XCircle size={20} className="mr-2" />
+            <span>Thèmes: {importThemesError}</span>
           </div>
         )}
       </Card>
@@ -493,10 +920,12 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {sortedQuestions.map((question) => {
-                const imageUrl = question.id ? imagePreviews[question.id.toString()] : null;
+              {enrichedQuestions.map((question) => { // Utiliser enrichedQuestions ici
+                // Cast question to include new properties for type safety in JSX, if not already part of StoredQuestion type
+                const displayQuestion = question as StoredQuestion & { referentialName?: string; themeName?: string; blocName?: string; };
+                const imageUrl = displayQuestion.id ? imagePreviews[displayQuestion.id.toString()] : null;
                 return (
-                  <tr key={question.id} className="hover:bg-gray-50">
+                  <tr key={displayQuestion.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-start">
                         <div className="flex-shrink-0 p-2 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -504,19 +933,19 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                         </div>
                         <div className="flex-1">
                           <div className="text-sm font-medium text-gray-900 mb-1 break-words">
-                            {question.text && question.text.length > 80
-                              ? `${question.text.substring(0, 80)}...`
-                              : question.text
+                            {displayQuestion.text && displayQuestion.text.length > 80
+                              ? `${displayQuestion.text.substring(0, 80)}...`
+                              : displayQuestion.text
                             }
                           </div>
                           <div className="flex items-center space-x-2 mt-1">
-                            {question.isEliminatory && (
+                            {displayQuestion.isEliminatory && (
                               <Badge variant="danger">
                                 <AlertTriangle size={12} className="mr-1" />
                                 Éliminatoire
                               </Badge>
                             )}
-                            {question.image instanceof Blob && imageUrl && (
+                            {displayQuestion.image instanceof Blob && imageUrl && (
                               <>
                                 <Badge variant="default">
                                   <Image size={12} className="mr-1" />
@@ -534,14 +963,15 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant="primary">{question.referential}</Badge>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {question.theme || 'N/A'} {/* Display the raw theme string */}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {question.usageCount || 0} fois
-                  </td>
+                      <Badge variant="primary">{displayQuestion.referentialName || 'N/A'}</Badge>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {displayQuestion.themeName || 'N/A'} <br />
+                      <span className="text-xs text-gray-400">{displayQuestion.blocName || 'N/A'}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {displayQuestion.usageCount || 0} fois
+                    </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <span className="text-sm text-gray-900 mr-2">

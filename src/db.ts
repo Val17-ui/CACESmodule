@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import { CACESReferential, Session, Participant, SessionResult, Trainer, SessionQuestion, SessionBoitier } from './types';
+import { CACESReferential, Session, Participant, SessionResult, Trainer, SessionQuestion, SessionBoitier, Referential, Theme, Bloc } from './types'; // Ajout de Referential, Theme, Bloc
 import { logger } from './utils/logger'; // Importer le logger
 
 // Interfaces pour la DB
@@ -11,8 +11,9 @@ export interface QuestionWithId {
   correctAnswer: string;
   timeLimit?: number;
   isEliminatory: boolean;
-  referential: CACESReferential | string;
-  theme: string;
+  // referential: CACESReferential | string; // Supprimé
+  // theme: string; // Supprimé
+  blocId?: number; // Ajouté
   image?: Blob | null;
   createdAt?: string;
   updatedAt?: string;
@@ -34,9 +35,14 @@ export class MySubClassedDexie extends Dexie {
   sessionResults!: Table<SessionResult, number>;
   adminSettings!: Table<{ key: string; value: any }, string>;
   votingDevices!: Table<VotingDevice, number>;
-  trainers!: Table<Trainer, number>; // Nouvelle table pour les formateurs
-  sessionQuestions!: Table<SessionQuestion, number>; // Nouvelle table pour les questions de session
-  sessionBoitiers!: Table<SessionBoitier, number>; // Nouvelle table pour les boîtiers de session
+  trainers!: Table<Trainer, number>;
+  sessionQuestions!: Table<SessionQuestion, number>;
+  sessionBoitiers!: Table<SessionBoitier, number>;
+
+  // Nouvelles tables
+  referentiels!: Table<Referential, number>;
+  themes!: Table<Theme, number>;
+  blocs!: Table<Bloc, number>;
 
   constructor() {
     super('myDatabase');
@@ -44,7 +50,7 @@ export class MySubClassedDexie extends Dexie {
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options'
     });
     this.version(2).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, *options',
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, *options', // 'referentiel' au lieu de 'referential'
       sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
     });
@@ -204,7 +210,8 @@ export class MySubClassedDexie extends Dexie {
         console.log("'trainers' table is empty after v10 cleaning or all entries had invalid IDs.");
       }
 
-      return tx.done;
+      // return tx.done; // Dexie handles promise completion for async upgrade functions implicitly.
+      return;
     });
 
     // Version 11: Ajout des tables sessionQuestions, sessionBoitiers et du champ testSlideGuid à sessions
@@ -261,6 +268,179 @@ export class MySubClassedDexie extends Dexie {
       });
       console.log("DB version 12 upgrade: Replaced testSlideGuid with ignoredSlideGuids and initialized resolvedImportAnomalies to null for existing sessions.");
     });
+
+    // Version 13: Ajout des tables referentiels, themes, blocs et modification de la table questions
+    this.version(13).stores({
+      // Nouvelles tables
+      referentiels: '++id, &code', // code doit être unique
+      themes: '++id, &code_theme, referentiel_id', // code_theme doit être unique
+      blocs: '++id, &code_bloc, theme_id', // code_bloc doit être unique
+
+      // Table questions modifiée
+      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options', // suppression de referential, theme et ajout de blocId
+
+      // Reprise des autres tables pour que Dexie sache qu'elles existent toujours
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Garder referentiel pour l'instant, migration à la v14
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      votingDevices: '++id, name, &serialNumber',
+      trainers: '++id, name, isDefault',
+      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId', // blockId ici est l'ancien, devra peut-être être mis à jour si on veut le lier au nouveau systeme de blocId
+      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
+    }).upgrade(async tx => {
+      console.log("DB version 13 upgrade: Adding referentiels, themes, blocs tables and modifying questions table.");
+      // Logique de migration des données de l'ancienne structure (questions.referential, questions.theme)
+      // vers les nouvelles tables referentiels, themes, blocs et mise à jour de questions.blocId.
+
+      const oldQuestions = await tx.table('questions').toArray();
+      const referentielsMap = new Map<string, number>();
+      const themesMap = new Map<string, number>();
+      const blocsMap = new Map<string, number>();
+
+      for (const oldQuestion of oldQuestions) {
+        // @ts-ignore
+        const oldReferentialCode = oldQuestion.referential;
+        // @ts-ignore
+        const oldThemeName = oldQuestion.theme; // Supposons que c'est le nom/code du thème
+
+        if (!oldReferentialCode || !oldThemeName) {
+          console.warn(`Question ID ${oldQuestion.id} has missing referential or theme. Skipping migration for this question.`);
+          // @ts-ignore
+          oldQuestion.blocId = null; // ou une valeur par défaut si nécessaire
+          continue;
+        }
+
+        let referentielId = referentielsMap.get(oldReferentialCode);
+        if (!referentielId) {
+          try {
+            const newRefId = await tx.table('referentiels').add({
+              code: oldReferentialCode,
+              nom_complet: oldReferentialCode // Utiliser le code comme nom complet par défaut
+            });
+            referentielId = newRefId as number;
+            referentielsMap.set(oldReferentialCode, referentielId);
+          } catch (e) {
+            // Gérer le cas où le référentiel existe déjà (si plusieurs questions partagent le même)
+            const existingRef = await tx.table('referentiels').where('code').equals(oldReferentialCode).first();
+            if (existingRef) referentielId = existingRef.id;
+            else throw e; // Renvoyer l'erreur si ce n'est pas une contrainte d'unicité
+          }
+        }
+
+        const themeCodeForMap = `${referentielId}_${oldThemeName}`;
+        let themeId = themesMap.get(themeCodeForMap);
+        if (!themeId && referentielId) {
+          try {
+            const newThemeId = await tx.table('themes').add({
+              code_theme: oldThemeName, // Utiliser l'ancien nom du thème comme code
+              nom_complet: oldThemeName, // Utiliser l'ancien nom du thème comme nom complet
+              referentiel_id: referentielId
+            });
+            themeId = newThemeId as number;
+            themesMap.set(themeCodeForMap, themeId);
+          } catch (e) {
+            const existingTheme = await tx.table('themes').where('code_theme').equals(oldThemeName).and(t => t.referentiel_id === referentielId).first();
+            if (existingTheme) themeId = existingTheme.id;
+            else throw e;
+          }
+        }
+
+        // Création d'un bloc par défaut pour ce thème. Le code_bloc sera THEMECODE_DEFAULTBLOC
+        const blocCodeForMap = `${themeId}_DEFAULTBLOC`;
+        let blocId = blocsMap.get(blocCodeForMap);
+        if (!blocId && themeId) {
+          const defaultBlocCode = `${oldThemeName}_GEN`; // Exemple: R489PR_GEN
+          try {
+            const newBlocId = await tx.table('blocs').add({
+              code_bloc: defaultBlocCode,
+              theme_id: themeId
+            });
+            blocId = newBlocId as number;
+            blocsMap.set(blocCodeForMap, blocId);
+          } catch (e) {
+             const existingBloc = await tx.table('blocs').where('code_bloc').equals(defaultBlocCode).and(b => b.theme_id === themeId).first();
+             if (existingBloc) blocId = existingBloc.id;
+             else throw e;
+          }
+        }
+
+        // Mettre à jour la question avec le nouveau blocId
+        // @ts-ignore
+        oldQuestion.blocId = blocId;
+        // @ts-ignore
+        delete oldQuestion.referential;
+        // @ts-ignore
+        delete oldQuestion.theme;
+      }
+
+      // Mettre à jour toutes les questions en une seule fois
+      if (oldQuestions.length > 0) {
+        await tx.table('questions').bulkPut(oldQuestions);
+      }
+      console.log(`DB version 13 upgrade: Migrated ${oldQuestions.length} questions to new structure.`);
+    });
+
+    // Version 14: Mise à jour de la table sessions (referentiel -> referentielId, selectionBlocs -> selectedBlocIds)
+    this.version(14).stores({
+      sessions: '++id, nomSession, dateSession, referentielId, *selectedBlocIds, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // referentiel -> referentielId, selectionBlocs -> *selectedBlocIds
+
+      // Reprise des autres tables
+      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      referentiels: '++id, &code',
+      themes: '++id, &code_theme, referentiel_id',
+      blocs: '++id, &code_bloc, theme_id',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      votingDevices: '++id, name, &serialNumber',
+      trainers: '++id, name, isDefault',
+      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
+      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
+    }).upgrade(async tx => {
+      console.log("DB version 14 upgrade: Modifying sessions table (referentiel -> referentielId, selectionBlocs -> selectedBlocIds).");
+      await tx.table('sessions').toCollection().modify(async (session: any) => {
+        if (session.referentiel && typeof session.referentiel === 'string') {
+          const refCode = session.referentiel;
+          const referentielObj = await tx.table('referentiels').where('code').equals(refCode).first();
+          if (referentielObj) {
+            session.referentielId = referentielObj.id;
+          } else {
+            // Gérer le cas où le code du référentiel n'existe pas :
+            // peut-être créer un référentiel par défaut ou laisser referentielId undefined/null
+            // Pour l'instant, on logue une erreur et on ne met pas de referentielId
+            console.warn(`Migration v14: Référentiel avec code "${refCode}" non trouvé pour la session ID ${session.id}. referentielId ne sera pas défini.`);
+            session.referentielId = null;
+          }
+        } else if (session.referentiel && typeof session.referentiel === 'number') {
+             // Si c'était déjà un ID par hasard (peu probable vu la structure précédente)
+            session.referentielId = session.referentiel;
+        }
+        delete session.referentiel; // Supprimer l'ancien champ
+
+        // Migration de selectionBlocs vers selectedBlocIds
+        // L'ancienne structure de selectionBlocs était { theme: string (nom du theme), blockId: string (lettre A, B...) }
+        // La nouvelle structure attend un tableau d'IDs de blocs numériques.
+        // Cette migration sera complexe car elle nécessite de retrouver les IDs à partir des noms/codes.
+        // Pour simplifier, si selectionBlocs existe, on le met à un tableau vide,
+        // car la logique de sélection des blocs sera revue.
+        // Une migration plus poussée nécessiterait de :
+        // 1. Pour chaque item dans session.selectionBlocs:
+        //    a. Trouver le themeId basé sur themeName (et potentiellement referentielId si les noms de thèmes ne sont pas uniques globalement)
+        //    b. Trouver le blocId basé sur blockLetter et themeId.
+        //    c. Ajouter ce blocId numérique à selectedBlocIds.
+        if (session.selectionBlocs && Array.isArray(session.selectionBlocs)) {
+            // Logique de migration complexe omise pour l'instant.
+            // On va juste initialiser selectedBlocIds comme un tableau vide.
+            // Les sessions existantes perdront leur ancienne sélection de blocs,
+            // mais la nouvelle logique de génération les recréera.
+            console.warn(`Migration v14: Session ID ${session.id} avait 'selectionBlocs'. Il sera réinitialisé. Les blocs devront être re-sélectionnés si la session n'est pas encore 'completed'.`);
+            session.selectedBlocIds = [];
+        } else {
+            session.selectedBlocIds = []; // Initialiser s'il n'existait pas
+        }
+        delete session.selectionBlocs;
+      });
+      console.log("DB version 14 upgrade: Sessions table modified.");
+    });
   }
 }
 
@@ -306,6 +486,14 @@ export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
   }
 };
 
+export const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
+  try {
+    return await db.blocs.where({ code_bloc, theme_id }).first();
+  } catch (error) {
+    console.error(`Error getting bloc with code_bloc ${code_bloc} and theme_id ${theme_id}: `, error);
+  }
+};
+
 export const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> => {
   try {
     return await db.questions.get(id);
@@ -343,23 +531,14 @@ export const calculateBlockUsage = async (startDate?: string | Date, endDate?: s
   const usageMap = new Map<string, BlockUsage>();
 
   try {
-    let query = db.sessions.where('status').equals('completed');
+    // let query = db.sessions.where('status').equals('completed'); // Unused variable
 
     let sessionsQuery = db.sessions.where('status').equals('completed');
 
-    if (startDate) {
-      const start = startDate instanceof Date ? startDate : new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      // Placeholder pour une requête Dexie plus performante si dateSession est indexé
-      // sessionsQuery = sessionsQuery.and(session => new Date(session.dateSession) >= start);
-    }
-
-    if (endDate) {
-      const end = endDate instanceof Date ? endDate : new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      // Placeholder pour une requête Dexie plus performante
-      // sessionsQuery = sessionsQuery.and(session => new Date(session.dateSession) <= end);
-    }
+    // Date filtering logic remains the same, but applied after fetching all completed sessions.
+    // For very large datasets, fetching all then filtering in JS can be inefficient.
+    // If performance becomes an issue, consider if Dexie's date range queries can be optimized
+    // (e.g., by ensuring dateSession is properly indexed and queried).
 
     const completedSessions = await sessionsQuery.toArray();
     let filteredSessions = completedSessions;
@@ -382,21 +561,54 @@ export const calculateBlockUsage = async (startDate?: string | Date, endDate?: s
       });
     }
 
-    for (const session of filteredSessions) {
-      if (session.selectionBlocs && session.selectionBlocs.length > 0) {
-        const sessionReferentiel = session.referentiel;
+    // Fetch all referentiels, themes, and blocs once to create lookup maps
+    // This avoids repeated DB queries inside the loop.
+    const allReferentiels = await db.referentiels.toArray();
+    const allThemes = await db.themes.toArray();
+    const allBlocs = await db.blocs.toArray();
 
-        for (const bloc of session.selectionBlocs) {
-          const key = `${sessionReferentiel}-${bloc.theme}-${bloc.blockId}`;
+    const referentielsMap = new Map(allReferentiels.map(r => [r.id, r]));
+    const themesMap = new Map(allThemes.map(t => [t.id, t]));
+    const blocsMap = new Map(allBlocs.map(b => [b.id, b]));
+
+    for (const session of filteredSessions) {
+      // session.selectedBlocIds is an array of numbers (bloc IDs)
+      if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
+        // session.referentielId should exist if selectedBlocIds exist and point to valid data.
+        // However, the original BlockUsage interface expects a referential code/string.
+        // We need to reconstruct this information.
+
+        for (const blocId of session.selectedBlocIds) {
+          const bloc = blocsMap.get(blocId);
+          if (!bloc) {
+            console.warn(`Bloc with ID ${blocId} not found for session ${session.id}. Skipping.`);
+            continue;
+          }
+
+          const theme = themesMap.get(bloc.theme_id);
+          if (!theme) {
+            console.warn(`Theme with ID ${bloc.theme_id} not found for bloc ${blocId}. Skipping.`);
+            continue;
+          }
+
+          const referentiel = referentielsMap.get(theme.referentiel_id);
+          if (!referentiel) {
+            console.warn(`Referentiel with ID ${theme.referentiel_id} not found for theme ${theme.id}. Skipping.`);
+            continue;
+          }
+
+          // The key for usageMap should uniquely identify the block.
+          // Using referentiel.code, theme.code_theme, and bloc.code_bloc provides human-readable unique key.
+          const key = `${referentiel.code}-${theme.code_theme}-${bloc.code_bloc}`;
 
           if (usageMap.has(key)) {
             const currentUsage = usageMap.get(key)!;
             currentUsage.usageCount++;
           } else {
             usageMap.set(key, {
-              referentiel: sessionReferentiel,
-              theme: bloc.theme,
-              blockId: bloc.blockId,
+              referentiel: referentiel.code, // Use code as per original BlockUsage interface
+              theme: theme.code_theme,     // Use code_theme
+              blockId: bloc.code_bloc,     // Use code_bloc
               usageCount: 1,
             });
           }
@@ -436,7 +648,7 @@ export const addSession = async (session: Session): Promise<number | undefined> 
         eventType: 'SESSION_CREATED',
         sessionId: id,
         sessionName: session.nomSession,
-        referential: session.referentiel,
+        referentialId: session.referentielId, // Changed from session.referentiel
         participantsCount: session.participants?.length || 0
       });
     }
@@ -812,5 +1024,105 @@ export const deleteSessionBoitiersBySessionId = async (sessionId: number): Promi
     await db.sessionBoitiers.where({ sessionId }).delete();
   } catch (error) {
     console.error(`Error deleting session boitiers for session ${sessionId}:`, error);
+  }
+};
+
+// --- CRUD pour Referentiels ---
+export const addReferential = async (referential: Omit<Referential, 'id'>): Promise<number | undefined> => {
+  try {
+    const id = await db.referentiels.add(referential as Referential);
+    return id;
+  } catch (error) {
+    console.error("Error adding referential: ", error);
+    throw error; // Renvoyer l'erreur pour la gestion dans l'UI
+  }
+};
+
+export const getAllReferentiels = async (): Promise<Referential[]> => {
+  try {
+    return await db.referentiels.toArray();
+  } catch (error) {
+    console.error("Error getting all referentiels: ", error);
+    return [];
+  }
+};
+
+export const getReferentialByCode = async (code: string): Promise<Referential | undefined> => {
+  try {
+    return await db.referentiels.where('code').equals(code).first();
+  } catch (error) {
+    console.error(`Error getting referential with code ${code}: `, error);
+  }
+};
+
+// --- CRUD pour Themes ---
+export const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> => {
+  try {
+    const id = await db.themes.add(theme as Theme);
+    // Création automatique d'un bloc par défaut pour ce thème
+    if (id) {
+      const defaultBlocCode = `${theme.code_theme}_GEN`; // Ex: R489PR_GEN
+      await addBloc({ code_bloc: defaultBlocCode, theme_id: id });
+    }
+    return id;
+  } catch (error) {
+    console.error("Error adding theme: ", error);
+    throw error;
+  }
+};
+
+export const getAllThemes = async (): Promise<Theme[]> => {
+  try {
+    return await db.themes.toArray();
+  } catch (error) {
+    console.error("Error getting all themes: ", error);
+    return [];
+  }
+};
+
+export const getThemesByReferentialId = async (referentielId: number): Promise<Theme[]> => {
+  try {
+    return await db.themes.where('referentiel_id').equals(referentielId).toArray();
+  } catch (error) {
+    console.error(`Error getting themes for referential id ${referentielId}:`, error);
+    return [];
+  }
+};
+
+export const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id: number): Promise<Theme | undefined> => {
+  try {
+    return await db.themes.where({ code_theme, referentiel_id }).first();
+  } catch (error) {
+    console.error(`Error getting theme with code_theme ${code_theme} and referentiel_id ${referentiel_id}: `, error);
+  }
+};
+
+
+// --- CRUD pour Blocs ---
+export const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
+  try {
+    const id = await db.blocs.add(bloc as Bloc);
+    return id;
+  } catch (error) {
+    console.error("Error adding bloc: ", error);
+    throw error;
+  }
+};
+
+export const getAllBlocs = async (): Promise<Bloc[]> => {
+  try {
+    return await db.blocs.toArray();
+  } catch (error) {
+    console.error("Error getting all blocs: ", error);
+    return [];
+  }
+};
+
+export const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
+  try {
+    return await db.blocs.where('theme_id').equals(themeId).toArray();
+  } catch (error) {
+    console.error(`Error getting blocs for theme id ${themeId}:`, error);
+    return [];
   }
 };

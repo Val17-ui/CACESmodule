@@ -505,24 +505,66 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
     setImportSummary("Génération .ors...");
     let allSelectedQuestionsForPptx: StoredQuestion[] = [];
-    let tempSelectedBlocksSummary: Record<string, string> = {};
+    // let tempSelectedBlocksSummary: Record<string, string> = {}; // Remplacé par une liste d'IDs de blocs
+    let selectedBlocIdsForSession: number[] = [];
+
     try {
-      const baseThemes = await StorageManager.getAllBaseThemesForReferential(refToUse as CACESReferential);
-      if (baseThemes.length === 0) { setImportSummary(`Aucun thème pour ${refToUse}.`); setIsGeneratingOrs(false); return; }
-      for (const baseTheme of baseThemes) {
-        const blockIdentifiers = await StorageManager.getAllBlockIdentifiersForTheme(refToUse as CACESReferential, baseTheme);
-        if (blockIdentifiers.length === 0) { console.warn(`Aucun bloc pour ${baseTheme}`); continue; }
-        const chosenBlockIdentifier = blockIdentifiers[Math.floor(Math.random() * blockIdentifiers.length)];
-        tempSelectedBlocksSummary[baseTheme] = chosenBlockIdentifier;
-        const questionsFromBlock = await StorageManager.getQuestionsForBlock(refToUse as CACESReferential, baseTheme, chosenBlockIdentifier);
-        allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBlock);
+      // 1. Obtenir l'objet Referential complet à partir du code.
+      const referentielObject = await StorageManager.getReferentialByCode(refToUse as string);
+      if (!referentielObject || !referentielObject.id) {
+        setImportSummary(`Référentiel avec code "${refToUse}" non trouvé.`);
+        setIsGeneratingOrs(false); return;
       }
 
-      if (allSelectedQuestionsForPptx.length === 0) { setImportSummary("Aucune question sélectionnée."); setIsGeneratingOrs(false); return; }
+      // 2. Obtenir les thèmes pour ce référentiel.
+      const themesForReferential = await StorageManager.getThemesByReferentialId(referentielObject.id);
+      if (!themesForReferential || themesForReferential.length === 0) {
+        setImportSummary(`Aucun thème trouvé pour le référentiel "${refToUse}".`);
+        setIsGeneratingOrs(false); return;
+      }
 
-      upToDateSessionData.selectionBlocs = Object.entries(tempSelectedBlocksSummary).map(([theme, blockId]) => ({ theme, blockId }));
+      for (const theme of themesForReferential) {
+        // 3. Pour chaque thème, obtenir ses blocs.
+        const blocsForTheme = await StorageManager.getBlocsByThemeId(theme.id!);
+        if (!blocsForTheme || blocsForTheme.length === 0) {
+          console.warn(`Aucun bloc trouvé pour le thème "${theme.code_theme}" (ID: ${theme.id}).`);
+          continue;
+        }
 
-      const sessionInfoForPptx = { name: upToDateSessionData.nomSession, date: upToDateSessionData.dateSession, referential: upToDateSessionData.referentiel as CACESReferential };
+        // 4. Filtrer les blocs pour ne garder que ceux se terminant par _A, _B, _C, _D, ou _E.
+        const filteredBlocs = blocsForTheme.filter(bloc =>
+          bloc.code_bloc.match(/_([A-E])$/i) // Case-insensitive match for _A to _E at the end
+        );
+
+        if (filteredBlocs.length === 0) {
+          console.warn(`Aucun bloc de type _A à _E trouvé pour le thème "${theme.code_theme}". Le bloc _GEN ou d'autres pourraient exister mais ne sont pas sélectionnés aléatoirement ici.`);
+          continue;
+        }
+
+        // 5. Choisir un bloc aléatoirement parmi les filtrés.
+        const chosenBloc = filteredBlocs[Math.floor(Math.random() * filteredBlocs.length)];
+        if (chosenBloc && chosenBloc.id) {
+          selectedBlocIdsForSession.push(chosenBloc.id);
+          // tempSelectedBlocksSummary[theme.code_theme] = chosenBloc.code_bloc; // Garder pour info si besoin, mais non stocké sur Session
+
+          // 6. Récupérer les questions pour ce bloc choisi.
+          const questionsFromBloc = await StorageManager.getQuestionsForBloc(chosenBloc.id);
+          allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBlock);
+          logger.info(`Thème: ${theme.code_theme}, Bloc choisi: ${chosenBloc.code_bloc}, Questions: ${questionsFromBloc.length}`);
+        }
+      }
+
+      if (allSelectedQuestionsForPptx.length === 0) {
+        setImportSummary("Aucune question sélectionnée après le processus de choix aléatoire des blocs. Vérifiez la configuration des thèmes et blocs.");
+        setIsGeneratingOrs(false); return;
+      }
+
+      // Mettre à jour la session avec les IDs des blocs sélectionnés
+      // upToDateSessionData.selectionBlocs = Object.entries(tempSelectedBlocksSummary).map(([theme, blockId]) => ({ theme, blockId })); // Obsolète
+      upToDateSessionData.selectedBlocIds = selectedBlocIdsForSession; // Nouvelle propriété
+
+      // Utiliser referentielObject.code qui est le code string (ex: "R489")
+      const sessionInfoForPptx = { name: upToDateSessionData.nomSession, date: upToDateSessionData.dateSession, referential: referentielObject.code as CACESReferential };
       const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
       const prefAnswersBulletStyle = await getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
       const prefPollTimeLimit = await getAdminSetting('pollTimeLimit');
@@ -569,10 +611,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           await updateSession(currentSavedId, {
             donneesOrs: orsBlob,
             questionMappings: questionMappings,
-            ignoredSlideGuids: newlyIgnoredSlideGuids || [], // S'assurer que c'est un tableau
+            ignoredSlideGuids: newlyIgnoredSlideGuids || [],
             updatedAt: new Date().toISOString(),
             status: 'ready',
-            selectionBlocs: upToDateSessionData.selectionBlocs,
+            // selectionBlocs: upToDateSessionData.selectionBlocs, // Remplacé par selectedBlocIds
+            selectedBlocIds: upToDateSessionData.selectedBlocIds, // Utiliser la nouvelle propriété
           });
 
           // Recharger les données de session pour avoir la version la plus à jour
@@ -593,16 +636,17 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               const originalQuestion = allSelectedQuestionsForPptx.find(q => q.id === qMap.dbQuestionId);
               if (originalQuestion) {
                 // Déterminer blockId
-                let blockId = 'N/A';
-                const questionThemeParts = originalQuestion.theme.split('_');
-                const baseTheme = questionThemeParts[0];
-                const selectedBlock = freshlyUpdatedSessionData.selectionBlocs?.find(sb => sb.theme === baseTheme);
-                if (selectedBlock) {
-                  blockId = selectedBlock.blockId;
-                } else if (questionThemeParts.length > 1) {
-                  // Fallback si selectionBlocs n'est pas parfaitement aligné, mais que le theme de la question a un blockId
-                  blockId = questionThemeParts[1];
+                // Pour retrouver le code du bloc pour SessionQuestion, il faut remonter depuis originalQuestion.blocId
+                let blocCodeForSessionQuestion = 'N/A';
+                if (originalQuestion.blocId) {
+                    const blocDetails = await StorageManager.getAllBlocs().then(allBlocs => allBlocs.find(b => b.id === originalQuestion.blocId));
+                    if (blocDetails) {
+                        blocCodeForSessionQuestion = blocDetails.code_bloc;
+                    } else {
+                        blocCodeForSessionQuestion = `ID_Bloc_${originalQuestion.blocId}`;
+                    }
                 }
+
 
                 sessionQuestionsToSave.push({
                   sessionId: currentSavedId,
@@ -611,7 +655,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   text: originalQuestion.text,
                   options: originalQuestion.options,
                   correctAnswer: originalQuestion.correctAnswer,
-                  blockId: blockId,
+                  blockId: blocCodeForSessionQuestion, // Utiliser le code_bloc ici
                 });
               }
             }
