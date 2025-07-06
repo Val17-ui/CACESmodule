@@ -210,7 +210,8 @@ export class MySubClassedDexie extends Dexie {
         console.log("'trainers' table is empty after v10 cleaning or all entries had invalid IDs.");
       }
 
-      return tx.done;
+      // return tx.done; // Dexie handles promise completion for async upgrade functions implicitly.
+      return;
     });
 
     // Version 11: Ajout des tables sessionQuestions, sessionBoitiers et du champ testSlideGuid à sessions
@@ -530,23 +531,14 @@ export const calculateBlockUsage = async (startDate?: string | Date, endDate?: s
   const usageMap = new Map<string, BlockUsage>();
 
   try {
-    let query = db.sessions.where('status').equals('completed');
+    // let query = db.sessions.where('status').equals('completed'); // Unused variable
 
     let sessionsQuery = db.sessions.where('status').equals('completed');
 
-    if (startDate) {
-      const start = startDate instanceof Date ? startDate : new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      // Placeholder pour une requête Dexie plus performante si dateSession est indexé
-      // sessionsQuery = sessionsQuery.and(session => new Date(session.dateSession) >= start);
-    }
-
-    if (endDate) {
-      const end = endDate instanceof Date ? endDate : new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      // Placeholder pour une requête Dexie plus performante
-      // sessionsQuery = sessionsQuery.and(session => new Date(session.dateSession) <= end);
-    }
+    // Date filtering logic remains the same, but applied after fetching all completed sessions.
+    // For very large datasets, fetching all then filtering in JS can be inefficient.
+    // If performance becomes an issue, consider if Dexie's date range queries can be optimized
+    // (e.g., by ensuring dateSession is properly indexed and queried).
 
     const completedSessions = await sessionsQuery.toArray();
     let filteredSessions = completedSessions;
@@ -569,21 +561,54 @@ export const calculateBlockUsage = async (startDate?: string | Date, endDate?: s
       });
     }
 
-    for (const session of filteredSessions) {
-      if (session.selectionBlocs && session.selectionBlocs.length > 0) {
-        const sessionReferentiel = session.referentiel;
+    // Fetch all referentiels, themes, and blocs once to create lookup maps
+    // This avoids repeated DB queries inside the loop.
+    const allReferentiels = await db.referentiels.toArray();
+    const allThemes = await db.themes.toArray();
+    const allBlocs = await db.blocs.toArray();
 
-        for (const bloc of session.selectionBlocs) {
-          const key = `${sessionReferentiel}-${bloc.theme}-${bloc.blockId}`;
+    const referentielsMap = new Map(allReferentiels.map(r => [r.id, r]));
+    const themesMap = new Map(allThemes.map(t => [t.id, t]));
+    const blocsMap = new Map(allBlocs.map(b => [b.id, b]));
+
+    for (const session of filteredSessions) {
+      // session.selectedBlocIds is an array of numbers (bloc IDs)
+      if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
+        // session.referentielId should exist if selectedBlocIds exist and point to valid data.
+        // However, the original BlockUsage interface expects a referential code/string.
+        // We need to reconstruct this information.
+
+        for (const blocId of session.selectedBlocIds) {
+          const bloc = blocsMap.get(blocId);
+          if (!bloc) {
+            console.warn(`Bloc with ID ${blocId} not found for session ${session.id}. Skipping.`);
+            continue;
+          }
+
+          const theme = themesMap.get(bloc.theme_id);
+          if (!theme) {
+            console.warn(`Theme with ID ${bloc.theme_id} not found for bloc ${blocId}. Skipping.`);
+            continue;
+          }
+
+          const referentiel = referentielsMap.get(theme.referentiel_id);
+          if (!referentiel) {
+            console.warn(`Referentiel with ID ${theme.referentiel_id} not found for theme ${theme.id}. Skipping.`);
+            continue;
+          }
+
+          // The key for usageMap should uniquely identify the block.
+          // Using referentiel.code, theme.code_theme, and bloc.code_bloc provides human-readable unique key.
+          const key = `${referentiel.code}-${theme.code_theme}-${bloc.code_bloc}`;
 
           if (usageMap.has(key)) {
             const currentUsage = usageMap.get(key)!;
             currentUsage.usageCount++;
           } else {
             usageMap.set(key, {
-              referentiel: sessionReferentiel,
-              theme: bloc.theme,
-              blockId: bloc.blockId,
+              referentiel: referentiel.code, // Use code as per original BlockUsage interface
+              theme: theme.code_theme,     // Use code_theme
+              blockId: bloc.code_bloc,     // Use code_bloc
               usageCount: 1,
             });
           }
@@ -623,7 +648,7 @@ export const addSession = async (session: Session): Promise<number | undefined> 
         eventType: 'SESSION_CREATED',
         sessionId: id,
         sessionName: session.nomSession,
-        referential: session.referentiel,
+        referentialId: session.referentielId, // Changed from session.referentiel
         participantsCount: session.participants?.length || 0
       });
     }
