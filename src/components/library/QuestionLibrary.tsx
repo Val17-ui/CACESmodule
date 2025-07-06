@@ -236,25 +236,23 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Thème avec code "${themeCode}" non trouvé pour le référentiel "${referentielCode}".`);
             continue;
           }
-          const bloc = await StorageManager.getBlocByCodeAndThemeId(blocCode, theme.id); // Supposing getBlocByCodeAndThemeId exists
+          const bloc = await StorageManager.getBlocByCodeAndThemeId(blocCode, theme.id);
           if (!bloc || !bloc.id) {
-            // Try to create the bloc if it's the default one (_GEN) and doesn't exist yet for this theme
-            if (blocCode === `${themeCode}_GEN`) {
-                const newBlocId = await StorageManager.addBloc({ code_bloc: blocCode, theme_id: theme.id}); // Corrected: addBloc returns ID
-                if (newBlocId) blocIdToStore = newBlocId; // Corrected: Use the returned ID
-                else {
-                    errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Bloc avec code "${blocCode}" non trouvé pour le thème "${themeCode}" et création automatique du bloc GEN a échoué.`);
-                    continue;
-                }
+            // MODIFICATION: Tentative de création de n'importe quel bloc (GEN ou non-GEN) s'il n'existe pas.
+            console.log(`Bloc "${blocCode}" non trouvé pour le thème "${themeCode}". Tentative de création...`);
+            const newBlocId = await StorageManager.addBloc({ code_bloc: blocCode, theme_id: theme.id });
+            if (newBlocId) {
+              blocIdToStore = newBlocId;
+              console.log(`Bloc "${blocCode}" créé automatiquement pour le thème "${themeCode}" avec ID: ${newBlocId}.`);
             } else {
-                errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Bloc avec code "${blocCode}" non trouvé pour le thème "${themeCode}". Les blocs non GEN doivent être créés manuellement ou via un autre import.`);
-                continue;
+              errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Création automatique du bloc "${blocCode}" pour le thème "${themeCode}" a échoué.`);
+              continue;
             }
           } else {
             blocIdToStore = bloc.id;
           }
         } catch (dbError: any) {
-          errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Erreur DB lors de la recherche de référentiel/thème/bloc: ${dbError.message}`);
+          errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Erreur DB lors de la recherche/création de référentiel/thème/bloc: ${dbError.message}`);
           continue;
         }
 
