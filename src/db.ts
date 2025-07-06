@@ -232,7 +232,7 @@ export class MySubClassedDexie extends Dexie {
 
     // Version 12: Remplacement de testSlideGuid par ignoredSlideGuids[] dans la table sessions
     this.version(12).stores({
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids', // Remplacement et indexation de ignoredSlideGuids
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Ajout de resolvedImportAnomalies
       // Reprise des autres tables pour que Dexie sache qu'elles existent toujours
       questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
       sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
@@ -253,8 +253,13 @@ export class MySubClassedDexie extends Dexie {
         }
         // @ts-ignore
         delete session.testSlideGuid; // Supprimer l'ancien champ
+
+        // NOUVELLE MIGRATION pour resolvedImportAnomalies
+        if (session.resolvedImportAnomalies === undefined) {
+          session.resolvedImportAnomalies = null; // Initialiser à null pour les sessions existantes
+        }
       });
-      console.log("DB version 12 upgrade: Replaced testSlideGuid with ignoredSlideGuids (array) in sessions table. Migrated existing testSlideGuid values.");
+      console.log("DB version 12 upgrade: Replaced testSlideGuid with ignoredSlideGuids and initialized resolvedImportAnomalies to null for existing sessions.");
     });
   }
 }
