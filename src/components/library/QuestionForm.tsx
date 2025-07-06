@@ -85,7 +85,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
   // Load referentiels on mount
   useEffect(() => {
-    StorageManager.db.getAllReferentiels().then(data => {
+    StorageManager.getAllReferentiels().then(data => {
       setReferentiels(data);
       // If there's a forcedReferential (by code, e.g., "R489"), find its ID
       if (forcedReferential) {
@@ -100,7 +100,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   // Load themes when selectedReferentialId changes
   useEffect(() => {
     if (selectedReferentialId) {
-      StorageManager.db.getThemesByReferentialId(parseInt(selectedReferentialId,10)).then(data => {
+      StorageManager.getThemesByReferentialId(parseInt(selectedReferentialId,10)).then(data => {
         setThemes(data);
         setSelectedThemeId(''); // Reset theme selection
         setBlocs([]); // Reset blocs
@@ -117,7 +117,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   // Load blocs when selectedThemeId changes
   useEffect(() => {
     if (selectedThemeId) {
-      StorageManager.db.getBlocsByThemeId(parseInt(selectedThemeId,10)).then(data => {
+      StorageManager.getBlocsByThemeId(parseInt(selectedThemeId,10)).then(data => {
         setBlocs(data);
         setSelectedBlocId(''); // Reset bloc selection
       });
@@ -150,9 +150,9 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
               // Need to find the referential, theme, and bloc from blocId
               // This is a bit complex as we need to go up the chain:
               // Bloc -> Theme -> Referential
-              const bloc = await StorageManager.db.getAllBlocs().then(allBlocs => allBlocs.find(b => b.id === existingQuestion.blocId));
+              const bloc = await StorageManager.getAllBlocs().then(allBlocs => allBlocs.find(b => b.id === existingQuestion.blocId));
               if (bloc && bloc.theme_id) {
-                const theme = await StorageManager.db.getAllThemes().then(allThemes => allThemes.find(t => t.id === bloc.theme_id));
+                const theme = await StorageManager.getAllThemes().then(allThemes => allThemes.find(t => t.id === bloc.theme_id));
                 if (theme && theme.referentiel_id) {
                   // Now set the select values. This will trigger downstream useEffects to load options.
                   setSelectedReferentialId(theme.referentiel_id.toString());
