@@ -70,7 +70,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
   const loadFilterData = async () => {
     try {
-      const refs = await StorageManager.db.getAllReferentiels();
+      const refs = await StorageManager.getAllReferentiels();
       setReferentielsData(refs);
       // Initial load for themes and blocs can be empty or based on a default selection if any
       setThemesData([]);
@@ -84,7 +84,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   useEffect(() => {
     // Load themes when selectedReferential changes
     if (selectedReferential) {
-      StorageManager.db.getThemesByReferentialId(parseInt(selectedReferential, 10))
+      StorageManager.getThemesByReferentialId(parseInt(selectedReferential, 10))
         .then(setThemesData)
         .catch(console.error);
       setSelectedTheme(''); // Reset theme selection
@@ -98,7 +98,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   useEffect(() => {
     // Load blocs when selectedTheme changes
     if (selectedTheme) {
-      StorageManager.db.getBlocsByThemeId(parseInt(selectedTheme, 10))
+      StorageManager.getBlocsByThemeId(parseInt(selectedTheme, 10))
         .then(setBlocsData)
         .catch(console.error);
       setSelectedBloc(''); // Reset bloc selection
@@ -226,22 +226,22 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
         let blocIdToStore: number | undefined = undefined;
         try {
-          const referentiel = await StorageManager.db.getReferentialByCode(referentielCode);
+          const referentiel = await StorageManager.getReferentialByCode(referentielCode);
           if (!referentiel || !referentiel.id) {
             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel avec code "${referentielCode}" non trouvé.`);
             continue;
           }
-          const theme = await StorageManager.db.getThemeByCodeAndReferentialId(themeCode, referentiel.id);
+          const theme = await StorageManager.getThemeByCodeAndReferentialId(themeCode, referentiel.id);
           if (!theme || !theme.id) {
             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Thème avec code "${themeCode}" non trouvé pour le référentiel "${referentielCode}".`);
             continue;
           }
-          const bloc = await StorageManager.db.getBlocByCodeAndThemeId(blocCode, theme.id); // Supposing getBlocByCodeAndThemeId exists
+          const bloc = await StorageManager.getBlocByCodeAndThemeId(blocCode, theme.id); // Supposing getBlocByCodeAndThemeId exists
           if (!bloc || !bloc.id) {
             // Try to create the bloc if it's the default one (_GEN) and doesn't exist yet for this theme
             if (blocCode === `${themeCode}_GEN`) {
-                const newBloc = await StorageManager.db.addBloc({ code_bloc: blocCode, theme_id: theme.id});
-                if (newBloc) blocIdToStore = newBloc;
+                const newBlocId = await StorageManager.addBloc({ code_bloc: blocCode, theme_id: theme.id}); // Corrected: addBloc returns ID
+                if (newBlocId) blocIdToStore = newBlocId; // Corrected: Use the returned ID
                 else {
                     errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Bloc avec code "${blocCode}" non trouvé pour le thème "${themeCode}" et création automatique du bloc GEN a échoué.`);
                     continue;
@@ -421,12 +421,12 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
         try {
           // Vérifier si le référentiel existe déjà par son code
-          const existing = await StorageManager.db.getReferentialByCode(code);
+          const existing = await StorageManager.getReferentialByCode(code);
           if (existing) {
             errors.push(`Ligne ${i + 1}: Le référentiel avec le code "${code}" existe déjà (ID: ${existing.id}). Pas d'ajout.`);
             continue;
           }
-          await StorageManager.db.addReferential({ code, nom_complet });
+          await StorageManager.addReferential({ code, nom_complet });
           addedCount++;
         } catch (e: any) {
           errors.push(`Ligne ${i + 1} (Code: ${code}): Erreur DB - ${e.message}`);
@@ -508,19 +508,19 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         }
 
         try {
-          const parentReferentiel = await StorageManager.db.getReferentialByCode(referentiel_code);
+          const parentReferentiel = await StorageManager.getReferentialByCode(referentiel_code);
           if (!parentReferentiel || parentReferentiel.id === undefined) {
             errors.push(`Ligne ${i + 1}: Référentiel parent avec code "${referentiel_code}" non trouvé pour le thème "${code_theme}".`);
             continue;
           }
 
-          const existingTheme = await StorageManager.db.getThemeByCodeAndReferentialId(code_theme, parentReferentiel.id);
+          const existingTheme = await StorageManager.getThemeByCodeAndReferentialId(code_theme, parentReferentiel.id);
           if (existingTheme) {
             errors.push(`Ligne ${i + 1}: Le thème avec le code "${code_theme}" existe déjà pour le référentiel "${referentiel_code}". Pas d'ajout.`);
             continue;
           }
 
-          await StorageManager.db.addTheme({
+          await StorageManager.addTheme({ // Corrected: Call addTheme directly
             code_theme,
             nom_complet,
             referentiel_id: parentReferentiel.id
