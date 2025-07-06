@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import { CACESReferential, Session, Participant, SessionResult, Trainer } from './types';
+import { CACESReferential, Session, Participant, SessionResult, Trainer, SessionQuestion, SessionBoitier } from './types';
 import { logger } from './utils/logger'; // Importer le logger
 
 // Interfaces pour la DB
@@ -35,6 +35,8 @@ export class MySubClassedDexie extends Dexie {
   adminSettings!: Table<{ key: string; value: any }, string>;
   votingDevices!: Table<VotingDevice, number>;
   trainers!: Table<Trainer, number>; // Nouvelle table pour les formateurs
+  sessionQuestions!: Table<SessionQuestion, number>; // Nouvelle table pour les questions de session
+  sessionBoitiers!: Table<SessionBoitier, number>; // Nouvelle table pour les boîtiers de session
 
   constructor() {
     super('myDatabase');
@@ -144,7 +146,9 @@ export class MySubClassedDexie extends Dexie {
       votingDevices: '++id, name, &serialNumber',
       trainers: '++id, name, isDefault' // Assurer que isDefault n'est pas unique ('&')
     }).upgrade(async tx => {
-      console.log("Migrating to DB version 10: Rebuilding 'trainers' table to ensure data integrity for 'isDefault' index.");
+      // Cette migration était pour la v10, si elle doit être rejouée ou si de nouvelles données pour trainers sont problématiques
+      // il faudra peut-être la revoir. Pour l'instant, on la laisse telle quelle.
+      console.log("Executing DB version 10 upgrade logic (trainers table)...");
       const trainersTable = tx.table('trainers');
       let allTrainersFromOldSchema = await trainersTable.toArray(); // Lire les données AVANT de potentiellement modifier la table.
 
@@ -201,6 +205,56 @@ export class MySubClassedDexie extends Dexie {
       }
 
       return tx.done;
+    });
+
+    // Version 11: Ajout des tables sessionQuestions, sessionBoitiers et du champ testSlideGuid à sessions
+    this.version(11).stores({
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, testSlideGuid', // Ajout de testSlideGuid
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      votingDevices: '++id, name, &serialNumber',
+      trainers: '++id, name, isDefault',
+      // Nouvelles tables
+      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId', // Index pour recherche par sessionId
+      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber' // Index pour recherche par sessionId
+    }).upgrade(async tx => {
+      // Logique de migration pour la v11 si nécessaire (par exemple, initialiser testSlideGuid à null pour les sessions existantes)
+      // Pour l'instant, Dexie gérera l'ajout de nouvelles tables et champs avec des valeurs undefined par défaut.
+      // Si testSlideGuid doit être explicitement null pour les anciennes sessions:
+      await tx.table('sessions').toCollection().modify(session => {
+        if (session.testSlideGuid === undefined) { // Champ de la v10 et avant
+          session.testSlideGuid = null;
+        }
+      });
+      console.log("DB version 11 upgrade: Added sessionQuestions, sessionBoitiers tables and testSlideGuid to sessions. Ensured testSlideGuid is null for existing sessions if it was undefined.");
+    });
+
+    // Version 12: Remplacement de testSlideGuid par ignoredSlideGuids[] dans la table sessions
+    this.version(12).stores({
+      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids', // Remplacement et indexation de ignoredSlideGuids
+      // Reprise des autres tables pour que Dexie sache qu'elles existent toujours
+      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      votingDevices: '++id, name, &serialNumber',
+      trainers: '++id, name, isDefault',
+      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
+      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
+    }).upgrade(async tx => {
+      await tx.table('sessions').toCollection().modify(session => {
+        // @ts-ignore (pour accéder à l'ancien champ testSlideGuid qui n'est plus dans le type Session)
+        const oldTestSlideGuid = session.testSlideGuid;
+
+        if (typeof oldTestSlideGuid === 'string' && oldTestSlideGuid.trim() !== '') {
+          session.ignoredSlideGuids = [oldTestSlideGuid];
+        } else {
+          session.ignoredSlideGuids = []; // Initialiser comme tableau vide si pas de testSlideGuid précédent ou s'il était invalide
+        }
+        // @ts-ignore
+        delete session.testSlideGuid; // Supprimer l'ancien champ
+      });
+      console.log("DB version 12 upgrade: Replaced testSlideGuid with ignoredSlideGuids (array) in sessions table. Migrated existing testSlideGuid values.");
     });
   }
 }
@@ -683,5 +737,75 @@ export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
     // En cas d'erreur (par exemple, si l'index est toujours problématique),
     // on pourrait retourner le premier formateur par ID comme fallback,
     // mais il vaut mieux que l'erreur soit visible pour diagnostic.
+  }
+};
+
+// --- CRUD pour SessionQuestion ---
+export const addSessionQuestion = async (sq: SessionQuestion): Promise<number | undefined> => {
+  try {
+    return await db.sessionQuestions.add(sq);
+  } catch (error) {
+    console.error("Error adding session question:", error);
+  }
+};
+
+export const addBulkSessionQuestions = async (questions: SessionQuestion[]): Promise<number[] | undefined> => {
+  try {
+    const ids = await db.sessionQuestions.bulkAdd(questions, { allKeys: true });
+    return ids as number[];
+  } catch (error) {
+    console.error("Error bulk adding session questions:", error);
+  }
+};
+
+export const getSessionQuestionsBySessionId = async (sessionId: number): Promise<SessionQuestion[]> => {
+  try {
+    return await db.sessionQuestions.where({ sessionId }).toArray();
+  } catch (error) {
+    console.error(`Error getting session questions for session ${sessionId}:`, error);
+    return [];
+  }
+};
+
+export const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<void> => {
+  try {
+    await db.sessionQuestions.where({ sessionId }).delete();
+  } catch (error) {
+    console.error(`Error deleting session questions for session ${sessionId}:`, error);
+  }
+};
+
+// --- CRUD pour SessionBoitier ---
+export const addSessionBoitier = async (sb: SessionBoitier): Promise<number | undefined> => {
+  try {
+    return await db.sessionBoitiers.add(sb);
+  } catch (error) {
+    console.error("Error adding session boitier:", error);
+  }
+};
+
+export const addBulkSessionBoitiers = async (boitiers: SessionBoitier[]): Promise<number[] | undefined> => {
+  try {
+    const ids = await db.sessionBoitiers.bulkAdd(boitiers, { allKeys: true });
+    return ids as number[];
+  } catch (error) {
+    console.error("Error bulk adding session boitiers:", error);
+  }
+};
+
+export const getSessionBoitiersBySessionId = async (sessionId: number): Promise<SessionBoitier[]> => {
+  try {
+    return await db.sessionBoitiers.where({ sessionId }).toArray();
+  } catch (error) {
+    console.error(`Error getting session boitiers for session ${sessionId}:`, error);
+    return [];
+  }
+};
+
+export const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void> => {
+  try {
+    await db.sessionBoitiers.where({ sessionId }).delete();
+  } catch (error) {
+    console.error(`Error deleting session boitiers for session ${sessionId}:`, error);
   }
 };

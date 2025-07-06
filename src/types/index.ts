@@ -22,6 +22,29 @@ export interface Session {
   createdAt?: string;
   updatedAt?: string;
   trainerId?: number; // ID du formateur assigné à la session (number pour correspondre à Trainer.id)
+  ignoredSlideGuids?: string[] | null; // GUIDs des slides pré-existantes dans le modèle à ignorer
+}
+
+// Interface pour stocker les métadonnées des questions d'une session
+export interface SessionQuestion {
+  id?: number; // Auto-incremented primary key par Dexie
+  sessionId: number; // Clé étrangère vers Session.id
+  dbQuestionId: number; // Clé étrangère vers QuestionWithId.id (l'ID original de la question)
+  slideGuid: string; // GUID de la slide dans le PPTX généré
+  text: string; // Texte de la question (snapshot)
+  options: string[]; // Options de réponse (snapshot)
+  correctAnswer: string; // Réponse correcte (snapshot)
+  blockId: string; // Identifiant du bloc dont la question provient (snapshot)
+}
+
+// Interface pour stocker les métadonnées des boîtiers assignés à une session
+export interface SessionBoitier {
+  id?: number; // Auto-incremented primary key par Dexie
+  sessionId: number; // Clé étrangère vers Session.id
+  participantId: string; // Identifiant unique du participant au sein de la session (par exemple, un UUID ou index)
+  visualId: number; // Numéro visuel du boîtier dans l'interface (1, 2, 3...)
+  serialNumber: string; // Numéro de série physique du boîtier (OMBEA ID)
+  participantName: string; // Nom complet du participant pour référence
 }
 
 // Nouveau type pour les formateurs

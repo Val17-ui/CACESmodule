@@ -9,7 +9,7 @@ export interface ExtractedResultFromXml {
   questionSlideGuid: string;   // Le SlideGUID de la question
   answerGivenID: string;       // L'ID de l' <ors:Answer> choisie par le participant (contenu de ors:IntVal)
   pointsObtained: number;      // Points calculés à partir du barème de la question dans le XML
-  // timestamp?: string;      // Optionnel: timestamp de la réponse si disponible et utile
+  timestamp?: string;      // Optionnel: timestamp de la réponse si disponible et utile
 }
 
 /**
@@ -107,7 +107,7 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
 
       const intValNode = responseNode.querySelector("Part > IntVal");
       const answerGivenID = intValNode?.textContent?.trim(); // ID de l'option de réponse choisie par le participant
-      // const responseTimestamp = responseNode.getAttribute("Time"); // Peut être utile
+      const responseTimestamp = responseNode.getAttribute("Time"); // Extraction du timestamp
 
       if (participantDeviceID && slideGuid && answerGivenID) {
         const pointsObtained = answerScores.get(answerGivenID) ?? 0;
@@ -122,7 +122,7 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
           questionSlideGuid: slideGuid,
           answerGivenID, // C'est l'ID de l'option de réponse (ex: "1", "2", "3", "4")
           pointsObtained,
-          // timestamp: responseTimestamp || undefined
+          timestamp: responseTimestamp || undefined // Stockage du timestamp
         });
       } else {
         if (!participantDeviceID) console.warn(`DeviceID non trouvé pour RespondentID séquentiel: ${respondentIdSequential} (Question SlideGUID ${slideGuid}). Réponse ignorée.`);

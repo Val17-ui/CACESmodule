@@ -11,7 +11,9 @@ import {
   Session as DBSession,
   Participant as DBParticipantType,
   SessionResult,
-  Trainer
+  Trainer,
+  SessionQuestion,
+  SessionBoitier
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import {
@@ -27,14 +29,21 @@ import {
   getGlobalPptxTemplate,
   getAdminSetting,
   getAllTrainers,
-  getDefaultTrainer
+  getDefaultTrainer,
+  addBulkSessionQuestions,
+  deleteSessionQuestionsBySessionId,
+  addBulkSessionBoitiers,
+  deleteSessionBoitiersBySessionId,
+  getSessionQuestionsBySessionId, // Importation ajoutée
+  getSessionBoitiersBySessionId // Importation ajoutée
 } from '../../db';
-import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
+import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator'; // Added QuestionMapping
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import { logger } from '../../utils/logger'; // Importer le logger
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
+import AnomalyResolutionModal, { AnomalyDataForModal } from './AnomalyResolutionModal'; // Importation
 
 interface FormParticipant extends DBParticipantType {
   id: string;
@@ -70,6 +79,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [modifiedAfterOrsGeneration, setModifiedAfterOrsGeneration] = useState(false);
   const [trainersList, setTrainersList] = useState<Trainer[]>([]);
   const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
+
+  // États pour la résolution des anomalies d'importation
+  const [detectedAnomalies, setDetectedAnomalies] = useState<{
+    muets: Array<{ serialNumber: string; visualId: number; participantName: string; responses: ExtractedResultFromXml[] }>;
+    inconnus: Array<{ serialNumber: string; responses: ExtractedResultFromXml[] }>;
+  } | null>(null);
+  const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
+  const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -537,29 +554,107 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       console.log('[SessionForm Gen .ors] Participants sent to generatePresentation:', participantsForGenerator);
       // Assumons que generatePresentation attend un type compatible avec {idBoitier: string, nom: string, prenom: string, ...}
       const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator as DBParticipantType[], allSelectedQuestionsForPptx, globalPptxTemplate, adminSettings);
-      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
-        const { orsBlob, questionMappings } = generationOutput;
+      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && upToDateSessionData) {
+        const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput; // Récupérer ignoredSlideGuids
         try {
+          // 1. Mettre à jour la session principale avec l'ORS, les mappings, et les ignoredSlideGuids
           await updateSession(currentSavedId, {
-            donneesOrs: orsBlob, questionMappings: questionMappings,
-            updatedAt: new Date().toISOString(), status: 'ready',
-            selectionBlocs: upToDateSessionData.selectionBlocs
+            donneesOrs: orsBlob,
+            questionMappings: questionMappings,
+            ignoredSlideGuids: newlyIgnoredSlideGuids || [], // S'assurer que c'est un tableau
+            updatedAt: new Date().toISOString(),
+            status: 'ready',
+            selectionBlocs: upToDateSessionData.selectionBlocs,
           });
-          setEditingSessionData(await getSessionById(currentSavedId) || null);
-          setImportSummary(`Session (ID: ${currentSavedId}) .ors et mappings générés. Statut: Prête.`);
-          logger.info(`Fichier .ors et mappings générés/mis à jour pour la session "${upToDateSessionData.nomSession}"`, {
-            eventType: 'ORS_UPDATED',
+
+          // Recharger les données de session pour avoir la version la plus à jour
+          const freshlyUpdatedSessionData = await getSessionById(currentSavedId);
+          if (!freshlyUpdatedSessionData) {
+            throw new Error("Impossible de recharger la session après la mise à jour avec l'ORS.");
+          }
+          setEditingSessionData(freshlyUpdatedSessionData);
+
+          // 2. Nettoyer les anciennes métadonnées pour cette session
+          await deleteSessionQuestionsBySessionId(currentSavedId);
+          await deleteSessionBoitiersBySessionId(currentSavedId);
+
+          // 3. Stocker les SessionQuestions
+          const sessionQuestionsToSave: SessionQuestion[] = [];
+          for (const qMap of questionMappings) {
+            if (qMap.slideGuid && qMap.dbQuestionId !== undefined) {
+              const originalQuestion = allSelectedQuestionsForPptx.find(q => q.id === qMap.dbQuestionId);
+              if (originalQuestion) {
+                // Déterminer blockId
+                let blockId = 'N/A';
+                const questionThemeParts = originalQuestion.theme.split('_');
+                const baseTheme = questionThemeParts[0];
+                const selectedBlock = freshlyUpdatedSessionData.selectionBlocs?.find(sb => sb.theme === baseTheme);
+                if (selectedBlock) {
+                  blockId = selectedBlock.blockId;
+                } else if (questionThemeParts.length > 1) {
+                  // Fallback si selectionBlocs n'est pas parfaitement aligné, mais que le theme de la question a un blockId
+                  blockId = questionThemeParts[1];
+                }
+
+                sessionQuestionsToSave.push({
+                  sessionId: currentSavedId,
+                  dbQuestionId: originalQuestion.id!,
+                  slideGuid: qMap.slideGuid,
+                  text: originalQuestion.text,
+                  options: originalQuestion.options,
+                  correctAnswer: originalQuestion.correctAnswer,
+                  blockId: blockId,
+                });
+              }
+            }
+          }
+          if (sessionQuestionsToSave.length > 0) {
+            await addBulkSessionQuestions(sessionQuestionsToSave);
+          }
+
+          // 4. Stocker les SessionBoitiers
+          const sessionBoitiersToSave: SessionBoitier[] = [];
+          freshlyUpdatedSessionData.participants.forEach((p_db, p_idx) => {
+            const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
+            if (assignedDevice) {
+              // Trouver le visualId (deviceId du FormParticipant)
+              // On fait correspondre le participant de la DB (p_db) avec celui du formulaire (participants)
+              // via assignedGlobalDeviceId car c'est l'identifiant le plus stable.
+              const formP = participants.find(fp => fp.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId);
+              const visualId = formP?.deviceId ?? (p_idx + 1); // Fallback à l'index + 1 si non trouvé
+
+              sessionBoitiersToSave.push({
+                sessionId: currentSavedId,
+                participantId: `P${p_idx + 1}`, // Utilisation de l'index comme ID simple pour le moment
+                visualId: visualId,
+                serialNumber: assignedDevice.serialNumber,
+                participantName: `${p_db.prenom} ${p_db.nom}`,
+              });
+            }
+          });
+          if (sessionBoitiersToSave.length > 0) {
+            await addBulkSessionBoitiers(sessionBoitiersToSave);
+          }
+
+          // Le testSlideGuid est maintenant géré via ignoredSlideGuids directement depuis generationOutput
+          // et stocké lors de la première mise à jour de la session avec l'ORS.
+          // Donc, plus besoin de logique spécifique ici pour un 'testQuestionDbId'.
+
+          setImportSummary(`Session (ID: ${currentSavedId}) .ors, mappings et métadonnées générés. Statut: Prête.`);
+          logger.info(`Fichier .ors, mappings et métadonnées générés/mis à jour pour la session "${freshlyUpdatedSessionData.nomSession}"`, {
+            eventType: 'ORS_METADATA_UPDATED',
             sessionId: currentSavedId,
-            sessionName: upToDateSessionData.nomSession
+            sessionName: freshlyUpdatedSessionData.nomSession
           });
           setModifiedAfterOrsGeneration(false);
+
         } catch (e: any) {
-          setImportSummary(`Erreur sauvegarde .ors/mappings: ${e.message}`);
-          console.error("Erreur sauvegarde .ors/mappings:", e);
-          logger.error(`Erreur lors de la sauvegarde .ors/mappings pour la session "${upToDateSessionData.nomSession}"`, { eventType: 'ORS_UPDATE_SAVE_ERROR', sessionId: currentSavedId, error: e });
+          setImportSummary(`Erreur sauvegarde .ors/mappings/métadonnées: ${e.message}`);
+          console.error("Erreur sauvegarde .ors/mappings/métadonnées:", e);
+          logger.error(`Erreur lors de la sauvegarde .ors/mappings/métadonnées pour la session "${upToDateSessionData.nomSession}"`, { eventType: 'ORS_METADATA_SAVE_ERROR', sessionId: currentSavedId, error: e });
         }
       } else {
-        setImportSummary("Erreur génération .ors/mappings.");
+        setImportSummary("Erreur génération .ors/mappings ou données de session manquantes.");
         console.error("Erreur génération .ors/mappings. Output:", generationOutput);
         logger.error(`Erreur lors de la génération .ors/mappings pour la session "${upToDateSessionData.nomSession}"`, { eventType: 'ORS_GENERATION_ERROR', sessionId: currentSavedId, output: generationOutput });
       }
@@ -591,14 +686,167 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (!orSessionXmlFile) { setImportSummary("Erreur: ORSession.xml introuvable dans le .zip."); return; }
       const xmlString = await orSessionXmlFile.async("string");
       setImportSummary("Parsing XML...");
-      const extractedResults: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
-      if (extractedResults.length === 0) { setImportSummary("Aucune réponse extraite."); return; }
-      setImportSummary(`${extractedResults.length} réponses extraites. Transformation...`);
+      let extractedResultsFromXml: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
+
+      if (extractedResultsFromXml.length === 0) {
+        setImportSummary("Aucune réponse trouvée dans le fichier XML.");
+        return;
+      }
+      logger.info(`[Import Results] ${extractedResultsFromXml.length} réponses initialement extraites du XML.`);
+
+      // Filtrer les questions ignorées (anciennement question test)
+      const slideGuidsToIgnore = editingSessionData.ignoredSlideGuids;
+      if (slideGuidsToIgnore && slideGuidsToIgnore.length > 0) {
+        const countBeforeFilteringIgnored = extractedResultsFromXml.length;
+        extractedResultsFromXml = extractedResultsFromXml.filter(
+          (result) => !slideGuidsToIgnore.includes(result.questionSlideGuid)
+        );
+        const countAfterFilteringIgnored = extractedResultsFromXml.length;
+        if (countBeforeFilteringIgnored > countAfterFilteringIgnored) {
+          logger.info(`[Import Results] ${countBeforeFilteringIgnored - countAfterFilteringIgnored} réponses correspondant à ${slideGuidsToIgnore.length} GUID(s) ignoré(s) ont été filtrées.`);
+        }
+      }
+
+      // Grouper les réponses par (serialNumber, slideGuid) et ne retenir que la dernière (timestamp le plus élevé)
+      const latestResultsMap = new Map<string, ExtractedResultFromXml>();
+      for (const result of extractedResultsFromXml) {
+        const key = `${result.participantDeviceID}-${result.questionSlideGuid}`;
+        const existingResult = latestResultsMap.get(key);
+
+        if (!existingResult) {
+          latestResultsMap.set(key, result);
+        } else {
+          // Si les timestamps sont disponibles, comparer. Sinon, la dernière vue écrase (ce qui est le comportement si OMBEA ne donne que la dernière)
+          // Pour une comparaison de timestamp plus robuste, s'assurer qu'ils sont dans un format comparable (ex: ISO string ou objets Date)
+          if (result.timestamp && existingResult.timestamp) {
+            if (new Date(result.timestamp) > new Date(existingResult.timestamp)) {
+              latestResultsMap.set(key, result);
+            }
+          } else if (result.timestamp && !existingResult.timestamp) { // La nouvelle a un timestamp, l'ancienne non
+            latestResultsMap.set(key, result);
+          }
+          // Si la nouvelle n'a pas de timestamp et que l'ancienne en a un, on garde l'ancienne.
+          // Si les deux n'ont pas de timestamp, la dernière vue (actuelle 'result') est implicitement ignorée si on ne fait rien,
+          // ou on peut choisir de la prendre: if (!result.timestamp && !existingResult.timestamp) { latestResultsMap.set(key, result); }
+          // Pour l'instant, si pas de timestamp, on garde la première rencontrée. Pour changer, ajouter une condition.
+        }
+      }
+      const finalExtractedResults = Array.from(latestResultsMap.values());
+      logger.info(`[Import Results] ${finalExtractedResults.length} réponses retenues après déduplication (conservation de la dernière réponse par timestamp).`);
+
+      if (finalExtractedResults.length === 0) {
+        setImportSummary("Aucune réponse valide à importer après filtrage et déduplication.");
+        return;
+      }
+
+      // Étape 1.1: Charger les données de référence de la session
+      const sessionQuestions = await getSessionQuestionsBySessionId(currentSessionDbId);
+      const sessionBoitiers = await getSessionBoitiersBySessionId(currentSessionDbId);
+
+      if (!sessionQuestions || sessionQuestions.length === 0) {
+        setImportSummary("Erreur: Impossible de charger les questions de référence pour cette session. L'import ne peut continuer.");
+        logger.error(`[Import Results] Impossible de charger sessionQuestions pour sessionId: ${currentSessionDbId}`);
+        return;
+      }
+      if (!sessionBoitiers) { // sessionBoitiers peut être vide si aucun participant n'a été configuré avec boîtier.
+        logger.warn(`[Import Results] Aucune information de boîtier (sessionBoitiers) trouvée pour sessionId: ${currentSessionDbId}. Les vérifications de boîtiers seront limitées.`);
+        // Ne pas bloquer ici, car une session pourrait ne pas avoir de participants pré-assignés.
+      }
+
+      // Étape 3.1: Vérification des questions
+      const validSlideGuids = new Set(sessionQuestions.map(sq => sq.slideGuid));
+      // Note: testSlideGuid a déjà été filtré de finalExtractedResults, donc pas besoin de l'exclure ici explicitement.
+
+      for (const result of finalExtractedResults) {
+        if (!validSlideGuids.has(result.questionSlideGuid)) {
+          const errorMessage = `Certains GUID de question (ex: ${result.questionSlideGuid}) dans le fichier de résultats ne correspondent pas à cette session. Vérifiez votre fichier ORS.`;
+          setImportSummary(errorMessage);
+          logger.error(`[Import Results - Anomaly] ${errorMessage}`, {
+            importedGuid: result.questionSlideGuid,
+            expectedGuids: Array.from(validSlideGuids)
+          });
+          return; // Arrêter le processus d'import
+        }
+      }
+      logger.info("[Import Results] Vérification des GUID de questions terminée. Tous les GUID importés sont valides pour cette session.");
+
+      // Étape 3.2: Correspondance des boîtiers et préparation des listes d'anomalies
+      const prevusSerialNumbers = new Set(sessionBoitiers.map(b => b.serialNumber));
+      // Clonage pour pouvoir modifier muetsAttendus sans affecter sessionBoitiers directement
+      let muetsAttendus: { serialNumber: string; visualId: number; participantName: string; responses: ExtractedResultFromXml[] }[] = sessionBoitiers.map(b => ({
+        serialNumber: b.serialNumber,
+        visualId: b.visualId,
+        participantName: b.participantName,
+        responses: [] // Initialisé vide, pour le cas partiel plus tard
+      }));
+
+      const inconnusDetectes: { serialNumber: string, responses: ExtractedResultFromXml[] }[] = [];
+      const reponsesDesAttendus: ExtractedResultFromXml[] = []; // Pour stocker les réponses des boîtiers attendus
+
+      for (const result of finalExtractedResults) {
+        const serialNumberRepondant = result.participantDeviceID;
+        if (prevusSerialNumbers.has(serialNumberRepondant)) {
+          // Le boîtier est attendu
+          reponsesDesAttendus.push(result); // Garder cette réponse
+
+          // Retirer de la liste des muets (s'il y est encore)
+          muetsAttendus = muetsAttendus.filter(muet => muet.serialNumber !== serialNumberRepondant);
+
+          // (Optionnel pour cas partiel - ajout de la réponse au boîtier attendu)
+          // Pour cela, il faudrait modifier l'objet dans sessionBoitiers ou une copie.
+          // Pour l'instant, on se contente de le retirer des muets.
+          // La logique pour le cas partiel sera plus complexe et nécessitera de savoir quelles questions ont été répondues.
+
+        } else {
+          // Le boîtier est inconnu
+          let inconnuEntry = inconnusDetectes.find(inc => inc.serialNumber === serialNumberRepondant);
+          if (!inconnuEntry) {
+            inconnuEntry = { serialNumber: serialNumberRepondant, responses: [] };
+            inconnusDetectes.push(inconnuEntry);
+          }
+          inconnuEntry.responses.push(result);
+        }
+      }
+
+      logger.info(`[Import Results] Correspondance des boîtiers terminée. ${muetsAttendus.length} boîtier(s) attendu(s) sont muets. ${inconnusDetectes.length} boîtier(s) inconnu(s) ont répondu.`);
+
+      // À ce point, nous avons:
+      // - reponsesDesAttendus: ExtractedResultFromXml[] des boîtiers prévus
+      // - muetsAttendus: SessionBoitier[] (avec un champ 'responses' vide pour l'instant)
+      // - inconnusDetectes: { serialNumber: string, responses: ExtractedResultFromXml[] }[]
+
+      // Si anomalies (muets ou inconnus), on ne procède pas à la sauvegarde directe.
+      // On stocke ces listes pour l'UI de résolution.
+      if (muetsAttendus.length > 0 || inconnusDetectes.length > 0) {
+        setImportSummary(`Anomalies détectées: ${muetsAttendus.length} boîtier(s) muet(s), ${inconnusDetectes.length} boîtier(s) inconnu(s). Résolution nécessaire.`);
+        setDetectedAnomalies({ muets: muetsAttendus, inconnus: inconnusDetectes });
+        setPendingValidResults(reponsesDesAttendus); // Stocker les réponses valides qui ne posent pas de problème de boîtier
+        setShowAnomalyResolutionUI(true); // Déclencheur pour afficher l'UI de résolution
+        logger.info("[Import Results] Des anomalies de boîtiers ont été détectées. Affichage de l'interface de résolution.");
+        return;
+      }
+
+      // Si aucune anomalie de boîtier, procéder à la transformation et sauvegarde des reponsesDesAttendus
+      logger.info("[Import Results] Aucune anomalie de boîtier détectée. Procédure d'import direct.");
+      setImportSummary(`${reponsesDesAttendus.length} réponses valides prêtes pour transformation et import...`);
+
       const currentQuestionMappings = editingSessionData.questionMappings;
-      if (!currentQuestionMappings || currentQuestionMappings.length === 0) { setImportSummary("Erreur: Mappages questions manquants."); return; }
-      const sessionResultsToSave = transformParsedResponsesToSessionResults(extractedResults, currentQuestionMappings, currentSessionDbId);
+      if (!currentQuestionMappings || currentQuestionMappings.length === 0) {
+        setImportSummary("Erreur: Mappages de questions manquants pour la session (editingSessionData.questionMappings). Impossible de lier les résultats.");
+        return;
+      }
+
+      // Utiliser reponsesDesAttendus car il ne contient que les réponses des boîtiers prévus et validés jusqu'ici
+      const sessionResultsToSave = transformParsedResponsesToSessionResults(
+        reponsesDesAttendus,
+        currentQuestionMappings,
+        currentSessionDbId
+      );
+
       if (sessionResultsToSave.length > 0) {
         try {
+          // Avant d'ajouter, il pourrait être pertinent de supprimer les anciens résultats pour cette session si c'est un ré-import.
+          // await deleteResultsForSession(currentSessionDbId); // A décommenter si nécessaire. Pour l'instant, on ajoute.
           const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats sauvegardés !`;
@@ -994,6 +1242,177 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
+// Fonctions pour le modal de résolution d'anomalies
+const handleResolveAnomalies = async (
+    resolvedResultsFromModal: ExtractedResultFromXml[],
+    muetResolutions: MuetResolution[],
+    inconnuResolutions: InconnuResolution[]
+  ) => {
+
+    logger.info(`[AnomalyResolution] Reprise de l'import. ${resolvedResultsFromModal.length} résultats reçus du modal.`);
+    logger.info('[AnomalyResolution] Décisions pour les muets:', muetResolutions);
+    logger.info('[AnomalyResolution] Décisions pour les inconnus:', inconnuResolutions);
+
+    setShowAnomalyResolutionUI(false);
+    setDetectedAnomalies(null);
+    setPendingValidResults([]);
+
+    if (!currentSessionDbId || !editingSessionData || !editingSessionData.questionMappings) {
+      setImportSummary("Erreur critique : Données de session manquantes pour finaliser l'import après résolution.");
+      logger.error("[AnomalyResolution] Données de session critiques manquantes pour finaliser l'import.");
+      return;
+    }
+
+    // Préparer une copie des participants de la session pour y ajouter les nouveaux si nécessaire
+    let updatedParticipantsList = [...editingSessionData.participants];
+    let participantsChanged = false;
+
+    // Gérer les inconnus marqués pour ajout
+    for (const inconnuRes of inconnuResolutions) {
+      if (inconnuRes.action === 'add_participant') {
+        const inconnuData = detectedAnomalies?.inconnus.find(i => i.serialNumber === inconnuRes.serialNumber);
+        if (inconnuData) {
+          // Vérifier si un participant avec ce serialNumber (via hardwareDevices) existe déjà pour éviter doublons
+          const existingHdDevice = hardwareDevices.find(hd => hd.serialNumber === inconnuData.serialNumber);
+          let globalDeviceIdToAssign: number | null | undefined = existingHdDevice?.id;
+
+          if (!existingHdDevice) {
+            // Créer un nouveau boîtier "virtuel" ou logguer une erreur si on ne veut pas créer de boîtier à la volée
+            // Pour l'instant, on ne crée pas de nouveau VotingDevice ici, on assume qu'il doit exister.
+            // On pourrait aussi créer un participant sans boîtier assigné si c'est permis.
+            // Alternative: créer un nouveau VotingDevice.
+            // Pour ce TODO, on va juste logguer et le participant n'aura pas de assignedGlobalDeviceId s'il n'existe pas.
+            logger.warn(`[AnomalyResolution] Boîtier inconnu S/N ${inconnuData.serialNumber} n'existe pas dans hardwareDevices. Le nouveau participant n'aura pas de boîtier assigné.`);
+            globalDeviceIdToAssign = null;
+          }
+
+          // Créer un nouveau participant
+          const newParticipant: DBParticipantType = {
+            nom: `Inconnu ${inconnuData.serialNumber.slice(-4)}`, // Nom placeholder
+            prenom: 'Participant', // Prénom placeholder
+            assignedGlobalDeviceId: globalDeviceIdToAssign,
+            // score et reussite seront calculés plus tard
+          };
+          updatedParticipantsList.push(newParticipant);
+          participantsChanged = true;
+          logger.info(`[AnomalyResolution] Participant ajouté pour boîtier inconnu S/N ${inconnuData.serialNumber}.`);
+        }
+      }
+      // TODO: Gérer 'assign_to_muet' en modifiant le participantIdBoitier dans resolvedResultsFromModal
+      // et potentiellement en ajustant updatedParticipantsList si cela change le participant assigné à un boîtier.
+    }
+
+    // Mettre à jour la session avec les nouveaux participants si nécessaire
+    if (participantsChanged) {
+        try {
+            await updateSession(currentSessionDbId, { participants: updatedParticipantsList });
+            // Recharger editingSessionData pour que les calculs de score se basent sur la liste à jour
+            const reloadedSessionForScore = await getSessionById(currentSessionDbId);
+            if (reloadedSessionForScore) {
+                setEditingSessionData(reloadedSessionForScore);
+            } else {
+                throw new Error("Impossible de recharger la session après ajout de participants.")
+            }
+            logger.info(`[AnomalyResolution] Liste des participants mise à jour dans la session ${currentSessionDbId}.`);
+        } catch (error) {
+            logger.error(`[AnomalyResolution] Erreur lors de la mise à jour des participants pour la session ${currentSessionDbId}.`, error);
+            setImportSummary("Erreur lors de la mise à jour des participants après résolution. L'import est stoppé.");
+            return;
+        }
+    }
+
+
+    // TODO: Gérer les muets marqués 'mark_absent'.
+    // Cela pourrait impliquer de mettre à jour une propriété sur l'objet participant dans la DB
+    // ou de les exclure du calcul de score. Pour l'instant, on ne fait rien de plus que de ne pas importer leurs réponses
+    // (ce qui est déjà le cas car ils sont "muets").
+
+    // La suite est la logique de traitement des résultats, similaire à handleImportResults
+    try {
+      const sessionResultsToSave = transformParsedResponsesToSessionResults(
+        resolvedResultsFromModal, // Utilise les résultats potentiellement modifiés par la résolution
+        editingSessionData.questionMappings, // Assure-toi que c'est bien le questionMappings de la session actuelle
+        currentSessionDbId
+      );
+
+      if (sessionResultsToSave.length > 0) {
+        await addBulkSessionResults(sessionResultsToSave); // Sauvegarde des résultats
+
+        // Logique de finalisation de la session et calcul des scores
+        // (Cette partie est une simplification et devrait être factorisée avec celle dans handleImportResults)
+        let message = `${sessionResultsToSave.length} résultats (après résolution) sauvegardés !`;
+        await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+        message += "\nStatut session: 'Terminée'.";
+
+        // Recharger les données pour le calcul des scores (surtout si les participants ont été modifiés)
+        const sessionDataForScores = await getSessionById(currentSessionDbId);
+        if (sessionDataForScores && sessionDataForScores.questionMappings) {
+            const sessionQuestionsForScores = await getQuestionsByIds(
+              sessionDataForScores.questionMappings.map(qm => qm.dbQuestionId)
+            );
+            const allSessionResultsForScores = await getResultsForSession(currentSessionDbId);
+
+            if (sessionQuestionsForScores.length > 0 && allSessionResultsForScores.length > 0) {
+                const finalParticipantsWithScores = sessionDataForScores.participants.map(p => {
+                    const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
+                    if (!device) return { ...p, score: p.score || 0, reussite: p.reussite || false };
+
+                    const participantResults = allSessionResultsForScores.filter(r => r.participantIdBoitier === device.serialNumber);
+                    const score = calculateParticipantScore(participantResults, sessionQuestionsForScores);
+                    const themeScores = calculateThemeScores(participantResults, sessionQuestionsForScores); // Supposons que cette fonction existe
+                    const reussite = determineIndividualSuccess(score, themeScores); // Supposons que cette fonction existe
+                    return { ...p, score, reussite };
+                });
+                await updateSession(currentSessionDbId, { participants: finalParticipantsWithScores });
+                message += "\nScores et réussite calculés et mis à jour.";
+            } else {
+                 message += "\nImpossible de charger toutes les données pour le calcul des scores.";
+            }
+        } else {
+            message += "\nImpossible de calculer les scores (données de session manquantes).";
+        }
+
+        setImportSummary(message);
+        setResultsFile(null);
+        logger.info(`Résultats importés et résolus pour la session ID ${currentSessionDbId}`, {
+          eventType: 'RESULTS_IMPORTED_RESOLVED',
+          sessionId: currentSessionDbId,
+          resultsCount: sessionResultsToSave.length
+        });
+        const reloadedSession = await getSessionById(currentSessionDbId);
+        setEditingSessionData(reloadedSession || null);
+        if (reloadedSession) { // Mise à jour de l'UI des participants si les scores ont changé
+            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db, loopIndex) => ({
+                ...p_db,
+                id: participants[loopIndex]?.id || `form-reloaded-${loopIndex}-${Date.now()}`,
+                firstName: p_db.prenom,
+                lastName: p_db.nom,
+                deviceId: participants[loopIndex]?.deviceId ?? (loopIndex + 1),
+                organization: participants[loopIndex]?.organization || (p_db as any).organization || '',
+                hasSigned: participants[loopIndex]?.hasSigned || (p_db as any).hasSigned || false,
+            }));
+            setParticipants(formParticipants);
+        }
+
+      } else {
+        setImportSummary("Aucun résultat à sauvegarder après résolution.");
+        logger.info(`[AnomalyResolution] Aucun résultat à sauvegarder pour session ID ${currentSessionDbId} après résolution.`);
+      }
+    } catch (error: any) {
+        setImportSummary(`Erreur lors de la finalisation de l'import après résolution: ${error.message}`);
+        logger.error(`Erreur lors de la finalisation de l'import après résolution pour session ID ${currentSessionDbId}`, { error });
+    }
+  };
+
+  const handleCancelAnomalyResolution = () => {
+    setShowAnomalyResolutionUI(false);
+    setDetectedAnomalies(null);
+    setPendingValidResults([]);
+    setImportSummary("Importation des résultats annulée par l'utilisateur en raison d'anomalies.");
+    setResultsFile(null); // Effacer le fichier pour que l'utilisateur doive le resélectionner s'il veut réessayer
+  };
+
+
   return (
     <div>
       {renderTabNavigation()}
@@ -1003,6 +1422,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           Enregistrer Brouillon
         </Button>
       </div>
+
+      {showAnomalyResolutionUI && detectedAnomalies && (
+        <AnomalyResolutionModal
+          isOpen={showAnomalyResolutionUI}
+          detectedAnomalies={detectedAnomalies}
+          pendingValidResultsCount={pendingValidResults.length}
+          onResolve={handleResolveAnomalies}
+          onCancel={handleCancelAnomalyResolution}
+        />
+      )}
     </div>
   );
 };
