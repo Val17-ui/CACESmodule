@@ -11,9 +11,10 @@ export interface Session {
   id?: number; // Auto-incremented primary key par Dexie
   nomSession: string;
   dateSession: string; // ISO string date
-  referentiel: CACESReferential | string; // Utiliser CACESReferential, ou string pour flexibilité
+  referentielId?: number; // FK vers Referential.id - Remplacer l'ancien champ 'referentiel'
   participants: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
-  selectionBlocs: SelectedBlock[]; // Blocs thématiques sélectionnés pour cette session
+  // selectionBlocs: SelectedBlock[]; // Remplacé par selectedBlocIds
+  selectedBlocIds?: number[]; // Liste des IDs des blocs sélectionnés pour cette session
   donneesOrs?: Blob | null; // Stockage du fichier .ors généré
   status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
@@ -113,11 +114,12 @@ export interface Participant {
   statusInSession?: 'present' | 'absent'; // Statut du participant pour cette session spécifique
 }
 
-// Nouvelle interface pour décrire un bloc thématique sélectionné
-export interface SelectedBlock {
-  theme: string; // e.g., "securite"
-  blockId: string; // e.g., "A", "B" ou un ID numérique spécifique du bloc
-}
+// L'interface SelectedBlock n'est plus nécessaire car nous stockons selectedBlocIds directement.
+// // Nouvelle interface pour décrire un bloc thématique sélectionné
+// export interface SelectedBlock {
+//   themeId: number;
+//   blocId: number;
+// }
 
 // Nouvelle interface pour stocker les résultats d'une session
 export interface SessionResult {
@@ -148,8 +150,9 @@ export interface Question {
   correctAnswer: string;
   timeLimit?: number;
   isEliminatory: boolean;
-  referentiel: CACESReferential;
-  theme: string;
+  // referentiel: CACESReferential; // Remplacé par blocId
+  // theme: string; // Remplacé par blocId
+  blocId?: number; // Clé étrangère vers la table Blocs
   image?: Blob;
   createdAt?: string;
   updatedAt?: string;
@@ -158,6 +161,28 @@ export interface Question {
   correctResponseRate?: number;
   slideGuid?: string; // Ajout du SlideGUID
 }
+
+// Nouvelles interfaces pour la structure dynamique
+export interface Referential {
+  id?: number;
+  code: string; // Ex: R489
+  nom_complet: string; // Ex: Chariots de manutention automoteurs
+}
+
+export interface Theme {
+  id?: number;
+  code_theme: string; // Ex: R489PR
+  nom_complet: string; // Ex: Prévention des risques
+  referentiel_id: number; // FK vers Referential.id
+}
+
+export interface Bloc {
+  id?: number;
+  code_bloc: string; // Ex: R489PR_A
+  // nom_complet: string; // Pas spécifié dans le plan initial, mais pourrait être utile
+  theme_id: number; // FK vers Theme.id
+}
+
 
 export interface QuestionStatistics {
   questionId: string;
