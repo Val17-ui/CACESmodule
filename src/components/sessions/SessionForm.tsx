@@ -11,6 +11,9 @@ import {
   Session as DBSession,
   Participant as DBParticipantType,
   SessionResult,
+  Referential,
+  Theme,
+  Bloc,
   Trainer,
   SessionQuestion,
   SessionBoitier
@@ -29,7 +32,6 @@ import {
   getGlobalPptxTemplate,
   getAdminSetting,
   getAllTrainers,
-  getDefaultTrainer,
   addBulkSessionQuestions,
   deleteSessionQuestionsBySessionId,
   addBulkSessionBoitiers,
@@ -38,7 +40,7 @@ import {
   getSessionBoitiersBySessionId // Importation ajoutée
 } from '../../db';
 // QuestionMapping n'est plus utilisé directement ici, mais generatePresentation le retourne. On le garde pour l'instant.
-import { generatePresentation, AdminPPTXSettings, QuestionMapping } from '../../utils/pptxOrchestrator';
+import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import { logger } from '../../utils/logger'; // Importer le logger
@@ -73,10 +75,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [sessionName, setSessionName] = useState('');
   const [sessionDate, setSessionDate] = useState('');
   const [selectedReferential, setSelectedReferential] = useState<CACESReferential | ''>('');
+  const [selectedReferentialId, setSelectedReferentialId] = useState<number | null>(null);    // Pour l'ID numérique
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
-  const [selectedBlocksSummary, setSelectedBlocksSummary] = useState<Record<string, string>>({});
   const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
@@ -87,36 +89,50 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [modifiedAfterOrsGeneration, setModifiedAfterOrsGeneration] = useState(false);
   const [trainersList, setTrainersList] = useState<Trainer[]>([]);
   const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
-
+  const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
+  const [allThemesData, setAllThemesData] = useState<Theme[]>([]);
+const [allBlocsData, setAllBlocsData] = useState<Bloc[]>([]);
+const [displayedBlockDetails, setDisplayedBlockDetails] = useState<Array<{ themeName: string, blocName: string }>>([]);
   // États pour la résolution des anomalies d'importation
-  const [detectedAnomalies, setDetectedAnomalies] = useState<{
-    muets: Array<{ serialNumber: string; visualId: number; participantName: string; responses: ExtractedResultFromXml[] }>;
-    inconnus: Array<{ serialNumber: string; responses: ExtractedResultFromXml[] }>;
-  } | null>(null);
+  const [detectedAnomalies, setDetectedAnomalies] = useState<DetectedAnomalies | null>(null);
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      const devicesFromDb = await getAllVotingDevices();
-      setHardwareDevices(devicesFromDb.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
-      setHardwareLoaded(true);
-
-      const allTrainers = await getAllTrainers();
-      setTrainersList(allTrainers.sort((a,b) => a.name.localeCompare(b.name)));
-
-      if (!sessionIdToLoad) {
-        const defaultTrainer = await getDefaultTrainer();
-        if (defaultTrainer && defaultTrainer.id) {
-          setSelectedTrainerId(defaultTrainer.id);
-        } else if (allTrainers.length > 0 && allTrainers[0].id) {
-          setSelectedTrainerId(allTrainers[0].id);
+    const fetchGlobalData = async () => { // Renommez la fonction interne pour plus de clarté
+      try {
+        const [devices, trainers, refs, themes, blocs] = await Promise.all([
+          getAllVotingDevices(),             // Fonction importée de ../../db
+          getAllTrainers(),                  // Fonction importée de ../../db
+          StorageManager.getAllReferentiels(), // Fonction sur StorageManager
+          StorageManager.getAllThemes(),       // Fonction sur StorageManager
+          StorageManager.getAllBlocs()        // Fonction sur StorageManager
+        ]);
+  
+        setHardwareDevices(devices.sort((a: VotingDevice, b: VotingDevice) => (a.id ?? 0) - (b.id ?? 0)));
+        setTrainersList(trainers.sort((a: Trainer, b: Trainer) => a.name.localeCompare(b.name)));
+        
+        setReferentielsData(refs);     // <--- APPEL DU SETTER
+        setAllThemesData(themes);       // <--- APPEL DU SETTER
+        setAllBlocsData(blocs);         // <--- APPEL DU SETTER
+        
+        setHardwareLoaded(true);
+  
+        if (!sessionIdToLoad && trainers.length > 0) {
+          const defaultTrainer = trainers.find(t => t.isDefault === 1) || trainers[0];
+          if (defaultTrainer?.id) {
+            setSelectedTrainerId(defaultTrainer.id);
+          }
         }
+      } catch (error) {
+        console.error("Erreur lors du chargement des données globales:", error);
+        setImportSummary("Erreur critique: Impossible de charger les données de base (référentiels, thèmes, etc.).");
       }
     };
-    fetchInitialData();
-  }, [sessionIdToLoad]);
-
+  
+    fetchGlobalData();
+  }, [sessionIdToLoad]); // Garder sessionIdToLoad comme dépendance pour la logique du formateur par défaut
+  
   const resetFormTactic = useCallback(() => {
     setCurrentSessionDbId(null);
     setSessionName('');
@@ -125,70 +141,103 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setLocation('');
     setNotes('');
     setParticipants([]);
-    setSelectedBlocksSummary({});
     setResultsFile(null);
     setImportSummary(null);
     setEditingSessionData(null);
     setActiveTab('details');
     setModifiedAfterOrsGeneration(false);
   }, []);
-
   useEffect(() => {
-    if (sessionIdToLoad && hardwareLoaded && trainersList.length >= 0) {
+    if (editingSessionData?.selectedBlocIds && allThemesData.length > 0 && allBlocsData.length > 0) {
+      const details: Array<{ themeName: string, blocName: string }> = [];
+      for (const blocId of editingSessionData.selectedBlocIds) {
+        const bloc = allBlocsData.find(b => b.id === blocId);
+        if (bloc) {
+          const theme = allThemesData.find(t => t.id === bloc.theme_id);
+          details.push({
+            themeName: theme ? `${theme.code_theme} - ${theme.nom_complet}` : `ID Thème Inconnu: ${bloc.theme_id}`,
+            blocName: bloc.code_bloc
+          });
+        } else {
+          details.push({ themeName: 'N/A', blocName: `ID Bloc Inconnu: ${blocId}` });
+        }
+      }
+      setDisplayedBlockDetails(details);
+    } else {
+      setDisplayedBlockDetails([]);
+    }
+  }, [editingSessionData, editingSessionData?.selectedBlocIds, allThemesData, allBlocsData]);
+  useEffect(() => {
+    // Condition pour s'assurer que les données nécessaires sont chargées
+    if (sessionIdToLoad && hardwareLoaded && referentielsData.length > 0 && trainersList.length > 0) { 
       const loadSession = async () => {
-        const sessionData = await getSessionById(sessionIdToLoad);
-        setEditingSessionData(sessionData || null);
-        if (sessionData) {
-          setCurrentSessionDbId(sessionData.id ?? null);
-          setSessionName(sessionData.nomSession);
-          setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
-          setSelectedReferential((sessionData.referentiel as CACESReferential) || '');
-          setLocation(sessionData.location || '');
-          setNotes(sessionData.notes || '');
-          setSelectedTrainerId(sessionData.trainerId || null);
-          setModifiedAfterOrsGeneration(false);
-          const formParticipants: FormParticipant[] = sessionData.participants.map((p_db, loopIndex) => {
-            // p_db est de type Participant from types/index.ts,
-            // il a donc p_db.assignedGlobalDeviceId et n'a plus p_db.idBoitier.
-            // hardwareDevices contient maintenant des VotingDevice {id, name, serialNumber}
-
-            // Le deviceId visuel est maintenant juste l'ordre dans la liste.
-            const visualDeviceId = loopIndex + 1;
-
-            // Le p_db.id (UI id) doit être unique, on peut utiliser l'index et la date.
-            // Attention: p_db n'a plus idBoitier, donc la clé d'unicité change.
-            // Si p_db a déjà un ID unique venant de la DB (pas le cas pour Participant dans un array Session), on l'utiliserait.
-            // Pour l'instant, on génère un ID pour le formulaire.
-            const formParticipantId = `loaded-${loopIndex}-${Date.now()}`;
-
-            return {
-              ...p_db, // Contient nom, prenom, assignedGlobalDeviceId, etc.
-              id: formParticipantId,
+        try {
+          const sessionData = await getSessionById(sessionIdToLoad);
+          setEditingSessionData(sessionData || null);
+          if (sessionData) {
+            setCurrentSessionDbId(sessionData.id ?? null);
+            setSessionName(sessionData.nomSession);
+            setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
+  
+            if (sessionData.referentielId) {
+              const refObj = referentielsData.find(r => r.id === sessionData.referentielId);
+              if (refObj) {
+                setSelectedReferential(refObj.code as CACESReferential);
+                setSelectedReferentialId(refObj.id ?? null); // Important: Mettre à jour l'ID numérique
+              } else {
+                console.warn(`Référentiel ID ${sessionData.referentielId} non trouvé dans referentielsData.`);
+                setSelectedReferential('');
+                setSelectedReferentialId(null);
+              }
+            } else if ((sessionData as any).referentiel && typeof (sessionData as any).referentiel === 'string') {
+              const oldCode = (sessionData as any).referentiel as CACESReferential;
+              setSelectedReferential(oldCode);
+              const refObj = referentielsData.find(r => r.code === oldCode);
+              setSelectedReferentialId(refObj?.id || null);
+              if (!refObj) {
+                  console.warn(`Référentiel avec code ${oldCode} (fallback) non trouvé pour déterminer l'ID.`);
+              }
+            } else {
+              setSelectedReferential('');
+              setSelectedReferentialId(null);
+            }
+  
+            setLocation(sessionData.location || '');
+            setNotes(sessionData.notes || '');
+            setSelectedTrainerId(sessionData.trainerId || null);
+            setModifiedAfterOrsGeneration(false);
+  
+            const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
+              ...p_db,
+              id: `loaded-${loopIndex}-${Date.now()}`,
               firstName: p_db.prenom,
               lastName: p_db.nom,
-              deviceId: visualDeviceId, // Le numéro visuel (1, 2, 3...)
-              // assignedGlobalDeviceId est déjà dans p_db
-              organization: (p_db as any).organization || '', // Conserver si pertinent
-              hasSigned: (p_db as any).hasSigned || false,    // Conserver si pertinent
-            };
-          });
-          setParticipants(formParticipants);
-          const summary: Record<string, string> = {};
-          if(sessionData.selectionBlocs){
-            sessionData.selectionBlocs.forEach(sb => { summary[sb.theme] = sb.blockId; });
+              deviceId: loopIndex + 1,
+              organization: (p_db as any).organization || '',
+              hasSigned: (p_db as any).hasSigned || false,
+            }));
+            setParticipants(formParticipants);
+  
+            // La logique pour selectedBlocksSummary est obsolète car selectionBlocs n'existe plus sur sessionData.
+            // L'affichage des blocs sélectionnés doit se baser sur sessionData.selectedBlocIds
+            // et être géré par un useEffect séparé qui peuple `displayedBlockDetails`.
+            // setSelectedBlocksSummary({}); 
+  
+          } else {
+            console.warn(`Session avec ID ${sessionIdToLoad} non trouvée.`);
+            resetFormTactic();
           }
-          setSelectedBlocksSummary(summary);
-        } else {
-          console.warn(`Session avec ID ${sessionIdToLoad} non trouvée.`);
+        } catch (error) {
+          console.error("Erreur lors du chargement de la session:", error);
           resetFormTactic();
         }
       };
       loadSession();
-    } else if (!sessionIdToLoad) {
+    } else if (!sessionIdToLoad && referentielsData.length > 0 && trainersList.length > 0) { 
       resetFormTactic();
     }
-  }, [sessionIdToLoad, hardwareLoaded, hardwareDevices, resetFormTactic, trainersList]);
-
+  }, [sessionIdToLoad, hardwareLoaded, referentielsData, trainersList, resetFormTactic]); // AJOUTÉ: referentielsData et trainersList aux dépendances
+  
   const referentialOptions = Object.entries(referentials).map(([value, label]) => ({
     value,
     label: `${value} - ${label}`,
@@ -366,38 +415,65 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   // --- Fin Logique Import Participants ---
 
   const prepareSessionDataForDb = async (includeOrsBlob?: Blob | null): Promise<DBSession | null> => {
-    const dbParticipants: DBParticipantType[] = participants.map((p_form) => {
-      // p_form est FormParticipant. Il a p_form.assignedGlobalDeviceId.
-      // DBParticipantType (Participant from types/index.ts) a aussi assignedGlobalDeviceId.
-      // L'ancien idBoitier (serialNumber) n'est plus stocké directement sur le participant en DB.
-      // Le serialNumber sera récupéré via assignedGlobalDeviceId au moment de la génération de l'ORS.
-
-      // Les champs à copier directement de FormParticipant vers DBParticipantType
-      // (ceux définis dans DBParticipantType)
-      return {
-        nom: p_form.lastName, // ou p_form.nom si FormParticipant a été aligné
-        prenom: p_form.firstName, // ou p_form.prenom
-        identificationCode: p_form.identificationCode,
-        score: p_form.score,
-        reussite: p_form.reussite,
-        assignedGlobalDeviceId: p_form.assignedGlobalDeviceId, // C'est le champ clé ici
-      };
-    });
-    const sessionToUpdate = editingSessionData;
+    const dbParticipants: DBParticipantType[] = participants.map((p_form: FormParticipant) => ({
+      nom: p_form.lastName,
+      prenom: p_form.firstName,
+      identificationCode: p_form.identificationCode,
+      score: p_form.score,
+      reussite: p_form.reussite,
+      assignedGlobalDeviceId: p_form.assignedGlobalDeviceId,
+      statusInSession: p_form.statusInSession, // Assurez-vous que statusInSession est dans FormParticipant
+    }));
+  
+    let currentReferentielIdToSave: number | undefined = undefined;
+  
+    if (selectedReferentialId) {
+      currentReferentielIdToSave = selectedReferentialId;
+    } else if (selectedReferential) {
+      const refObj = referentielsData.find(r => r.code === selectedReferential);
+      if (refObj && refObj.id !== undefined) {
+        currentReferentielIdToSave = refObj.id;
+        // Il serait bon de synchroniser selectedReferentialId ici aussi, mais c'est mieux dans l'onChange du Select.
+        // Exemple: si l'onChange du Select met à jour selectedReferential (code) ET selectedReferentialId (number)
+        // alors cette branche else if ne serait nécessaire que si selectedReferentialId n'a pas été mis à jour ailleurs.
+      } else {
+        console.error(`Impossible de trouver l'ID pour le code référentiel: ${selectedReferential} lors de la préparation.`);
+        // Gérer l'erreur : peut-être afficher un message à l'utilisateur via setImportSummary
+        // et retourner null pour empêcher la sauvegarde si un référentiel est requis.
+        // setImportSummary(`Erreur: Référentiel "${selectedReferential}" non valide.`);
+        // return null; 
+      }
+    } else if (editingSessionData?.referentielId) {
+      currentReferentielIdToSave = editingSessionData.referentielId;
+    }
+  
     const sessionToSave: DBSession = {
       id: currentSessionDbId || undefined,
-      nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
+      nomSession: sessionName.trim() || `Session du ${new Date().toLocaleDateString()}`,
       dateSession: sessionDate || new Date().toISOString().split('T')[0],
-      referentiel: selectedReferential || sessionToUpdate?.referentiel || '',
+      referentielId: currentReferentielIdToSave, // Utilise l'ID numérique
       participants: dbParticipants,
-      selectionBlocs: Object.entries(selectedBlocksSummary).map(([theme, blockId]) => ({ theme, blockId })),
-      donneesOrs: includeOrsBlob !== undefined ? includeOrsBlob : sessionToUpdate?.donneesOrs,
-      location: location, status: sessionToUpdate?.status || 'planned',
-      questionMappings: sessionToUpdate?.questionMappings, notes: notes,
+      selectedBlocIds: editingSessionData?.selectedBlocIds || [],
+      donneesOrs: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.donneesOrs,
+      status: editingSessionData?.status || 'planned',
+      location: location,
+      questionMappings: editingSessionData?.questionMappings,
+      notes: notes,
       trainerId: selectedTrainerId ?? undefined,
-      createdAt: sessionToUpdate?.createdAt || new Date().toISOString(),
+      createdAt: editingSessionData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      ignoredSlideGuids: editingSessionData?.ignoredSlideGuids,
+      resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
     };
+  
+    // Optionnel: Validation finale avant de retourner
+    if (sessionToSave.referentielId === undefined && selectedReferential) {
+        console.warn("Tentative de sauvegarde de session sans referentielId valide alors qu'un code était sélectionné.");
+        // Vous pourriez vouloir retourner null ici si un référentiel est absolument requis.
+        // setImportSummary("Le référentiel sélectionné est invalide ou n'a pas pu être identifié. Sauvegarde annulée.");
+        // return null;
+    }
+  
     return sessionToSave;
   };
 
@@ -436,11 +512,26 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               };
             });
             setParticipants(formParticipants);
-            const summary: Record<string, string> = {};
-            if(reloadedSession.selectionBlocs){
-                reloadedSession.selectionBlocs.forEach(sb => { summary[sb.theme] = sb.blockId; });
+            const newDisplayedBlockDetails: Array<{ themeName: string, blocName: string }> = [];
+            if (reloadedSession && reloadedSession.selectedBlocIds && allBlocsData.length > 0 && allThemesData.length > 0) {
+              for (const blocId of reloadedSession.selectedBlocIds) {
+                const bloc = allBlocsData.find(b => b.id === blocId);
+                if (bloc) {
+                  const theme = allThemesData.find(t => t.id === bloc.theme_id);
+                  newDisplayedBlockDetails.push({
+                    themeName: theme ? `${theme.code_theme} - ${theme.nom_complet}` : `ID Thème: ${bloc.theme_id}`,
+                    blocName: bloc.code_bloc
+                  });
+                } else {
+                  newDisplayedBlockDetails.push({ themeName: 'N/A', blocName: `ID Bloc Inconnu: ${blocId}` });
+                }
+              }
             }
-            setSelectedBlocksSummary(summary);
+            setDisplayedBlockDetails(newDisplayedBlockDetails); // Met à jour l'état pour l'affichage des blocs
+
+            // L'état selectedBlocksSummary est probablement obsolète et peut être supprimé.
+            // Si vous le supprimez, supprimez aussi sa déclaration useState et sa fonction setSelectedBlocksSummary.
+            // setSelectedBlocksSummary({}); // Supprimez ou commentez cette ligne.
          }
       }
       return savedId;
@@ -460,7 +551,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const handleGenerateQuestionnaireAndOrs = async () => {
-    const refToUse = selectedReferential || editingSessionData?.referentiel;
+    const refToUse = selectedReferential || editingSessionData?.referentielId;
     if (!refToUse) {
       setImportSummary("Veuillez sélectionner un référentiel pour générer l'ORS.");
       return;
@@ -549,7 +640,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
           // 6. Récupérer les questions pour ce bloc choisi.
           const questionsFromBloc = await StorageManager.getQuestionsForBloc(chosenBloc.id);
-          allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBlock);
+          allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBloc);
           logger.info(`Thème: ${theme.code_theme}, Bloc choisi: ${chosenBloc.code_bloc}, Questions: ${questionsFromBloc.length}`);
         }
       }
@@ -560,9 +651,32 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       }
 
       // Mettre à jour la session avec les IDs des blocs sélectionnés
-      // upToDateSessionData.selectionBlocs = Object.entries(tempSelectedBlocksSummary).map(([theme, blockId]) => ({ theme, blockId })); // Obsolète
-      upToDateSessionData.selectedBlocIds = selectedBlocIdsForSession; // Nouvelle propriété
-
+      upToDateSessionData.selectedBlocIds = selectedBlocIdsForSession;
+      if (referentielObject && referentielObject.id !== undefined) {
+          upToDateSessionData.referentielId = referentielObject.id; // Assurez-vous que c'est l'ID numérique
+      } else {
+          // Gérer le cas où referentielObject.id n'est pas défini, si c'est possible ici
+          console.error("L'ID du référentiel n'a pas pu être déterminé pour la mise à jour de upToDateSessionData.");
+          setImportSummary("Erreur critique : l'ID du référentiel est manquant.");
+          setIsGeneratingOrs(false);
+          return; // Arrêter le processus
+      }
+   
+// Optionnel mais recommandé : Persister ces changements en base de données immédiatement
+// Cela mettra aussi à jour l'état editingSessionData si handleSaveSession est bien écrit.
+try {
+  await updateSession(currentSavedId, { 
+      selectedBlocIds: upToDateSessionData.selectedBlocIds, 
+      referentielId: upToDateSessionData.referentielId 
+  });
+  const reloadedSession = await getSessionById(currentSavedId);
+  if (reloadedSession) setEditingSessionData(reloadedSession); // Mettre à jour l'état principal
+} catch (error) {
+  console.error("Erreur lors de la mise à jour de la session avec selectedBlocIds/referentielId avant génération PPTX", error);
+  setImportSummary("Erreur sauvegarde session avant génération PPTX.");
+  setIsGeneratingOrs(false);
+  return;
+}
       // Utiliser referentielObject.code qui est le code string (ex: "R489")
       const sessionInfoForPptx = { name: upToDateSessionData.nomSession, date: upToDateSessionData.dateSession, referential: referentielObject.code as CACESReferential };
       const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
@@ -614,7 +728,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             ignoredSlideGuids: newlyIgnoredSlideGuids || [],
             updatedAt: new Date().toISOString(),
             status: 'ready',
-            // selectionBlocs: upToDateSessionData.selectionBlocs, // Remplacé par selectedBlocIds
             selectedBlocIds: upToDateSessionData.selectedBlocIds, // Utiliser la nouvelle propriété
           });
 
@@ -921,7 +1034,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
       // Utiliser reponsesDesAttendus car il ne contient que les réponses des boîtiers prévus et validés jusqu'ici
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
-        reponsesDesAttendus,
+        responsesFromExpectedDevices, // <--- CORRIGÉ ICI
         currentQuestionMappings,
         currentSessionDbId
       );
@@ -1113,18 +1226,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 readOnly={isReadOnly}
               />
             </div>
-            {currentSessionDbId && editingSessionData?.selectionBlocs && editingSessionData.selectionBlocs.length > 0 && (
-              <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50 mb-6">
-                <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés:</h4>
-                <ul className="list-disc list-inside pl-2 space-y-1">
-                  {editingSessionData.selectionBlocs.map((sb) => (
-                    <li key={`${sb.theme}-${sb.blockId}`} className="text-sm text-gray-600">
-                      <span className="font-medium">{sb.theme}:</span> Bloc {sb.blockId}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {currentSessionDbId && displayedBlockDetails.length > 0 && (
+  <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50 mb-6">
+    <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés:</h4>
+    <ul className="list-disc list-inside pl-2 space-y-1">
+      {displayedBlockDetails.map((detail, index) => (
+        <li key={index} className="text-sm text-gray-600">
+          <span className="font-medium">{detail.themeName}:</span> Bloc {detail.blocName}
+        </li>
+      ))}
+    </ul>
+  </div>
+)}
           </Card>
         );
       case 'participants':
@@ -1293,8 +1406,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     variant="primary"
                     icon={<PackagePlus size={16} />}
                     onClick={handleGenerateQuestionnaireAndOrs}
-                    disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentiel)}
-                    title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentiel) ? "Veuillez d'abord sélectionner un référentiel" :
+                    disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
+                    title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
                            isReadOnly ? "La session est terminée, regénération bloquée." :
                            (!!editingSessionData?.donneesOrs) ? "Régénérer .ors & PPTX (Attention : ceci écrasera l'ORS existant)" :
                            "Générer .ors & PPTX"}
@@ -1304,7 +1417,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   {isReadOnly && (
                      <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération de l'ORS est bloquée.</p>
                   )}
-                   {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentiel) && !isReadOnly && (
+                   {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
                      <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
                   )}
                   {modifiedAfterOrsGeneration && !!editingSessionData?.donneesOrs && !isReadOnly && (
@@ -1386,7 +1499,7 @@ const handleResolveAnomalies = async (
           participantsDataChanged = true;
           logger.info(`[AnomalyResolution] Participant ${expectedDeviceData.participantName} marqué comme absent. Score et réussite mis à 0.`);
         } else {
-          logger.warn(`[AnomalyResolution] Participant non trouvé dans la liste pour ${expectedDeviceData.participantName} (SN: ${resolution.serialNumber}) lors du marquage comme absent.`);
+          logger.warning(`[AnomalyResolution] Participant non trouvé dans la liste pour ${expectedDeviceData.participantName} (SN: ${resolution.serialNumber}) lors du marquage comme absent.`);
         }
       } else if (resolution.action === 'aggregate_with_unknown') {
         if (resolution.sourceUnknownSerialNumber) {
@@ -1415,11 +1528,11 @@ const handleResolveAnomalies = async (
             }
             finalResultsToImport.push(...Array.from(mergedResponsesForKey.values()));
           } else {
-            logger.warn(`[AnomalyResolution] Source inconnue SN: ${resolution.sourceUnknownSerialNumber} non trouvée pour agrégation avec ${resolution.serialNumber}. Les réponses partielles de l'attendu (si existent) sont conservées.`);
+            logger.warning(`[AnomalyResolution] Source inconnue SN: ${resolution.sourceUnknownSerialNumber} non trouvée pour agrégation avec ${resolution.serialNumber}. Les réponses partielles de l'attendu (si existent) sont conservées.`);
              finalResultsToImport.push(...expectedDeviceData.responseInfo.responsesProvidedByExpected.map(r => ({...r, participantDeviceID: resolution.serialNumber})));
           }
         } else {
-           logger.warn(`[AnomalyResolution] Action 'aggregate_with_unknown' pour ${resolution.serialNumber} mais pas de sourceUnknownSerialNumber. Les réponses partielles de l'attendu (si existent) sont conservées.`);
+           logger.warning(`[AnomalyResolution] Action 'aggregate_with_unknown' pour ${resolution.serialNumber} mais pas de sourceUnknownSerialNumber. Les réponses partielles de l'attendu (si existent) sont conservées.`);
            finalResultsToImport.push(...expectedDeviceData.responseInfo.responsesProvidedByExpected.map(r => ({...r, participantDeviceID: resolution.serialNumber})));
         }
       }
@@ -1451,7 +1564,7 @@ const handleResolveAnomalies = async (
         if (existingHardwareDevice) {
             assignedGlobalDeviceIdForNew = existingHardwareDevice.id!;
         } else {
-            logger.warn(`[AnomalyResolution] Aucun VotingDevice global trouvé pour SN ${resolution.serialNumber}. Le nouveau participant sera sans assignedGlobalDeviceId.`);
+            logger.warning(`[AnomalyResolution] Aucun VotingDevice global trouvé pour SN ${resolution.serialNumber}. Le nouveau participant sera sans assignedGlobalDeviceId.`);
         }
 
         const newParticipantEntry: DBParticipantType = {
