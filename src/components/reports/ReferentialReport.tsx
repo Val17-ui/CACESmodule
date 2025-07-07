@@ -54,6 +54,7 @@ const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDat
       }
       return true;
     });
+    console.log(`[ReferentialReport] Nombre de sessions après filtre date: ${filteredSessions.length} (Période: ${startDate} au ${endDate})`);
 
     const stats = new Map<string, { sessionCount: number; participantCount: number; totalSuccessRate: number }>();
 

@@ -66,6 +66,7 @@ const BlockReport: React.FC<BlockReportProps> = ({ startDate, endDate }) => {
       }
       return true;
     });
+    console.log(`[BlockReport] Nombre de sessions après filtre date: ${filteredSessions.length} (Période: ${startDate} au ${endDate})`);
 
     const uniqueNumericBlocIds = Array.from(new Set(filteredSessions.flatMap(s => s.selectedBlocIds || []).filter(id => id != null))) as number[];
 

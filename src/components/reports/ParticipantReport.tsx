@@ -10,9 +10,13 @@ import {
   getAllThemes,
   getAllBlocs,
   getBlocById,
-  getThemeById
+  getThemeById,
+  getAdminSetting // Ajouté
 } from '../../db';
 import { Session, Participant, SessionResult, QuestionWithId, Referential, VotingDevice, Theme, Bloc, ThemeScoreDetails } from '../../types';
+import jsPDF from 'jspdf'; // Ajouté
+import html2canvas from 'html2canvas'; // Ajouté
+import { saveAs } from 'file-saver'; // Ajouté
 import {
   Table,
   TableHeader,
@@ -22,7 +26,7 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
-import { Search, ArrowLeft, HelpCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Search, ArrowLeft, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react'; // Ajout de Download
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import Badge from '../ui/Badge';
@@ -64,6 +68,7 @@ const ParticipantReport = () => {
   const [startDate, setStartDate] = useState<string>(''); // Nouvel état
   const [endDate, setEndDate] = useState<string>('');     // Nouvel état
   const [detailedParticipation, setDetailedParticipation] = useState<ProcessedSessionDetails | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false); // État pour le chargement du PDF
 
   const referentialCodeMap = useMemo(() => {
     return new Map(allReferentiels.map(ref => [ref.id, ref.code]));
@@ -201,6 +206,135 @@ const ParticipantReport = () => {
     setDetailedParticipation(null);
   };
 
+  const generateSingleParticipantReportPDF = async () => {
+    if (!detailedParticipation) return;
+    setIsGeneratingPdf(true);
+
+    const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
+
+    // Récupérer le nom du formateur (si non déjà disponible)
+    // Pour l'instant, on suppose qu'il n'est pas dans detailedParticipation, à ajouter si besoin.
+    // let trainerName = 'N/A';
+    // if (trainerId) { const trainer = await getTrainerById(trainerId); if (trainer) trainerName = trainer.name; }
+
+    const reportDate = new Date().toLocaleDateString('fr-FR');
+    const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
+
+    let pdfHtml = `
+      <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px; color: #333;">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height: 60px; margin-bottom: 20px;"/>` : ''}
+        <h1 style="font-size: 18px; text-align: center; color: #1a237e; margin-bottom: 10px;">RAPPORT INDIVIDUEL DE SESSION</h1>
+        <hr style="border: 0; border-top: 1px solid #ccc; margin-bottom: 20px;" />
+
+        <table style="width: 100%; font-size: 10px; margin-bottom: 15px; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 4px; width: 50%;"><strong>Participant :</strong> ${participantRef.prenom} ${participantRef.nom}</td>
+            <td style="padding: 4px; width: 50%;"><strong>ID Boîtier :</strong> ${deviceMap.get(participantRef.assignedGlobalDeviceId) || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px;"><strong>Session :</strong> ${nomSession}</td>
+            <td style="padding: 4px;"><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialCodeMap.get(referentielId) || 'N/A'}</td>
+            <td style="padding: 4px;"><strong>Lieu :</strong> ${location || 'N/A'}</td>
+          </tr>
+          {/*<tr> TODO: Ajouter Formateur si disponible
+            <td style="padding: 4px;"><strong>Formateur :</strong> ${trainerName}</td>
+            <td style="padding: 4px;"></td>
+          </tr>*/}
+        </table>
+
+        <div style="background-color: ${participantSuccess ? '#e8f5e9' : '#ffebee'}; padding: 15px; border-radius: 4px; margin-bottom: 20px; text-align: center;">
+          <p style="font-size: 14px; font-weight: bold; margin:0;">Score Global :
+            <span style="color: ${participantSuccess ? '#2e7d32' : '#c62828'};">${participantScore !== undefined ? participantScore.toFixed(0) : 'N/A'} / 100</span>
+          </p>
+          <p style="font-size: 12px; font-weight: bold; color: ${participantSuccess ? '#2e7d32' : '#c62828'}; margin-top: 5px;">
+            Mention : ${participantSuccess ? 'RÉUSSI' : 'AJOURNÉ'}
+          </p>
+        </div>
+
+        <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Scores par Thème</h2>
+    `;
+    if (themeScores && Object.keys(themeScores).length > 0) {
+      pdfHtml += '<ul style="list-style-type: none; padding-left: 0;">';
+      for (const [themeName, details] of Object.entries(themeScores)) {
+        pdfHtml += `<li style="margin-bottom: 5px; padding: 5px; border-bottom: 1px solid #eee; ${details.score < 50 ? 'color: #c62828; font-weight: bold;' : ''}">
+          ${themeName}: ${details.score.toFixed(0)}% (${details.correct}/${details.total})
+        </li>`;
+      }
+      pdfHtml += '</ul>';
+    } else {
+      pdfHtml += '<p style="font-size: 10px; color: #555;">Scores par thème non disponibles.</p>';
+    }
+
+    pdfHtml += `<h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Questions</h2>`;
+
+    const questionsByThemeForPdf: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
+    if (questionsForDisplay) {
+      questionsForDisplay.forEach(q => {
+        const theme = q.resolvedThemeName || 'Thème non spécifié';
+        if (!questionsByThemeForPdf[theme]) questionsByThemeForPdf[theme] = [];
+        questionsByThemeForPdf[theme].push(q);
+      });
+    }
+
+    if (Object.keys(questionsByThemeForPdf).length > 0) {
+      for (const [themeName, questions] of Object.entries(questionsByThemeForPdf)) {
+        pdfHtml += `<h3 style="font-size: 12px; color: #3f51b5; margin-top: 15px; margin-bottom: 8px;">Thème : ${themeName}</h3>`;
+        questions.forEach(q => {
+          pdfHtml += `
+            <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dotted #ccc; page-break-inside: avoid;">
+              <p style="margin: 2px 0; font-weight: bold;">${q.text}</p>
+              <p style="margin: 2px 0 0 10px;">Votre réponse : <span style="font-style: italic;">${q.participantAnswer || 'Non répondu'}</span></p>
+              ${q.isCorrectAnswer === false && q.participantAnswer !== undefined ? `<p style="margin: 2px 0 0 10px; color: #d32f2f;">Bonne réponse : <span style="font-style: italic;">${q.correctAnswer}</span></p>` : ''}
+              <p style="margin: 2px 0 0 10px;">Points : ${q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</p>
+            </div>
+          `;
+        });
+      }
+    } else {
+      pdfHtml += '<p style="font-size: 10px; color: #555;">Détail des questions non disponible.</p>';
+    }
+    pdfHtml += `<p style="text-align: right; font-size: 8px; color: #777; margin-top: 30px;">Rapport généré le ${reportDate}</p>`;
+    pdfHtml += '</div>'; // Fin du conteneur principal
+
+    const element = document.createElement('div');
+    // Pour une meilleure qualité PDF, on peut augmenter la largeur virtuelle avant le rendu canvas.
+    element.style.width = '1000px';
+    element.style.padding = '20px'; // Simuler des marges pour le rendu
+    element.innerHTML = pdfHtml;
+    document.body.appendChild(element);
+
+    const canvas = await html2canvas(element, { scale: 2, useCORS: true, windowWidth: element.scrollWidth, windowHeight: element.scrollHeight });
+    const imgData = canvas.toDataURL('image/png');
+    document.body.removeChild(element);
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const imgProps = pdf.getImageProperties(imgData);
+    const ratio = imgProps.height / imgProps.width;
+    let imgHeight = pdfWidth * ratio;
+    let position = 0;
+
+    if (imgHeight > pdfHeight) { // Gestion du contenu sur plusieurs pages
+        let pageCount = Math.ceil(imgHeight / pdfHeight);
+        for (let i = 0; i < pageCount; i++) {
+            if (i > 0) pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, pdfWidth, imgHeight);
+        }
+    } else {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+    }
+
+    const safeFileName = `Rapport_${participantRef.prenom}_${participantRef.nom}_${nomSession}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    pdf.save(safeFileName);
+
+    setIsGeneratingPdf(false);
+  };
+
+
   if (detailedParticipation) {
     const { participantRef, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
 
@@ -215,9 +349,18 @@ const ParticipantReport = () => {
 
     return (
       <Card>
-        <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBackToList} className="mb-4">
-          Retour à la liste
-        </Button>
+        <div className="flex justify-between items-center mb-4">
+          <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBackToList}>
+            Retour à la liste
+          </Button>
+          <Button
+            onClick={generateSingleParticipantReportPDF}
+            icon={<Download size={16} />}
+            disabled={isGeneratingPdf}
+          >
+            {isGeneratingPdf ? 'Génération PDF...' : 'Télécharger PDF'}
+          </Button>
+        </div>
         <h2 className="text-2xl font-bold mb-1">Détail de la participation</h2>
         <p className="text-lg mb-1">Participant : <span className="font-semibold">{participantRef.prenom} {participantRef.nom}</span></p>
         <p className="text-md mb-1">Session : <span className="font-semibold">{detailedParticipation.nomSession}</span> ({new Date(detailedParticipation.dateSession).toLocaleDateString('fr-FR')})</p>
