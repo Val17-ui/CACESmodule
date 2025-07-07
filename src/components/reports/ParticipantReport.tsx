@@ -5,18 +5,17 @@ import {
   getResultsForSession,
   getQuestionsForSessionBlocks,
   getAllReferentiels,
-  // getReferentialById, // Moins utile ici car on a referentialMap
   getAllVotingDevices,
   getAllThemes,
   getAllBlocs,
   getBlocById,
   getThemeById,
-  getAdminSetting // Ajouté
+  getTrainerById // Ajouté pour le PDF
 } from '../../db';
 import { Session, Participant, SessionResult, QuestionWithId, Referential, VotingDevice, Theme, Bloc, ThemeScoreDetails } from '../../types';
-import jsPDF from 'jspdf'; // Ajouté
-import html2canvas from 'html2canvas'; // Ajouté
-import { saveAs } from 'file-saver'; // Ajouté
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import { saveAs } from 'file-saver';
 import {
   Table,
   TableHeader,
@@ -26,7 +25,7 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
-import { Search, ArrowLeft, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react'; // Ajout de Download
+import { Search, ArrowLeft, ChevronDown, ChevronRight, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react';
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import Badge from '../ui/Badge';
@@ -38,11 +37,11 @@ interface EnrichedQuestionForParticipantReport extends QuestionWithId {
   isCorrectAnswer?: boolean;
 }
 
-interface ProcessedSessionDetails extends Session { // Renommé pour clarifier que c'est pour UNE session/participation
-  participantRef: Participant; // Garder une référence au participant de cette participation
+interface ProcessedSessionDetails extends Session {
+  participantRef: Participant;
   participantScore?: number;
   participantSuccess?: boolean;
-  themeScores?: { [theme: string]: ThemeScoreDetails }; // Utilise le nouveau type
+  themeScores?: { [theme: string]: ThemeScoreDetails };
   questionsForDisplay?: EnrichedQuestionForParticipantReport[];
 }
 
@@ -52,8 +51,7 @@ interface SessionParticipation {
   participantRef: Participant;
   sessionName: string;
   sessionDate: string;
-  referentialCode: string; // Changé pour code
-  // Ajout des IDs pour pouvoir retrouver la session et le participant originaux
+  referentialCode: string;
   originalSessionId: number;
   originalParticipantAssignedGlobalDeviceId?: number | null;
 }
@@ -65,10 +63,10 @@ const ParticipantReport = () => {
   const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [startDate, setStartDate] = useState<string>(''); // Nouvel état
-  const [endDate, setEndDate] = useState<string>('');     // Nouvel état
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [detailedParticipation, setDetailedParticipation] = useState<ProcessedSessionDetails | null>(null);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false); // État pour le chargement du PDF
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const referentialCodeMap = useMemo(() => {
     return new Map(allReferentiels.map(ref => [ref.id, ref.code]));
@@ -102,22 +100,19 @@ const ParticipantReport = () => {
     fetchInitialData();
   }, []);
 
-  // Ce useEffect n'est plus nécessaire pour peupler une liste d'historique,
-  // la logique de traitement est maintenant dans handleSelectParticipation
-  // useEffect(() => {
-  // }, [detailedParticipation, sessions, deviceMap, allThemesDb, allBlocsDb]);
-
   const allSessionParticipations = useMemo(() => {
     const participations: SessionParticipation[] = [];
     const filteredSessionsByDate = sessions.filter(session => {
       if (!startDate && !endDate) return true;
       const sessionDate = new Date(session.dateSession);
-      if (startDate && sessionDate < new Date(startDate)) return false;
-      if (endDate) {
-        const endOfDayEndDate = new Date(endDate);
-        endOfDayEndDate.setHours(23, 59, 59, 999);
-        if (sessionDate > endOfDayEndDate) return false;
-      }
+      // Ajustement pour que la date de début soit inclusive
+      const start = startDate ? new Date(startDate) : null;
+      if (start) start.setHours(0,0,0,0);
+      if (start && sessionDate < start) return false;
+
+      const end = endDate ? new Date(endDate) : null;
+      if (end) end.setHours(23, 59, 59, 999);
+      if (end && sessionDate > end) return false;
       return true;
     });
 
@@ -138,7 +133,7 @@ const ParticipantReport = () => {
       });
     });
     return participations;
-  }, [sessions, referentialCodeMap, deviceMap]);
+  }, [sessions, referentialCodeMap, deviceMap, startDate, endDate]);
 
   const filteredSessionParticipations = useMemo(() => {
     if (!searchTerm) return allSessionParticipations;
@@ -153,7 +148,6 @@ const ParticipantReport = () => {
     setDetailedParticipation(null);
 
     const targetSession = sessions.find(s => s.id === participation.originalSessionId);
-    // Trouve le participant spécifique DANS la session cible, basé sur assignedGlobalDeviceId
     const targetParticipantRef = targetSession?.participants.find(p => p.assignedGlobalDeviceId === participation.originalParticipantAssignedGlobalDeviceId);
 
     if (!targetSession || !targetParticipantRef || targetParticipantRef.assignedGlobalDeviceId === undefined || !deviceMap.size || !allThemesDb.length || !allBlocsDb.length) {
@@ -167,39 +161,49 @@ const ParticipantReport = () => {
       return;
     }
 
-    const sessionResults = await getResultsForSession(targetSession.id!);
-    const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
+    try {
+      const sessionResults = await getResultsForSession(targetSession.id!);
+      const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
 
-    const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
-      baseSessionQuestions.map(async (question) => {
-        let resolvedThemeName = 'Thème non spécifié';
-        if (question.blocId) {
-          const bloc = allBlocsDb.find(b => b.id === question.blocId);
-          if (bloc && bloc.theme_id) {
-            const theme = allThemesDb.find(t => t.id === bloc.theme_id);
-            if (theme) resolvedThemeName = theme.nom_complet;
+      const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
+        baseSessionQuestions.map(async (question, index) => {
+          try {
+            let resolvedThemeName = 'Thème non spécifié';
+            if (question.blocId) {
+              const bloc = allBlocsDb.find(b => b.id === question.blocId);
+              if (bloc && bloc.theme_id) {
+                const theme = allThemesDb.find(t => t.id === bloc.theme_id);
+                if (theme) resolvedThemeName = theme.nom_complet;
+              }
+            }
+            const participantResult = sessionResults.find(
+              sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
+            );
+            return { ...question, resolvedThemeName, participantAnswer: participantResult?.answer, pointsObtainedForAnswer: participantResult?.pointsObtained, isCorrectAnswer: participantResult?.isCorrect };
+          } catch (error) {
+            console.error(`[ParticipantReport] Error enriching question ID ${question.id} (index ${index}):`, error);
+            return { ...question, resolvedThemeName: 'Erreur chargement thème', participantAnswer: 'Erreur', pointsObtainedForAnswer: 0, isCorrectAnswer: false };
           }
-        }
-        const participantResult = sessionResults.find(
-          sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
-        );
-        return { ...question, resolvedThemeName, participantAnswer: participantResult?.answer, pointsObtainedForAnswer: participantResult?.pointsObtained, isCorrectAnswer: participantResult?.isCorrect };
-      })
-    );
+        })
+      );
 
-    const currentParticipantSessionResults = sessionResults.filter(r => r.participantIdBoitier === serialNumberOfSelectedParticipant);
-    const score = calculateParticipantScore(currentParticipantSessionResults, enrichedSessionQuestions);
-    const themeScores = calculateThemeScores(currentParticipantSessionResults, enrichedSessionQuestions);
-    const reussite = determineIndividualSuccess(score, themeScores);
+      const currentParticipantSessionResults = sessionResults.filter(r => r.participantIdBoitier === serialNumberOfSelectedParticipant);
+      const score = calculateParticipantScore(currentParticipantSessionResults, enrichedSessionQuestions);
+      const themeScores = calculateThemeScores(currentParticipantSessionResults, enrichedSessionQuestions);
+      const reussite = determineIndividualSuccess(score, themeScores);
 
-    setDetailedParticipation({
-      ...targetSession,
-      participantRef: targetParticipantRef,
-      participantScore: score,
-      participantSuccess: reussite,
-      themeScores,
-      questionsForDisplay: enrichedSessionQuestions
-    });
+      setDetailedParticipation({
+        ...targetSession,
+        participantRef: targetParticipantRef,
+        participantScore: score,
+        participantSuccess: reussite,
+        themeScores,
+        questionsForDisplay: enrichedSessionQuestions
+      });
+    } catch (error) {
+      console.error('[ParticipantReport] Error processing participation details:', error);
+      setDetailedParticipation(null); // S'assurer de réinitialiser en cas d'erreur globale
+    }
   };
 
   const handleBackToList = () => {
@@ -212,10 +216,11 @@ const ParticipantReport = () => {
 
     const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
 
-    // Récupérer le nom du formateur (si non déjà disponible)
-    // Pour l'instant, on suppose qu'il n'est pas dans detailedParticipation, à ajouter si besoin.
-    // let trainerName = 'N/A';
-    // if (trainerId) { const trainer = await getTrainerById(trainerId); if (trainer) trainerName = trainer.name; }
+    let fetchedTrainerName = 'N/A';
+    if (trainerId) {
+      const trainer = await getTrainerById(trainerId);
+      if (trainer) fetchedTrainerName = trainer.name;
+    }
 
     const reportDate = new Date().toLocaleDateString('fr-FR');
     const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
@@ -239,10 +244,10 @@ const ParticipantReport = () => {
             <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialCodeMap.get(referentielId) || 'N/A'}</td>
             <td style="padding: 4px;"><strong>Lieu :</strong> ${location || 'N/A'}</td>
           </tr>
-          {/*<tr> TODO: Ajouter Formateur si disponible
-            <td style="padding: 4px;"><strong>Formateur :</strong> ${trainerName}</td>
+          <tr>
+            <td style="padding: 4px;"><strong>Formateur :</strong> ${fetchedTrainerName}</td>
             <td style="padding: 4px;"></td>
-          </tr>*/}
+          </tr>
         </table>
 
         <div style="background-color: ${participantSuccess ? '#e8f5e9' : '#ffebee'}; padding: 15px; border-radius: 4px; margin-bottom: 20px; text-align: center;">
@@ -297,12 +302,11 @@ const ParticipantReport = () => {
       pdfHtml += '<p style="font-size: 10px; color: #555;">Détail des questions non disponible.</p>';
     }
     pdfHtml += `<p style="text-align: right; font-size: 8px; color: #777; margin-top: 30px;">Rapport généré le ${reportDate}</p>`;
-    pdfHtml += '</div>'; // Fin du conteneur principal
+    pdfHtml += '</div>';
 
     const element = document.createElement('div');
-    // Pour une meilleure qualité PDF, on peut augmenter la largeur virtuelle avant le rendu canvas.
     element.style.width = '1000px';
-    element.style.padding = '20px'; // Simuler des marges pour le rendu
+    element.style.padding = '20px';
     element.innerHTML = pdfHtml;
     document.body.appendChild(element);
 
@@ -316,9 +320,8 @@ const ParticipantReport = () => {
     const imgProps = pdf.getImageProperties(imgData);
     const ratio = imgProps.height / imgProps.width;
     let imgHeight = pdfWidth * ratio;
-    let position = 0;
 
-    if (imgHeight > pdfHeight) { // Gestion du contenu sur plusieurs pages
+    if (imgHeight > pdfHeight) {
         let pageCount = Math.ceil(imgHeight / pdfHeight);
         for (let i = 0; i < pageCount; i++) {
             if (i > 0) pdf.addPage();
@@ -390,11 +393,11 @@ const ParticipantReport = () => {
         </div>
 
         <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Détail des Questions par Thème</h3>
-          {Object.entries(questionsByTheme).length > 0 ? (
+        <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Détail des Questions par Thème</h3>
+        {Object.entries(questionsByTheme).length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
               {Object.entries(questionsByTheme).map(([themeName, questions]) => (
-                <div key={themeName} className="mb-4 pt-2"> {/* Espace pour chaque bloc thème */}
+                <div key={themeName} className="mb-4 pt-2">
                   <h4 className="text-md font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-300">
                     {themeName}
                   </h4>
@@ -442,14 +445,14 @@ const ParticipantReport = () => {
           label="Date de début"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          className="" // La largeur sera gérée par la grille
+          className=""
         />
         <Input
           type="date"
           label="Date de fin"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
-          className="" // La largeur sera gérée par la grille
+          className=""
         />
       </div>
       <Table>

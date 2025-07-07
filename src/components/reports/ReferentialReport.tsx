@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions, getAllResults, getQuestionsForSessionBlocks } from '../../db';
-import { Session, SessionResult, QuestionWithId, Referential } from '../../types'; // Ajout de Referential
+import { getAllSessions, getAllResults, getQuestionsForSessionBlocks, getAllThemes, getAllBlocs, getReferentialById } from '../../db'; // Ajout de getAllThemes, getAllBlocs, getReferentialById
+import { Session, SessionResult, QuestionWithId, Referential, Theme, Bloc, OverallThemeStats } from '../../types'; // Ajout de Theme, Bloc, OverallThemeStats
 import {
   Table,
   TableHeader,
@@ -10,36 +10,71 @@ import {
   TableHead,
   TableCell,
 } from '../ui/Table';
-import { calculateSessionStats } from '../../utils/reportCalculators';
+import { calculateSessionStats, calculateOverallThemeStats } from '../../utils/reportCalculators'; // Ajout de calculateOverallThemeStats
+import Button from '../ui/Button'; // Ajouté
+import { ArrowLeft, Eye } from 'lucide-react'; // Ajouté
 
 type ReferentialReportProps = {
   startDate?: string;
   endDate?: string;
   referentialMap: Map<number | undefined, string | undefined>; // ID -> Code
-  // sessions: Session[]; // Les sessions seront fetchées ici ou passées en props filtrées
-  // allResults: SessionResult[]; // Idem
-  // allQuestions: QuestionWithId[]; // Idem
 };
 
 const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDate, referentialMap }) => {
-  // Les données sont chargées en interne pour ce composant pour l'instant
-  // Pour une optimisation, elles pourraient être passées en props si déjà chargées par le parent (Reports.tsx)
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allResults, setAllResults] = useState<SessionResult[]>([]);
   const [allQuestions, setAllQuestions] = useState<QuestionWithId[]>([]);
+  const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]); // Nouvel état
+  const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);   // Nouvel état
+  const [selectedReferentialForThemeStats, setSelectedReferentialForThemeStats] = useState<Referential | null>(null); // Nouvel état
 
   useEffect(() => {
     const fetchData = async () => {
-      const fetchedSessions = await getAllSessions();
-      setSessions(fetchedSessions); // Pas de tri par date ici, le filtre s'en chargera
-      const fetchedResults = await getAllResults();
+      const [
+        fetchedSessions,
+        fetchedResults,
+        // fetchedQuestions, // Sera dérivé après le filtrage des sessions
+        fetchedThemes,
+        fetchedBlocs
+      ] = await Promise.all([
+        getAllSessions(),
+        getAllResults(),
+        // getAllQuestions(), // On ne charge pas toutes les questions ici, mais celles des blocs des sessions filtrées
+        getAllThemes(),
+        getAllBlocs()
+      ]);
+      setSessions(fetchedSessions);
       setAllResults(fetchedResults);
-      const allUniqueBlocIds = Array.from(new Set(fetchedSessions.flatMap(s => s.selectedBlocIds || []).filter(id => id != null)));
-      const fetchedQuestions = await getQuestionsForSessionBlocks(allUniqueBlocIds as number[]);
-      setAllQuestions(fetchedQuestions);
+      setAllThemesDb(fetchedThemes);
+      setAllBlocsDb(fetchedBlocs);
+      // Les questions seront chargées dynamiquement ou après filtrage des sessions
     };
     fetchData();
-  }, []); // Se charge une fois
+  }, []);
+
+  // Calcul des questions uniques après que les sessions soient potentiellement filtrées par date
+  const relevantQuestions = useMemo(() => {
+    const filteredSessions = sessions.filter(session => {
+      if (session.status !== 'completed') return false;
+      if (!startDate && !endDate) return true;
+      const sessionDate = new Date(session.dateSession);
+      if (startDate && sessionDate < new Date(startDate)) return false;
+      if (endDate) {
+        const endOfDayEndDate = new Date(endDate);
+        endOfDayEndDate.setHours(23, 59, 59, 999);
+        if (sessionDate > endOfDayEndDate) return false;
+      }
+      return true;
+    });
+    const allUniqueBlocIds = Array.from(new Set(filteredSessions.flatMap(s => s.selectedBlocIds || []).filter(id => id != null)));
+    // Note: getQuestionsForSessionBlocks est async, ne peut pas être dans useMemo directement sans un useEffect pour le résultat
+    // Pour l'instant, on va supposer que allQuestions est chargé globalement ou on adapte.
+    // Alternative: charger toutes les questions une fois et filtrer ici.
+    // Pour simplifier, on utilise allQuestions chargé dans le useEffect initial (qui charge TOUTES les questions)
+    // Ce n'est pas optimal si les dates changent souvent, mais suffisant pour l'instant.
+    return allQuestions.filter(q => q.blocId && allUniqueBlocIds.includes(q.blocId));
+  }, [sessions, startDate, endDate, allQuestions]);
+
 
   const statsByReferential = useMemo(() => {
     const filteredSessions = sessions.filter(session => {
@@ -81,7 +116,89 @@ const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDat
       ...data,
       avgSuccessRate: data.sessionCount > 0 ? data.totalSuccessRate / data.sessionCount : 0,
     }));
-  }, [sessions, allResults, allQuestions]);
+  }, [sessions, startDate, endDate, allResults, allQuestions]); // Ajout de startDate, endDate
+
+  const overallThemeStatsForSelectedReferential = useMemo((): OverallThemeStats[] => {
+    if (!selectedReferentialForThemeStats || !selectedReferentialForThemeStats.id) return [];
+
+    const sessionsForThisReferential = sessions.filter(s =>
+      s.referentielId === selectedReferentialForThemeStats.id &&
+      s.status === 'completed' &&
+      (!startDate || new Date(s.dateSession) >= new Date(startDate)) &&
+      (!endDate || new Date(s.dateSession) <= new Date(new Date(endDate).setHours(23,59,59,999)))
+    );
+
+    // Re-calculer les questions pertinentes pour ces sessions spécifiques si `allQuestions` n'est pas déjà globalement chargé et filtré
+    // Pour l'instant, on utilise `relevantQuestions` qui est basé sur les sessions filtrées par date globalement.
+    // Idéalement, on passerait les questions spécifiques à ces sessionsForThisReferential.
+    // Ou, plus simple, on passe toutes les questions `allQuestions` si elles sont toutes chargées.
+    // Le plus correct est de recalculer les questions pertinentes pour `sessionsForThisReferential`
+    const blocIdsForSelectedRefSessions = Array.from(new Set(sessionsForThisReferential.flatMap(s => s.selectedBlocIds || []).filter(id => id != null)));
+    const questionsForSelectedRefSessions = allQuestions.filter(q => q.blocId && blocIdsForSelectedRefSessions.includes(q.blocId));
+
+
+    return calculateOverallThemeStats(
+      sessionsForThisReferential,
+      allResults,
+      questionsForSelectedRefSessions, // Utiliser les questions filtrées pour le référentiel et la période
+      allThemesDb,
+      allBlocsDb
+    );
+  }, [selectedReferentialForThemeStats, sessions, allResults, allQuestions, allThemesDb, allBlocsDb, startDate, endDate]);
+
+  const handleSelectReferential = async (referentialIdString: string) => {
+    const referentialId = Number(referentialIdString);
+    // On doit récupérer l'objet Referential complet, pas juste le code de referentialMap
+    // Pour cela, on pourrait avoir besoin de la liste complète des référentiels ici.
+    // Ou alors, le parent (Reports.tsx) passe allReferentielsDb.
+    // Pour l'instant, on va simuler la récupération par ID.
+    const refObj = await getReferentialById(referentialId); // Assurez-vous que getReferentialById est importé
+    if (refObj) {
+      setSelectedReferentialForThemeStats(refObj);
+    } else {
+      console.warn("Référentiel non trouvé pour l'ID:", referentialId);
+    }
+  };
+
+  const handleBackToReferentialList = () => {
+    setSelectedReferentialForThemeStats(null);
+  };
+
+  if (selectedReferentialForThemeStats) {
+    return (
+      <Card>
+        <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBackToReferentialList} className="mb-4">
+          Retour aux référentiels
+        </Button>
+        <h2 className="text-xl font-bold mb-1">
+          Statistiques par Thème pour le Référentiel : {selectedReferentialForThemeStats.code}
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">{selectedReferentialForThemeStats.nom_complet}</p>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Code Thème</TableHead>
+              <TableHead>Nom du Thème</TableHead>
+              <TableHead className="text-center">Questions Répondues</TableHead>
+              <TableHead className="text-center">Bonnes Réponses</TableHead>
+              <TableHead className="text-center">Taux de Réussite</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {overallThemeStatsForSelectedReferential.map(stat => (
+              <TableRow key={stat.themeId}>
+                <TableCell>{stat.themeCode}</TableCell>
+                <TableCell className="font-medium">{stat.themeName}</TableCell>
+                <TableCell className="text-center">{stat.totalQuestionsAnswered}</TableCell>
+                <TableCell className="text-center">{stat.totalCorrectAnswers}</TableCell>
+                <TableCell className="text-center">{stat.successRate.toFixed(0)}%</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -92,7 +209,8 @@ const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDat
             <TableHead>Référentiel</TableHead>
             <TableHead className="text-center">Sessions</TableHead>
             <TableHead className="text-center">Participants</TableHead>
-            <TableHead className="text-center">Taux de réussite moyen</TableHead>
+            <TableHead className="text-center">Taux de Réussite Moyen</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

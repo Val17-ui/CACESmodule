@@ -74,17 +74,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
         // Récupérer le nom du référentiel
         if (session.referentielId) {
-          // console.log('[ReportDetails] session.referentielId:', session.referentielId);
           const referential = await getReferentialById(session.referentielId);
-          // console.log('[ReportDetails] Fetched referential (full object):', JSON.stringify(referential));
           if (referential && referential.code) {
             setReferentialCode(referential.code);
           } else {
-            // console.warn('[ReportDetails] Referential object or code is missing for id:', session.referentielId);
             setReferentialCode('N/A');
           }
         } else {
-          // console.log('[ReportDetails] session.referentielId is undefined or null');
           setReferentialCode('N/A');
         }
 
@@ -353,7 +349,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   };
 
   // console.log('[ReportDetails] Final referentialInfo before render:', referentialInfo); // Remplacé par referentialCode
-  console.log('[ReportDetails] Final referentialCode before render:', referentialCode);
+  // console.log('[ReportDetails] Final referentialCode before render:', referentialCode); // Nettoyé
 
 
   return (

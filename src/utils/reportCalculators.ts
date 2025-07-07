@@ -230,12 +230,12 @@ export const calculateNumericBlockPerformanceForSession = (
 ): NumericBlockPerformanceStats | null => {
   const blocInfo = allBlocsDb.find(b => b.id === targetNumericBlocId);
   if (!blocInfo) {
-    console.warn(`[CalcNumericBlocPerf] Bloc numérique ID ${targetNumericBlocId} non trouvé dans allBlocsDb.`);
+    // console.warn(`[CalcNumericBlocPerf] Bloc numérique ID ${targetNumericBlocId} non trouvé dans allBlocsDb.`);
     return null;
   }
   const themeInfo = allThemesDb.find(t => t.id === blocInfo.theme_id);
   if (!themeInfo) {
-    console.warn(`[CalcNumericBlocPerf] Thème ID ${blocInfo.theme_id} pour bloc ${targetNumericBlocId} non trouvé.`);
+    // console.warn(`[CalcNumericBlocPerf] Thème ID ${blocInfo.theme_id} pour bloc ${targetNumericBlocId} non trouvé.`);
     return null;
   }
 
@@ -248,7 +248,7 @@ export const calculateNumericBlockPerformanceForSession = (
     // Il est possible qu'un bloc sélectionné pour la session (dans selectedBlocIds)
     // n'ait finalement aucune question mappée dans questionMappings (et donc dans allQuestionsOfSession).
     // Dans ce cas, on peut retourner des stats vides pour ce bloc.
-    console.log(`[CalcNumericBlocPerf] Aucune question trouvée pour le bloc numérique ID ${targetNumericBlocId} dans allQuestionsOfSession.`);
+    // console.log(`[CalcNumericBlocPerf] Aucune question trouvée pour le bloc numérique ID ${targetNumericBlocId} dans allQuestionsOfSession.`);
     return {
       blocId: targetNumericBlocId,
       blocCode: blocInfo.code_bloc,
@@ -335,6 +335,84 @@ export const calculateNumericBlockPerformanceForSession = (
   };
 };
 
+/**
+ * Calcule les statistiques globales pour chaque thème au sein d'un ensemble de sessions donné.
+ * @param relevantSessions Sessions déjà filtrées (par référentiel, période).
+ * @param allResults Tous les résultats de la base de données.
+ * @param allQuestions Toutes les questions de la base de données.
+ * @param allThemesDb Tous les thèmes de la base de données.
+ * @param allBlocsDb Tous les blocs de la base de données.
+ * @returns Un tableau de OverallThemeStats.
+ */
+export const calculateOverallThemeStats = (
+  relevantSessions: Session[],
+  allResults: SessionResult[],
+  allQuestions: QuestionWithId[],
+  allThemesDb: Theme[],
+  allBlocsDb: Bloc[]
+): OverallThemeStats[] => {
+  const themeStatsMap = new Map<number, { themeCode: string; themeName: string; totalCorrect: number; totalAnswered: number }>();
+
+  // Initialiser la map avec tous les thèmes pertinents (ceux présents dans les blocs des questions)
+  // pour s'assurer que même les thèmes sans réponse sont listés (avec 0/0).
+  // On peut aussi se baser sur les thèmes des blocs sélectionnés dans les relevantSessions.
+  const relevantThemeIds = new Set<number>();
+  relevantSessions.forEach(session => {
+    session.selectedBlocIds?.forEach(blocId => {
+      const bloc = allBlocsDb.find(b => b.id === blocId);
+      if (bloc && bloc.theme_id) {
+        relevantThemeIds.add(bloc.theme_id);
+      }
+    });
+  });
+
+  relevantThemeIds.forEach(themeId => {
+    const themeInfo = allThemesDb.find(t => t.id === themeId);
+    if (themeInfo) {
+      themeStatsMap.set(themeId, {
+        themeCode: themeInfo.code_theme,
+        themeName: themeInfo.nom_complet,
+        totalCorrect: 0,
+        totalAnswered: 0,
+      });
+    }
+  });
+
+  relevantSessions.forEach(session => {
+    if (!session.id || !session.participants || session.participants.length === 0) {
+      return;
+    }
+
+    const resultsForThisSession = allResults.filter(r => r.sessionId === session.id);
+
+    resultsForThisSession.forEach(result => {
+      const question = allQuestions.find(q => q.id === result.questionId);
+      if (!question || question.blocId === undefined) return;
+
+      const bloc = allBlocsDb.find(b => b.id === question.blocId);
+      if (!bloc || bloc.theme_id === undefined) return;
+
+      const themeId = bloc.theme_id;
+      const themeStat = themeStatsMap.get(themeId);
+
+      if (themeStat) {
+        themeStat.totalAnswered++;
+        if (result.isCorrect) {
+          themeStat.totalCorrect++;
+        }
+      }
+    });
+  });
+
+  return Array.from(themeStatsMap.values()).map(stat => ({
+    themeId: allThemesDb.find(t => t.code_theme === stat.themeCode && t.nom_complet === stat.themeName)!.id!, // Retrouver l'ID pour la clé
+    themeCode: stat.themeCode,
+    themeName: stat.themeName,
+    totalQuestionsAnswered: stat.totalAnswered,
+    totalCorrectAnswers: stat.totalCorrect,
+    successRate: stat.totalAnswered > 0 ? (stat.totalCorrect / stat.totalAnswered) * 100 : 0,
+  })).sort((a,b) => a.themeName.localeCompare(b.themeName));
+};
 
 /**
  * Calcule les statistiques globales pour un bloc de questions spécifique à travers toutes les sessions.
@@ -484,6 +562,15 @@ export interface NumericBlockPerformanceStats {
   successRateOnBlock: number;  // % de participants ayant "réussi" ce bloc (score >= 50%)
 }
 
+export interface OverallThemeStats {
+  themeId: number;
+  themeCode: string;
+  themeName: string;
+  totalQuestionsAnswered: number;
+  totalCorrectAnswers: number;
+  successRate: number;
+}
+
 /**
  * Calcule les statistiques de performance pour un bloc de questions spécifique au sein d'UNE session donnée.
  * @param blockSelection - L'objet { theme, blockId } du bloc sélectionné pour la session.
@@ -497,14 +584,14 @@ export const calculateBlockPerformanceForSession = (
   sessionResults: SessionResult[],
   deviceMap: Map<number | undefined, string | undefined> // Map de assignedGlobalDeviceId vers serialNumber
 ): BlockPerformanceStats | null => {
-  console.log('[Calculator] calculateBlockPerformanceForSession called with blockSelection:', blockSelection);
+  // console.log('[Calculator] calculateBlockPerformanceForSession called with blockSelection:', blockSelection); // Nettoyé
   if (
     !session.participants ||
     session.participants.length === 0 ||
     !session.questionMappings ||
     session.questionMappings.length === 0
   ) {
-    console.warn('[Calculator] Données de session (participants ou questionMappings) manquantes.');
+    // console.warn('[Calculator] Données de session (participants ou questionMappings) manquantes.'); // Nettoyé
     return null;
   }
 
@@ -512,26 +599,26 @@ export const calculateBlockPerformanceForSession = (
   const questionIdsInBlockForThisSession = session.questionMappings
     .filter(qm => qm.theme === blockSelection.theme && qm.blockId === blockSelection.blockId)
     .map(qm => qm.dbQuestionId);
-  console.log('[Calculator] questionIdsInBlockForThisSession:', questionIdsInBlockForThisSession);
+  // console.log('[Calculator] questionIdsInBlockForThisSession:', questionIdsInBlockForThisSession); // Nettoyé
 
   if (questionIdsInBlockForThisSession.length === 0) {
-    console.log('[Calculator] No questions found for this blockSelection in questionMappings.');
+    // console.log('[Calculator] No questions found for this blockSelection in questionMappings.'); // Nettoyé
     return null;
   }
   const numQuestionsInBlock = questionIdsInBlockForThisSession.length;
-  console.log('[Calculator] numQuestionsInBlock:', numQuestionsInBlock);
+  // console.log('[Calculator] numQuestionsInBlock:', numQuestionsInBlock); // Nettoyé
 
   let totalCorrectAnswersInBlockAcrossParticipants = 0;
   let successfulParticipantsOnBlockCount = 0;
   const sessionParticipantsCount = session.participants.length;
-  console.log(`[Calculator] Processing ${sessionParticipantsCount} participants for block ${blockSelection.theme} - ${blockSelection.blockId}`);
+  // console.log(`[Calculator] Processing ${sessionParticipantsCount} participants for block ${blockSelection.theme} - ${blockSelection.blockId}`); // Nettoyé
 
   session.participants.forEach((participant, pIndex) => {
     const deviceSerialNumber = participant.assignedGlobalDeviceId
       ? deviceMap.get(participant.assignedGlobalDeviceId)
       : undefined;
 
-    console.log(`[Calculator] Participant ${pIndex + 1}: assignedGlobalDeviceId ${participant.assignedGlobalDeviceId}, DeviceSN: ${deviceSerialNumber}, Nom: ${participant.prenom} ${participant.nom}`);
+    // console.log(`[Calculator] Participant ${pIndex + 1}: assignedGlobalDeviceId ${participant.assignedGlobalDeviceId}, DeviceSN: ${deviceSerialNumber}, Nom: ${participant.prenom} ${participant.nom}`); // Nettoyé
 
     const participantResultsForBlock = deviceSerialNumber
       ? sessionResults.filter(r =>
@@ -540,7 +627,7 @@ export const calculateBlockPerformanceForSession = (
         )
       : [];
 
-    console.log(`[Calculator] Participant ${pIndex + 1}: Found ${participantResultsForBlock.length} results for this block.`);
+    // console.log(`[Calculator] Participant ${pIndex + 1}: Found ${participantResultsForBlock.length} results for this block.`); // Nettoyé
 
     let correctAnswersInBlockForParticipant = 0;
     participantResultsForBlock.forEach(result => {
@@ -548,20 +635,20 @@ export const calculateBlockPerformanceForSession = (
         correctAnswersInBlockForParticipant++;
       }
     });
-    console.log(`[Calculator] Participant ${pIndex + 1}: Correct answers in block: ${correctAnswersInBlockForParticipant}`);
+    // console.log(`[Calculator] Participant ${pIndex + 1}: Correct answers in block: ${correctAnswersInBlockForParticipant}`); // Nettoyé
 
     totalCorrectAnswersInBlockAcrossParticipants += correctAnswersInBlockForParticipant;
 
     // Condition de reussite du bloc pour CE participant : >= 50% des questions de CE bloc
     if (numQuestionsInBlock > 0 && (correctAnswersInBlockForParticipant / numQuestionsInBlock) >= 0.50) {
       successfulParticipantsOnBlockCount++;
-      console.log(`[Calculator] Participant ${pIndex + 1}: Succeeded in block.`);
+      // console.log(`[Calculator] Participant ${pIndex + 1}: Succeeded in block.`); // Nettoyé
     }
   });
 
-  console.log(`[Calculator] Totals for block ${blockSelection.theme} - ${blockSelection.blockId}:
-    TotalCorrectAcrossParticipants: ${totalCorrectAnswersInBlockAcrossParticipants},
-    SuccessfulParticipants: ${successfulParticipantsOnBlockCount}`);
+  // console.log(`[Calculator] Totals for block ${blockSelection.theme} - ${blockSelection.blockId}:
+  //   TotalCorrectAcrossParticipants: ${totalCorrectAnswersInBlockAcrossParticipants},
+  //   SuccessfulParticipants: ${successfulParticipantsOnBlockCount}`); // Nettoyé
 
   const averageCorrectAnswers = sessionParticipantsCount > 0
     ? totalCorrectAnswersInBlockAcrossParticipants / sessionParticipantsCount
