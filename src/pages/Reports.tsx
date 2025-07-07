@@ -11,8 +11,8 @@ import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
-import { getAllSessions, getSessionById, getAllTrainers } from '../db'; // Ajout de getAllTrainers
-import { Session, Participant, CACESReferential, Trainer } from '../types'; // Ajout de Trainer
+import { getAllSessions, getSessionById, getAllTrainers, getAllReferentiels } from '../db'; // Ajout de getAllReferentiels
+import { Session, Participant, CACESReferential, Trainer, Referential } from '../types'; // Ajout de Referential
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 
@@ -27,17 +27,35 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [sessionParticipants, setSessionParticipants] = useState<Participant[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [referentialFilter, setReferentialFilter] = useState<string>('all');
-  const [trainerFilter, setTrainerFilter] = useState<string>('all'); // Nouvel état pour le filtre formateur
-  const [trainersListForFilter, setTrainersListForFilter] = useState<Trainer[]>([]); // Nouvel état pour la liste des formateurs
+  const [referentialFilter, setReferentialFilter] = useState<string>('all'); // Conserver pour le filtre, mais basé sur ID
+  const [trainerFilter, setTrainerFilter] = useState<string>('all');
+  const [trainersListForFilter, setTrainersListForFilter] = useState<Trainer[]>([]);
+  const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]); // Pour stocker les référentiels de la DB
+
+  const referentialMap = useMemo(() => {
+    return new Map(allReferentielsDb.map(ref => [ref.id, ref.nom_complet]));
+  }, [allReferentielsDb]);
+
+  // Options pour le Select des référentiels, basées sur allReferentielsDb
+  const referentialOptionsForFilter = useMemo(() => {
+    return [
+      { value: 'all', label: 'Tous les référentiels' },
+      ...allReferentielsDb.map(ref => ({ value: String(ref.id), label: ref.nom_complet }))
+    ];
+  }, [allReferentielsDb]);
+
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      const allSessions = await getAllSessions();
-      setSessions(allSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+      const [fetchedSessions, fetchedTrainers, fetchedReferentiels] = await Promise.all([
+        getAllSessions(),
+        getAllTrainers(),
+        getAllReferentiels()
+      ]);
 
-      const allTrainers = await getAllTrainers(); // Charger les formateurs
-      setTrainersListForFilter(allTrainers.sort((a,b) => a.name.localeCompare(b.name)));
+      setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+      setTrainersListForFilter(fetchedTrainers.sort((a,b) => a.name.localeCompare(b.name)));
+      setAllReferentielsDb(fetchedReferentiels.sort((a,b) => a.nom_complet.localeCompare(b.nom_complet)));
     };
     fetchInitialData();
   }, []);
@@ -66,7 +84,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const filteredSessions = useMemo(() => {
     return sessions
       .filter(session => 
-        referentialFilter === 'all' || session.referentiel === referentialFilter
+        referentialFilter === 'all' || (session.referentielId !== undefined && session.referentielId?.toString() === referentialFilter)
       )
       .filter(session =>
         trainerFilter === 'all' || (session.trainerId !== undefined && session.trainerId?.toString() === trainerFilter)
@@ -97,10 +115,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 value={referentialFilter}
                 onChange={(e) => setReferentialFilter(e.target.value)}
                 className="w-1/4"
-                options={[
-                  { value: 'all', label: 'Tous les référentiels' },
-                  ...Object.values(CACESReferential).map(ref => ({ value: ref, label: ref }))
-                ]}
+                options={referentialOptionsForFilter} // Utiliser les options dynamiques
               />
               <Select
                 value={trainerFilter}
@@ -113,22 +128,31 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 disabled={trainersListForFilter.length === 0}
               />
             </div>
-            <ReportsList sessions={filteredSessions} onViewReport={handleViewSessionReport} />
+            <ReportsList
+              sessions={filteredSessions}
+              onViewReport={handleViewSessionReport}
+              referentialMap={referentialMap} // Passer la map
+            />
           </div>
         );
       case 'participant':
+        // ParticipantReport pourrait aussi avoir besoin de referentialMap si on affiche le nom du réf. dans sa liste
         return <ParticipantReport />;
       case 'period':
+        // PeriodReport sera supprimé selon le plan
         return <PeriodReport />;
       case 'referential':
+        // ReferentialReport pourrait aussi avoir besoin de referentialMap
         return <ReferentialReport />;
       case 'block':
+        // BlockReport pourrait aussi avoir besoin de referentialMap/themeMap/blocMap
         return <BlockReport />;
       case 'custom':
         return <CustomReport />;
       default:
         return (
           <>
+            {/* GlobalStats pourrait avoir besoin de referentialMap si on y affiche des stats par référentiel */}
             <GlobalStats sessions={filteredSessions} />
             <ReportTypeSelector onSelectReport={handleSelectReport} />
           </>

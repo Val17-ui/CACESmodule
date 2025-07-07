@@ -3,7 +3,7 @@ import { Download, Eye, Printer, FileText } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import { Session } from '../../types';
+import { Session, Referential } from '../../types'; // Ajout de Referential
 import {
   Table,
   TableHeader,
@@ -18,9 +18,10 @@ import { getResultsForSession, getQuestionsForSessionBlocks } from '../../db';
 type ReportsListProps = {
   sessions: Session[];
   onViewReport: (id: string) => void;
+  referentialMap: Map<number | undefined, string | undefined>; // Map ID Référentiel -> Nom Référentiel
 };
 
-const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => {
+const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, referentialMap }) => {
   const [sessionStats, setSessionStats] = useState<{[sessionId: number]: { averageScore: number, successRate: number }}>({});
 
   useEffect(() => {
@@ -82,7 +83,9 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
             <TableRow key={session.id} className="hover:bg-gray-50">
               <TableCell className="font-medium">{session.nomSession}</TableCell>
               <TableCell>
-                <Badge variant="secondary">{session.referentiel}</Badge>
+                <Badge variant="secondary">
+                  {session.referentielId ? (referentialMap.get(session.referentielId) || 'N/A') : 'N/A'}
+                </Badge>
               </TableCell>
               <TableCell>{formatDate(session.dateSession)}</TableCell>
               <TableCell className="text-center">{session.participants?.length || 0}</TableCell>
