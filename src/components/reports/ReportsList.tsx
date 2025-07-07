@@ -29,7 +29,8 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport }) => 
       for (const session of sessions) {
         if (session.id && session.status === 'completed') {
           const results = await getResultsForSession(session.id);
-          const questions = await getQuestionsForSessionBlocks(session.selectionBlocs || []);
+          // Utiliser session.selectedBlocIds au lieu de session.selectionBlocs
+          const questions = await getQuestionsForSessionBlocks(session.selectedBlocIds || []);
           stats[session.id] = calculateSessionStats(session, results, questions);
         }
       }

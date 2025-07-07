@@ -23,16 +23,11 @@ const ReferentialReport = () => {
       setSessions(fetchedSessions);
       const fetchedResults = await getAllResults();
       setAllResults(fetchedResults);
-      // Fetch all questions to be able to map them to blocks
-      // This might need optimization if there are too many questions
-      const allSessionBlocks = fetchedSessions.flatMap(s => s.selectionBlocs || []);
-      const uniqueBlockQuestions = Array.from(new Set(allSessionBlocks.map(b => b.theme + b.blockId)))
-        .map(blockId => {
-          const block = allSessionBlocks.find(b => b.theme + b.blockId === blockId);
-          return block;
-        }).filter(Boolean);
       
-      const fetchedQuestions = await getQuestionsForSessionBlocks(uniqueBlockQuestions as any);
+      // Collecter tous les IDs de blocs uniques de toutes les sessions
+      const allUniqueBlocIds = Array.from(new Set(fetchedSessions.flatMap(s => s.selectedBlocIds || []).filter(id => id !== undefined)));
+
+      const fetchedQuestions = await getQuestionsForSessionBlocks(allUniqueBlocIds as number[]);
       setAllQuestions(fetchedQuestions);
     };
     fetchData();
@@ -44,7 +39,7 @@ const ReferentialReport = () => {
     sessions.forEach(session => {
       if (session.status !== 'completed') return;
 
-      const key = String(session.referentiel);
+      const key = String(session.referentielId); // Utiliser referentielId
       if (!stats.has(key)) {
         stats.set(key, { sessionCount: 0, participantCount: 0, totalSuccessRate: 0 });
       }
@@ -54,14 +49,15 @@ const ReferentialReport = () => {
 
       if (session.id) {
         const sessionResults = allResults.filter(r => r.sessionId === session.id);
-        const sessionQuestions = allQuestions.filter(q => session.selectionBlocs?.some(b => q.theme === b.theme && q.slideGuid === b.blockId));
-        const sessionStats = calculateSessionStats(session, sessionResults, sessionQuestions);
+        // Filtrer les questions pertinentes pour cette session à partir de allQuestions
+        const questionsForThisSession = allQuestions.filter(q => session.selectedBlocIds?.includes(q.blocId as number));
+        const sessionStats = calculateSessionStats(session, sessionResults, questionsForThisSession);
         currentStats.totalSuccessRate += sessionStats.successRate;
       }
     });
 
-    return Array.from(stats.entries()).map(([referentiel, data]) => ({
-      referentiel,
+    return Array.from(stats.entries()).map(([referentielId, data]) => ({ // referentielId au lieu de referentiel
+      referentiel: referentielId, // Temporairement, sera remplacé par le nom du référentiel plus tard
       ...data,
       avgSuccessRate: data.sessionCount > 0 ? data.totalSuccessRate / data.sessionCount : 0,
     }));

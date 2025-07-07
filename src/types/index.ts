@@ -202,6 +202,10 @@ export interface DeviceMapping {
 export interface GeneralSettings {
   deviceMappings: DeviceMapping[];
   maxDevices: number;
+  defaultSuccessThreshold?: number; // Seuil de réussite global par défaut (ex: 70 pour 70%)
+  defaultThemeThreshold?: number; // Seuil de réussite par thème par défaut (ex: 50 pour 50%)
+  reportLogoBase64?: string; // Logo pour les rapports PDF, encodé en Base64
+  // Potentiellement d'autres paramètres globaux pour les rapports ici
 }
 
 export enum CACESReferential {
