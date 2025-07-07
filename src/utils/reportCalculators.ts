@@ -200,6 +200,134 @@ export interface CalculatedBlockOverallStats {
 }
 
 /**
+ * Calcule les statistiques de performance pour un BLOC NUMERIQUE ID au sein d'UNE session donnée.
+ * @param targetNumericBlocId L'ID numérique du bloc à analyser.
+ * @param session L'objet Session complet.
+ * @param sessionResults Array des SessionResult pour CETTE session.
+ * @param allQuestionsOfSession Questions de la session (déjà filtrées pour la session, peuvent être enrichies).
+ * @param deviceMap Map pour lier participant.assignedGlobalDeviceId au serialNumber.
+ * @param allThemesDb Liste de tous les thèmes de la DB pour trouver le nom du thème.
+ * @param allBlocsDb Liste de tous les blocs de la DB pour trouver le code du bloc.
+ * @returns NumericBlockPerformanceStats | null si les données sont insuffisantes.
+ */
+export const calculateNumericBlockPerformanceForSession = (
+  targetNumericBlocId: number,
+  session: Session,
+  sessionResults: SessionResult[],
+  allQuestionsOfSession: QuestionWithResolvedTheme[], // Attend des questions potentiellement enrichies
+  deviceMap: Map<number | undefined, string | undefined>,
+  allThemesDb: Theme[],
+  allBlocsDb: Bloc[]
+): NumericBlockPerformanceStats | null => {
+  const blocInfo = allBlocsDb.find(b => b.id === targetNumericBlocId);
+  if (!blocInfo) {
+    console.warn(`[CalcNumericBlocPerf] Bloc numérique ID ${targetNumericBlocId} non trouvé dans allBlocsDb.`);
+    return null;
+  }
+  const themeInfo = allThemesDb.find(t => t.id === blocInfo.theme_id);
+  if (!themeInfo) {
+    console.warn(`[CalcNumericBlocPerf] Thème ID ${blocInfo.theme_id} pour bloc ${targetNumericBlocId} non trouvé.`);
+    return null;
+  }
+
+  // 1. Identifier les questions qui appartiennent à ce bloc numérique POUR CETTE SESSION
+  const questionsInThisNumericBlock = allQuestionsOfSession.filter(
+    q => q.blocId === targetNumericBlocId
+  );
+
+  if (questionsInThisNumericBlock.length === 0) {
+    // Il est possible qu'un bloc sélectionné pour la session (dans selectedBlocIds)
+    // n'ait finalement aucune question mappée dans questionMappings (et donc dans allQuestionsOfSession).
+    // Dans ce cas, on peut retourner des stats vides pour ce bloc.
+    console.log(`[CalcNumericBlocPerf] Aucune question trouvée pour le bloc numérique ID ${targetNumericBlocId} dans allQuestionsOfSession.`);
+    return {
+      blocId: targetNumericBlocId,
+      blocCode: blocInfo.code_bloc,
+      themeName: themeInfo.nom_complet,
+      questionsInBlockCount: 0,
+      averageScoreOnBlock: 0,
+      successRateOnBlock: 0,
+    };
+  }
+  const numQuestionsInBlock = questionsInThisNumericBlock.length;
+
+  let totalScoreSumOnBlock = 0;
+  let successfulParticipantsOnBlockCount = 0;
+  let participantsWithResultsOnBlock = 0;
+
+  if (!session.participants || session.participants.length === 0) {
+    return { // Ou null, ou stats vides. Stats vides semble plus cohérent.
+      blocId: targetNumericBlocId,
+      blocCode: blocInfo.code_bloc,
+      themeName: themeInfo.nom_complet,
+      questionsInBlockCount: numQuestionsInBlock,
+      averageScoreOnBlock: 0,
+      successRateOnBlock: 0,
+    };
+  }
+
+  session.participants.forEach(participant => {
+    const deviceSerialNumber = participant.assignedGlobalDeviceId
+      ? deviceMap.get(participant.assignedGlobalDeviceId)
+      : undefined;
+
+    if (!deviceSerialNumber) return; // Ne peut pas lier ce participant aux résultats
+
+    const participantResultsForThisBlock = sessionResults.filter(r =>
+      r.participantIdBoitier === deviceSerialNumber &&
+      questionsInThisNumericBlock.some(q => q.id === r.questionId) // Vérifie que la question est bien de CE bloc numérique
+    );
+
+    // On ne compte un participant pour la moyenne que s'il a des résultats pour ce bloc
+    if (participantResultsForThisBlock.length > 0) {
+      participantsWithResultsOnBlock++;
+      const scoreForParticipantOnBlock = calculateParticipantScore(
+        participantResultsForThisBlock,
+        questionsInThisNumericBlock // Calcule le score basé sur les questions de CE bloc uniquement
+      );
+      totalScoreSumOnBlock += scoreForParticipantOnBlock;
+
+      if (scoreForParticipantOnBlock >= 50) { // Seuil de réussite pour le bloc à 50%
+        successfulParticipantsOnBlockCount++;
+      }
+    } else if (numQuestionsInBlock > 0) {
+      // Si le bloc a des questions mais que le participant n'a aucun résultat pour ces questions,
+      // on le compte quand même pour la moyenne des scores (avec un score de 0 implicite pour ce bloc)
+      // et pour le taux de réussite (comme un échec).
+      // Cela dépend de la définition : est-ce que le taux de réussite est sur ceux qui ont répondu, ou tous ceux qui ont "vu" le bloc?
+      // Actuellement, calculateParticipantScore renverra 0 si participantResultsForThisBlock est vide et questionsInThisNumericBlock n'est pas vide.
+      // Pour être explicite, si un participant n'a pas de résultats pour un bloc qui a des questions, son score sur ce bloc est 0.
+      participantsWithResultsOnBlock++; // Il a "participé" au bloc, même sans répondre.
+      // totalScoreSumOnBlock += 0; // implicite
+      // successfulParticipantsOnBlockCount += 0; // implicite
+    }
+  });
+
+  const averageScoreOnBlock = participantsWithResultsOnBlock > 0
+    ? totalScoreSumOnBlock / participantsWithResultsOnBlock
+    : 0;
+
+  // Taux de réussite basé sur le nombre total de participants à la session,
+  // ou sur participantsWithResultsOnBlock ?
+  // Le plan d'origine pour BlockPerformanceStats disait "% de participants ayant "réussi" ce bloc"
+  // Cela suggère de baser sur le nombre de participants qui ont effectivement eu des résultats pour ce bloc.
+  // Si on veut sur tous les participants de la session: session.participants.length
+  const successRateOnBlock = participantsWithResultsOnBlock > 0 // Ou session.participants.length si définition différente
+    ? (successfulParticipantsOnBlockCount / participantsWithResultsOnBlock) * 100
+    : 0;
+
+  return {
+    blocId: targetNumericBlocId,
+    blocCode: blocInfo.code_bloc,
+    themeName: themeInfo.nom_complet,
+    questionsInBlockCount: numQuestionsInBlock,
+    averageScoreOnBlock: parseFloat(averageScoreOnBlock.toFixed(1)), // Garder une décimale
+    successRateOnBlock: parseFloat(successRateOnBlock.toFixed(0)),
+  };
+};
+
+
+/**
  * Calcule les statistiques globales pour un bloc de questions spécifique à travers toutes les sessions.
  * @param targetBlocId - L'ID numérique du bloc à analyser.
  * @param allSessions - Toutes les sessions.
@@ -324,12 +452,27 @@ export const calculateBlockStats = (
 // --- Stats par Bloc pour UNE session spécifique ---
 
 export interface BlockPerformanceStats {
-  blockTheme: string;
-  blockId: string;
+  blockTheme: string; // Ancien identifiant textuel du thème
+  blockId: string;    // Ancien identifiant textuel du bloc (ex: "A")
   averageScoreStringOnBlock: string; // Format "X.Y/Z", ex: "32.5/50"
   successRateOnBlock: number;  // % de participants ayant "réussi" ce bloc (score >= 50% sur les q° du bloc)
   participantsCountInSession: number;   // Nb de participants dans CETTE session (ayant donc eu ce bloc)
   questionsInBlockCount: number; // Nombre de questions composant ce bloc dans cette session
+}
+
+// Interface pour les questions enrichies avec le nom du thème résolu (déjà définie plus haut)
+// interface QuestionWithResolvedTheme extends QuestionWithId {
+//   resolvedThemeName?: string;
+// }
+
+
+export interface NumericBlockPerformanceStats {
+  blocId: number; // L'ID numérique du bloc
+  blocCode: string; // Le code du bloc (ex: R489PR_A)
+  themeName: string; // Le nom complet du thème parent
+  questionsInBlockCount: number; // Nombre de questions de ce bloc DANS CETTE SESSION
+  averageScoreOnBlock: number; // Score moyen des participants sur ce bloc (en pourcentage)
+  successRateOnBlock: number;  // % de participants ayant "réussi" ce bloc (score >= 50%)
 }
 
 /**

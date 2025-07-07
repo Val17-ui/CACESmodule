@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions, getResultsForSession, getQuestionsForSessionBlocks } from '../../db';
-import { Session, Participant, SessionResult, QuestionWithId } from '../../types';
+import { getAllSessions, getResultsForSession, getQuestionsForSessionBlocks, getAllReferentiels, getReferentialById } from '../../db'; // Ajout de getAllReferentiels, getReferentialById
+import { Session, Participant, SessionResult, QuestionWithId, Referential } from '../../types'; // Ajout de Referential
 import {
   Table,
   TableHeader,
@@ -21,18 +21,36 @@ interface ProcessedSession extends Session {
   participantSuccess?: boolean;
 }
 
+interface SessionParticipation {
+  key: string; // Clé unique pour la ligne, ex: `session-${sessionId}-participant-${participantRef.assignedGlobalDeviceId}`
+  participantDisplayId: string; // Pour l'affichage, si idBoitier n'est pas sur Participant
+  participantRef: Participant;
+  sessionName: string;
+  sessionDate: string;
+  referentialName: string;
+}
+
 const ParticipantReport = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [allReferentiels, setAllReferentiels] = useState<Referential[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
   const [processedParticipantSessions, setProcessedParticipantSessions] = useState<ProcessedSession[]>([]);
 
+  const referentialMap = useMemo(() => {
+    return new Map(allReferentiels.map(ref => [ref.id, ref.nom_complet]));
+  }, [allReferentiels]);
+
   useEffect(() => {
-    const fetchSessions = async () => {
-      const allSessions = await getAllSessions();
-      setSessions(allSessions);
+    const fetchInitialData = async () => {
+      const [fetchedSessions, fetchedReferentiels] = await Promise.all([
+        getAllSessions(),
+        getAllReferentiels()
+      ]);
+      setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+      setAllReferentiels(fetchedReferentiels);
     };
-    fetchSessions();
+    fetchInitialData();
   }, []);
 
   useEffect(() => {
@@ -58,30 +76,42 @@ const ParticipantReport = () => {
       }
     };
     processSessions();
-  }, [selectedParticipant, sessions]);
+  }, [selectedParticipant, sessions]); // Potentiellement ajouter getQuestionsForSessionBlocks si sa définition change
 
-  const allParticipants = useMemo(() => {
-    const participantMap = new Map<string, { participant: Participant; sessionCount: number }>();
+  const allSessionParticipations = useMemo(() => {
+    const participations: SessionParticipation[] = [];
     sessions.forEach(session => {
-      session.participants?.forEach(p => {
-        const key = `${p.nom}-${p.prenom}`;
-        if (participantMap.has(key)) {
-          participantMap.get(key)!.sessionCount++;
-        } else {
-          participantMap.set(key, { participant: p, sessionCount: 1 });
-        }
+      if (!session.id) return; // Assurer que la session a un ID
+      session.participants?.forEach((p, index) => {
+        // Utiliser assignedGlobalDeviceId ou un index pour la clé si assignedGlobalDeviceId est null
+        const participantKeyPart = p.assignedGlobalDeviceId ? p.assignedGlobalDeviceId.toString() : `idx-${index}`;
+        participations.push({
+          key: `session-${session.id}-participant-${participantKeyPart}`,
+          participantRef: p,
+          participantDisplayId: p.identificationCode || `Boîtier ID ${p.assignedGlobalDeviceId || 'N/A'}`, // Exemple d'ID affichable
+          sessionName: session.nomSession,
+          sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
+          referentialName: session.referentielId ? (referentialMap.get(session.referentielId) || 'N/A') : 'N/A',
+        });
       });
     });
-    return Array.from(participantMap.values());
-  }, [sessions]);
+    return participations;
+  }, [sessions, referentialMap]);
 
-  const filteredParticipants = useMemo(() => {
-    return allParticipants.filter(({ participant }) => 
-      `${participant.prenom} ${participant.nom}`.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredSessionParticipations = useMemo(() => {
+    if (!searchTerm) {
+      return allSessionParticipations;
+    }
+    return allSessionParticipations.filter(participation =>
+      participation.participantRef.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      participation.participantRef.prenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      participation.sessionName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      participation.referentialName.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [allParticipants, searchTerm]);
+  }, [allSessionParticipations, searchTerm]);
 
   const handleSelectParticipant = (participant: Participant) => {
+    // La sélection d'un participant pour voir ses détails reste basée sur l'objet Participant
     setSelectedParticipant(participant);
   };
 
@@ -165,20 +195,30 @@ const ParticipantReport = () => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Prénom</TableHead>
-            <TableHead>Nom</TableHead>
-            <TableHead className="text-center">Sessions Participées</TableHead>
+            <TableHead>Participant</TableHead>
+            <TableHead>Session</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Référentiel</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredParticipants.map(({ participant, sessionCount }) => (
-            <TableRow key={`${participant.nom}-${participant.prenom}`} onClick={() => handleSelectParticipant(participant)} className="cursor-pointer">
-              <TableCell>{participant.prenom}</TableCell>
-              <TableCell>{participant.nom}</TableCell>
-              <TableCell className="text-center">{sessionCount}</TableCell>
+          {filteredSessionParticipations.map((participation) => (
+            <TableRow
+              key={participation.key}
+              onClick={() => handleSelectParticipant(participation.participantRef)}
+              className="cursor-pointer hover:bg-gray-50"
+            >
+              <TableCell>{participation.participantRef.prenom} {participation.participantRef.nom}</TableCell>
+              <TableCell>{participation.sessionName}</TableCell>
+              <TableCell>{participation.sessionDate}</TableCell>
+              <TableCell>
+                <Badge variant="secondary">{participation.referentialName}</Badge>
+              </TableCell>
               <TableCell className="text-right">
-                <Button variant="ghost" onClick={() => handleSelectParticipant(participant)}>Détails</Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleSelectParticipant(participation.participantRef); }}>
+                  Voir l'historique du participant
+                </Button>
               </TableCell>
             </TableRow>
           ))}

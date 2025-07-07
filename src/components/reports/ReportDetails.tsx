@@ -8,14 +8,25 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { getResultsForSession, getQuestionsByIds, getTrainerById, getReferentialById, getThemeById, getBlocById, getAllVotingDevices } from '../../db'; // Ajout de getAllVotingDevices
+import {
+  getResultsForSession,
+  getQuestionsByIds,
+  getTrainerById,
+  getReferentialById,
+  getThemeById,
+  getBlocById,
+  getAllVotingDevices,
+  getAllThemes, // Ajouté
+  getAllBlocs // Ajouté
+} from '../../db';
 import {
   calculateParticipantScore,
   calculateThemeScores,
   determineIndividualSuccess,
-  // calculateQuestionSuccessRate, // Retiré
-  calculateBlockPerformanceForSession, // Ajouté
-  BlockPerformanceStats // Ajouté
+  calculateBlockPerformanceForSession, // Gardé pour l'instant, mais sera remplacé/supprimé
+  BlockPerformanceStats, // Gardé pour l'instant
+  calculateNumericBlockPerformanceForSession, // Ajouté
+  NumericBlockPerformanceStats // Ajouté
 } from '../../utils/reportCalculators';
 
 type ReportDetailsProps = {
@@ -27,11 +38,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
   const [questionsForThisSession, setQuestionsForThisSession] = useState<QuestionWithId[]>([]);
-  const [blockStats, setBlockStats] = useState<BlockPerformanceStats[]>([]);
+  const [blockStats, setBlockStats] = useState<NumericBlockPerformanceStats[]>([]); // Changement de type
   const [trainerName, setTrainerName] = useState<string>('N/A');
   const [referentialName, setReferentialName] = useState<string>('N/A');
   const [themeNames, setThemeNames] = useState<string[]>([]);
   const [votingDevices, setVotingDevices] = useState<VotingDevice[]>([]);
+  const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
+  const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
 
   // Utiliser session.participants directement
   const participants = session.participants || [];
@@ -44,8 +57,14 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     const fetchData = async () => {
       if (session.id) {
         // Charger tous les boîtiers de vote
-        const allVotingDevices = await getAllVotingDevices();
-        setVotingDevices(allVotingDevices);
+        const allVotingDevicesData = await getAllVotingDevices();
+        setVotingDevices(allVotingDevicesData);
+
+        // Charger tous les thèmes et blocs de la DB
+        const allThemesData = await getAllThemes();
+        setAllThemesDb(allThemesData);
+        const allBlocsData = await getAllBlocs();
+        setAllBlocsDb(allBlocsData);
 
         // Récupérer le nom du formateur
         if (session.trainerId) {
@@ -57,10 +76,16 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         if (session.referentielId) {
           console.log('[ReportDetails] session.referentielId:', session.referentielId);
           const referential = await getReferentialById(session.referentielId);
-          console.log('[ReportDetails] Fetched referential:', referential);
-          if (referential) setReferentialName(referential.nom_complet);
+          console.log('[ReportDetails] Fetched referential (full object):', JSON.stringify(referential));
+          if (referential && referential.nom_complet) {
+            setReferentialName(referential.nom_complet);
+          } else {
+            console.warn('[ReportDetails] Referential object or nom_complet is missing:', referential);
+            setReferentialName('Référentiel non trouvé');
+          }
         } else {
           console.log('[ReportDetails] session.referentielId is undefined or null');
+          setReferentialName('N/A');
         }
 
         // Récupérer les noms des thèmes
@@ -122,39 +147,52 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   }, [session]); // Ajout de getBlocById et getThemeById aux dépendances si elles changent, mais elles sont stables.
 
   useEffect(() => {
-    // Calculer les stats par bloc une fois que session, sessionResults et questionsForThisSession sont disponibles
-    // Note: session.selectionBlocs est l'ancienne structure, devrait utiliser selectedBlocIds si pertinent ici.
-    // Pour l'instant, cette partie du code n'est pas directement modifiée par cette tâche.
-    if (session && session.selectedBlocIds && sessionResults.length > 0 && questionsForThisSession.length > 0) {
-      const calculatedBlockStats: BlockPerformanceStats[] = [];
-      // La logique de calcul des stats par bloc doit être revue pour utiliser selectedBlocIds et la nouvelle structure.
-      // Pour l'instant, on se concentre sur la correction des scores par thème.
-      // Exemple de comment on pourrait itérer sur selectedBlocIds si nécessaire:
-      // session.selectedBlocIds.forEach(blocId => { ... });
-      // La fonction calculateBlockPerformanceForSession attendait {theme, blockId} textuels.
-      // Cela devra être adapté dans une autre étape si ce rapport par bloc est conservé/modifié.
-      console.log('[ReportDetails] session.questionMappings for blockStats:', session.questionMappings);
+    // Calculer les stats par bloc une fois que session, sessionResults, questionsForThisSession, deviceMap, allThemesDb et allBlocsDb sont disponibles
+    if (
+      session &&
+      session.selectedBlocIds &&
+      sessionResults.length > 0 && // ou session.participants.length > 0 si on veut afficher même sans résultats
+      questionsForThisSession.length > 0 && // Nécessaire pour filtrer les questions du bloc
+      deviceMap.size > 0 && // S'assurer que deviceMap est prête
+      allThemesDb.length > 0 && // S'assurer que les thèmes sont chargés
+      allBlocsDb.length > 0 // S'assurer que les blocs sont chargés
+    ) {
+      const calculatedBlockStats: NumericBlockPerformanceStats[] = [];
+      console.log('[ReportDetails] Calculating NumericBlockPerformance for selectedBlocIds:', session.selectedBlocIds);
 
-      // Temporairement, pour éviter une erreur si session.selectionBlocs (ancienne structure) n'est plus là :
-      const currentSelectionForBlockStats = session.questionMappings?.map(qm => ({theme: qm.theme, blockId: qm.blockId})) || [];
-      const uniqueLegacyBlocks = Array.from(new Set(currentSelectionForBlockStats.map(b => `${b.theme}-${b.blockId}`)))
-        .map(key => {
-          const [theme, blockId] = key.split('-');
-          return {theme, blockId};
-        });
-      console.log('[ReportDetails] uniqueLegacyBlocks for blockStats:', uniqueLegacyBlocks);
+      session.selectedBlocIds.forEach(blocId => {
+        if (blocId === undefined || blocId === null) return; // Skip si un ID de bloc est invalide
 
-      uniqueLegacyBlocks.forEach(blockSelection => {
-        const stats = calculateBlockPerformanceForSession(blockSelection, session, sessionResults, deviceMap); // Ajout de deviceMap
+        const stats = calculateNumericBlockPerformanceForSession(
+          blocId,
+          session,
+          sessionResults,
+          questionsForThisSession as (QuestionWithId & { resolvedThemeName?: string })[],
+          deviceMap,
+          allThemesDb,
+          allBlocsDb
+        );
         if (stats) {
           calculatedBlockStats.push(stats);
+        } else {
+          console.log(`[ReportDetails] No stats returned for numeric blocId ${blocId}`);
         }
       });
-      setBlockStats(calculatedBlockStats);
+      setBlockStats(calculatedBlockStats.sort((a,b) => a.themeName.localeCompare(b.themeName) || a.blocCode.localeCompare(b.blocCode)));
     } else {
+      // Log pour déboguer pourquoi on n'entre pas dans le calcul
+      // console.log('[ReportDetails] Skipping blockStats calculation due to missing data:', {
+      //   hasSession: !!session,
+      //   hasSelectedBlocIds: !!session?.selectedBlocIds?.length,
+      //   hasSessionResults: sessionResults.length > 0,
+      //   hasQuestions: questionsForThisSession.length > 0,
+      //   hasDeviceMap: deviceMap.size > 0,
+      //   hasAllThemesDb: allThemesDb.length > 0,
+      //   hasAllBlocsDb: allBlocsDb.length > 0,
+      // });
       setBlockStats([]);
     }
-  }, [session, sessionResults, questionsForThisSession, deviceMap]); // Ajout de deviceMap aux dépendances
+  }, [session, sessionResults, questionsForThisSession, deviceMap, allThemesDb, allBlocsDb]); // Ajout de deviceMap, allThemesDb, allBlocsDb aux dépendances
 
 
   const handleExportPDF = () => {
@@ -313,6 +351,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     }
   };
 
+  console.log('[ReportDetails] Final referentialName before render:', referentialName);
 
   return (
     <div>
@@ -340,8 +379,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <span>Date : {formatDate(session.dateSession)}</span>
                 </div>
                 <div className="flex items-center text-sm">
-                  <BookOpen size={18} className="text-gray-400 mr-2" />
-                  <span>Référentiel : {referentialName}</span>
+                  {/* <BookOpen size={18} className="text-gray-400 mr-2" />
+                  <span>Référentiel : </span> */}
+                  <span>{referentialName}</span>
                 </div>
                 {themeNames.length > 0 && (
                   <div className="flex items-start text-sm"> {/* items-start pour alignement multiligne */}
@@ -444,24 +484,24 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         </Card>
 
         {blockStats.length > 0 && (
-          <Card title="Performances par Bloc de Questions (pour cette session)" className="mb-6">
+          <Card title="Performances par Bloc de Questions (utilisés dans cette session)" className="mb-6">
             <div className="flex items-center mb-3 text-gray-600">
                 <Layers size={18} className="mr-2" />
                 <h3 className="text-md font-semibold">
-                Détail par bloc utilisé dans cette session
+                Détail par bloc
                 </h3>
             </div>
             <div className="space-y-4">
               {blockStats.map(bs => (
-                <div key={`${bs.blockTheme}-${bs.blockId}`} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
+                <div key={bs.blocId} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
                   <h4 className="text-sm font-semibold text-gray-800 mb-1">
-                    Thème: <span className="font-normal">{bs.blockTheme}</span> - Bloc: <span className="font-normal">{bs.blockId}</span>
+                    Thème: <span className="font-normal">{bs.themeName}</span> - Bloc: <span className="font-normal">{bs.blocCode}</span>
                     <span className="text-xs text-gray-500 ml-2">({bs.questionsInBlockCount} questions)</span>
                   </h4>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <div>
                         <span className="text-gray-500">Score moyen sur bloc:</span>
-                        <strong className="ml-1 text-gray-700">{bs.averageScoreStringOnBlock}</strong>
+                        <strong className="ml-1 text-gray-700">{bs.averageScoreOnBlock.toFixed(1)}%</strong>
                     </div>
                     <div>
                         <span className="text-gray-500">Taux de réussite du bloc:</span>
