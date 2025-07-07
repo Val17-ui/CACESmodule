@@ -1,10 +1,11 @@
-import React from 'react';
-import { CalendarClock, ClipboardList, Play, Download, AlertTriangle } from 'lucide-react'; // Ajout AlertTriangle pour erreurs
+import React, { useState, useEffect } from 'react'; // Ajout useState, useEffect
+import { CalendarClock, ClipboardList, Play, Download, AlertTriangle } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import { Session as DBSession, CACESReferential } from '../../types';
-import { saveAs } from 'file-saver'; // Assurer que file-saver est installé et importé
+import { Session as DBSession, CACESReferential, Referential } from '../../types'; // Ajout Referential
+import { saveAs } from 'file-saver';
+import { StorageManager } from '../../services/StorageManager'; // Ajout StorageManager
 
 type SessionsListProps = {
   sessions: DBSession[];
@@ -17,6 +18,20 @@ const SessionsList: React.FC<SessionsListProps> = ({
   onManageSession,
   onStartExam,
 }) => {
+  const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
+
+  useEffect(() => {
+    const loadReferentiels = async () => {
+      try {
+        const refs = await StorageManager.getAllReferentiels();
+        setReferentielsData(refs);
+      } catch (error) {
+        console.error("Erreur chargement des référentiels pour SessionsList:", error);
+      }
+    };
+    loadReferentiels();
+  }, []);
+
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'Date non définie';
     try {
@@ -122,7 +137,16 @@ const SessionsList: React.FC<SessionsListProps> = ({
                     {formatDate(session.dateSession)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant="primary">{session.referentiel as CACESReferential || 'N/A'}</Badge> {/* Modifié: info -> primary */}
+                    {(() => {
+                      if (session.referentielId && referentielsData.length > 0) {
+                        const refObj = referentielsData.find(r => r.id === session.referentielId);
+                        return <Badge variant="primary">{refObj ? refObj.code : `ID: ${session.referentielId}`}</Badge>;
+                      }
+                      if ((session as any).referentiel) { // Fallback pour anciennes données
+                        return <Badge variant="secondary">{(session as any).referentiel}</Badge>;
+                      }
+                      return <Badge variant="default">N/A</Badge>;
+                    })()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">
                     {session.participants?.length ?? 0}
