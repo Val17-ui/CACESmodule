@@ -34,22 +34,28 @@ export const calculateParticipantScore = (
  * @param sessionQuestions - Les questions de la session.
  * @returns Un objet avec les scores pour chaque thématique.
  */
+// Ajout d'une interface pour les questions enrichies avec le nom du thème résolu
+interface QuestionWithResolvedTheme extends QuestionWithId {
+  resolvedThemeName?: string;
+}
+
 export const calculateThemeScores = (
   participantResults: SessionResult[],
-  sessionQuestions: QuestionWithId[]
+  sessionQuestions: QuestionWithResolvedTheme[] // Utilise le type enrichi
 ): { [theme: string]: number } => {
   const themeScores: { [theme: string]: { correct: number; total: number } } = {};
 
   sessionQuestions.forEach(question => {
-    const theme = question.theme;
-    if (!themeScores[theme]) {
-      themeScores[theme] = { correct: 0, total: 0 };
+    // Utiliser resolvedThemeName, avec un fallback si jamais il n'est pas là
+    const themeName = question.resolvedThemeName || 'Thème non spécifié';
+    if (!themeScores[themeName]) {
+      themeScores[themeName] = { correct: 0, total: 0 };
     }
-    themeScores[theme].total++; // Compte toutes les questions pour le total
+    themeScores[themeName].total++; // Compte toutes les questions pour le total
 
     const result = participantResults.find(r => r.questionId === question.id);
     if (result && result.isCorrect) {
-      themeScores[theme].correct++;
+      themeScores[themeName].correct++;
     }
   });
 

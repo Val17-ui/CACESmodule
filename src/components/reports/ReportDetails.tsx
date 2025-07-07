@@ -1,12 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
-import { AlertTriangle, BarChart, UserCheck, Calendar, Download, Layers } from 'lucide-react'; // Ajout de Layers
-import { Session, Participant, SessionResult, QuestionWithId, QuestionMapping } from '../../types'; // Ajout de QuestionMapping
+import { UserCheck, Calendar, Download, Layers, MapPin, User, BookOpen, ListChecks } from 'lucide-react'; // Ajout de BookOpen, ListChecks
+import { Session, Participant, SessionResult, QuestionWithId, QuestionMapping, Trainer, Referential, Theme, Bloc } from '../../types'; // Ajout de Referential, Theme, Bloc
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { getResultsForSession, getQuestionsByIds } from '../../db'; // getAllSessions, getAllResults, getAllQuestions sont retires si non utilises pour stats par bloc de session
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+import { getResultsForSession, getQuestionsByIds, getTrainerById, getReferentialById, getThemeById, getBlocById } from '../../db'; // Ajout de getReferentialById, getThemeById, getBlocById
 import {
   calculateParticipantScore,
   calculateThemeScores,
@@ -26,6 +28,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
   const [questionsForThisSession, setQuestionsForThisSession] = useState<QuestionWithId[]>([]);
   const [blockStats, setBlockStats] = useState<BlockPerformanceStats[]>([]);
+  const [trainerName, setTrainerName] = useState<string>('N/A');
+  const [referentialName, setReferentialName] = useState<string>('N/A');
+  const [themeNames, setThemeNames] = useState<string[]>([]);
 
   // Utiliser session.participants directement
   const participants = session.participants || [];
@@ -33,6 +38,35 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   useEffect(() => {
     const fetchData = async () => {
       if (session.id) {
+        // Récupérer le nom du formateur
+        if (session.trainerId) {
+          const trainer = await getTrainerById(session.trainerId);
+          if (trainer) setTrainerName(trainer.name);
+        }
+
+        // Récupérer le nom du référentiel
+        if (session.referentielId) {
+          const referential = await getReferentialById(session.referentielId);
+          if (referential) setReferentialName(referential.nom_complet);
+        }
+
+        // Récupérer les noms des thèmes
+        if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
+          const uniqueThemeIds = new Set<number>();
+          for (const blocId of session.selectedBlocIds) {
+            const bloc = await getBlocById(blocId);
+            if (bloc && bloc.theme_id) {
+              uniqueThemeIds.add(bloc.theme_id);
+            }
+          }
+          const fetchedThemeNames = [];
+          for (const themeId of uniqueThemeIds) {
+            const theme = await getThemeById(themeId);
+            if (theme) fetchedThemeNames.push(theme.nom_complet);
+          }
+          setThemeNames(fetchedThemeNames.sort());
+        }
+
         const results = await getResultsForSession(session.id);
         setSessionResults(results);
 
@@ -42,8 +76,24 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
             .filter((id): id is number => id !== null && id !== undefined);
 
           if (questionIds.length > 0) {
-            const questions = await getQuestionsByIds(questionIds);
-            setQuestionsForThisSession(questions);
+            const baseQuestions = await getQuestionsByIds(questionIds);
+            // Enrichir les questions avec le nom du thème résolu
+            const enrichedQuestions = await Promise.all(
+              baseQuestions.map(async (question) => {
+                let resolvedThemeName = 'Thème non spécifié';
+                if (question.blocId) {
+                  const bloc = await getBlocById(question.blocId);
+                  if (bloc && bloc.theme_id) {
+                    const theme = await getThemeById(bloc.theme_id);
+                    if (theme) {
+                      resolvedThemeName = theme.nom_complet;
+                    }
+                  }
+                }
+                return { ...question, resolvedThemeName };
+              })
+            );
+            setQuestionsForThisSession(enrichedQuestions);
           } else {
             setQuestionsForThisSession([]);
           }
@@ -56,13 +106,30 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       }
     };
     fetchData();
-  }, [session]);
+  }, [session]); // Ajout de getBlocById et getThemeById aux dépendances si elles changent, mais elles sont stables.
 
   useEffect(() => {
     // Calculer les stats par bloc une fois que session, sessionResults et questionsForThisSession sont disponibles
-    if (session && session.selectionBlocs && sessionResults.length > 0 && questionsForThisSession.length > 0) {
+    // Note: session.selectionBlocs est l'ancienne structure, devrait utiliser selectedBlocIds si pertinent ici.
+    // Pour l'instant, cette partie du code n'est pas directement modifiée par cette tâche.
+    if (session && session.selectedBlocIds && sessionResults.length > 0 && questionsForThisSession.length > 0) {
       const calculatedBlockStats: BlockPerformanceStats[] = [];
-      session.selectionBlocs.forEach(blockSelection => {
+      // La logique de calcul des stats par bloc doit être revue pour utiliser selectedBlocIds et la nouvelle structure.
+      // Pour l'instant, on se concentre sur la correction des scores par thème.
+      // Exemple de comment on pourrait itérer sur selectedBlocIds si nécessaire:
+      // session.selectedBlocIds.forEach(blocId => { ... });
+      // La fonction calculateBlockPerformanceForSession attendait {theme, blockId} textuels.
+      // Cela devra être adapté dans une autre étape si ce rapport par bloc est conservé/modifié.
+
+      // Temporairement, pour éviter une erreur si session.selectionBlocs (ancienne structure) n'est plus là :
+      const currentSelectionForBlockStats = session.questionMappings?.map(qm => ({theme: qm.theme, blockId: qm.blockId})) || [];
+      const uniqueLegacyBlocks = Array.from(new Set(currentSelectionForBlockStats.map(b => `${b.theme}-${b.blockId}`)))
+        .map(key => {
+          const [theme, blockId] = key.split('-');
+          return {theme, blockId};
+        });
+
+      uniqueLegacyBlocks.forEach(blockSelection => {
         // Note: calculateBlockPerformanceForSession attend `allQuestions` pour le mapping.
         // Ici, `questionsForThisSession` contient déjà les questions pertinentes pour la session.
         // Si `calculateBlockPerformanceForSession` a besoin de ALL questions de la DB pour une raison X,
@@ -121,10 +188,128 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
   // La section pour questionSuccessRates est supprimée et remplacée par blockStats plus bas
 
+  const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+
+  // Fonction pour générer le PDF d'un participant
+  // (Contenu HTML et style très simplifiés pour cette étape)
+  const generateParticipantPDF = async (
+    participant: Participant & { score?: number; reussite?: boolean },
+    currentSession: Session,
+    questionsForSession: QuestionWithId[], // questions déjà enrichies avec resolvedThemeName
+    sessionTrainerName: string,
+    sessionReferentialName: string
+  ): Promise<{ filename: string; data: Blob }> => {
+    const { nom, prenom, score, reussite } = participant;
+    const safeScore = score !== undefined ? score.toFixed(0) : 'N/A';
+    const mention = reussite ? 'Réussi' : 'Ajourné';
+
+    // Récupérer les résultats et scores par thème pour ce participant
+    const participantResults = sessionResults.filter(r => r.participantIdBoitier === participant.idBoitier);
+    const themeScores = calculateThemeScores(participantResults, questionsForSession as any); // Cast car QuestionWithId[] attendu par le type, mais on passe des enrichies
+
+    let reportHtml = `
+      <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px;">
+        <h1 style="font-size: 16px; text-align: center;">Rapport Individuel</h1>
+        <p><strong>Session :</strong> ${currentSession.nomSession}</p>
+        <p><strong>Date :</strong> ${formatDate(currentSession.dateSession)}</p>
+        <p><strong>Lieu :</strong> ${currentSession.location || 'N/A'}</p>
+        <p><strong>Formateur :</strong> ${sessionTrainerName}</p>
+        <p><strong>Référentiel :</strong> ${sessionReferentialName}</p>
+        <hr />
+        <h2 style="font-size: 14px;">Participant : ${prenom} ${nom}</h2>
+        <p><strong>Score Global :</strong> ${safeScore} / 100</p>
+        <p><strong>Mention :</strong> ${mention}</p>
+        <h3 style="font-size: 12px;">Scores par Thème :</h3>
+        <ul>
+    `;
+    for (const theme in themeScores) {
+      reportHtml += `<li>${theme}: ${themeScores[theme].toFixed(0)} / 100</li>`;
+    }
+    reportHtml += `</ul>`;
+
+    // Ajout simplifié des questions/réponses (sans détails pour l'instant pour garder la fonction gérable)
+    reportHtml += `<h3 style="font-size: 12px; margin-top: 15px;">Détail des Réponses (simplifié) :</h3>`;
+    questionsForSession.forEach(q => {
+      const result = participantResults.find(r => r.questionId === q.id);
+      reportHtml += `
+        <div style="margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #eee;">
+          <p style="margin: 2px 0;"><strong>Thème :</strong> ${q.resolvedThemeName || 'N/A'}</p>
+          <p style="margin: 2px 0;"><strong>Question :</strong> ${q.text}</p>
+          <p style="margin: 2px 0;"><strong>Réponse donnée :</strong> ${result ? result.answer : 'Non répondu'}</p>
+          <p style="margin: 2px 0;"><strong>Correction :</strong> ${q.correctAnswer}</p>
+          <p style="margin: 2px 0;"><strong>Points :</strong> ${result && result.isCorrect ? (result.pointsObtained || 1) : 0}</p>
+        </div>
+      `;
+    });
+
+    reportHtml += `</div>`;
+
+    const element = document.createElement('div');
+    element.innerHTML = reportHtml;
+    document.body.appendChild(element); // Nécessaire pour html2canvas pour calculer les styles
+
+    const canvas = await html2canvas(element, { scale: 2 });
+    const imgData = canvas.toDataURL('image/png');
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, 'PNG', 10, 10, pdfWidth - 20, pdfHeight - 20); // Marges de 10mm
+
+    document.body.removeChild(element); // Nettoyage
+
+    return {
+      filename: `Rapport_${currentSession.nomSession}_${prenom}_${nom}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_'),
+      data: pdf.output('blob')
+    };
+  };
+
+  const handleExportAllParticipantsPDF = async () => {
+    if (!session || participantCalculatedData.length === 0) return;
+    setIsGeneratingZip(true);
+    const zip = new JSZip();
+
+    for (const participant of participantCalculatedData) {
+      // On s'assure que participantCalculatedData contient bien les infos de Participant (idBoitier etc.)
+      // et les infos calculées (score, reussite).
+      // Le type de participant dans participantCalculatedData est déjà Participant & { score, reussite }
+      try {
+        const pdfData = await generateParticipantPDF(
+          participant,
+          session,
+          questionsForThisSession as (QuestionWithId & { resolvedThemeName?: string })[], // Cast pour correspondre
+          trainerName,
+          referentialName
+        );
+        zip.file(pdfData.filename, pdfData.data);
+      } catch (error) {
+        console.error(`Erreur lors de la génération du PDF pour ${participant.nom} ${participant.prenom}:`, error);
+        // On pourrait ajouter une notification à l'utilisateur ici
+      }
+    }
+
+    try {
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      saveAs(zipBlob, `Rapports_Session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.zip`);
+    } catch (error) {
+      console.error("Erreur lors de la génération du fichier ZIP:", error);
+    } finally {
+      setIsGeneratingZip(false);
+    }
+  };
+
+
   return (
     <div>
-      <div className="flex justify-end mb-4">
-        <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter en PDF</Button>
+      <div className="flex justify-end mb-4 space-x-2">
+        <Button
+          onClick={handleExportAllParticipantsPDF}
+          icon={<Download size={16}/>}
+          disabled={isGeneratingZip}
+        >
+          {isGeneratingZip ? 'Génération en cours...' : 'Télécharger Rapports Participants (ZIP)'}
+        </Button>
+        <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter Rapport Session (PDF)</Button>
       </div>
       <div ref={reportRef} className="p-4">
         <Card title="Résumé de la session" className="mb-6">
@@ -140,13 +325,29 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <span>Date : {formatDate(session.dateSession)}</span>
                 </div>
                 <div className="flex items-center text-sm">
-                  <Badge variant="primary" className="mr-2">{session.referentiel}</Badge>
-                  <span>Référentiel CACES</span>
+                  <BookOpen size={18} className="text-gray-400 mr-2" />
+                  <span>Référentiel : {referentialName}</span>
                 </div>
+                {themeNames.length > 0 && (
+                  <div className="flex items-start text-sm"> {/* items-start pour alignement multiligne */}
+                    <ListChecks size={18} className="text-gray-400 mr-2 mt-0.5" />
+                    <span className="flex-1">Thèmes abordés : {themeNames.join(', ')}</span>
+                  </div>
+                )}
                 <div className="flex items-center text-sm">
                   <UserCheck size={18} className="text-gray-400 mr-2" />
                   <span>Participants : {session.participants?.length || 0}</span>
                 </div>
+                <div className="flex items-center text-sm">
+                  <User size={18} className="text-gray-400 mr-2" />
+                  <span>Formateur : {trainerName}</span>
+                </div>
+                {session.location && (
+                  <div className="flex items-center text-sm">
+                    <MapPin size={18} className="text-gray-400 mr-2" />
+                    <span>Lieu : {session.location}</span>
+                  </div>
+                )}
               </div>
             </div>
             
