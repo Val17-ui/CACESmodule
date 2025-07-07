@@ -76,11 +76,11 @@ interface AnomalyResolutionModalProps {
     finalResultsToImport: ExtractedResultFromXml[],
     expectedIssueResolutions: ExpectedIssueResolution[],
     unknownDeviceResolutions: UnknownDeviceResolution[],
-    updatedParticipantsData?: any[]
+    updatedParticipantsData?: any[] // Ce paramètre semble inutilisé dans l'appel onResolve actuel
   ) => void;
   onCancel: () => void;
   availableUnknownsForAggregation?: Array<{ serialNumber: string, responseCount: number }>;
-  sessionQuestionsCount?: number;
+  // sessionQuestionsCount?: number; // Supprimé car non utilisé
 }
 
 const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
@@ -90,7 +90,7 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
   onResolve,
   onCancel,
   availableUnknownsForAggregation,
-  sessionQuestionsCount,
+  // sessionQuestionsCount, // Supprimé de la déstructuration
 }) => {
   const [expectedIssueResolutions, setExpectedIssueResolutions] = useState<ExpectedIssueResolution[]>([]);
   const [unknownDeviceResolutions, setUnknownDeviceResolutions] = useState<UnknownDeviceResolution[]>([]);
@@ -377,13 +377,8 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
 };
 
 export default AnomalyResolutionModal;
-export type {
-  DetectedAnomalies,
-  ExpectedDeviceWithIssue,
-  UnknownDeviceWithResponses,
-  ExpectedDeviceResponseInfo,
-  ExpectedIssueResolution,
-  UnknownDeviceResolution,
-  ExpectedIssueAction,
-  UnknownDeviceAction,
-};
+// Les types ExpectedIssueResolution, UnknownDeviceResolution, ExpectedIssueAction, UnknownDeviceAction
+// sont importés depuis ../../types et ne doivent pas être réexportés ici.
+// Les types DetectedAnomalies, ExpectedDeviceWithIssue, UnknownDeviceWithResponses, ExpectedDeviceResponseInfo
+// sont définis et exportés au début de ce fichier, donc pas besoin de les réexporter ici non plus.
+// Supprimer cette section d'export pour éviter les conflits.
