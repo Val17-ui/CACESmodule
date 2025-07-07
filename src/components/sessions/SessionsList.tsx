@@ -3,7 +3,7 @@ import { CalendarClock, ClipboardList, Play, Download, AlertTriangle } from 'luc
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import { Session as DBSession, CACESReferential, Referential } from '../../types'; // Ajout Referential
+import { Session as DBSession, Referential } from '../../types'; // Ajout Referential
 import { saveAs } from 'file-saver';
 import { StorageManager } from '../../services/StorageManager'; // Ajout StorageManager
 
@@ -143,7 +143,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
                         return <Badge variant="primary">{refObj ? refObj.code : `ID: ${session.referentielId}`}</Badge>;
                       }
                       if ((session as any).referentiel) { // Fallback pour anciennes données
-                        return <Badge variant="secondary">{(session as any).referentiel}</Badge>;
+                        return <Badge variant="default">{(session as any).referentiel}</Badge>;
                       }
                       return <Badge variant="default">N/A</Badge>;
                     })()}
