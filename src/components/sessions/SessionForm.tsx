@@ -7,7 +7,6 @@ import Badge from '../ui/Badge';
 import { Save, FileUp, UserPlus, Trash2, PackagePlus, AlertTriangle } from 'lucide-react';
 import {
   CACESReferential, // Gardé pour le type de selectedReferential et les options du select
-  referentials,     // Gardé pour les options du select de référentiel
   Session as DBSession,
   Participant as DBParticipantType,
   SessionResult,
@@ -32,7 +31,6 @@ import {
   getGlobalPptxTemplate,
   getAdminSetting,
   getAllTrainers,
-  getDefaultTrainer,
   addBulkSessionQuestions,
   deleteSessionQuestionsBySessionId,
   addBulkSessionBoitiers,
@@ -1329,6 +1327,340 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setResultsFile(null);
   };
 
+  const renderTabNavigation = () => (
+    <div className="mb-6 border-b border-gray-200">
+      <nav className="-mb-px flex space-x-4 sm:space-x-8" aria-label="Tabs">
+        {(Object.keys({ details: 'Détails Session', participants: 'Participants', resultsOrs: 'Résultats & ORS' }) as TabKey[]).map((tabKey) => {
+          const tabLabels: Record<TabKey, string> = {
+            details: 'Détails Session',
+            participants: 'Participants',
+            resultsOrs: 'Résultats & ORS',
+          };
+          return (
+            <button
+              key={tabKey}
+              onClick={() => setActiveTab(tabKey)} // Assurez-vous que activeTab et setActiveTab sont définis (via useState)
+              className={`
+                ${activeTab === tabKey
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
+                whitespace-nowrap py-3 px-2 sm:py-4 sm:px-3 border-b-2 font-medium text-sm
+              `}
+              aria-current={activeTab === tabKey ? 'page' : undefined}
+            >
+              {tabLabels[tabKey]}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+  
+  const renderTabContent = () => {
+    const isReadOnly = editingSessionData?.status === 'completed';
+    const isOrsGeneratedAndNotEditable = !!editingSessionData?.donneesOrs && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
+  
+    switch (activeTab) { // Assurez-vous que activeTab (état) est défini
+      case 'details':
+        return (
+          <Card title="Informations générales" className="mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input
+                label="Nom de la session"
+                placeholder="Ex: Formation CACES R489 - Groupe A"
+                value={sessionName} // Assurez-vous que sessionName (état) est défini
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionName(e.target.value)} // Assurez-vous que setSessionName (état) est défini
+                required
+                disabled={isReadOnly}
+              />
+              <Input
+                label="Date de la session"
+                type="date"
+                value={sessionDate} // Assurez-vous que sessionDate (état) est défini
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)} // Assurez-vous que setSessionDate (état) est défini
+                required
+                disabled={isReadOnly}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              <Select
+                label="Référentiel CACES"
+                options={referentialOptionsFromData} // Assurez-vous que referentialOptionsFromData est défini et peuplé
+                value={selectedReferential} // Assurez-vous que selectedReferential (état) est défini
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                  const newSelectedCode = e.target.value as CACESReferential | '';
+                  setSelectedReferential(newSelectedCode); // Assurez-vous que setSelectedReferential (état) est défini
+                  if (newSelectedCode) {
+                    const refObj = referentielsData.find(r => r.code === newSelectedCode); // Assurez-vous que referentielsData (état) est défini et peuplé
+                    setSelectedReferentialId(refObj?.id || null); // Assurez-vous que setSelectedReferentialId (état) est défini
+                  } else {
+                    setSelectedReferentialId(null);
+                  }
+                }}
+                placeholder="Sélectionner un référentiel"
+                required
+                disabled={!!editingSessionData?.questionMappings || isReadOnly}
+              />
+              <Select
+                label="Formateur"
+                options={trainersList.map((t: Trainer) => ({ value: t.id?.toString() || '', label: t.name }))} // Assurez-vous que trainersList (état) est défini et peuplé
+                value={selectedTrainerId?.toString() || ''} // Assurez-vous que selectedTrainerId (état) est défini
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null)} // Assurez-vous que setSelectedTrainerId (état) est défini
+                placeholder="Sélectionner un formateur"
+                disabled={isReadOnly}
+              />
+            </div>
+            <div className="mt-4">
+              <Input
+                label="Lieu de formation"
+                placeholder="Ex: Centre de formation Paris Nord"
+                value={location} // Assurez-vous que location (état) est défini
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)} // Assurez-vous que setLocation (état) est défini
+                disabled={isReadOnly}
+              />
+            </div>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <textarea
+                rows={3}
+                className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                placeholder="Informations complémentaires..."
+                value={notes} // Assurez-vous que notes (état) est défini
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)} // Assurez-vous que setNotes (état) est défini
+                readOnly={isReadOnly}
+              />
+            </div>
+            {currentSessionDbId && displayedBlockDetails.length > 0 && (
+              <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50 mb-6">
+                <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés:</h4>
+                <ul className="list-disc list-inside pl-2 space-y-1">
+                  {displayedBlockDetails.map((detail, index) => (
+                    <li key={index} className="text-sm text-gray-600">
+                      <span className="font-medium">{detail.themeName}:</span> Bloc {detail.blocName}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Card>
+        );
+      case 'participants':
+        return (
+          <Card title="Participants" className="mb-6">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm text-gray-500">Gérez la liste des participants.</p>
+              <div className="flex space-x-3">
+                 <input
+                  type="file"
+                  id="participant-file-input"
+                  className="hidden"
+                  accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={handleParticipantFileSelect}
+                />
+                <Button
+                  variant="outline"
+                  icon={<FileUp size={16} />}
+                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                  onClick={() => document.getElementById('participant-file-input')?.click()}
+                  title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Importer une liste de participants"}
+                >
+                  Importer Participants
+                </Button>
+                <Button
+                  variant="outline"
+                  icon={<UserPlus size={16} />}
+                  onClick={handleAddParticipant}
+                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                  title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Ajouter un participant"}
+                />
+              </div>
+            </div>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro de boîtier</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Assigné</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Ident.</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Réussite</th>
+                    <th className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {participants.length === 0 ? (
+                    <tr><td className="px-4 py-4 text-center text-sm text-gray-500" colSpan={9}>Aucun participant.</td></tr>
+                  ) : (
+                    participants.map((participant) => (
+                      <tr key={participant.id}>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <Input
+                            type="number"
+                            value={participant.deviceId === null ? '' : participant.deviceId?.toString()}
+                            onChange={(e) => handleParticipantChange(participant.id, 'deviceId', e.target.value === '' ? null : (parseInt(e.target.value,10) || null))}
+                            className="mb-0 w-24 text-center"
+                            placeholder="N/A"
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                          />
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
+                          {(() => {
+                            if (participant.assignedGlobalDeviceId === null || participant.assignedGlobalDeviceId === undefined) {
+                              return <span className="text-gray-500">Non assigné</span>;
+                            }
+                            const assignedDevice = hardwareDevices.find(hd => hd.id === participant.assignedGlobalDeviceId);
+                            if (assignedDevice) {
+                              return assignedDevice.serialNumber; // Afficher le numéro de série
+                            }
+                            return <span className="text-red-500">Boîtier introuvable (ID: {participant.assignedGlobalDeviceId})</span>;
+                          })()}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0" disabled={isReadOnly} />
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <Input value={participant.lastName} onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)} placeholder="Nom" className="mb-0" disabled={isReadOnly} />
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <Input value={participant.organization || ''} onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)} placeholder="Organisation" className="mb-0" disabled={isReadOnly} />
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <Input value={participant.identificationCode || ''} onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)} placeholder="Code" className="mb-0" disabled={isReadOnly} />
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">
+                          {participant.score !== undefined ? `${participant.score}%` : '-'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-center">
+                          {participant.reussite === true && <Badge variant="success">Réussi</Badge>}
+                          {participant.reussite === false && <Badge variant="danger">Échec</Badge>}
+                          {participant.reussite === undefined && <Badge variant="default">-</Badge>}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+                          <Button
+                            variant="ghost"
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                            size="sm"
+                            icon={<Trash2 size={16} />}
+                            onClick={() => handleRemoveParticipant(participant.id)}
+                            title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Supprimer participant"}
+                          />
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {participants.length > 0 && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Attribution boîtiers :</strong> Le numéro de boîtier est utilisé pour identifier les participants. Assurez-vous que chaque numéro est unique et correspond à un boîtier physique configuré dans les paramètres matériels.
+                  Les boîtiers non assignés (N/A) ou incorrectement assignés empêcheront la génération de l'ORS.
+                </p>
+              </div>
+            )}
+          </Card>
+        );
+      case 'resultsOrs':
+        return (
+          <>
+            {currentSessionDbId && (
+          <Card title="Résultats de la Session (Import)" className="mb-6">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.zip contenant ORSession.xml)</label>
+              <Input
+                id="resultsFileInput"
+                type="file"
+                accept=".ors" // Changé de .zip à .ors pour l'expérience utilisateur
+                onChange={handleResultsFileSelect}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                disabled={!editingSessionData?.donneesOrs || isReadOnly}
+              />
+              {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
+            </div>
+            <Button
+              variant="secondary"
+              icon={<FileUp size={16} />}
+              onClick={handleImportResults}
+              disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.donneesOrs}
+            >
+              Importer les Résultats
+            </Button>
+            {!editingSessionData?.donneesOrs && !isReadOnly && (
+               <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
+            )}
+            {isReadOnly && (
+                 <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
+            )}
+            <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
+            {importSummary && (
+              <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
+              </div>
+            )}
+          </div>
+        </Card>
+            )}
+               <Card title="Génération .ORS & PPTX" className="mb-6">
+                <Button
+                    variant="primary"
+                    icon={<PackagePlus size={16} />}
+                    onClick={handleGenerateQuestionnaireAndOrs}
+                    disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
+                    title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
+                           isReadOnly ? "La session est terminée, regénération bloquée." :
+                           (!!editingSessionData?.donneesOrs) ? "Régénérer .ors & PPTX (Attention : ceci écrasera l'ORS existant)" :
+                           "Générer .ors & PPTX"}
+                  >
+                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.donneesOrs ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
+                  </Button>
+                  {isReadOnly && (
+                     <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération de l'ORS est bloquée.</p>
+                  )}
+                   {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
+                     <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
+                  )}
+                  {modifiedAfterOrsGeneration && !!editingSessionData?.donneesOrs && !isReadOnly && (
+                    <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
+                      <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+                      <span>
+                        <strong className="font-semibold">Attention :</strong> Les informations des participants ont été modifiées après la dernière génération de l'ORS.
+                        Veuillez regénérer le fichier .ors et PPTX pour inclure ces changements.
+                      </span>
+                    </p>
+                  )}
+             </Card>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+ 
+  return (
+    <div>
+      {renderTabNavigation()}
+      {renderTabContent()}
+      <div className="flex justify-end items-center mt-8 py-4 border-t border-gray-200">
+        <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
+          Enregistrer Brouillon
+        </Button>
+      </div>
+      {showAnomalyResolutionUI && detectedAnomalies && (
+        <AnomalyResolutionModal
+          isOpen={showAnomalyResolutionUI}
+          detectedAnomalies={detectedAnomalies}
+          pendingValidResults={pendingValidResults}
+          onResolve={handleResolveAnomalies}
+          onCancel={handleCancelAnomalyResolution}
+        />
+      )}
+    </div>
+  );
 
   return (
     <div>
