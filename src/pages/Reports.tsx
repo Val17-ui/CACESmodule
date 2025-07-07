@@ -5,7 +5,7 @@ import ReportTypeSelector, { ReportType } from '../components/reports/ReportType
 import ReportsList from '../components/reports/ReportsList';
 import ReportDetails from '../components/reports/ReportDetails';
 import ParticipantReport from '../components/reports/ParticipantReport';
-import PeriodReport from '../components/reports/PeriodReport';
+// import PeriodReport from '../components/reports/PeriodReport'; // Supprimé
 import ReferentialReport from '../components/reports/ReferentialReport';
 import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
@@ -27,10 +27,12 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [sessionParticipants, setSessionParticipants] = useState<Participant[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [referentialFilter, setReferentialFilter] = useState<string>('all'); // Conserver pour le filtre, mais basé sur ID
+  const [referentialFilter, setReferentialFilter] = useState<string>('all');
   const [trainerFilter, setTrainerFilter] = useState<string>('all');
   const [trainersListForFilter, setTrainersListForFilter] = useState<Trainer[]>([]);
   const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]);
+  const [startDate, setStartDate] = useState<string>(''); // Nouvel état pour date de début
+  const [endDate, setEndDate] = useState<string>('');     // Nouvel état pour date de fin
 
   const referentialCodeMap = useMemo(() => {
     return new Map(allReferentielsDb.map(ref => [ref.id, ref.code]));
@@ -93,8 +95,19 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
       )
       .filter(session => 
         session.nomSession.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-  }, [sessions, searchTerm, referentialFilter, trainerFilter]);
+      )
+      .filter(session => {
+        if (!startDate && !endDate) return true;
+        const sessionDate = new Date(session.dateSession);
+        if (startDate && sessionDate < new Date(startDate)) return false;
+        if (endDate) {
+          const endOfDayEndDate = new Date(endDate);
+          endOfDayEndDate.setHours(23, 59, 59, 999); // Inclure toute la journée de la date de fin
+          if (sessionDate > endOfDayEndDate) return false;
+        }
+        return true;
+      });
+  }, [sessions, searchTerm, referentialFilter, trainerFilter, startDate, endDate]);
 
   const renderContent = () => {
     if (selectedSession) {
@@ -130,6 +143,22 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 disabled={trainersListForFilter.length === 0}
               />
             </div>
+            <div className="mb-4 flex space-x-4">
+              <Input
+                type="date"
+                label="Date de début"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-1/4"
+              />
+              <Input
+                type="date"
+                label="Date de fin"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-1/4"
+              />
+            </div>
             <ReportsList
               sessions={filteredSessions}
               onViewReport={handleViewSessionReport}
@@ -140,15 +169,12 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
       case 'participant':
         // ParticipantReport pourrait aussi avoir besoin de referentialMap si on affiche le nom du réf. dans sa liste
         return <ParticipantReport />;
-      case 'period':
-        // PeriodReport sera supprimé selon le plan
-        return <PeriodReport />;
+      // case 'period': // Supprimé
+      // return <PeriodReport />;
       case 'referential':
-        // ReferentialReport pourrait aussi avoir besoin de referentialMap
-        return <ReferentialReport />;
+        return <ReferentialReport startDate={startDate} endDate={endDate} referentialMap={referentialCodeMap} />;
       case 'block':
-        // BlockReport pourrait aussi avoir besoin de referentialMap/themeMap/blocMap
-        return <BlockReport />;
+        return <BlockReport startDate={startDate} endDate={endDate} />;
       case 'custom':
         return <CustomReport />;
       default:
@@ -165,15 +191,15 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const getTitle = () => {
     if (selectedSession) return `Rapport: ${selectedSession.nomSession}`;
     if (activeReport) {
-      const reportTitles = {
+      const reportTitles: { [key in ReportType]?: string } = { // S'assurer que ReportType est à jour
         session: 'Rapports par Session',
         participant: 'Rapports par Participant',
-        period: 'Rapports par Période',
+        // period: 'Rapports par Période', // Supprimé
         referential: 'Rapports par Référentiel',
         block: 'Rapports par Bloc',
         custom: 'Rapport Personnalisé',
       };
-      return reportTitles[activeReport];
+      return reportTitles[activeReport] || 'Rapports'; // Fallback au cas où
     }
     return 'Rapports et Statistiques';
   };

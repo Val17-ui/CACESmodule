@@ -39,33 +39,42 @@ interface QuestionWithResolvedTheme extends QuestionWithId {
   resolvedThemeName?: string;
 }
 
+export interface ThemeScoreDetails {
+  score: number; // en pourcentage
+  correct: number;
+  total: number;
+}
+
 export const calculateThemeScores = (
   participantResults: SessionResult[],
   sessionQuestions: QuestionWithResolvedTheme[] // Utilise le type enrichi
-): { [theme: string]: number } => {
-  const themeScores: { [theme: string]: { correct: number; total: number } } = {};
+): { [theme: string]: ThemeScoreDetails } => {
+  const themeData: { [theme: string]: { correct: number; total: number } } = {};
 
   sessionQuestions.forEach(question => {
-    // Utiliser resolvedThemeName, avec un fallback si jamais il n'est pas là
     const themeName = question.resolvedThemeName || 'Thème non spécifié';
-    if (!themeScores[themeName]) {
-      themeScores[themeName] = { correct: 0, total: 0 };
+    if (!themeData[themeName]) {
+      themeData[themeName] = { correct: 0, total: 0 };
     }
-    themeScores[themeName].total++; // Compte toutes les questions pour le total
+    themeData[themeName].total++;
 
     const result = participantResults.find(r => r.questionId === question.id);
     if (result && result.isCorrect) {
-      themeScores[themeName].correct++;
+      themeData[themeName].correct++;
     }
   });
 
-  const finalScores: { [theme: string]: number } = {};
-  for (const theme in themeScores) {
-    const { correct, total } = themeScores[theme];
-    finalScores[theme] = total > 0 ? (correct / total) * 100 : 0;
+  const finalThemeScores: { [theme: string]: ThemeScoreDetails } = {};
+  for (const themeName in themeData) {
+    const { correct, total } = themeData[themeName];
+    finalThemeScores[themeName] = {
+      score: total > 0 ? (correct / total) * 100 : 0,
+      correct,
+      total
+    };
   }
 
-  return finalScores;
+  return finalThemeScores;
 };
 
 /**
@@ -76,16 +85,16 @@ export const calculateThemeScores = (
  */
 export const determineIndividualSuccess = (
   globalScore: number,
-  themeScores: { [theme: string]: number },
-  seuilGlobal: number = 70, // Valeur par défaut si non fournie
-  seuilTheme: number = 50   // Valeur par défaut si non fournie
+  themeScores: { [theme: string]: ThemeScoreDetails }, // Modifié pour utiliser ThemeScoreDetails
+  seuilGlobal: number = 70,
+  seuilTheme: number = 50
 ): boolean => {
   if (globalScore < seuilGlobal) {
     return false;
   }
 
-  for (const theme in themeScores) {
-    if (themeScores[theme] < seuilTheme) {
+  for (const themeName in themeScores) {
+    if (themeScores[themeName].score < seuilTheme) { // Accéder à la propriété score
       return false;
     }
   }

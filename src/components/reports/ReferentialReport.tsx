@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import { getAllSessions, getAllResults, getQuestionsForSessionBlocks } from '../../db';
-import { Session, CACESReferential, SessionResult, QuestionWithId } from '../../types';
+import { Session, SessionResult, QuestionWithId, Referential } from '../../types'; // Ajout de Referential
 import {
   Table,
   TableHeader,
@@ -12,7 +12,18 @@ import {
 } from '../ui/Table';
 import { calculateSessionStats } from '../../utils/reportCalculators';
 
-const ReferentialReport = () => {
+type ReferentialReportProps = {
+  startDate?: string;
+  endDate?: string;
+  referentialMap: Map<number | undefined, string | undefined>; // ID -> Code
+  // sessions: Session[]; // Les sessions seront fetchées ici ou passées en props filtrées
+  // allResults: SessionResult[]; // Idem
+  // allQuestions: QuestionWithId[]; // Idem
+};
+
+const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDate, referentialMap }) => {
+  // Les données sont chargées en interne pour ce composant pour l'instant
+  // Pour une optimisation, elles pourraient être passées en props si déjà chargées par le parent (Reports.tsx)
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allResults, setAllResults] = useState<SessionResult[]>([]);
   const [allQuestions, setAllQuestions] = useState<QuestionWithId[]>([]);
@@ -20,26 +31,34 @@ const ReferentialReport = () => {
   useEffect(() => {
     const fetchData = async () => {
       const fetchedSessions = await getAllSessions();
-      setSessions(fetchedSessions);
+      setSessions(fetchedSessions); // Pas de tri par date ici, le filtre s'en chargera
       const fetchedResults = await getAllResults();
       setAllResults(fetchedResults);
-      
-      // Collecter tous les IDs de blocs uniques de toutes les sessions
-      const allUniqueBlocIds = Array.from(new Set(fetchedSessions.flatMap(s => s.selectedBlocIds || []).filter(id => id !== undefined)));
-
+      const allUniqueBlocIds = Array.from(new Set(fetchedSessions.flatMap(s => s.selectedBlocIds || []).filter(id => id != null)));
       const fetchedQuestions = await getQuestionsForSessionBlocks(allUniqueBlocIds as number[]);
       setAllQuestions(fetchedQuestions);
     };
     fetchData();
-  }, []);
+  }, []); // Se charge une fois
 
   const statsByReferential = useMemo(() => {
+    const filteredSessions = sessions.filter(session => {
+      if (session.status !== 'completed') return false;
+      if (!startDate && !endDate) return true;
+      const sessionDate = new Date(session.dateSession);
+      if (startDate && sessionDate < new Date(startDate)) return false;
+      if (endDate) {
+        const endOfDayEndDate = new Date(endDate);
+        endOfDayEndDate.setHours(23, 59, 59, 999);
+        if (sessionDate > endOfDayEndDate) return false;
+      }
+      return true;
+    });
+
     const stats = new Map<string, { sessionCount: number; participantCount: number; totalSuccessRate: number }>();
 
-    sessions.forEach(session => {
-      if (session.status !== 'completed') return;
-
-      const key = String(session.referentielId); // Utiliser referentielId
+    filteredSessions.forEach(session => {
+      const key = String(session.referentielId);
       if (!stats.has(key)) {
         stats.set(key, { sessionCount: 0, participantCount: 0, totalSuccessRate: 0 });
       }
@@ -76,12 +95,20 @@ const ReferentialReport = () => {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {statsByReferential.map(stat => (
-            <TableRow key={stat.referentiel}>
-              <TableCell className="font-medium">{stat.referentiel}</TableCell>
-              <TableCell className="text-center">{stat.sessionCount}</TableCell>
-              <TableCell className="text-center">{stat.participantCount}</TableCell>
-              <TableCell className="text-center">{stat.avgSuccessRate.toFixed(2)}%</TableCell>
+          {statsByReferential.map(stat => {
+            const referentialCode = referentialMap.get(Number(stat.referentiel)) || 'N/A';
+            return (
+              <TableRow key={stat.referentiel}>
+                <TableCell className="font-medium">{referentialCode}</TableCell>
+                <TableCell className="text-center">{stat.sessionCount}</TableCell>
+                <TableCell className="text-center">{stat.participantCount}</TableCell>
+                <TableCell className="text-center">{stat.avgSuccessRate.toFixed(0)}%</TableCell>
+                {/* Mis à toFixed(0) pour être cohérent avec les autres taux de réussite */}
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
             </TableRow>
           ))}
         </TableBody>

@@ -12,7 +12,7 @@ import {
   getBlocById,
   getThemeById
 } from '../../db';
-import { Session, Participant, SessionResult, QuestionWithId, Referential, VotingDevice, Theme, Bloc } from '../../types';
+import { Session, Participant, SessionResult, QuestionWithId, Referential, VotingDevice, Theme, Bloc, ThemeScoreDetails } from '../../types';
 import {
   Table,
   TableHeader,
@@ -22,12 +22,11 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
-import { Search, ArrowLeft, ChevronDown, ChevronRight, HelpCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Search, ArrowLeft, HelpCircle, CheckCircle, XCircle } from 'lucide-react';
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import Badge from '../ui/Badge';
 
-// Interface pour les questions enrichies localement
 interface EnrichedQuestionForParticipantReport extends QuestionWithId {
   resolvedThemeName?: string;
   participantAnswer?: string;
@@ -35,22 +34,24 @@ interface EnrichedQuestionForParticipantReport extends QuestionWithId {
   isCorrectAnswer?: boolean;
 }
 
-// Étend Session pour inclure les données traitées pour l'affichage du participant
-interface ProcessedSession extends Session {
+interface ProcessedSessionDetails extends Session { // Renommé pour clarifier que c'est pour UNE session/participation
+  participantRef: Participant; // Garder une référence au participant de cette participation
   participantScore?: number;
   participantSuccess?: boolean;
-  themeScores?: { [theme: string]: number };
+  themeScores?: { [theme: string]: ThemeScoreDetails }; // Utilise le nouveau type
   questionsForDisplay?: EnrichedQuestionForParticipantReport[];
 }
 
-// Pour la liste principale des participations
 interface SessionParticipation {
   key: string;
   participantDisplayId: string;
   participantRef: Participant;
   sessionName: string;
   sessionDate: string;
-  referentialName: string; // Ici, on utilisera le code du référentiel
+  referentialCode: string; // Changé pour code
+  // Ajout des IDs pour pouvoir retrouver la session et le participant originaux
+  originalSessionId: number;
+  originalParticipantAssignedGlobalDeviceId?: number | null;
 }
 
 const ParticipantReport = () => {
@@ -60,12 +61,12 @@ const ParticipantReport = () => {
   const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
-  const [processedParticipantSessions, setProcessedParticipantSessions] = useState<ProcessedSession[]>([]);
-  const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set());
+  const [startDate, setStartDate] = useState<string>(''); // Nouvel état
+  const [endDate, setEndDate] = useState<string>('');     // Nouvel état
+  const [detailedParticipation, setDetailedParticipation] = useState<ProcessedSessionDetails | null>(null);
 
   const referentialCodeMap = useMemo(() => {
-    return new Map(allReferentiels.map(ref => [ref.id, ref.code])); // id -> code
+    return new Map(allReferentiels.map(ref => [ref.id, ref.code]));
   }, [allReferentiels]);
 
   const deviceMap = useMemo(() => {
@@ -96,287 +97,216 @@ const ParticipantReport = () => {
     fetchInitialData();
   }, []);
 
-  useEffect(() => {
-    const processSessions = async () => {
-      // console.log('[ParticipantReport DEBUG] processSessions triggered. SP:', selectedParticipant);
-      // console.log('[ParticipantReport DEBUG] Values at start of processSessions: deviceMap type =', typeof deviceMap, 'deviceMap keys =', deviceMap ? Array.from(deviceMap.keys()) : 'undefined', 'allThemesDb length =', allThemesDb?.length, 'allBlocsDb length =', allBlocsDb?.length);
-
-      if (selectedParticipant && selectedParticipant.assignedGlobalDeviceId !== undefined) {
-        // console.log('[ParticipantReport DEBUG] Participant selected. Checking maps/arrays...');
-        try {
-          if (deviceMap && typeof deviceMap.get === 'function' && deviceMap.size > 0 && allThemesDb && allThemesDb.length > 0 && allBlocsDb && allBlocsDb.length > 0) {
-            // console.log('[ParticipantReport DEBUG] All maps/arrays seem populated. Proceeding with logic.');
-            const serialNumberOfSelectedParticipant = deviceMap.get(selectedParticipant.assignedGlobalDeviceId);
-            // console.log('[ParticipantReport DEBUG] Serial for SP:', serialNumberOfSelectedParticipant);
-
-            if (!serialNumberOfSelectedParticipant) {
-              setProcessedParticipantSessions([]);
-              // console.log('[ParticipantReport DEBUG] No serial number for selected participant, clearing processed sessions.');
-              return;
-            }
-
-            const participantSessions = sessions.filter(s =>
-              s.participants?.some(p => p.assignedGlobalDeviceId === selectedParticipant.assignedGlobalDeviceId)
-            );
-            // console.log('[ParticipantReport DEBUG] Number of sessions found for participant:', participantSessions.length);
-
-            if (participantSessions.length === 0) {
-                setProcessedParticipantSessions([]);
-                // console.log('[ParticipantReport DEBUG] No sessions found for this participant in the main sessions list.');
-                return;
-            }
-
-            const processed: ProcessedSession[] = [];
-
-            for (const sessionInstance of participantSessions) {
-              // console.log(`[ParticipantReport DEBUG] Processing session ID: ${sessionInstance.id}`);
-              if (sessionInstance.id) {
-                const sessionResults = await getResultsForSession(sessionInstance.id);
-                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Found ${sessionResults.length} results.`);
-
-                const baseSessionQuestions = await getQuestionsForSessionBlocks(sessionInstance.selectedBlocIds || []);
-                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Found ${baseSessionQuestions.length} base questions for selected blocs.`);
-
-                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Starting Promise.all for enriching ${baseSessionQuestions.length} questions...`);
-                const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
-                  baseSessionQuestions.map(async (question, index) => {
-                    try {
-                      let resolvedThemeName = 'Thème non spécifié';
-                      if (question.blocId) {
-                        const bloc = allBlocsDb.find(b => b.id === question.blocId);
-                        if (bloc && bloc.theme_id) {
-                          const theme = allThemesDb.find(t => t.id === bloc.theme_id);
-                          if (theme) {
-                            resolvedThemeName = theme.nom_complet;
-                          }
-                        }
-                      }
-                      const participantResult = sessionResults.find(
-                        sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
-                      );
-                      return {
-                        ...question,
-                        resolvedThemeName,
-                        participantAnswer: participantResult?.answer,
-                        pointsObtainedForAnswer: participantResult?.pointsObtained,
-                        isCorrectAnswer: participantResult?.isCorrect
-                      };
-                    } catch (error) {
-                      console.error(`[ParticipantReport] Error enriching question ID ${question.id} (index ${index}):`, error); // Garder ce log d'erreur important
-                      return {
-                        ...question,
-                        resolvedThemeName: 'Erreur chargement thème',
-                        participantAnswer: 'Erreur',
-                        pointsObtainedForAnswer: 0,
-                        isCorrectAnswer: false
-                      };
-                    }
-                  })
-                );
-                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Finished Promise.all. Enriched ${enrichedSessionQuestions.length} questions.`);
-
-                const currentParticipantSessionResults = sessionResults.filter(
-                  r => r.participantIdBoitier === serialNumberOfSelectedParticipant
-                );
-
-                const score = calculateParticipantScore(currentParticipantSessionResults, enrichedSessionQuestions);
-                const themeScores = calculateThemeScores(currentParticipantSessionResults, enrichedSessionQuestions);
-                const reussite = determineIndividualSuccess(score, themeScores);
-
-                processed.push({
-                  ...sessionInstance,
-                  participantScore: score,
-                  participantSuccess: reussite,
-                  themeScores,
-                  questionsForDisplay: enrichedSessionQuestions
-                });
-                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Pushed to processed. Current total: ${processed.length}`);
-              }
-            }
-            // console.log('[ParticipantReport DEBUG] Processed sessions for participant (final count):', processed.length, processed);
-            setProcessedParticipantSessions(processed.sort((a,b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
-          } else {
-            // console.log('[ParticipantReport DEBUG] processSessions: DID NOT RUN main logic. Conditions not met. deviceMap type:', typeof deviceMap, 'deviceMap size:', deviceMap?.size, 'themes:', allThemesDb?.length, 'blocs:', allBlocsDb?.length);
-            setProcessedParticipantSessions([]);
-          }
-        } catch (e: any) {
-          console.error('[ParticipantReport] Error in processSessions try-catch block:', e); // Garder ce log
-          if (e instanceof ReferenceError) {
-            console.error("[ParticipantReport] Caught ReferenceError in processSessions:", e.message, e.stack);  // Garder ce log
-          }
-          setProcessedParticipantSessions([]);
-        }
-      } else {
-        // console.log('[ParticipantReport DEBUG] No selected participant or missing assignedGlobalDeviceId. Clearing processed sessions.');
-        setProcessedParticipantSessions([]);
-      }
-    };
-    processSessions();
-  }, [selectedParticipant, sessions, deviceMap, allThemesDb, allBlocsDb]);
+  // Ce useEffect n'est plus nécessaire pour peupler une liste d'historique,
+  // la logique de traitement est maintenant dans handleSelectParticipation
+  // useEffect(() => {
+  // }, [detailedParticipation, sessions, deviceMap, allThemesDb, allBlocsDb]);
 
   const allSessionParticipations = useMemo(() => {
     const participations: SessionParticipation[] = [];
-    sessions.forEach(session => {
+    const filteredSessionsByDate = sessions.filter(session => {
+      if (!startDate && !endDate) return true;
+      const sessionDate = new Date(session.dateSession);
+      if (startDate && sessionDate < new Date(startDate)) return false;
+      if (endDate) {
+        const endOfDayEndDate = new Date(endDate);
+        endOfDayEndDate.setHours(23, 59, 59, 999);
+        if (sessionDate > endOfDayEndDate) return false;
+      }
+      return true;
+    });
+
+    filteredSessionsByDate.forEach(session => {
       if (!session.id) return;
       session.participants?.forEach((p, index) => {
-        const participantKeyPart = p.assignedGlobalDeviceId ? p.assignedGlobalDeviceId.toString() : `idx-${index}`;
+        const participantKeyPart = p.assignedGlobalDeviceId ? p.assignedGlobalDeviceId.toString() : `paridx-${index}`;
         participations.push({
-          key: `session-${session.id}-participant-${participantKeyPart}`,
+          key: `sess-${session.id}-part-${participantKeyPart}`,
           participantRef: p,
-          participantDisplayId: p.identificationCode || `Boîtier ID ${p.assignedGlobalDeviceId || 'N/A'}`,
+          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId) || 'N/A'}`,
           sessionName: session.nomSession,
           sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
-          referentialName: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
+          referentialCode: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
+          originalSessionId: session.id,
+          originalParticipantAssignedGlobalDeviceId: p.assignedGlobalDeviceId,
         });
       });
     });
     return participations;
-  }, [sessions, referentialCodeMap]);
+  }, [sessions, referentialCodeMap, deviceMap]);
 
   const filteredSessionParticipations = useMemo(() => {
     if (!searchTerm) return allSessionParticipations;
     return allSessionParticipations.filter(participation =>
       `${participation.participantRef.prenom} ${participation.participantRef.nom}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       participation.sessionName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      participation.referentialName.toLowerCase().includes(searchTerm.toLowerCase())
+      participation.referentialCode.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [allSessionParticipations, searchTerm]);
 
-  const handleSelectParticipant = (participant: Participant) => {
-    setSelectedParticipant(participant);
-    setExpandedSessions(new Set());
+  const handleSelectParticipation = async (participation: SessionParticipation) => {
+    setDetailedParticipation(null);
+
+    const targetSession = sessions.find(s => s.id === participation.originalSessionId);
+    // Trouve le participant spécifique DANS la session cible, basé sur assignedGlobalDeviceId
+    const targetParticipantRef = targetSession?.participants.find(p => p.assignedGlobalDeviceId === participation.originalParticipantAssignedGlobalDeviceId);
+
+    if (!targetSession || !targetParticipantRef || targetParticipantRef.assignedGlobalDeviceId === undefined || !deviceMap.size || !allThemesDb.length || !allBlocsDb.length) {
+      console.error("Données manquantes pour traiter la participation détaillée", {targetSession, targetParticipantRef, deviceMapSize: deviceMap.size, allThemesDbL: allThemesDb.length, allBlocsDbL: allBlocsDb.length});
+      return;
+    }
+
+    const serialNumberOfSelectedParticipant = deviceMap.get(targetParticipantRef.assignedGlobalDeviceId);
+    if (!serialNumberOfSelectedParticipant) {
+      console.error("Numéro de série non trouvé pour le participant", targetParticipantRef);
+      return;
+    }
+
+    const sessionResults = await getResultsForSession(targetSession.id!);
+    const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
+
+    const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
+      baseSessionQuestions.map(async (question) => {
+        let resolvedThemeName = 'Thème non spécifié';
+        if (question.blocId) {
+          const bloc = allBlocsDb.find(b => b.id === question.blocId);
+          if (bloc && bloc.theme_id) {
+            const theme = allThemesDb.find(t => t.id === bloc.theme_id);
+            if (theme) resolvedThemeName = theme.nom_complet;
+          }
+        }
+        const participantResult = sessionResults.find(
+          sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
+        );
+        return { ...question, resolvedThemeName, participantAnswer: participantResult?.answer, pointsObtainedForAnswer: participantResult?.pointsObtained, isCorrectAnswer: participantResult?.isCorrect };
+      })
+    );
+
+    const currentParticipantSessionResults = sessionResults.filter(r => r.participantIdBoitier === serialNumberOfSelectedParticipant);
+    const score = calculateParticipantScore(currentParticipantSessionResults, enrichedSessionQuestions);
+    const themeScores = calculateThemeScores(currentParticipantSessionResults, enrichedSessionQuestions);
+    const reussite = determineIndividualSuccess(score, themeScores);
+
+    setDetailedParticipation({
+      ...targetSession,
+      participantRef: targetParticipantRef,
+      participantScore: score,
+      participantSuccess: reussite,
+      themeScores,
+      questionsForDisplay: enrichedSessionQuestions
+    });
   };
 
-  const handleBack = () => {
-    setSelectedParticipant(null);
-    setProcessedParticipantSessions([]);
-    setExpandedSessions(new Set());
+  const handleBackToList = () => {
+    setDetailedParticipation(null);
   };
 
-  if (selectedParticipant) {
+  if (detailedParticipation) {
+    const { participantRef, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
+
+    const questionsByTheme: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
+    if (questionsForDisplay) {
+      questionsForDisplay.forEach(q => {
+        const theme = q.resolvedThemeName || 'Thème non spécifié';
+        if (!questionsByTheme[theme]) questionsByTheme[theme] = [];
+        questionsByTheme[theme].push(q);
+      });
+    }
+
     return (
       <Card>
-        <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBack} className="mb-4">
+        <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBackToList} className="mb-4">
           Retour à la liste
         </Button>
-        <h2 className="text-2xl font-bold mb-2">{selectedParticipant.prenom} {selectedParticipant.nom}</h2>
-        <p className="text-gray-500 mb-6">
-          ID Boîtier : {selectedParticipant.assignedGlobalDeviceId ? (deviceMap.get(selectedParticipant.assignedGlobalDeviceId) || 'N/A') : 'Non assigné'}
-        </p>
-        
-        <h3 className="text-xl font-semibold mb-4">Historique des sessions</h3>
-        {processedParticipantSessions.length === 0 && (
-          <p className="text-gray-500">Aucune session traitée à afficher pour ce participant (ou données en cours de chargement).</p>
-        )}
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Session</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Score Global</TableHead>
-              <TableHead>Résultat Global</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {processedParticipantSessions.map(session => {
-              const isExpanded = session.id !== undefined && expandedSessions.has(session.id);
-              const toggleExpansion = () => {
-                if (session.id === undefined) return;
-                setExpandedSessions(prev => {
-                  const next = new Set(prev);
-                  if (next.has(session.id!)) next.delete(session.id!);
-                  else next.add(session.id!);
-                  return next;
-                });
-              };
+        <h2 className="text-2xl font-bold mb-1">Détail de la participation</h2>
+        <p className="text-lg mb-1">Participant : <span className="font-semibold">{participantRef.prenom} {participantRef.nom}</span></p>
+        <p className="text-md mb-1">Session : <span className="font-semibold">{detailedParticipation.nomSession}</span> ({new Date(detailedParticipation.dateSession).toLocaleDateString('fr-FR')})</p>
+        <p className="text-md mb-4">Référentiel : <Badge variant="secondary">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></p>
 
-              const questionsByTheme: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
-              if (session.questionsForDisplay) {
-                session.questionsForDisplay.forEach(q => {
-                  const theme = q.resolvedThemeName || 'Thème non spécifié';
-                  if (!questionsByTheme[theme]) questionsByTheme[theme] = [];
-                  questionsByTheme[theme].push(q);
-                });
-              }
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <Card className="p-4">
+            <h3 className="text-lg font-semibold mb-2">Performance Globale</h3>
+            <p className={participantSuccess ? 'text-green-600 font-bold text-2xl' : 'text-red-600 font-bold text-2xl'}>
+              {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
+            </p>
+            {participantSuccess !== undefined ? (
+              participantSuccess ? <Badge variant="success" size="lg">Réussi</Badge> : <Badge variant="danger" size="lg">Ajourné</Badge>
+            ) : <Badge variant="warning" size="lg">En attente</Badge>}
+          </Card>
+          <Card className="p-4">
+            <h3 className="text-lg font-semibold mb-2">Scores par Thème</h3>
+            {themeScores && Object.entries(themeScores).length > 0 ? (
+              Object.entries(themeScores).map(([themeName, themeScoreDetail]) => (
+              <div key={themeName} className="mb-1 text-sm">
+                <span className={themeScoreDetail.score < 50 ? 'text-red-500 font-semibold' : 'text-gray-700 font-semibold'}>
+                  {themeName}: </span> {themeScoreDetail.score.toFixed(0)}% ({themeScoreDetail.correct}/{themeScoreDetail.total})
+              </div>
+            ))
+            ) : (<p className="text-sm text-gray-500">Scores par thème non disponibles.</p>)}
+          </Card>
+        </div>
 
-              return (
-                <React.Fragment key={session.id}>
-                  <TableRow onClick={toggleExpansion} className="cursor-pointer hover:bg-gray-100">
-                    <TableCell className="font-medium">
-                      {isExpanded ? <ChevronDown size={16} className="inline mr-1" /> : <ChevronRight size={16} className="inline mr-1" />}
-                      {session.nomSession}
-                    </TableCell>
-                    <TableCell>{new Date(session.dateSession).toLocaleDateString('fr-FR')}</TableCell>
-                    <TableCell className={session.participantSuccess === true ? 'text-green-600 font-semibold' : session.participantSuccess === false ? 'text-red-600 font-semibold' : ''}>
-                      {session.participantScore !== undefined ? `${session.participantScore.toFixed(0)} / 100` : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {session.participantSuccess !== undefined ? (
-                        session.participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
-                      ) : <Badge variant="warning">En attente</Badge>}
-                    </TableCell>
-                  </TableRow>
-                  {isExpanded && session.id !== undefined && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="p-0 bg-slate-50">
-                        <div className="p-4 ">
-                          <h4 className="text-md font-semibold mb-3 text-gray-800">Détail des scores par thème :</h4>
-                          {session.themeScores && Object.entries(session.themeScores).length > 0 ? (
-                            Object.entries(session.themeScores).map(([themeName, themeScore]) => (
-                            <div key={themeName} className="mb-1 text-sm">
-                              <span className={themeScore < 50 ? 'text-red-500 font-semibold' : 'text-gray-700 font-semibold'}>
-                                {themeName}: </span> {themeScore.toFixed(0)} / 100
-                            </div>
-                          ))
-                          ) : (<p className="text-xs text-gray-500">Scores par thème non disponibles.</p>)}
-
-                          {Object.entries(questionsByTheme).length > 0 ? (
-                            Object.entries(questionsByTheme).map(([themeName, questions]) => (
-                            <div key={themeName} className="mt-4">
-                              <h5 className="text-sm font-semibold text-gray-700 mb-2 border-b border-gray-300 pb-1">Thème : {themeName}</h5>
-                              {questions.map((q, qIndex) => (
-                                <div key={q.id || qIndex} className="text-xs mb-3 pb-2 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
-                                  <p className="flex items-center font-medium text-gray-800">
-                                    <HelpCircle size={14} className="mr-1.5 text-blue-600 flex-shrink-0" />
-                                    {q.text}
-                                  </p>
-                                  <p className="ml-5 mt-0.5">Votre réponse : <span className="font-semibold text-gray-700">{q.participantAnswer || 'Non répondu'}</span></p>
-                                  {q.isCorrectAnswer === false && (
-                                    <p className="ml-5 mt-0.5 text-orange-700">Bonne réponse : <span className="font-semibold">{q.correctAnswer}</span></p>
-                                  )}
-                                  <p className="ml-5 mt-0.5 flex items-center">
-                                    Points : <span className="font-semibold text-gray-700 ml-1">{q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</span>
-                                    {q.isCorrectAnswer === true && <CheckCircle size={14} className="ml-2 text-green-500" />}
-                                    {q.isCorrectAnswer === false && q.participantAnswer !== undefined && <XCircle size={14} className="ml-2 text-red-500" />}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          ))
-                          ) : (<p className="mt-4 text-xs text-gray-500">Détail des questions non disponible.</p>)}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <div>
+          <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Détail des Questions par Thème</h3>
+          {Object.entries(questionsByTheme).length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+              {Object.entries(questionsByTheme).map(([themeName, questions]) => (
+                <div key={themeName} className="mb-4 pt-2"> {/* Espace pour chaque bloc thème */}
+                  <h4 className="text-md font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-300">
+                    {themeName}
+                  </h4>
+                  {questions.map((q, qIndex) => (
+                    <div key={q.id || qIndex} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
+                      <p className="flex items-start font-medium text-gray-900 mb-1">
+                        <HelpCircle size={16} className="mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <span>{q.text}</span>
+                      </p>
+                      <div className="pl-6 space-y-0.5">
+                        <p>Votre réponse : <span className="font-semibold">{q.participantAnswer || 'Non répondu'}</span></p>
+                        {q.isCorrectAnswer === false && q.participantAnswer !== undefined && (
+                          <p className="text-orange-600">Bonne réponse : <span className="font-semibold">{q.correctAnswer}</span></p>
+                        )}
+                         <p className="flex items-center">
+                            Points : <span className="font-semibold ml-1">{q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</span>
+                            {q.isCorrectAnswer === true && <CheckCircle size={15} className="ml-2 text-green-500" />}
+                            {q.isCorrectAnswer === false && q.participantAnswer !== undefined && <XCircle size={15} className="ml-2 text-red-500" />}
+                          </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (<p className="mt-4 text-sm text-gray-500">Détail des questions non disponible.</p>)}
+        </div>
       </Card>
     );
   }
 
   return (
     <Card>
-      <h2 className="text-xl font-bold mb-4">Rapport par Participant</h2>
-      <div className="mb-4">
+      <h2 className="text-xl font-bold mb-4">Rapport par Participant (Participations aux Sessions)</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <Input 
-          placeholder="Rechercher un participant, une session..."
+          placeholder="Rechercher..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-1/2 lg:w-1/3"
+          className="md:col-span-1"
           icon={<Search size={16} className="text-gray-400"/>}
+        />
+        <Input
+          type="date"
+          label="Date de début"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="" // La largeur sera gérée par la grille
+        />
+        <Input
+          type="date"
+          label="Date de fin"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          className="" // La largeur sera gérée par la grille
         />
       </div>
       <Table>
@@ -393,18 +323,18 @@ const ParticipantReport = () => {
           {filteredSessionParticipations.map((participation) => (
             <TableRow
               key={participation.key}
-              onClick={() => handleSelectParticipant(participation.participantRef)}
+              onClick={() => handleSelectParticipation(participation)}
               className="cursor-pointer hover:bg-gray-50"
             >
               <TableCell>{participation.participantRef.prenom} {participation.participantRef.nom}</TableCell>
               <TableCell>{participation.sessionName}</TableCell>
               <TableCell>{participation.sessionDate}</TableCell>
               <TableCell>
-                <Badge variant="secondary">{participation.referentialName}</Badge>
+                <Badge variant="secondary">{participation.referentialCode}</Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleSelectParticipant(participation.participantRef); }}>
-                  Voir l'historique du participant
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleSelectParticipation(participation); }}>
+                  Voir détails participation
                 </Button>
               </TableCell>
             </TableRow>
