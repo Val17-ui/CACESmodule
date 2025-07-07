@@ -55,8 +55,12 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
         // Récupérer le nom du référentiel
         if (session.referentielId) {
+          console.log('[ReportDetails] session.referentielId:', session.referentielId);
           const referential = await getReferentialById(session.referentielId);
+          console.log('[ReportDetails] Fetched referential:', referential);
           if (referential) setReferentialName(referential.nom_complet);
+        } else {
+          console.log('[ReportDetails] session.referentielId is undefined or null');
         }
 
         // Récupérer les noms des thèmes
@@ -129,6 +133,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       // session.selectedBlocIds.forEach(blocId => { ... });
       // La fonction calculateBlockPerformanceForSession attendait {theme, blockId} textuels.
       // Cela devra être adapté dans une autre étape si ce rapport par bloc est conservé/modifié.
+      console.log('[ReportDetails] session.questionMappings for blockStats:', session.questionMappings);
 
       // Temporairement, pour éviter une erreur si session.selectionBlocs (ancienne structure) n'est plus là :
       const currentSelectionForBlockStats = session.questionMappings?.map(qm => ({theme: qm.theme, blockId: qm.blockId})) || [];
@@ -137,17 +142,10 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           const [theme, blockId] = key.split('-');
           return {theme, blockId};
         });
+      console.log('[ReportDetails] uniqueLegacyBlocks for blockStats:', uniqueLegacyBlocks);
 
       uniqueLegacyBlocks.forEach(blockSelection => {
-        // Note: calculateBlockPerformanceForSession attend `allQuestions` pour le mapping.
-        // Ici, `questionsForThisSession` contient déjà les questions pertinentes pour la session.
-        // Si `calculateBlockPerformanceForSession` a besoin de ALL questions de la DB pour une raison X,
-        // il faudrait les charger. Mais pour les stats DANS la session, `questionsForThisSession` devrait suffire
-        // si la logique interne de `calculateBlockPerformanceForSession` est adaptée.
-        // Pour l'instant, on passe `questionsForThisSession` comme équivalent de `allQuestions` pour ce contexte.
-        // La fonction `calculateBlockPerformanceForSession` a été écrite pour prendre `allQuestions`
-        // mais elle filtre ensuite par `questionIdsInSession`. Donc c'est ok.
-        const stats = calculateBlockPerformanceForSession(blockSelection, session, sessionResults);
+        const stats = calculateBlockPerformanceForSession(blockSelection, session, sessionResults, deviceMap); // Ajout de deviceMap
         if (stats) {
           calculatedBlockStats.push(stats);
         }
@@ -156,7 +154,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     } else {
       setBlockStats([]);
     }
-  }, [session, sessionResults, questionsForThisSession]);
+  }, [session, sessionResults, questionsForThisSession, deviceMap]); // Ajout de deviceMap aux dépendances
 
 
   const handleExportPDF = () => {

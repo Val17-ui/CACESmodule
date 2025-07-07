@@ -342,15 +342,17 @@ export interface BlockPerformanceStats {
 export const calculateBlockPerformanceForSession = (
   blockSelection: { theme: string; blockId: string },
   session: Session,
-  sessionResults: SessionResult[]
+  sessionResults: SessionResult[],
+  deviceMap: Map<number | undefined, string | undefined> // Map de assignedGlobalDeviceId vers serialNumber
 ): BlockPerformanceStats | null => {
+  console.log('[Calculator] calculateBlockPerformanceForSession called with blockSelection:', blockSelection);
   if (
     !session.participants ||
     session.participants.length === 0 ||
     !session.questionMappings ||
     session.questionMappings.length === 0
   ) {
-    console.warn('[BlockPerformance] Données de session (participants ou questionMappings) manquantes.');
+    console.warn('[Calculator] Données de session (participants ou questionMappings) manquantes.');
     return null;
   }
 
@@ -358,21 +360,35 @@ export const calculateBlockPerformanceForSession = (
   const questionIdsInBlockForThisSession = session.questionMappings
     .filter(qm => qm.theme === blockSelection.theme && qm.blockId === blockSelection.blockId)
     .map(qm => qm.dbQuestionId);
+  console.log('[Calculator] questionIdsInBlockForThisSession:', questionIdsInBlockForThisSession);
 
   if (questionIdsInBlockForThisSession.length === 0) {
+    console.log('[Calculator] No questions found for this blockSelection in questionMappings.');
     return null;
   }
   const numQuestionsInBlock = questionIdsInBlockForThisSession.length;
+  console.log('[Calculator] numQuestionsInBlock:', numQuestionsInBlock);
 
   let totalCorrectAnswersInBlockAcrossParticipants = 0;
   let successfulParticipantsOnBlockCount = 0;
   const sessionParticipantsCount = session.participants.length;
+  console.log(`[Calculator] Processing ${sessionParticipantsCount} participants for block ${blockSelection.theme} - ${blockSelection.blockId}`);
 
-  session.participants.forEach(participant => {
-    const participantResultsForBlock = sessionResults.filter(r =>
-      r.participantIdBoitier === participant.idBoitier &&
-      questionIdsInBlockForThisSession.includes(r.questionId)
-    );
+  session.participants.forEach((participant, pIndex) => {
+    const deviceSerialNumber = participant.assignedGlobalDeviceId
+      ? deviceMap.get(participant.assignedGlobalDeviceId)
+      : undefined;
+
+    console.log(`[Calculator] Participant ${pIndex + 1}: assignedGlobalDeviceId ${participant.assignedGlobalDeviceId}, DeviceSN: ${deviceSerialNumber}, Nom: ${participant.prenom} ${participant.nom}`);
+
+    const participantResultsForBlock = deviceSerialNumber
+      ? sessionResults.filter(r =>
+          r.participantIdBoitier === deviceSerialNumber &&
+          questionIdsInBlockForThisSession.includes(r.questionId)
+        )
+      : [];
+
+    console.log(`[Calculator] Participant ${pIndex + 1}: Found ${participantResultsForBlock.length} results for this block.`);
 
     let correctAnswersInBlockForParticipant = 0;
     participantResultsForBlock.forEach(result => {
@@ -380,14 +396,20 @@ export const calculateBlockPerformanceForSession = (
         correctAnswersInBlockForParticipant++;
       }
     });
+    console.log(`[Calculator] Participant ${pIndex + 1}: Correct answers in block: ${correctAnswersInBlockForParticipant}`);
 
     totalCorrectAnswersInBlockAcrossParticipants += correctAnswersInBlockForParticipant;
 
     // Condition de reussite du bloc pour CE participant : >= 50% des questions de CE bloc
     if (numQuestionsInBlock > 0 && (correctAnswersInBlockForParticipant / numQuestionsInBlock) >= 0.50) {
       successfulParticipantsOnBlockCount++;
+      console.log(`[Calculator] Participant ${pIndex + 1}: Succeeded in block.`);
     }
   });
+
+  console.log(`[Calculator] Totals for block ${blockSelection.theme} - ${blockSelection.blockId}:
+    TotalCorrectAcrossParticipants: ${totalCorrectAnswersInBlockAcrossParticipants},
+    SuccessfulParticipants: ${successfulParticipantsOnBlockCount}`);
 
   const averageCorrectAnswers = sessionParticipantsCount > 0
     ? totalCorrectAnswersInBlockAcrossParticipants / sessionParticipantsCount
