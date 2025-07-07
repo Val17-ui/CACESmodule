@@ -56,6 +56,9 @@ interface SessionParticipation {
 const ParticipantReport = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allReferentiels, setAllReferentiels] = useState<Referential[]>([]);
+  const [allVotingDevices, setAllVotingDevices] = useState<VotingDevice[]>([]);
+  const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
+  const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
   const [processedParticipantSessions, setProcessedParticipantSessions] = useState<ProcessedSession[]>([]);
@@ -65,86 +68,155 @@ const ParticipantReport = () => {
     return new Map(allReferentiels.map(ref => [ref.id, ref.nom_complet]));
   }, [allReferentiels]);
 
+  const deviceMap = useMemo(() => {
+    return new Map(allVotingDevices.map(device => [device.id, device.serialNumber]));
+  }, [allVotingDevices]);
+
   useEffect(() => {
     const fetchInitialData = async () => {
-      const [fetchedSessions, fetchedReferentiels] = await Promise.all([
+      const [
+        fetchedSessions,
+        fetchedReferentiels,
+        fetchedVotingDevices,
+        fetchedThemes,
+        fetchedBlocs
+      ] = await Promise.all([
         getAllSessions(),
-        getAllReferentiels()
+        getAllReferentiels(),
+        getAllVotingDevices(),
+        getAllThemes(),
+        getAllBlocs()
       ]);
       setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
       setAllReferentiels(fetchedReferentiels);
+      setAllVotingDevices(fetchedVotingDevices);
+      setAllThemesDb(fetchedThemes);
+      setAllBlocsDb(fetchedBlocs);
     };
     fetchInitialData();
   }, []);
 
   useEffect(() => {
     const processSessions = async () => {
-      if (selectedParticipant && selectedParticipant.assignedGlobalDeviceId !== undefined && deviceMap.size > 0 && allThemesDb.length > 0 && allBlocsDb.length > 0) {
-        const serialNumberOfSelectedParticipant = deviceMap.get(selectedParticipant.assignedGlobalDeviceId);
+      console.log('[ParticipantReport DEBUG] processSessions triggered. SP:', selectedParticipant);
+      console.log('[ParticipantReport DEBUG] Values at start of processSessions: deviceMap type =', typeof deviceMap, 'deviceMap keys =', deviceMap ? Array.from(deviceMap.keys()) : 'undefined', 'allThemesDb length =', allThemesDb?.length, 'allBlocsDb length =', allBlocsDb?.length);
 
-        if (!serialNumberOfSelectedParticipant) {
-          setProcessedParticipantSessions([]);
-          return;
-        }
+      if (selectedParticipant && selectedParticipant.assignedGlobalDeviceId !== undefined) {
+        console.log('[ParticipantReport DEBUG] Participant selected. Checking maps/arrays...');
+        try {
+          if (deviceMap && typeof deviceMap.get === 'function' && deviceMap.size > 0 && allThemesDb && allThemesDb.length > 0 && allBlocsDb && allBlocsDb.length > 0) {
+            console.log('[ParticipantReport DEBUG] All maps/arrays seem populated. Proceeding with logic.');
+            const serialNumberOfSelectedParticipant = deviceMap.get(selectedParticipant.assignedGlobalDeviceId);
+            console.log('[ParticipantReport DEBUG] Serial for SP:', serialNumberOfSelectedParticipant);
 
-        const participantSessions = sessions.filter(s =>
-          s.participants?.some(p => p.assignedGlobalDeviceId === selectedParticipant.assignedGlobalDeviceId)
-        );
-        const processed: ProcessedSession[] = [];
+            if (!serialNumberOfSelectedParticipant) {
+              setProcessedParticipantSessions([]);
+              console.log('[ParticipantReport DEBUG] No serial number for selected participant, clearing processed sessions.');
+              return;
+            }
 
-        for (const sessionInstance of participantSessions) {
-          if (sessionInstance.id) {
-            const sessionResults = await getResultsForSession(sessionInstance.id);
+            const participantSessions = sessions.filter(s =>
+              s.participants?.some(p => p.assignedGlobalDeviceId === selectedParticipant.assignedGlobalDeviceId)
+            );
+            console.log('[ParticipantReport DEBUG] Number of sessions found for participant:', participantSessions.length);
 
-            // 1. Récupérer les questions de base pour les selectedBlocIds de la session
-            const baseSessionQuestions = await getQuestionsForSessionBlocks(sessionInstance.selectedBlocIds || []);
+            if (participantSessions.length === 0) {
+                setProcessedParticipantSessions([]);
+                console.log('[ParticipantReport DEBUG] No sessions found for this participant in the main sessions list.');
+                return;
+            }
 
-            // 2. Enrichir ces questions avec resolvedThemeName
-            const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
-              baseSessionQuestions.map(async (question) => {
-                let resolvedThemeName = 'Thème non spécifié';
-                if (question.blocId) {
-                  const bloc = allBlocsDb.find(b => b.id === question.blocId);
-                  if (bloc && bloc.theme_id) {
-                    const theme = allThemesDb.find(t => t.id === bloc.theme_id);
-                    if (theme) {
-                      resolvedThemeName = theme.nom_complet;
+            const processed: ProcessedSession[] = [];
+
+            for (const sessionInstance of participantSessions) {
+              console.log(`[ParticipantReport DEBUG] Processing session ID: ${sessionInstance.id}`);
+              if (sessionInstance.id) {
+                const sessionResults = await getResultsForSession(sessionInstance.id);
+                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Found ${sessionResults.length} results.`);
+
+                const baseSessionQuestions = await getQuestionsForSessionBlocks(sessionInstance.selectedBlocIds || []);
+                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Found ${baseSessionQuestions.length} base questions for selected blocs.`);
+
+                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Starting Promise.all for enriching ${baseSessionQuestions.length} questions...`);
+                const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
+                  baseSessionQuestions.map(async (question, index) => {
+                    try {
+                      // console.log(`[ParticipantReport DEBUG] Enriching question ${index + 1}/${baseSessionQuestions.length}, ID: ${question.id}, blocId: ${question.blocId}`);
+                      let resolvedThemeName = 'Thème non spécifié';
+                      if (question.blocId) {
+                        const bloc = allBlocsDb.find(b => b.id === question.blocId);
+                        if (bloc && bloc.theme_id) {
+                          const theme = allThemesDb.find(t => t.id === bloc.theme_id);
+                          if (theme) {
+                            resolvedThemeName = theme.nom_complet;
+                          } else {
+                            // console.warn(`[ParticipantReport DEBUG] Theme not found for theme_id: ${bloc.theme_id} (Question ID: ${question.id})`);
+                          }
+                        } else {
+                          // console.warn(`[ParticipantReport DEBUG] Bloc not found for blocId: ${question.blocId} or theme_id missing (Question ID: ${question.id})`);
+                        }
+                      } else {
+                        // console.warn(`[ParticipantReport DEBUG] question.blocId is missing (Question ID: ${question.id})`);
+                      }
+
+                      const participantResult = sessionResults.find(
+                        sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
+                      );
+
+                      return {
+                        ...question,
+                        resolvedThemeName,
+                        participantAnswer: participantResult?.answer,
+                        pointsObtainedForAnswer: participantResult?.pointsObtained,
+                        isCorrectAnswer: participantResult?.isCorrect
+                      };
+                    } catch (error) {
+                      console.error(`[ParticipantReport DEBUG] Error enriching question ID ${question.id} (index ${index}):`, error);
+                      return {
+                        ...question,
+                        resolvedThemeName: 'Erreur chargement thème',
+                        participantAnswer: 'Erreur',
+                        pointsObtainedForAnswer: 0,
+                        isCorrectAnswer: false
+                      };
                     }
-                  }
-                }
-                // Trouver la réponse du participant et les points
-                const participantResult = sessionResults.find(
-                  sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
+                  })
                 );
-                return {
-                  ...question,
-                  resolvedThemeName,
-                  participantAnswer: participantResult?.answer,
-                  pointsObtainedForAnswer: participantResult?.pointsObtained,
-                  isCorrectAnswer: participantResult?.isCorrect
-                };
-              })
-            );
+                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Finished Promise.all. Enriched ${enrichedSessionQuestions.length} questions.`);
 
-            const currentParticipantSessionResults = sessionResults.filter(
-              r => r.participantIdBoitier === serialNumberOfSelectedParticipant
-            );
+                const currentParticipantSessionResults = sessionResults.filter(
+                  r => r.participantIdBoitier === serialNumberOfSelectedParticipant
+                );
 
-            const score = calculateParticipantScore(currentParticipantSessionResults, enrichedSessionQuestions);
-            const themeScores = calculateThemeScores(currentParticipantSessionResults, enrichedSessionQuestions);
-            const reussite = determineIndividualSuccess(score, themeScores);
+                const score = calculateParticipantScore(currentParticipantSessionResults, enrichedSessionQuestions);
+                const themeScores = calculateThemeScores(currentParticipantSessionResults, enrichedSessionQuestions);
+                const reussite = determineIndividualSuccess(score, themeScores);
 
-            processed.push({
-              ...sessionInstance,
-              participantScore: score,
-              participantSuccess: reussite,
-              themeScores,
-              questionsForDisplay: enrichedSessionQuestions
-            });
+                processed.push({
+                  ...sessionInstance,
+                  participantScore: score,
+                  participantSuccess: reussite,
+                  themeScores,
+                  questionsForDisplay: enrichedSessionQuestions
+                });
+                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Pushed to processed. Current total: ${processed.length}`);
+              }
+            }
+            console.log('[ParticipantReport DEBUG] Processed sessions for participant (final count):', processed.length, processed);
+            setProcessedParticipantSessions(processed.sort((a,b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+          } else {
+            console.log('[ParticipantReport DEBUG] processSessions: DID NOT RUN main logic. Conditions not met. deviceMap type:', typeof deviceMap, 'deviceMap size:', deviceMap?.size, 'themes:', allThemesDb?.length, 'blocs:', allBlocsDb?.length);
+            setProcessedParticipantSessions([]);
           }
+        } catch (e: any) {
+          console.error('[ParticipantReport DEBUG] Error in processSessions try-catch block:', e);
+          if (e instanceof ReferenceError) {
+            console.error("[ParticipantReport DEBUG] Caught ReferenceError in processSessions:", e.message, e.stack);
+          }
+          setProcessedParticipantSessions([]);
         }
-        setProcessedParticipantSessions(processed.sort((a,b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
       } else {
+        console.log('[ParticipantReport DEBUG] No selected participant or missing assignedGlobalDeviceId. Clearing processed sessions.');
         setProcessedParticipantSessions([]);
       }
     };
@@ -194,10 +266,12 @@ const ParticipantReport = () => {
   };
 
   if (selectedParticipant) {
-    const totalScore = processedParticipantSessions.reduce((sum, s) => sum + (s.participantScore || 0), 0);
-    const avgScore = processedParticipantSessions.length > 0 ? totalScore / processedParticipantSessions.length : 0;
-    const totalSuccess = processedParticipantSessions.filter(s => s.participantSuccess).length;
-    const successRate = processedParticipantSessions.length > 0 ? (totalSuccess / processedParticipantSessions.length) * 100 : 0;
+    // Calcule le score moyen et taux de réussite global pour le participant sélectionné sur toutes ses sessions traitées.
+    // Ces statistiques globales ne sont peut-être pas celles attendues ici si on veut un détail par session.
+    // const totalScore = processedParticipantSessions.reduce((sum, s) => sum + (s.participantScore || 0), 0);
+    // const avgScore = processedParticipantSessions.length > 0 ? totalScore / processedParticipantSessions.length : 0;
+    // const totalSuccess = processedParticipantSessions.filter(s => s.participantSuccess).length;
+    // const successRate = processedParticipantSessions.length > 0 ? (totalSuccess / processedParticipantSessions.length) * 100 : 0;
 
     return (
       <Card>
@@ -205,8 +279,12 @@ const ParticipantReport = () => {
           Retour à la liste
         </Button>
         <h2 className="text-2xl font-bold mb-2">{selectedParticipant.prenom} {selectedParticipant.nom}</h2>
-        <p className="text-gray-500 mb-6">ID Boîtier: {selectedParticipant.idBoitier}</p>
+        {/* Afficher l'ID du boîtier (serialNumber) si disponible via deviceMap */}
+        <p className="text-gray-500 mb-6">
+          ID Boîtier : {selectedParticipant.assignedGlobalDeviceId ? (deviceMap.get(selectedParticipant.assignedGlobalDeviceId) || 'N/A') : 'Non assigné'}
+        </p>
         
+        {/* Retrait des stats globales du participant pour se concentrer sur les détails par session
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-xs text-gray-500">Score moyen global</p>
@@ -217,15 +295,19 @@ const ParticipantReport = () => {
             <p className="text-2xl font-semibold text-gray-900">{successRate.toFixed(0)}%</p>
           </div>
         </div>
+        */}
 
         <h3 className="text-xl font-semibold mb-4">Historique des sessions</h3>
+        {processedParticipantSessions.length === 0 && (
+          <p className="text-gray-500">Aucune session traitée à afficher pour ce participant (vérifiez les logs pour le débogage).</p>
+        )}
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Session</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Score</TableHead>
-              <TableHead>Résultat</TableHead>
+              <TableHead>Score Global</TableHead>
+              <TableHead>Résultat Global</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -264,7 +346,7 @@ const ParticipantReport = () => {
                       {session.nomSession}
                     </TableCell>
                     <TableCell>{new Date(session.dateSession).toLocaleDateString('fr-FR')}</TableCell>
-                    <TableCell className={session.participantSuccess ? 'text-green-600' : 'text-red-600'}>
+                    <TableCell className={session.participantSuccess === true ? 'text-green-600 font-semibold' : session.participantSuccess === false ? 'text-red-600 font-semibold' : ''}>
                       {session.participantScore !== undefined ? `${session.participantScore.toFixed(0)} / 100` : 'N/A'}
                     </TableCell>
                     <TableCell>
@@ -281,39 +363,42 @@ const ParticipantReport = () => {
                   </TableRow>
                   {isExpanded && session.id !== undefined && (
                     <TableRow>
-                      <TableCell colSpan={4} className="p-0"> {/* p-0 pour que la sous-carte prenne toute la place */}
-                        <div className="p-4 bg-gray-50">
-                          <h4 className="text-md font-semibold mb-3">Détail des scores par thème :</h4>
-                          {session.themeScores && Object.entries(session.themeScores).map(([themeName, themeScore]) => (
-                            <div key={themeName} className="mb-2">
-                              <span className={themeScore < 50 ? 'text-red-500 font-semibold' : 'font-semibold'}>
-                                {themeName}: {themeScore.toFixed(0)} / 100
-                              </span>
+                      <TableCell colSpan={4} className="p-0 bg-slate-50"> {/* p-0 pour que la sous-carte prenne toute la place */}
+                        <div className="p-4 ">
+                          <h4 className="text-md font-semibold mb-3 text-gray-800">Détail des scores par thème :</h4>
+                          {session.themeScores && Object.entries(session.themeScores).length > 0 ? (
+                            Object.entries(session.themeScores).map(([themeName, themeScore]) => (
+                            <div key={themeName} className="mb-1 text-sm">
+                              <span className={themeScore < 50 ? 'text-red-500 font-semibold' : 'text-gray-700 font-semibold'}>
+                                {themeName}: </span> {themeScore.toFixed(0)} / 100
                             </div>
-                          ))}
+                          ))
+                          ) : (<p className="text-xs text-gray-500">Scores par thème non disponibles.</p>)}
 
-                          {Object.entries(questionsByTheme).map(([themeName, questions]) => (
+                          {Object.entries(questionsByTheme).length > 0 ? (
+                            Object.entries(questionsByTheme).map(([themeName, questions]) => (
                             <div key={themeName} className="mt-4">
-                              <h5 className="text-sm font-semibold text-gray-700 mb-2 border-b pb-1">Thème : {themeName}</h5>
+                              <h5 className="text-sm font-semibold text-gray-700 mb-2 border-b border-gray-300 pb-1">Thème : {themeName}</h5>
                               {questions.map((q, qIndex) => (
                                 <div key={q.id || qIndex} className="text-xs mb-3 pb-2 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
-                                  <p className="flex items-center">
-                                    <HelpCircle size={14} className="mr-1 text-blue-500" />
-                                    <strong>{q.text}</strong>
+                                  <p className="flex items-center font-medium text-gray-800">
+                                    <HelpCircle size={14} className="mr-1.5 text-blue-600 flex-shrink-0" />
+                                    {q.text}
                                   </p>
-                                  <p className="ml-5">Votre réponse : <span className="font-medium">{q.participantAnswer || 'Non répondu'}</span></p>
+                                  <p className="ml-5 mt-0.5">Votre réponse : <span className="font-semibold text-gray-700">{q.participantAnswer || 'Non répondu'}</span></p>
                                   {q.isCorrectAnswer === false && ( // Afficher correction seulement si réponse fausse
-                                    <p className="ml-5 text-orange-600">Bonne réponse : <span className="font-medium">{q.correctAnswer}</span></p>
+                                    <p className="ml-5 mt-0.5 text-orange-700">Bonne réponse : <span className="font-semibold">{q.correctAnswer}</span></p>
                                   )}
-                                  <p className="ml-5 flex items-center">
-                                    Points obtenus : <span className="font-medium ml-1">{q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</span>
+                                  <p className="ml-5 mt-0.5 flex items-center">
+                                    Points : <span className="font-semibold text-gray-700 ml-1">{q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</span>
                                     {q.isCorrectAnswer === true && <CheckCircle size={14} className="ml-2 text-green-500" />}
-                                    {q.isCorrectAnswer === false && <XCircle size={14} className="ml-2 text-red-500" />}
+                                    {q.isCorrectAnswer === false && q.participantAnswer !== undefined && <XCircle size={14} className="ml-2 text-red-500" />}
                                   </p>
                                 </div>
                               ))}
                             </div>
-                          ))}
+                          ))
+                          ) : (<p className="mt-4 text-xs text-gray-500">Détail des questions non disponible.</p>)}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -332,10 +417,10 @@ const ParticipantReport = () => {
       <h2 className="text-xl font-bold mb-4">Rapport par Participant</h2>
       <div className="mb-4">
         <Input 
-          placeholder="Rechercher par nom..."
+          placeholder="Rechercher un participant, une session..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-1/3"
+          className="w-full md:w-1/2 lg:w-1/3"
           icon={<Search size={16} className="text-gray-400"/>}
         />
       </div>
