@@ -5,14 +5,14 @@ import {
   getResultsForSession,
   getQuestionsForSessionBlocks,
   getAllReferentiels,
-  getReferentialById,
-  getAllVotingDevices, // Ajouté
-  getAllThemes,        // Ajouté
-  getAllBlocs,         // Ajouté
-  getBlocById,         // Ajouté pour enrichissement questions
-  getThemeById         // Ajouté pour enrichissement questions
+  // getReferentialById, // Moins utile ici car on a referentialMap
+  getAllVotingDevices,
+  getAllThemes,
+  getAllBlocs,
+  getBlocById,
+  getThemeById
 } from '../../db';
-import { Session, Participant, SessionResult, QuestionWithId, Referential, VotingDevice, Theme, Bloc } from '../../types'; // Ajout de VotingDevice, Theme, Bloc
+import { Session, Participant, SessionResult, QuestionWithId, Referential, VotingDevice, Theme, Bloc } from '../../types';
 import {
   Table,
   TableHeader,
@@ -22,14 +22,12 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
-import { Search, ArrowLeft, ChevronDown, ChevronRight, HelpCircle, CheckCircle, XCircle } from 'lucide-react'; // Ajout d'icônes
+import { Search, ArrowLeft, ChevronDown, ChevronRight, HelpCircle, CheckCircle, XCircle } from 'lucide-react';
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import Badge from '../ui/Badge';
-// Ajout d'un type pour le mapping des réponses (si nécessaire, pour l'instant string)
-// type AnswerOption = { id: string; text: string }; // Exemple
 
-// Interface pour les questions enrichies localement dans ce composant
+// Interface pour les questions enrichies localement
 interface EnrichedQuestionForParticipantReport extends QuestionWithId {
   resolvedThemeName?: string;
   participantAnswer?: string;
@@ -37,6 +35,7 @@ interface EnrichedQuestionForParticipantReport extends QuestionWithId {
   isCorrectAnswer?: boolean;
 }
 
+// Étend Session pour inclure les données traitées pour l'affichage du participant
 interface ProcessedSession extends Session {
   participantScore?: number;
   participantSuccess?: boolean;
@@ -44,13 +43,14 @@ interface ProcessedSession extends Session {
   questionsForDisplay?: EnrichedQuestionForParticipantReport[];
 }
 
+// Pour la liste principale des participations
 interface SessionParticipation {
-  key: string; // Clé unique pour la ligne, ex: `session-${sessionId}-participant-${participantRef.assignedGlobalDeviceId}`
-  participantDisplayId: string; // Pour l'affichage, si idBoitier n'est pas sur Participant
+  key: string;
+  participantDisplayId: string;
   participantRef: Participant;
   sessionName: string;
   sessionDate: string;
-  referentialName: string;
+  referentialName: string; // Ici, on utilisera le code du référentiel
 }
 
 const ParticipantReport = () => {
@@ -62,10 +62,10 @@ const ParticipantReport = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
   const [processedParticipantSessions, setProcessedParticipantSessions] = useState<ProcessedSession[]>([]);
-  const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set()); // Pour gérer les détails dépliés
+  const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set());
 
-  const referentialMap = useMemo(() => {
-    return new Map(allReferentiels.map(ref => [ref.id, ref.nom_complet]));
+  const referentialCodeMap = useMemo(() => {
+    return new Map(allReferentiels.map(ref => [ref.id, ref.code])); // id -> code
   }, [allReferentiels]);
 
   const deviceMap = useMemo(() => {
@@ -98,50 +98,49 @@ const ParticipantReport = () => {
 
   useEffect(() => {
     const processSessions = async () => {
-      console.log('[ParticipantReport DEBUG] processSessions triggered. SP:', selectedParticipant);
-      console.log('[ParticipantReport DEBUG] Values at start of processSessions: deviceMap type =', typeof deviceMap, 'deviceMap keys =', deviceMap ? Array.from(deviceMap.keys()) : 'undefined', 'allThemesDb length =', allThemesDb?.length, 'allBlocsDb length =', allBlocsDb?.length);
+      // console.log('[ParticipantReport DEBUG] processSessions triggered. SP:', selectedParticipant);
+      // console.log('[ParticipantReport DEBUG] Values at start of processSessions: deviceMap type =', typeof deviceMap, 'deviceMap keys =', deviceMap ? Array.from(deviceMap.keys()) : 'undefined', 'allThemesDb length =', allThemesDb?.length, 'allBlocsDb length =', allBlocsDb?.length);
 
       if (selectedParticipant && selectedParticipant.assignedGlobalDeviceId !== undefined) {
-        console.log('[ParticipantReport DEBUG] Participant selected. Checking maps/arrays...');
+        // console.log('[ParticipantReport DEBUG] Participant selected. Checking maps/arrays...');
         try {
           if (deviceMap && typeof deviceMap.get === 'function' && deviceMap.size > 0 && allThemesDb && allThemesDb.length > 0 && allBlocsDb && allBlocsDb.length > 0) {
-            console.log('[ParticipantReport DEBUG] All maps/arrays seem populated. Proceeding with logic.');
+            // console.log('[ParticipantReport DEBUG] All maps/arrays seem populated. Proceeding with logic.');
             const serialNumberOfSelectedParticipant = deviceMap.get(selectedParticipant.assignedGlobalDeviceId);
-            console.log('[ParticipantReport DEBUG] Serial for SP:', serialNumberOfSelectedParticipant);
+            // console.log('[ParticipantReport DEBUG] Serial for SP:', serialNumberOfSelectedParticipant);
 
             if (!serialNumberOfSelectedParticipant) {
               setProcessedParticipantSessions([]);
-              console.log('[ParticipantReport DEBUG] No serial number for selected participant, clearing processed sessions.');
+              // console.log('[ParticipantReport DEBUG] No serial number for selected participant, clearing processed sessions.');
               return;
             }
 
             const participantSessions = sessions.filter(s =>
               s.participants?.some(p => p.assignedGlobalDeviceId === selectedParticipant.assignedGlobalDeviceId)
             );
-            console.log('[ParticipantReport DEBUG] Number of sessions found for participant:', participantSessions.length);
+            // console.log('[ParticipantReport DEBUG] Number of sessions found for participant:', participantSessions.length);
 
             if (participantSessions.length === 0) {
                 setProcessedParticipantSessions([]);
-                console.log('[ParticipantReport DEBUG] No sessions found for this participant in the main sessions list.');
+                // console.log('[ParticipantReport DEBUG] No sessions found for this participant in the main sessions list.');
                 return;
             }
 
             const processed: ProcessedSession[] = [];
 
             for (const sessionInstance of participantSessions) {
-              console.log(`[ParticipantReport DEBUG] Processing session ID: ${sessionInstance.id}`);
+              // console.log(`[ParticipantReport DEBUG] Processing session ID: ${sessionInstance.id}`);
               if (sessionInstance.id) {
                 const sessionResults = await getResultsForSession(sessionInstance.id);
-                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Found ${sessionResults.length} results.`);
+                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Found ${sessionResults.length} results.`);
 
                 const baseSessionQuestions = await getQuestionsForSessionBlocks(sessionInstance.selectedBlocIds || []);
-                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Found ${baseSessionQuestions.length} base questions for selected blocs.`);
+                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Found ${baseSessionQuestions.length} base questions for selected blocs.`);
 
-                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Starting Promise.all for enriching ${baseSessionQuestions.length} questions...`);
+                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Starting Promise.all for enriching ${baseSessionQuestions.length} questions...`);
                 const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
                   baseSessionQuestions.map(async (question, index) => {
                     try {
-                      // console.log(`[ParticipantReport DEBUG] Enriching question ${index + 1}/${baseSessionQuestions.length}, ID: ${question.id}, blocId: ${question.blocId}`);
                       let resolvedThemeName = 'Thème non spécifié';
                       if (question.blocId) {
                         const bloc = allBlocsDb.find(b => b.id === question.blocId);
@@ -149,20 +148,12 @@ const ParticipantReport = () => {
                           const theme = allThemesDb.find(t => t.id === bloc.theme_id);
                           if (theme) {
                             resolvedThemeName = theme.nom_complet;
-                          } else {
-                            // console.warn(`[ParticipantReport DEBUG] Theme not found for theme_id: ${bloc.theme_id} (Question ID: ${question.id})`);
                           }
-                        } else {
-                          // console.warn(`[ParticipantReport DEBUG] Bloc not found for blocId: ${question.blocId} or theme_id missing (Question ID: ${question.id})`);
                         }
-                      } else {
-                        // console.warn(`[ParticipantReport DEBUG] question.blocId is missing (Question ID: ${question.id})`);
                       }
-
                       const participantResult = sessionResults.find(
                         sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
                       );
-
                       return {
                         ...question,
                         resolvedThemeName,
@@ -171,7 +162,7 @@ const ParticipantReport = () => {
                         isCorrectAnswer: participantResult?.isCorrect
                       };
                     } catch (error) {
-                      console.error(`[ParticipantReport DEBUG] Error enriching question ID ${question.id} (index ${index}):`, error);
+                      console.error(`[ParticipantReport] Error enriching question ID ${question.id} (index ${index}):`, error); // Garder ce log d'erreur important
                       return {
                         ...question,
                         resolvedThemeName: 'Erreur chargement thème',
@@ -182,7 +173,7 @@ const ParticipantReport = () => {
                     }
                   })
                 );
-                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Finished Promise.all. Enriched ${enrichedSessionQuestions.length} questions.`);
+                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Finished Promise.all. Enriched ${enrichedSessionQuestions.length} questions.`);
 
                 const currentParticipantSessionResults = sessionResults.filter(
                   r => r.participantIdBoitier === serialNumberOfSelectedParticipant
@@ -199,24 +190,24 @@ const ParticipantReport = () => {
                   themeScores,
                   questionsForDisplay: enrichedSessionQuestions
                 });
-                console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Pushed to processed. Current total: ${processed.length}`);
+                // console.log(`[ParticipantReport DEBUG] Session ${sessionInstance.id}: Pushed to processed. Current total: ${processed.length}`);
               }
             }
-            console.log('[ParticipantReport DEBUG] Processed sessions for participant (final count):', processed.length, processed);
+            // console.log('[ParticipantReport DEBUG] Processed sessions for participant (final count):', processed.length, processed);
             setProcessedParticipantSessions(processed.sort((a,b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
           } else {
-            console.log('[ParticipantReport DEBUG] processSessions: DID NOT RUN main logic. Conditions not met. deviceMap type:', typeof deviceMap, 'deviceMap size:', deviceMap?.size, 'themes:', allThemesDb?.length, 'blocs:', allBlocsDb?.length);
+            // console.log('[ParticipantReport DEBUG] processSessions: DID NOT RUN main logic. Conditions not met. deviceMap type:', typeof deviceMap, 'deviceMap size:', deviceMap?.size, 'themes:', allThemesDb?.length, 'blocs:', allBlocsDb?.length);
             setProcessedParticipantSessions([]);
           }
         } catch (e: any) {
-          console.error('[ParticipantReport DEBUG] Error in processSessions try-catch block:', e);
+          console.error('[ParticipantReport] Error in processSessions try-catch block:', e); // Garder ce log
           if (e instanceof ReferenceError) {
-            console.error("[ParticipantReport DEBUG] Caught ReferenceError in processSessions:", e.message, e.stack);
+            console.error("[ParticipantReport] Caught ReferenceError in processSessions:", e.message, e.stack);  // Garder ce log
           }
           setProcessedParticipantSessions([]);
         }
       } else {
-        console.log('[ParticipantReport DEBUG] No selected participant or missing assignedGlobalDeviceId. Clearing processed sessions.');
+        // console.log('[ParticipantReport DEBUG] No selected participant or missing assignedGlobalDeviceId. Clearing processed sessions.');
         setProcessedParticipantSessions([]);
       }
     };
@@ -226,80 +217,56 @@ const ParticipantReport = () => {
   const allSessionParticipations = useMemo(() => {
     const participations: SessionParticipation[] = [];
     sessions.forEach(session => {
-      if (!session.id) return; // Assurer que la session a un ID
+      if (!session.id) return;
       session.participants?.forEach((p, index) => {
-        // Utiliser assignedGlobalDeviceId ou un index pour la clé si assignedGlobalDeviceId est null
         const participantKeyPart = p.assignedGlobalDeviceId ? p.assignedGlobalDeviceId.toString() : `idx-${index}`;
         participations.push({
           key: `session-${session.id}-participant-${participantKeyPart}`,
           participantRef: p,
-          participantDisplayId: p.identificationCode || `Boîtier ID ${p.assignedGlobalDeviceId || 'N/A'}`, // Exemple d'ID affichable
+          participantDisplayId: p.identificationCode || `Boîtier ID ${p.assignedGlobalDeviceId || 'N/A'}`,
           sessionName: session.nomSession,
           sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
-          referentialName: session.referentielId ? (referentialMap.get(session.referentielId) || 'N/A') : 'N/A',
+          referentialName: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
         });
       });
     });
     return participations;
-  }, [sessions, referentialMap]);
+  }, [sessions, referentialCodeMap]);
 
   const filteredSessionParticipations = useMemo(() => {
-    if (!searchTerm) {
-      return allSessionParticipations;
-    }
+    if (!searchTerm) return allSessionParticipations;
     return allSessionParticipations.filter(participation =>
-      participation.participantRef.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      participation.participantRef.prenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `${participation.participantRef.prenom} ${participation.participantRef.nom}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       participation.sessionName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       participation.referentialName.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [allSessionParticipations, searchTerm]);
 
   const handleSelectParticipant = (participant: Participant) => {
-    // La sélection d'un participant pour voir ses détails reste basée sur l'objet Participant
     setSelectedParticipant(participant);
+    setExpandedSessions(new Set());
   };
 
   const handleBack = () => {
     setSelectedParticipant(null);
     setProcessedParticipantSessions([]);
+    setExpandedSessions(new Set());
   };
 
   if (selectedParticipant) {
-    // Calcule le score moyen et taux de réussite global pour le participant sélectionné sur toutes ses sessions traitées.
-    // Ces statistiques globales ne sont peut-être pas celles attendues ici si on veut un détail par session.
-    // const totalScore = processedParticipantSessions.reduce((sum, s) => sum + (s.participantScore || 0), 0);
-    // const avgScore = processedParticipantSessions.length > 0 ? totalScore / processedParticipantSessions.length : 0;
-    // const totalSuccess = processedParticipantSessions.filter(s => s.participantSuccess).length;
-    // const successRate = processedParticipantSessions.length > 0 ? (totalSuccess / processedParticipantSessions.length) * 100 : 0;
-
     return (
       <Card>
         <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBack} className="mb-4">
           Retour à la liste
         </Button>
         <h2 className="text-2xl font-bold mb-2">{selectedParticipant.prenom} {selectedParticipant.nom}</h2>
-        {/* Afficher l'ID du boîtier (serialNumber) si disponible via deviceMap */}
         <p className="text-gray-500 mb-6">
           ID Boîtier : {selectedParticipant.assignedGlobalDeviceId ? (deviceMap.get(selectedParticipant.assignedGlobalDeviceId) || 'N/A') : 'Non assigné'}
         </p>
         
-        {/* Retrait des stats globales du participant pour se concentrer sur les détails par session
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <p className="text-xs text-gray-500">Score moyen global</p>
-            <p className="text-2xl font-semibold text-gray-900">{avgScore.toFixed(0)}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500">Taux de réussite global</p>
-            <p className="text-2xl font-semibold text-gray-900">{successRate.toFixed(0)}%</p>
-          </div>
-        </div>
-        */}
-
         <h3 className="text-xl font-semibold mb-4">Historique des sessions</h3>
         {processedParticipantSessions.length === 0 && (
-          <p className="text-gray-500">Aucune session traitée à afficher pour ce participant (vérifiez les logs pour le débogage).</p>
+          <p className="text-gray-500">Aucune session traitée à afficher pour ce participant (ou données en cours de chargement).</p>
         )}
         <Table>
           <TableHeader>
@@ -317,23 +284,17 @@ const ParticipantReport = () => {
                 if (session.id === undefined) return;
                 setExpandedSessions(prev => {
                   const next = new Set(prev);
-                  if (next.has(session.id!)) {
-                    next.delete(session.id!);
-                  } else {
-                    next.add(session.id!);
-                  }
+                  if (next.has(session.id!)) next.delete(session.id!);
+                  else next.add(session.id!);
                   return next;
                 });
               };
 
-              // Grouper les questions par thème résolu pour l'affichage
               const questionsByTheme: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
               if (session.questionsForDisplay) {
                 session.questionsForDisplay.forEach(q => {
                   const theme = q.resolvedThemeName || 'Thème non spécifié';
-                  if (!questionsByTheme[theme]) {
-                    questionsByTheme[theme] = [];
-                  }
+                  if (!questionsByTheme[theme]) questionsByTheme[theme] = [];
                   questionsByTheme[theme].push(q);
                 });
               }
@@ -351,19 +312,13 @@ const ParticipantReport = () => {
                     </TableCell>
                     <TableCell>
                       {session.participantSuccess !== undefined ? (
-                        session.participantSuccess ? (
-                          <Badge variant="success">Réussi</Badge>
-                        ) : (
-                          <Badge variant="danger">Ajourné</Badge>
-                        )
-                      ) : (
-                        <Badge variant="warning">En attente</Badge>
-                      )}
+                        session.participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
+                      ) : <Badge variant="warning">En attente</Badge>}
                     </TableCell>
                   </TableRow>
                   {isExpanded && session.id !== undefined && (
                     <TableRow>
-                      <TableCell colSpan={4} className="p-0 bg-slate-50"> {/* p-0 pour que la sous-carte prenne toute la place */}
+                      <TableCell colSpan={4} className="p-0 bg-slate-50">
                         <div className="p-4 ">
                           <h4 className="text-md font-semibold mb-3 text-gray-800">Détail des scores par thème :</h4>
                           {session.themeScores && Object.entries(session.themeScores).length > 0 ? (
@@ -386,7 +341,7 @@ const ParticipantReport = () => {
                                     {q.text}
                                   </p>
                                   <p className="ml-5 mt-0.5">Votre réponse : <span className="font-semibold text-gray-700">{q.participantAnswer || 'Non répondu'}</span></p>
-                                  {q.isCorrectAnswer === false && ( // Afficher correction seulement si réponse fausse
+                                  {q.isCorrectAnswer === false && (
                                     <p className="ml-5 mt-0.5 text-orange-700">Bonne réponse : <span className="font-semibold">{q.correctAnswer}</span></p>
                                   )}
                                   <p className="ml-5 mt-0.5 flex items-center">

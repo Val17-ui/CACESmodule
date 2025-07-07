@@ -38,9 +38,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
   const [questionsForThisSession, setQuestionsForThisSession] = useState<QuestionWithId[]>([]);
-  const [blockStats, setBlockStats] = useState<NumericBlockPerformanceStats[]>([]); // Changement de type
+  const [blockStats, setBlockStats] = useState<NumericBlockPerformanceStats[]>([]);
   const [trainerName, setTrainerName] = useState<string>('N/A');
-  const [referentialInfo, setReferentialInfo] = useState<Referential | null>(null); // Pour stocker l'objet Référentiel
+  const [referentialCode, setReferentialCode] = useState<string>('N/A'); // Stocker uniquement le code
   const [themeNames, setThemeNames] = useState<string[]>([]);
   const [votingDevices, setVotingDevices] = useState<VotingDevice[]>([]);
   const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
@@ -74,18 +74,18 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
         // Récupérer le nom du référentiel
         if (session.referentielId) {
-          console.log('[ReportDetails] session.referentielId:', session.referentielId);
+          // console.log('[ReportDetails] session.referentielId:', session.referentielId);
           const referential = await getReferentialById(session.referentielId);
-          console.log('[ReportDetails] Fetched referential (full object):', JSON.stringify(referential));
-          if (referential) {
-            setReferentialInfo(referential);
+          // console.log('[ReportDetails] Fetched referential (full object):', JSON.stringify(referential));
+          if (referential && referential.code) {
+            setReferentialCode(referential.code);
           } else {
-            console.warn('[ReportDetails] Referential object not found for id:', session.referentielId);
-            setReferentialInfo(null);
+            // console.warn('[ReportDetails] Referential object or code is missing for id:', session.referentielId);
+            setReferentialCode('N/A');
           }
         } else {
-          console.log('[ReportDetails] session.referentielId is undefined or null');
-          setReferentialInfo(null);
+          // console.log('[ReportDetails] session.referentielId is undefined or null');
+          setReferentialCode('N/A');
         }
 
         // Récupérer les noms des thèmes
@@ -327,13 +327,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       // et les infos calculées (score, reussite).
       // Le type de participant dans participantCalculatedData est déjà Participant & { score, reussite }
       try {
-      const referentialDisplayForPdf = referentialInfo ? referentialInfo.code : 'N/A'; // Juste le code pour le PDF aussi
+      // referentialCode est déjà juste le code ou 'N/A'
         const pdfData = await generateParticipantPDF(
           participant,
           session,
           questionsForThisSession as (QuestionWithId & { resolvedThemeName?: string })[], // Cast pour correspondre
           trainerName,
-        referentialDisplayForPdf
+        referentialCode
         );
         zip.file(pdfData.filename, pdfData.data);
       } catch (error) {
@@ -352,8 +352,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     }
   };
 
-  // console.log('[ReportDetails] Final referentialName before render:', referentialName); // Remplacé par referentialInfo
-  console.log('[ReportDetails] Final referentialInfo before render:', referentialInfo);
+  // console.log('[ReportDetails] Final referentialInfo before render:', referentialInfo); // Remplacé par referentialCode
+  console.log('[ReportDetails] Final referentialCode before render:', referentialCode);
 
 
   return (
@@ -370,7 +370,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       </div>
       <div ref={reportRef} className="p-4">
         <Card title="Résumé de la session" className="mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Ajout de md:items-start pour que les colonnes de la grille déterminent leur propre hauteur */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:items-start">
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {session.nomSession}
@@ -383,7 +384,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                 </div>
                 <div className="flex items-center text-sm">
                   <BookOpen size={18} className="text-gray-400 mr-2" />
-                  <span>Référentiel : {referentialInfo ? referentialInfo.code : 'N/A'}</span>
+                  <span>Référentiel : {referentialCode}</span>
                 </div>
                 {themeNames.length > 0 && (
                   <div className="flex items-start text-sm"> {/* items-start pour alignement multiligne */}
