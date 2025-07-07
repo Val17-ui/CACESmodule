@@ -40,7 +40,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const [questionsForThisSession, setQuestionsForThisSession] = useState<QuestionWithId[]>([]);
   const [blockStats, setBlockStats] = useState<NumericBlockPerformanceStats[]>([]); // Changement de type
   const [trainerName, setTrainerName] = useState<string>('N/A');
-  const [referentialName, setReferentialName] = useState<string>('N/A');
+  const [referentialInfo, setReferentialInfo] = useState<Referential | null>(null); // Pour stocker l'objet Référentiel
   const [themeNames, setThemeNames] = useState<string[]>([]);
   const [votingDevices, setVotingDevices] = useState<VotingDevice[]>([]);
   const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
@@ -77,15 +77,15 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           console.log('[ReportDetails] session.referentielId:', session.referentielId);
           const referential = await getReferentialById(session.referentielId);
           console.log('[ReportDetails] Fetched referential (full object):', JSON.stringify(referential));
-          if (referential && referential.nom_complet) {
-            setReferentialName(referential.nom_complet);
+          if (referential) {
+            setReferentialInfo(referential);
           } else {
-            console.warn('[ReportDetails] Referential object or nom_complet is missing:', referential);
-            setReferentialName('Référentiel non trouvé');
+            console.warn('[ReportDetails] Referential object not found for id:', session.referentielId);
+            setReferentialInfo(null);
           }
         } else {
           console.log('[ReportDetails] session.referentielId is undefined or null');
-          setReferentialName('N/A');
+          setReferentialInfo(null);
         }
 
         // Récupérer les noms des thèmes
@@ -327,12 +327,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       // et les infos calculées (score, reussite).
       // Le type de participant dans participantCalculatedData est déjà Participant & { score, reussite }
       try {
+      const referentialDisplayForPdf = referentialInfo ? referentialInfo.code : 'N/A'; // Juste le code pour le PDF aussi
         const pdfData = await generateParticipantPDF(
           participant,
           session,
           questionsForThisSession as (QuestionWithId & { resolvedThemeName?: string })[], // Cast pour correspondre
           trainerName,
-          referentialName
+        referentialDisplayForPdf
         );
         zip.file(pdfData.filename, pdfData.data);
       } catch (error) {
@@ -351,7 +352,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     }
   };
 
-  console.log('[ReportDetails] Final referentialName before render:', referentialName);
+  // console.log('[ReportDetails] Final referentialName before render:', referentialName); // Remplacé par referentialInfo
+  console.log('[ReportDetails] Final referentialInfo before render:', referentialInfo);
+
 
   return (
     <div>
@@ -379,9 +382,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <span>Date : {formatDate(session.dateSession)}</span>
                 </div>
                 <div className="flex items-center text-sm">
-                  {/* <BookOpen size={18} className="text-gray-400 mr-2" />
-                  <span>Référentiel : </span> */}
-                  <span>{referentialName}</span>
+                  <BookOpen size={18} className="text-gray-400 mr-2" />
+                  <span>Référentiel : {referentialInfo ? referentialInfo.code : 'N/A'}</span>
                 </div>
                 {themeNames.length > 0 && (
                   <div className="flex items-start text-sm"> {/* items-start pour alignement multiligne */}

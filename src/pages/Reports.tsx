@@ -32,15 +32,20 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const [trainersListForFilter, setTrainersListForFilter] = useState<Trainer[]>([]);
   const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]); // Pour stocker les référentiels de la DB
 
-  const referentialMap = useMemo(() => {
-    return new Map(allReferentielsDb.map(ref => [ref.id, ref.nom_complet]));
+  const referentialCodeMap = useMemo(() => {
+    // Stocke l'ID du référentiel vers son CODE
+    return new Map(allReferentielsDb.map(ref => [ref.id, ref.code]));
   }, [allReferentielsDb]);
 
   // Options pour le Select des référentiels, basées sur allReferentielsDb
   const referentialOptionsForFilter = useMemo(() => {
     return [
       { value: 'all', label: 'Tous les référentiels' },
-      ...allReferentielsDb.map(ref => ({ value: String(ref.id), label: ref.nom_complet }))
+      // Afficher juste le code dans les options du filtre
+      ...allReferentielsDb.map(ref => ({
+        value: String(ref.id),
+        label: ref.code // Juste le code
+      }))
     ];
   }, [allReferentielsDb]);
 
@@ -131,7 +136,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
             <ReportsList
               sessions={filteredSessions}
               onViewReport={handleViewSessionReport}
-              referentialMap={referentialMap} // Passer la map
+              referentialMap={referentialCodeMap} // Passer la nouvelle map de codes
             />
           </div>
         );

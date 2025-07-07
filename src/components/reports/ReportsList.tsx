@@ -18,7 +18,7 @@ import { getResultsForSession, getQuestionsForSessionBlocks } from '../../db';
 type ReportsListProps = {
   sessions: Session[];
   onViewReport: (id: string) => void;
-  referentialMap: Map<number | undefined, string | undefined>; // Map ID Référentiel -> Nom Référentiel
+  referentialMap: Map<number | undefined, string | undefined>; // Map ID Référentiel -> Code Référentiel
 };
 
 const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, referentialMap }) => {
