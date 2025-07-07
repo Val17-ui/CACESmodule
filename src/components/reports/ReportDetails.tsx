@@ -1,14 +1,14 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react'; // Ajout de useMemo
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
-import { UserCheck, Calendar, Download, Layers, MapPin, User, BookOpen, ListChecks } from 'lucide-react'; // Ajout de BookOpen, ListChecks
-import { Session, Participant, SessionResult, QuestionWithId, QuestionMapping, Trainer, Referential, Theme, Bloc } from '../../types'; // Ajout de Referential, Theme, Bloc
+import { UserCheck, Calendar, Download, Layers, MapPin, User, BookOpen, ListChecks } from 'lucide-react';
+import { Session, Participant, SessionResult, QuestionWithId, QuestionMapping, Trainer, Referential, Theme, Bloc, VotingDevice } from '../../types'; // Ajout de VotingDevice
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { getResultsForSession, getQuestionsByIds, getTrainerById, getReferentialById, getThemeById, getBlocById } from '../../db'; // Ajout de getReferentialById, getThemeById, getBlocById
+import { getResultsForSession, getQuestionsByIds, getTrainerById, getReferentialById, getThemeById, getBlocById, getAllVotingDevices } from '../../db'; // Ajout de getAllVotingDevices
 import {
   calculateParticipantScore,
   calculateThemeScores,
@@ -31,13 +31,22 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const [trainerName, setTrainerName] = useState<string>('N/A');
   const [referentialName, setReferentialName] = useState<string>('N/A');
   const [themeNames, setThemeNames] = useState<string[]>([]);
+  const [votingDevices, setVotingDevices] = useState<VotingDevice[]>([]);
 
   // Utiliser session.participants directement
   const participants = session.participants || [];
 
+  const deviceMap = useMemo(() => {
+    return new Map(votingDevices.map(device => [device.id, device.serialNumber]));
+  }, [votingDevices]);
+
   useEffect(() => {
     const fetchData = async () => {
       if (session.id) {
+        // Charger tous les boîtiers de vote
+        const allVotingDevices = await getAllVotingDevices();
+        setVotingDevices(allVotingDevices);
+
         // Récupérer le nom du formateur
         if (session.trainerId) {
           const trainer = await getTrainerById(session.trainerId);
@@ -170,14 +179,22 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
   };
 
-  const participantCalculatedData = participants.map(p => {
-    const participantResults = sessionResults.filter(r => r.participantIdBoitier === p.idBoitier);
-    // Utiliser questionsForThisSession au lieu de sessionQuestions
-    const score = calculateParticipantScore(participantResults, questionsForThisSession);
-    const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
-    const reussite = determineIndividualSuccess(score, themeScores);
-    return { ...p, score, reussite };
-  });
+  const participantCalculatedData = useMemo(() => {
+    return participants.map(p => {
+      const deviceSerialNumber = p.assignedGlobalDeviceId ? deviceMap.get(p.assignedGlobalDeviceId) : undefined;
+
+      const participantResults = deviceSerialNumber
+        ? sessionResults.filter(r => r.participantIdBoitier === deviceSerialNumber)
+        : [];
+
+      // Utiliser questionsForThisSession (qui sont déjà enrichies avec resolvedThemeName)
+      const score = calculateParticipantScore(participantResults, questionsForThisSession);
+      const themeScores = calculateThemeScores(participantResults, questionsForThisSession as any); // Cast car questionsForThisSession est enrichi
+      const reussite = determineIndividualSuccess(score, themeScores); // Utilise les seuils par défaut 70/50
+
+      return { ...p, score, reussite, idBoitier: deviceSerialNumber }; // Ajout de idBoitier pour référence si besoin
+    });
+  }, [participants, sessionResults, questionsForThisSession, deviceMap]);
 
   const passedCount = participantCalculatedData.filter(p => p.reussite).length;
   const passRate = participants.length > 0 ? (passedCount / participants.length) * 100 : 0;
@@ -397,8 +414,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {participantCalculatedData.map((participant) => (
-                  <tr key={participant.idBoitier} className="hover:bg-gray-50">
+                {participantCalculatedData.map((participant, index) => (
+                  // Utiliser assignedGlobalDeviceId ou l'index comme clé si le premier est null/undefined
+                  <tr key={participant.assignedGlobalDeviceId || `participant-${index}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{participant.nom} {participant.prenom}</div>
                     </td>
