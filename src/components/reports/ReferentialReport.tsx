@@ -103,14 +103,9 @@ const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDat
                 <TableCell className="text-center">{stat.sessionCount}</TableCell>
                 <TableCell className="text-center">{stat.participantCount}</TableCell>
                 <TableCell className="text-center">{stat.avgSuccessRate.toFixed(0)}%</TableCell>
-                {/* Mis à toFixed(0) pour être cohérent avec les autres taux de réussite */}
               </TableRow>
             );
           })}
-        </TableBody>
-      </Table>
-            </TableRow>
-          ))}
         </TableBody>
       </Table>
     </Card>
