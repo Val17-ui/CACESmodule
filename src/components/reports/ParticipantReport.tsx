@@ -216,6 +216,13 @@ const ParticipantReport = () => {
 
     const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
 
+    console.log('[PDF Generation] Inside generateSingleParticipantReportPDF');
+    console.log('[PDF Generation] deviceMap:', deviceMap);
+    console.log('[PDF Generation] participantRef:', participantRef);
+    if (participantRef) {
+      console.log('[PDF Generation] participantRef.assignedGlobalDeviceId:', participantRef.assignedGlobalDeviceId);
+    }
+
     let fetchedTrainerName = 'N/A';
     if (trainerId) {
       const trainer = await getTrainerById(trainerId);
@@ -224,6 +231,11 @@ const ParticipantReport = () => {
 
     const reportDate = new Date().toLocaleDateString('fr-FR');
     const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
+
+    // Calculer la valeur avant de l'injecter dans le template string
+    const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId) || 'N/A';
+    console.log('[PDF Generation] boitierIdDisplay (pre-calculated):', boitierIdDisplay);
+
 
     let pdfHtml = `
       <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px; color: #333;">
@@ -234,7 +246,7 @@ const ParticipantReport = () => {
         <table style="width: 100%; font-size: 10px; margin-bottom: 15px; border-collapse: collapse;">
           <tr>
             <td style="padding: 4px; width: 50%;"><strong>Participant :</strong> ${participantRef.prenom} ${participantRef.nom}</td>
-            <td style="padding: 4px; width: 50%;"><strong>ID Boîtier :</strong> ${deviceMap.get(participantRef.assignedGlobalDeviceId) || 'N/A'}</td>
+            <td style="padding: 4px; width: 50%;"><strong>ID Boîtier :</strong> ${boitierIdDisplay}</td>
           </tr>
           <tr>
             <td style="padding: 4px;"><strong>Session :</strong> ${nomSession}</td>

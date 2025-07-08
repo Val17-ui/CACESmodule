@@ -272,3 +272,10 @@ export interface PPTXQuestion {
 export interface PPTXGenerationOptions {
   fileName?: string;
 }
+
+// Ajouté depuis reportCalculators.ts pour une portée globale
+export interface ThemeScoreDetails {
+  score: number; // en pourcentage
+  correct: number;
+  total: number;
+}
