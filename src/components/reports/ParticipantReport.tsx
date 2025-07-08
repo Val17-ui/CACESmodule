@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react'; // React retiré
 import Card from '../ui/Card';
 import {
   getAllSessions,
@@ -8,14 +8,16 @@ import {
   getAllVotingDevices,
   getAllThemes,
   getAllBlocs,
-  getBlocById,
-  getThemeById,
-  getTrainerById // Ajouté pour le PDF
+  // getBlocById, // Non utilisé
+  // getThemeById, // Non utilisé
+  getAdminSetting,
+  getTrainerById
 } from '../../db';
-import { Session, Participant, SessionResult, QuestionWithId, Referential, VotingDevice, Theme, Bloc, ThemeScoreDetails } from '../../types';
+// SessionResult non utilisé directement ici, saveAs non plus
+import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails } from '../../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { saveAs } from 'file-saver';
+import { saveAs } from 'file-saver'; // Ré-ajouté car utilisé
 import {
   Table,
   TableHeader,
@@ -25,7 +27,7 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
-import { Search, ArrowLeft, ChevronDown, ChevronRight, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react';
+import { Search, ArrowLeft, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react';
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import Badge from '../ui/Badge';
@@ -105,7 +107,6 @@ const ParticipantReport = () => {
     const filteredSessionsByDate = sessions.filter(session => {
       if (!startDate && !endDate) return true;
       const sessionDate = new Date(session.dateSession);
-      // Ajustement pour que la date de début soit inclusive
       const start = startDate ? new Date(startDate) : null;
       if (start) start.setHours(0,0,0,0);
       if (start && sessionDate < start) return false;
@@ -127,7 +128,7 @@ const ParticipantReport = () => {
           sessionName: session.nomSession,
           sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
           referentialCode: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
-          originalSessionId: session.id,
+          originalSessionId: session.id as number, // TypeScript satisfait avec l'assertion
           originalParticipantAssignedGlobalDeviceId: p.assignedGlobalDeviceId,
         });
       });
@@ -150,7 +151,7 @@ const ParticipantReport = () => {
     const targetSession = sessions.find(s => s.id === participation.originalSessionId);
     const targetParticipantRef = targetSession?.participants.find(p => p.assignedGlobalDeviceId === participation.originalParticipantAssignedGlobalDeviceId);
 
-    if (!targetSession || !targetParticipantRef || targetParticipantRef.assignedGlobalDeviceId === undefined || !deviceMap.size || !allThemesDb.length || !allBlocsDb.length) {
+    if (!targetSession || !targetSession.id || !targetParticipantRef || targetParticipantRef.assignedGlobalDeviceId === undefined || !deviceMap.size || !allThemesDb.length || !allBlocsDb.length) {
       console.error("Données manquantes pour traiter la participation détaillée", {targetSession, targetParticipantRef, deviceMapSize: deviceMap.size, allThemesDbL: allThemesDb.length, allBlocsDbL: allBlocsDb.length});
       return;
     }
@@ -162,7 +163,7 @@ const ParticipantReport = () => {
     }
 
     try {
-      const sessionResults = await getResultsForSession(targetSession.id!);
+      const sessionResults = await getResultsForSession(targetSession.id);
       const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
 
       const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
@@ -202,7 +203,7 @@ const ParticipantReport = () => {
       });
     } catch (error) {
       console.error('[ParticipantReport] Error processing participation details:', error);
-      setDetailedParticipation(null); // S'assurer de réinitialiser en cas d'erreur globale
+      setDetailedParticipation(null);
     }
   };
 
@@ -216,13 +217,6 @@ const ParticipantReport = () => {
 
     const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
 
-    console.log('[PDF Generation] Inside generateSingleParticipantReportPDF');
-    console.log('[PDF Generation] deviceMap:', deviceMap);
-    console.log('[PDF Generation] participantRef:', participantRef);
-    if (participantRef) {
-      console.log('[PDF Generation] participantRef.assignedGlobalDeviceId:', participantRef.assignedGlobalDeviceId);
-    }
-
     let fetchedTrainerName = 'N/A';
     if (trainerId) {
       const trainer = await getTrainerById(trainerId);
@@ -231,18 +225,13 @@ const ParticipantReport = () => {
 
     const reportDate = new Date().toLocaleDateString('fr-FR');
     const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
-
-    // Calculer la valeur avant de l'injecter dans le template string
     const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId) || 'N/A';
-    console.log('[PDF Generation] boitierIdDisplay (pre-calculated):', boitierIdDisplay);
-
 
     let pdfHtml = `
       <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px; color: #333;">
         ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height: 60px; margin-bottom: 20px;"/>` : ''}
         <h1 style="font-size: 18px; text-align: center; color: #1a237e; margin-bottom: 10px;">RAPPORT INDIVIDUEL DE SESSION</h1>
         <hr style="border: 0; border-top: 1px solid #ccc; margin-bottom: 20px;" />
-
         <table style="width: 100%; font-size: 10px; margin-bottom: 15px; border-collapse: collapse;">
           <tr>
             <td style="padding: 4px; width: 50%;"><strong>Participant :</strong> ${participantRef.prenom} ${participantRef.nom}</td>
@@ -261,7 +250,6 @@ const ParticipantReport = () => {
             <td style="padding: 4px;"></td>
           </tr>
         </table>
-
         <div style="background-color: ${participantSuccess ? '#e8f5e9' : '#ffebee'}; padding: 15px; border-radius: 4px; margin-bottom: 20px; text-align: center;">
           <p style="font-size: 14px; font-weight: bold; margin:0;">Score Global :
             <span style="color: ${participantSuccess ? '#2e7d32' : '#c62828'};">${participantScore !== undefined ? participantScore.toFixed(0) : 'N/A'} / 100</span>
@@ -270,9 +258,7 @@ const ParticipantReport = () => {
             Mention : ${participantSuccess ? 'RÉUSSI' : 'AJOURNÉ'}
           </p>
         </div>
-
-        <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Scores par Thème</h2>
-    `;
+        <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Scores par Thème</h2>`;
     if (themeScores && Object.keys(themeScores).length > 0) {
       pdfHtml += '<ul style="list-style-type: none; padding-left: 0;">';
       for (const [themeName, details] of Object.entries(themeScores)) {
@@ -284,9 +270,7 @@ const ParticipantReport = () => {
     } else {
       pdfHtml += '<p style="font-size: 10px; color: #555;">Scores par thème non disponibles.</p>';
     }
-
     pdfHtml += `<h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Questions</h2>`;
-
     const questionsByThemeForPdf: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
     if (questionsForDisplay) {
       questionsForDisplay.forEach(q => {
@@ -295,7 +279,6 @@ const ParticipantReport = () => {
         questionsByThemeForPdf[theme].push(q);
       });
     }
-
     if (Object.keys(questionsByThemeForPdf).length > 0) {
       for (const [themeName, questions] of Object.entries(questionsByThemeForPdf)) {
         pdfHtml += `<h3 style="font-size: 12px; color: #3f51b5; margin-top: 15px; margin-bottom: 8px;">Thème : ${themeName}</h3>`;
@@ -306,15 +289,13 @@ const ParticipantReport = () => {
               <p style="margin: 2px 0 0 10px;">Votre réponse : <span style="font-style: italic;">${q.participantAnswer || 'Non répondu'}</span></p>
               ${q.isCorrectAnswer === false && q.participantAnswer !== undefined ? `<p style="margin: 2px 0 0 10px; color: #d32f2f;">Bonne réponse : <span style="font-style: italic;">${q.correctAnswer}</span></p>` : ''}
               <p style="margin: 2px 0 0 10px;">Points : ${q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</p>
-            </div>
-          `;
+            </div>`;
         });
       }
     } else {
       pdfHtml += '<p style="font-size: 10px; color: #555;">Détail des questions non disponible.</p>';
     }
-    pdfHtml += `<p style="text-align: right; font-size: 8px; color: #777; margin-top: 30px;">Rapport généré le ${reportDate}</p>`;
-    pdfHtml += '</div>';
+    pdfHtml += `<p style="text-align: right; font-size: 8px; color: #777; margin-top: 30px;">Rapport généré le ${reportDate}</p></div>`;
 
     const element = document.createElement('div');
     element.style.width = '1000px';
@@ -326,21 +307,67 @@ const ParticipantReport = () => {
     const imgData = canvas.toDataURL('image/png');
     document.body.removeChild(element);
 
-    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
     const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const imgProps = pdf.getImageProperties(imgData);
-    const ratio = imgProps.height / imgProps.width;
-    let imgHeight = pdfWidth * ratio;
+    const pdfPageHeight = pdf.internal.pageSize.getHeight();
 
-    if (imgHeight > pdfHeight) {
-        let pageCount = Math.ceil(imgHeight / pdfHeight);
-        for (let i = 0; i < pageCount; i++) {
-            if (i > 0) pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, pdfWidth, imgHeight);
-        }
-    } else {
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+    const img = new Image();
+    img.src = imgData;
+    await new Promise(resolve => { img.onload = resolve; img.onerror = () => { console.error("Erreur de chargement de l'image pour PDF"); resolve(null);}; });
+
+    if (img.width === 0 || img.height === 0) {
+      console.error("PDF Generation: Image from canvas has zero dimensions.");
+      setIsGeneratingPdf(false);
+      return;
+    }
+
+    const PADDING = 10;
+    const usableWidth = pdfWidth - 2 * PADDING;
+    const usableHeight = pdfPageHeight - 2 * PADDING;
+
+    const aspectRatio = img.height / img.width;
+    let finalImgWidth = usableWidth;
+    let finalImgHeight = usableWidth * aspectRatio;
+
+    if (finalImgHeight > usableHeight) {
+      finalImgHeight = usableHeight;
+      finalImgWidth = usableHeight / aspectRatio;
+    }
+
+    // Logique de découpage manuel pour html2canvas
+    const sourceCanvas = canvas;
+    const pageCanvas = document.createElement('canvas');
+    const pageCtx = pageCanvas.getContext('2d');
+
+    const sliceHeightPx = (usableHeight / finalImgHeight) * sourceCanvas.height;
+    pageCanvas.width = sourceCanvas.width;
+    pageCanvas.height = sliceHeightPx;
+
+    let yOffsetPx = 0;
+    let pageNum = 0;
+
+    while(yOffsetPx < sourceCanvas.height) {
+      if (pageNum > 0) {
+        pdf.addPage();
+      }
+      pageCtx?.clearRect(0,0, pageCanvas.width, pageCanvas.height);
+      pageCtx?.drawImage(sourceCanvas, 0, yOffsetPx, sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx), 0, 0, sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx));
+      const pageImgData = pageCanvas.toDataURL('image/png');
+
+      let currentSlicePdfHeight = usableHeight;
+      if (yOffsetPx + sliceHeightPx > sourceCanvas.height) {
+          currentSlicePdfHeight = ((sourceCanvas.height - yOffsetPx) / sliceHeightPx) * usableHeight;
+      }
+      // S'assurer que la largeur de l'image ajoutée ne dépasse pas la largeur utilisable
+      const currentSlicePdfWidth = Math.min(finalImgWidth, usableWidth);
+
+      pdf.addImage(pageImgData, 'PNG', PADDING + (usableWidth - currentSlicePdfWidth) / 2, PADDING, currentSlicePdfWidth, currentSlicePdfHeight);
+      yOffsetPx += sliceHeightPx;
+      pageNum++;
+      if (pageNum > 20) {
+          console.warn("PDF Generation: Exceeded 20 pages, stopping.");
+          break;
+      }
     }
 
     const safeFileName = `Rapport_${participantRef.prenom}_${participantRef.nom}_${nomSession}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -348,7 +375,6 @@ const ParticipantReport = () => {
 
     setIsGeneratingPdf(false);
   };
-
 
   if (detailedParticipation) {
     const { participantRef, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
@@ -379,7 +405,7 @@ const ParticipantReport = () => {
         <h2 className="text-2xl font-bold mb-1">Détail de la participation</h2>
         <p className="text-lg mb-1">Participant : <span className="font-semibold">{participantRef.prenom} {participantRef.nom}</span></p>
         <p className="text-md mb-1">Session : <span className="font-semibold">{detailedParticipation.nomSession}</span> ({new Date(detailedParticipation.dateSession).toLocaleDateString('fr-FR')})</p>
-        <p className="text-md mb-4">Référentiel : <Badge variant="secondary">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></p>
+        <p className="text-md mb-4">Référentiel : <Badge variant="default">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <Card className="p-4">
@@ -388,8 +414,8 @@ const ParticipantReport = () => {
               {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
             </p>
             {participantSuccess !== undefined ? (
-              participantSuccess ? <Badge variant="success" size="lg">Réussi</Badge> : <Badge variant="danger" size="lg">Ajourné</Badge>
-            ) : <Badge variant="warning" size="lg">En attente</Badge>}
+              participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
+            ) : <Badge variant="warning">En attente</Badge>}
           </Card>
           <Card className="p-4">
             <h3 className="text-lg font-semibold mb-2">Scores par Thème</h3>
@@ -488,10 +514,10 @@ const ParticipantReport = () => {
               <TableCell>{participation.sessionName}</TableCell>
               <TableCell>{participation.sessionDate}</TableCell>
               <TableCell>
-                <Badge variant="secondary">{participation.referentialCode}</Badge>
+                <Badge variant="default">{participation.referentialCode}</Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleSelectParticipation(participation); }}>
+                <Button variant="ghost" size="sm" onClick={(event: React.MouseEvent) => { event.stopPropagation(); handleSelectParticipation(participation); }}>
                   Voir détails participation
                 </Button>
               </TableCell>

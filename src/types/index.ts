@@ -279,3 +279,51 @@ export interface ThemeScoreDetails {
   correct: number;
   total: number;
 }
+
+// Déplacé depuis db.ts
+export interface QuestionWithId {
+  id?: number;
+  text: string;
+  // type: 'multiple-choice' | 'true-false'; // Remplacé par QuestionType enum
+  type: QuestionType;
+  options: string[];
+  correctAnswer: string;
+  timeLimit?: number;
+  isEliminatory: boolean;
+  blocId?: number;
+  image?: Blob | null;
+  createdAt?: string;
+  updatedAt?: string;
+  usageCount?: number;
+  correctResponseRate?: number;
+  slideGuid?: string;
+  imageName?: string;
+}
+
+// Déplacé depuis db.ts
+export interface VotingDevice {
+  id?: number;
+  name: string;
+  serialNumber: string;
+}
+
+// Déplacé depuis reportCalculators.ts
+export interface CalculatedBlockOverallStats {
+  blocId: number;
+  referentielCode: string;
+  themeCode: string;
+  blocCode: string;
+  usageCount: number;
+  averageSuccessRate: number;
+  averageScore: number;
+}
+
+// Déplacé depuis reportCalculators.ts
+export interface OverallThemeStats {
+  themeId: number;
+  themeCode: string;
+  themeName: string;
+  totalQuestionsAnswered: number;
+  totalCorrectAnswers: number;
+  successRate: number;
+}

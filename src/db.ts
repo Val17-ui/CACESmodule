@@ -1,33 +1,12 @@
 import Dexie, { Table } from 'dexie';
-import { CACESReferential, Session, Participant, SessionResult, Trainer, SessionQuestion, SessionBoitier, Referential, Theme, Bloc } from './types'; // Ajout de Referential, Theme, Bloc
+import {
+  CACESReferential, Session, Participant, SessionResult, Trainer,
+  SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
+  QuestionWithId, VotingDevice // Types maintenant importés
+} from './types';
 import { logger } from './utils/logger'; // Importer le logger
 
-// Interfaces pour la DB
-export interface QuestionWithId {
-  id?: number;
-  text: string;
-  type: 'multiple-choice' | 'true-false';
-  options: string[];
-  correctAnswer: string;
-  timeLimit?: number;
-  isEliminatory: boolean;
-  // referential: CACESReferential | string; // Supprimé
-  // theme: string; // Supprimé
-  blocId?: number; // Ajouté
-  image?: Blob | null;
-  createdAt?: string;
-  updatedAt?: string;
-  usageCount?: number;
-  correctResponseRate?: number;
-  slideGuid?: string;
-  imageName?: string; // Added to store the name of the image file
-}
-
-export interface VotingDevice {
-  id?: number;
-  name: string;         // User-friendly name
-  serialNumber: string; // Unique physical/serial ID (formerly physicalId)
-}
+// Les interfaces QuestionWithId et VotingDevice sont maintenant dans ../types
 
 export class MySubClassedDexie extends Dexie {
   questions!: Table<QuestionWithId, number>;

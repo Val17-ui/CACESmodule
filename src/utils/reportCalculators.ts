@@ -1,4 +1,7 @@
-import { Session, SessionResult, QuestionWithId, SelectedBlock, Referential, Theme, Bloc, ThemeScoreDetails } from '../types'; // Ajout de Referential, Theme, Bloc, ThemeScoreDetails
+import {
+  Session, SessionResult, QuestionWithId, SelectedBlock, Referential, Theme, Bloc,
+  ThemeScoreDetails, CalculatedBlockOverallStats, OverallThemeStats // Types maintenant importés
+} from '../types';
 
 /**
  * Calcule la note globale d'un participant pour une session spécifique.
@@ -194,15 +197,15 @@ import { Session, SessionResult, QuestionWithId, Referential, Theme, Bloc } from
 /**
  * Définit la structure des statistiques retournées pour un bloc.
  */
-export interface CalculatedBlockOverallStats {
-  blocId: number;
-  referentielCode: string;
-  themeCode: string;
-  blocCode: string;
-  usageCount: number; // Nombre de sessions complétées où ce bloc a été utilisé
-  averageSuccessRate: number; // Pourcentage moyen de participants ayant "réussi" le bloc (score >= 50% sur les questions du bloc)
-  averageScore: number; // Score moyen obtenu par les participants sur ce bloc
-}
+// export interface CalculatedBlockOverallStats { // Déplacé vers types/index.ts
+//   blocId: number;
+//   referentielCode: string;
+//   themeCode: string;
+//   blocCode: string;
+//   usageCount: number;
+//   averageSuccessRate: number;
+//   averageScore: number;
+// }
 
 /**
  * Calcule les statistiques de performance pour un BLOC NUMERIQUE ID au sein d'UNE session donnée.
@@ -558,14 +561,14 @@ export interface NumericBlockPerformanceStats {
   successRateOnBlock: number;  // % de participants ayant "réussi" ce bloc (score >= 50%)
 }
 
-export interface OverallThemeStats {
-  themeId: number;
-  themeCode: string;
-  themeName: string;
-  totalQuestionsAnswered: number;
-  totalCorrectAnswers: number;
-  successRate: number;
-}
+// export interface OverallThemeStats { // Déplacé vers types/index.ts
+//   themeId: number;
+//   themeCode: string;
+//   themeName: string;
+//   totalQuestionsAnswered: number;
+//   totalCorrectAnswers: number;
+//   successRate: number;
+// }
 
 /**
  * Calcule les statistiques de performance pour un bloc de questions spécifique au sein d'UNE session donnée.
