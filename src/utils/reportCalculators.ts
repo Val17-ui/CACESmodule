@@ -1,4 +1,4 @@
-import { Session, SessionResult, QuestionWithId, SelectedBlock } from '../types';
+import { Session, SessionResult, QuestionWithId, SelectedBlock, Referential, Theme, Bloc, ThemeScoreDetails } from '../types'; // Ajout de Referential, Theme, Bloc, ThemeScoreDetails
 
 /**
  * Calcule la note globale d'un participant pour une session spécifique.
@@ -39,11 +39,7 @@ interface QuestionWithResolvedTheme extends QuestionWithId {
   resolvedThemeName?: string;
 }
 
-export interface ThemeScoreDetails {
-  score: number; // en pourcentage
-  correct: number;
-  total: number;
-}
+// ThemeScoreDetails est maintenant importé depuis ../types
 
 export const calculateThemeScores = (
   participantResults: SessionResult[],

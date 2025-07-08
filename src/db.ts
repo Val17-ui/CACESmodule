@@ -820,11 +820,10 @@ export const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): 
       .anyOf(selectedBlocIds.filter(id => typeof id === 'number')) // S'assurer que ce sont des nombres valides
       .toArray();
 
-    // Optionnel: log pour débogage
-    console.log(`Récupéré ${questions.length} questions pour les blocIDs: ${selectedBlocIds.join(', ')}.`);
+    // console.log(`Récupéré ${questions.length} questions pour les blocIDs: ${selectedBlocIds.join(', ')}.`); // Nettoyé
     return questions;
   } catch (error) {
-    console.error("Erreur lors de la récupération des questions pour les IDs de bloc de session:", error);
+    console.error("Erreur lors de la récupération des questions pour les IDs de bloc de session:", error); // Garder ce log d'erreur
     return [];
   }
 };
