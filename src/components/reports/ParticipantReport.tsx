@@ -16,7 +16,7 @@ import {
 import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails } from '../../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-// import { saveAs } from 'file-saver'; // Supprimé car jsPDF.save() gère le téléchargement
+// import { saveAs } from 'file-saver'; // Retiré car pdf.save() le gère
 import {
   Table,
   TableHeader,
@@ -26,6 +26,7 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
+// ChevronDown, ChevronRight retirés
 import { Search, ArrowLeft, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react';
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
@@ -123,7 +124,7 @@ const ParticipantReport = () => {
         participations.push({
           key: `sess-${session.id}-part-${participantKeyPart}`,
           participantRef: p,
-          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId ?? undefined) || 'N/A'}`, // Utilisation de ?? pour convertir null en undefined
+          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId === null ? undefined : p.assignedGlobalDeviceId) || 'N/A'}`,
           sessionName: session.nomSession,
           sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
           referentialCode: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
@@ -226,6 +227,9 @@ const ParticipantReport = () => {
     const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
     const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId === null ? undefined : participantRef.assignedGlobalDeviceId) || 'N/A';
 
+    const currentReferential = referentielId ? allReferentiels.find(r => r.id === referentielId) : null;
+    const referentialDisplayForPdf = currentReferential ? `${currentReferential.code} - ${currentReferential.nom_complet}` : 'N/A';
+
     let pdfHtml = `
       <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px; color: #333;">
         ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height: 60px; margin-bottom: 20px;"/>` : ''}
@@ -241,7 +245,7 @@ const ParticipantReport = () => {
             <td style="padding: 4px;"><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</td>
           </tr>
           <tr>
-            <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialCodeMap.get(referentielId) || 'N/A'}</td>
+            <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialDisplayForPdf}</td>
             <td style="padding: 4px;"><strong>Lieu :</strong> ${location || 'N/A'}</td>
           </tr>
           <tr>
@@ -280,16 +284,31 @@ const ParticipantReport = () => {
     }
     if (Object.keys(questionsByThemeForPdf).length > 0) {
       for (const [themeName, questions] of Object.entries(questionsByThemeForPdf)) {
-        pdfHtml += `<h3 style="font-size: 12px; color: #3f51b5; margin-top: 15px; margin-bottom: 8px;">Thème : ${themeName}</h3>`;
-        questions.forEach(q => {
-          pdfHtml += `
-            <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dotted #ccc; page-break-inside: avoid;">
-              <p style="margin: 2px 0; font-weight: bold;">${q.text}</p>
-              <p style="margin: 2px 0 0 10px;">Votre réponse : <span style="font-style: italic;">${q.participantAnswer || 'Non répondu'}</span></p>
-              ${q.isCorrectAnswer === false && q.participantAnswer !== undefined ? `<p style="margin: 2px 0 0 10px; color: #d32f2f;">Bonne réponse : <span style="font-style: italic;">${q.correctAnswer}</span></p>` : ''}
-              <p style="margin: 2px 0 0 10px;">Points : ${q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</p>
-            </div>`;
-        });
+        pdfHtml += `<h3 style="font-size: 12px; color: #3f51b5; margin-top: 15px; margin-bottom: 8px; width:100%; page-break-before: auto; page-break-after: avoid;">Thème : ${themeName}</h3>`;
+        pdfHtml += `<div style="width: 100%; overflow: auto; page-break-inside: avoid;">`;
+
+        const questionsPerColumn = Math.ceil(questions.length / 3);
+        for (let col = 0; col < 3; col++) {
+          const marginRight = col < 2 ? '1%' : '0';
+          pdfHtml += `<div style="display: inline-block; width: 32%; vertical-align: top; margin-right: ${marginRight}; page-break-inside: avoid;">`;
+
+          const startIndex = col * questionsPerColumn;
+          const endIndex = Math.min(startIndex + questionsPerColumn, questions.length);
+
+          for (let i = startIndex; i < endIndex; i++) {
+            const q = questions[i];
+            pdfHtml += `
+              <div style="margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dotted #ccc; page-break-inside: avoid;">
+                <p style="margin: 1px 0; font-weight: bold; font-size: 9px;">${q.text}</p>
+                <p style="margin: 1px 0 0 8px; font-size: 9px;">Réponse : <span style="font-style: italic;">${q.participantAnswer || 'N/R'}</span></p>
+                ${q.isCorrectAnswer === false && q.participantAnswer !== undefined ? `<p style="margin: 1px 0 0 8px; color: #d32f2f; font-size: 9px;">Correction : <span style="font-style: italic;">${q.correctAnswer}</span></p>` : ''}
+                <p style="margin: 1px 0 0 8px; font-size: 9px;">Points : ${q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</p>
+              </div>`;
+          }
+          pdfHtml += `</div>`;
+        }
+        pdfHtml += `</div>`;
+        pdfHtml += `<div style="clear: both;"></div>`;
       }
     } else {
       pdfHtml += '<p style="font-size: 10px; color: #555;">Détail des questions non disponible.</p>';
@@ -337,20 +356,15 @@ const ParticipantReport = () => {
     const pageCanvas = document.createElement('canvas');
     const pageCtx = pageCanvas.getContext('2d');
 
-    // Hauteur d'une "tranche" de l'image originale qui correspond à une page PDF (en pixels du canvas original)
-    // Note: Ce calcul de sliceHeightPx peut être délicat si l'aspectRatio de l'image ajoutée au PDF (finalImgWidth/finalImgHeight)
-    // n'est pas le même que l'aspectRatio du canvas source.
-    // Pour une approche plus simple, on peut se baser sur un ratio de la hauteur de page PDF.
-    // Ici, on essaie de calculer la portion du canvas source qui correspond à une page PDF.
     let sliceHeightPx = sourceCanvas.height * (usableHeight / finalImgHeight);
-    if (finalImgHeight < usableHeight) { // Si l'image entière tient sur moins d'une page PDF en hauteur
-        sliceHeightPx = sourceCanvas.height; // Prendre tout le canvas source
+    if (finalImgHeight < usableHeight) {
+        sliceHeightPx = sourceCanvas.height;
     }
 
     pageCanvas.width = sourceCanvas.width;
-    pageCanvas.height = sliceHeightPx; // La hauteur du canvas temporaire est la hauteur d'une "page" de l'image source
+    pageCanvas.height = sliceHeightPx;
 
-    let yOffsetPx = 0; // Offset de lecture sur le grand canvas source
+    let yOffsetPx = 0;
     let pageNum = 0;
 
     while(yOffsetPx < sourceCanvas.height) {
@@ -358,22 +372,19 @@ const ParticipantReport = () => {
         pdf.addPage();
       }
       pageCtx?.clearRect(0,0, pageCanvas.width, pageCanvas.height);
-      // Dessiner la tranche du grand canvas sur le petit canvas de page
       pageCtx?.drawImage(sourceCanvas,
-        0, yOffsetPx, // Coordonnées source (x,y)
-        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx), // Largeur et hauteur source de la tranche
-        0, 0, // Coordonnées destination (x,y) sur le pageCanvas
-        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx) // Largeur et hauteur destination
+        0, yOffsetPx,
+        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx),
+        0, 0,
+        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx)
       );
       const pageImgData = pageCanvas.toDataURL('image/png');
 
-      // Hauteur de cette tranche spécifique dans le PDF
       let currentSlicePdfHeight = usableHeight;
-      if (yOffsetPx + sliceHeightPx > sourceCanvas.height) { // Dernière page, potentiellement plus petite
+      if (yOffsetPx + sliceHeightPx > sourceCanvas.height) {
           currentSlicePdfHeight = ((sourceCanvas.height - yOffsetPx) / sliceHeightPx) * usableHeight;
       }
 
-      // S'assurer que la largeur de l'image ajoutée ne dépasse pas la largeur utilisable
       const currentSlicePdfWidth = Math.min(finalImgWidth, usableWidth);
 
       pdf.addImage(pageImgData, 'PNG', PADDING + (usableWidth - currentSlicePdfWidth) / 2, PADDING, currentSlicePdfWidth, currentSlicePdfHeight);
@@ -532,8 +543,7 @@ const ParticipantReport = () => {
                 <Badge variant="default">{participation.referentialCode}</Badge>
               </TableCell>
               <TableCell className="text-right">
-                {/* Simplification du onClick pour correspondre au type () => void attendu par Button si stopPropagation n'est pas modifiable dans Button */}
-                <Button variant="ghost" size="sm" onClick={() => handleSelectParticipation(participation)}>
+                <Button variant="ghost" size="sm" onClick={(event: React.MouseEvent) => { event.stopPropagation(); handleSelectParticipation(participation); }}>
                   Voir détails participation
                 </Button>
               </TableCell>
