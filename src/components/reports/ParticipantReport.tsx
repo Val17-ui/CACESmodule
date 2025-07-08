@@ -16,7 +16,7 @@ import {
 import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails } from '../../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { saveAs } from 'file-saver';
+// import { saveAs } from 'file-saver'; // Supprimé car jsPDF.save() gère le téléchargement
 import {
   Table,
   TableHeader,
@@ -123,7 +123,7 @@ const ParticipantReport = () => {
         participations.push({
           key: `sess-${session.id}-part-${participantKeyPart}`,
           participantRef: p,
-          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId === null ? undefined : p.assignedGlobalDeviceId) || 'N/A'}`,
+          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId ?? undefined) || 'N/A'}`, // Utilisation de ?? pour convertir null en undefined
           sessionName: session.nomSession,
           sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
           referentialCode: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
@@ -532,7 +532,8 @@ const ParticipantReport = () => {
                 <Badge variant="default">{participation.referentialCode}</Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button variant="ghost" size="sm" onClick={(event: React.MouseEvent) => { event.stopPropagation(); handleSelectParticipation(participation); }}>
+                {/* Simplification du onClick pour correspondre au type () => void attendu par Button si stopPropagation n'est pas modifiable dans Button */}
+                <Button variant="ghost" size="sm" onClick={() => handleSelectParticipation(participation)}>
                   Voir détails participation
                 </Button>
               </TableCell>
