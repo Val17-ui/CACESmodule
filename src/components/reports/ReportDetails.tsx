@@ -26,9 +26,10 @@ import {
   calculateBlockPerformanceForSession, // Gardé pour l'instant, mais sera remplacé/supprimé
   BlockPerformanceStats,
   calculateNumericBlockPerformanceForSession,
-  NumericBlockPerformanceStats,
-  ThemeScoreDetails // Importer ThemeScoreDetails
+  NumericBlockPerformanceStats
+  // ThemeScoreDetails retiré d'ici
 } from '../../utils/reportCalculators';
+import { ThemeScoreDetails } from '../../types'; // Importé de types/index.ts
 
 interface ParticipantCalculatedData extends Participant {
   score?: number;

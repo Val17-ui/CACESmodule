@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'; // React retiré
+import { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import {
   getAllSessions,
@@ -8,16 +8,15 @@ import {
   getAllVotingDevices,
   getAllThemes,
   getAllBlocs,
-  // getBlocById, // Non utilisé
-  // getThemeById, // Non utilisé
+  getBlocById,
+  getThemeById,
   getAdminSetting,
   getTrainerById
 } from '../../db';
-// SessionResult non utilisé directement ici, saveAs non plus
 import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails } from '../../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { saveAs } from 'file-saver'; // Ré-ajouté car utilisé
+import { saveAs } from 'file-saver';
 import {
   Table,
   TableHeader,
@@ -124,11 +123,11 @@ const ParticipantReport = () => {
         participations.push({
           key: `sess-${session.id}-part-${participantKeyPart}`,
           participantRef: p,
-          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId) || 'N/A'}`,
+          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId === null ? undefined : p.assignedGlobalDeviceId) || 'N/A'}`,
           sessionName: session.nomSession,
           sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
           referentialCode: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
-          originalSessionId: session.id as number, // TypeScript satisfait avec l'assertion
+          originalSessionId: session.id as number,
           originalParticipantAssignedGlobalDeviceId: p.assignedGlobalDeviceId,
         });
       });
@@ -156,14 +155,14 @@ const ParticipantReport = () => {
       return;
     }
 
-    const serialNumberOfSelectedParticipant = deviceMap.get(targetParticipantRef.assignedGlobalDeviceId);
+    const serialNumberOfSelectedParticipant = deviceMap.get(targetParticipantRef.assignedGlobalDeviceId === null ? undefined : targetParticipantRef.assignedGlobalDeviceId);
     if (!serialNumberOfSelectedParticipant) {
       console.error("Numéro de série non trouvé pour le participant", targetParticipantRef);
       return;
     }
 
     try {
-      const sessionResults = await getResultsForSession(targetSession.id);
+      const sessionResults = await getResultsForSession(targetSession.id!);
       const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
 
       const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
@@ -225,7 +224,7 @@ const ParticipantReport = () => {
 
     const reportDate = new Date().toLocaleDateString('fr-FR');
     const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
-    const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId) || 'N/A';
+    const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId === null ? undefined : participantRef.assignedGlobalDeviceId) || 'N/A';
 
     let pdfHtml = `
       <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px; color: #333;">
@@ -334,16 +333,24 @@ const ParticipantReport = () => {
       finalImgWidth = usableHeight / aspectRatio;
     }
 
-    // Logique de découpage manuel pour html2canvas
     const sourceCanvas = canvas;
     const pageCanvas = document.createElement('canvas');
     const pageCtx = pageCanvas.getContext('2d');
 
-    const sliceHeightPx = (usableHeight / finalImgHeight) * sourceCanvas.height;
-    pageCanvas.width = sourceCanvas.width;
-    pageCanvas.height = sliceHeightPx;
+    // Hauteur d'une "tranche" de l'image originale qui correspond à une page PDF (en pixels du canvas original)
+    // Note: Ce calcul de sliceHeightPx peut être délicat si l'aspectRatio de l'image ajoutée au PDF (finalImgWidth/finalImgHeight)
+    // n'est pas le même que l'aspectRatio du canvas source.
+    // Pour une approche plus simple, on peut se baser sur un ratio de la hauteur de page PDF.
+    // Ici, on essaie de calculer la portion du canvas source qui correspond à une page PDF.
+    let sliceHeightPx = sourceCanvas.height * (usableHeight / finalImgHeight);
+    if (finalImgHeight < usableHeight) { // Si l'image entière tient sur moins d'une page PDF en hauteur
+        sliceHeightPx = sourceCanvas.height; // Prendre tout le canvas source
+    }
 
-    let yOffsetPx = 0;
+    pageCanvas.width = sourceCanvas.width;
+    pageCanvas.height = sliceHeightPx; // La hauteur du canvas temporaire est la hauteur d'une "page" de l'image source
+
+    let yOffsetPx = 0; // Offset de lecture sur le grand canvas source
     let pageNum = 0;
 
     while(yOffsetPx < sourceCanvas.height) {
@@ -351,13 +358,21 @@ const ParticipantReport = () => {
         pdf.addPage();
       }
       pageCtx?.clearRect(0,0, pageCanvas.width, pageCanvas.height);
-      pageCtx?.drawImage(sourceCanvas, 0, yOffsetPx, sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx), 0, 0, sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx));
+      // Dessiner la tranche du grand canvas sur le petit canvas de page
+      pageCtx?.drawImage(sourceCanvas,
+        0, yOffsetPx, // Coordonnées source (x,y)
+        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx), // Largeur et hauteur source de la tranche
+        0, 0, // Coordonnées destination (x,y) sur le pageCanvas
+        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx) // Largeur et hauteur destination
+      );
       const pageImgData = pageCanvas.toDataURL('image/png');
 
+      // Hauteur de cette tranche spécifique dans le PDF
       let currentSlicePdfHeight = usableHeight;
-      if (yOffsetPx + sliceHeightPx > sourceCanvas.height) {
+      if (yOffsetPx + sliceHeightPx > sourceCanvas.height) { // Dernière page, potentiellement plus petite
           currentSlicePdfHeight = ((sourceCanvas.height - yOffsetPx) / sliceHeightPx) * usableHeight;
       }
+
       // S'assurer que la largeur de l'image ajoutée ne dépasse pas la largeur utilisable
       const currentSlicePdfWidth = Math.min(finalImgWidth, usableWidth);
 
@@ -440,7 +455,7 @@ const ParticipantReport = () => {
                     {themeName}
                   </h4>
                   {questions.map((q, qIndex) => (
-                    <div key={q.id || qIndex} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
+                    <div key={q.id || `q-${qIndex}`} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
                       <p className="flex items-start font-medium text-gray-900 mb-1">
                         <HelpCircle size={16} className="mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
                         <span>{q.text}</span>
