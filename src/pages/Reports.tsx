@@ -5,14 +5,14 @@ import ReportTypeSelector, { ReportType } from '../components/reports/ReportType
 import ReportsList from '../components/reports/ReportsList';
 import ReportDetails from '../components/reports/ReportDetails';
 import ParticipantReport from '../components/reports/ParticipantReport';
-import PeriodReport from '../components/reports/PeriodReport';
+// import PeriodReport from '../components/reports/PeriodReport'; // Supprimé
 import ReferentialReport from '../components/reports/ReferentialReport';
 import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
-import { getAllSessions, getSessionById, getAllTrainers } from '../db'; // Ajout de getAllTrainers
-import { Session, Participant, CACESReferential, Trainer } from '../types'; // Ajout de Trainer
+import { getAllSessions, getSessionById, getAllTrainers, getAllReferentiels } from '../db'; // Ajout de getAllReferentiels
+import { Session, Participant, CACESReferential, Trainer, Referential } from '../types'; // Ajout de Referential
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 
@@ -28,16 +28,38 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const [sessionParticipants, setSessionParticipants] = useState<Participant[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [referentialFilter, setReferentialFilter] = useState<string>('all');
-  const [trainerFilter, setTrainerFilter] = useState<string>('all'); // Nouvel état pour le filtre formateur
-  const [trainersListForFilter, setTrainersListForFilter] = useState<Trainer[]>([]); // Nouvel état pour la liste des formateurs
+  const [trainerFilter, setTrainerFilter] = useState<string>('all');
+  const [trainersListForFilter, setTrainersListForFilter] = useState<Trainer[]>([]);
+  const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]);
+  const [startDate, setStartDate] = useState<string>(''); // Nouvel état pour date de début
+  const [endDate, setEndDate] = useState<string>('');     // Nouvel état pour date de fin
+
+  const referentialCodeMap = useMemo(() => {
+    return new Map(allReferentielsDb.map(ref => [ref.id, ref.code]));
+  }, [allReferentielsDb]);
+
+  const referentialOptionsForFilter = useMemo(() => {
+    return [
+      { value: 'all', label: 'Tous les référentiels' },
+      ...allReferentielsDb.map(ref => ({
+        value: String(ref.id),
+        label: ref.code
+      }))
+    ];
+  }, [allReferentielsDb]);
+
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      const allSessions = await getAllSessions();
-      setSessions(allSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+      const [fetchedSessions, fetchedTrainers, fetchedReferentiels] = await Promise.all([
+        getAllSessions(),
+        getAllTrainers(),
+        getAllReferentiels()
+      ]);
 
-      const allTrainers = await getAllTrainers(); // Charger les formateurs
-      setTrainersListForFilter(allTrainers.sort((a,b) => a.name.localeCompare(b.name)));
+      setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+      setTrainersListForFilter(fetchedTrainers.sort((a,b) => a.name.localeCompare(b.name)));
+      setAllReferentielsDb(fetchedReferentiels.sort((a,b) => a.nom_complet.localeCompare(b.nom_complet)));
     };
     fetchInitialData();
   }, []);
@@ -66,15 +88,26 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const filteredSessions = useMemo(() => {
     return sessions
       .filter(session => 
-        referentialFilter === 'all' || session.referentiel === referentialFilter
+        referentialFilter === 'all' || (session.referentielId !== undefined && session.referentielId?.toString() === referentialFilter)
       )
       .filter(session =>
         trainerFilter === 'all' || (session.trainerId !== undefined && session.trainerId?.toString() === trainerFilter)
       )
       .filter(session => 
         session.nomSession.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-  }, [sessions, searchTerm, referentialFilter, trainerFilter]);
+      )
+      .filter(session => {
+        if (!startDate && !endDate) return true;
+        const sessionDate = new Date(session.dateSession);
+        if (startDate && sessionDate < new Date(startDate)) return false;
+        if (endDate) {
+          const endOfDayEndDate = new Date(endDate);
+          endOfDayEndDate.setHours(23, 59, 59, 999); // Inclure toute la journée de la date de fin
+          if (sessionDate > endOfDayEndDate) return false;
+        }
+        return true;
+      });
+  }, [sessions, searchTerm, referentialFilter, trainerFilter, startDate, endDate]);
 
   const renderContent = () => {
     if (selectedSession) {
@@ -97,10 +130,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 value={referentialFilter}
                 onChange={(e) => setReferentialFilter(e.target.value)}
                 className="w-1/4"
-                options={[
-                  { value: 'all', label: 'Tous les référentiels' },
-                  ...Object.values(CACESReferential).map(ref => ({ value: ref, label: ref }))
-                ]}
+                options={referentialOptionsForFilter} // Utiliser les options dynamiques
               />
               <Select
                 value={trainerFilter}
@@ -113,22 +143,44 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 disabled={trainersListForFilter.length === 0}
               />
             </div>
-            <ReportsList sessions={filteredSessions} onViewReport={handleViewSessionReport} />
+            <div className="mb-4 flex space-x-4">
+              <Input
+                type="date"
+                label="Date de début"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-1/4"
+              />
+              <Input
+                type="date"
+                label="Date de fin"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-1/4"
+              />
+            </div>
+            <ReportsList
+              sessions={filteredSessions}
+              onViewReport={handleViewSessionReport}
+              referentialMap={referentialCodeMap} // Passer la nouvelle map de codes
+            />
           </div>
         );
       case 'participant':
+        // ParticipantReport pourrait aussi avoir besoin de referentialMap si on affiche le nom du réf. dans sa liste
         return <ParticipantReport />;
-      case 'period':
-        return <PeriodReport />;
+      // case 'period': // Supprimé
+      // return <PeriodReport />;
       case 'referential':
-        return <ReferentialReport />;
+        return <ReferentialReport startDate={startDate} endDate={endDate} referentialMap={referentialCodeMap} />;
       case 'block':
-        return <BlockReport />;
+        return <BlockReport startDate={startDate} endDate={endDate} />;
       case 'custom':
         return <CustomReport />;
       default:
         return (
           <>
+            {/* GlobalStats pourrait avoir besoin de referentialMap si on y affiche des stats par référentiel */}
             <GlobalStats sessions={filteredSessions} />
             <ReportTypeSelector onSelectReport={handleSelectReport} />
           </>
@@ -139,15 +191,15 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const getTitle = () => {
     if (selectedSession) return `Rapport: ${selectedSession.nomSession}`;
     if (activeReport) {
-      const reportTitles = {
+      const reportTitles: { [key in ReportType]?: string } = { // S'assurer que ReportType est à jour
         session: 'Rapports par Session',
         participant: 'Rapports par Participant',
-        period: 'Rapports par Période',
+        // period: 'Rapports par Période', // Supprimé
         referential: 'Rapports par Référentiel',
         block: 'Rapports par Bloc',
         custom: 'Rapport Personnalisé',
       };
-      return reportTitles[activeReport];
+      return reportTitles[activeReport] || 'Rapports'; // Fallback au cas où
     }
     return 'Rapports et Statistiques';
   };

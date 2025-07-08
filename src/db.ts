@@ -486,6 +486,40 @@ export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
   }
 };
 
+// --- Fonctions de récupération spécifiques par ID (si non existantes) ---
+export const getReferentialById = async (id: number): Promise<Referential | undefined> => {
+  try {
+    return await db.referentiels.get(id);
+  } catch (error) {
+    console.error(`Error getting referential with id ${id}: `, error);
+  }
+};
+
+export const getThemeById = async (id: number): Promise<Theme | undefined> => {
+  try {
+    return await db.themes.get(id);
+  } catch (error) {
+    console.error(`Error getting theme with id ${id}: `, error);
+  }
+};
+
+export const getBlocById = async (id: number): Promise<Bloc | undefined> => {
+  try {
+    return await db.blocs.get(id);
+  } catch (error) {
+    console.error(`Error getting bloc with id ${id}: `, error);
+  }
+};
+
+export const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> => {
+  try {
+    return await db.questions.where('blocId').equals(blocId).toArray();
+  } catch (error) {
+    console.error(`Error getting questions for blocId ${blocId}: `, error);
+    return [];
+  }
+};
+
 export const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
   try {
     return await db.blocs.where({ code_bloc, theme_id }).first();
@@ -774,24 +808,23 @@ export const deleteResultsForSession = async (sessionId: number): Promise<void> 
   }
 };
 
-export const getQuestionsForSessionBlocks = async (selectionBlocs: { theme: string; blockId: string }[]): Promise<QuestionWithId[]> => {
-  if (!selectionBlocs || selectionBlocs.length === 0) {
+export const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise<QuestionWithId[]> => {
+  if (!selectedBlocIds || selectedBlocIds.length === 0) {
     return [];
   }
-  const allMatchingQuestions: QuestionWithId[] = [];
   try {
-    for (const bloc of selectionBlocs) {
-      const questionsFromDb = await db.questions.where('theme').startsWith(bloc.theme).toArray();
-      questionsFromDb.forEach(q => {
-        if (!allMatchingQuestions.some(mq => mq.id === q.id)) {
-          allMatchingQuestions.push(q);
-        }
-      });
-    }
-    console.log(`Récupéré ${allMatchingQuestions.length} questions pour les blocs de la session.`);
-    return allMatchingQuestions;
+    // Récupérer toutes les questions dont le blocId est dans la liste selectedBlocIds
+    // et qui ne sont pas undefined
+    const questions = await db.questions
+      .where('blocId')
+      .anyOf(selectedBlocIds.filter(id => typeof id === 'number')) // S'assurer que ce sont des nombres valides
+      .toArray();
+
+    // Optionnel: log pour débogage
+    console.log(`Récupéré ${questions.length} questions pour les blocIDs: ${selectedBlocIds.join(', ')}.`);
+    return questions;
   } catch (error) {
-    console.error("Erreur lors de la récupération des questions pour les blocs de session:", error);
+    console.error("Erreur lors de la récupération des questions pour les IDs de bloc de session:", error);
     return [];
   }
 };

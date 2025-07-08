@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions, getAllResults, getAllQuestions } from '../../db';
-import { Session, SessionResult, QuestionWithId } from '../../types';
+import { getAllSessions, getAllResults, getAllQuestions, getAllReferentiels, getAllThemes, getAllBlocs } from '../../db';
+import { Session, SessionResult, QuestionWithId, Referential, Theme, Bloc, CalculatedBlockOverallStats } from '../../types'; // Ajout des types
 import {
   Table,
   TableHeader,
@@ -10,57 +10,98 @@ import {
   TableHead,
   TableCell,
 } from '../ui/Table';
-import { calculateBlockStats } from '../../utils/reportCalculators';
+import { calculateBlockStats } from '../../utils/reportCalculators'; // calculateBlockStats est déjà la version refactorée
 
-const BlockReport = () => {
+type BlockReportProps = {
+  startDate?: string;
+  endDate?: string;
+  // Potentiellement passer les données déjà chargées par Reports.tsx pour optimiser
+};
+
+const BlockReport: React.FC<BlockReportProps> = ({ startDate, endDate }) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allResults, setAllResults] = useState<SessionResult[]>([]);
   const [allQuestions, setAllQuestions] = useState<QuestionWithId[]>([]);
+  const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]);
+  const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
+  const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
-      const fetchedSessions = await getAllSessions();
+      const [
+        fetchedSessions,
+        fetchedResults,
+        fetchedQuestions,
+        fetchedReferentiels,
+        fetchedThemes,
+        fetchedBlocs
+      ] = await Promise.all([
+        getAllSessions(),
+        getAllResults(),
+        getAllQuestions(),
+        getAllReferentiels(),
+        getAllThemes(),
+        getAllBlocs()
+      ]);
       setSessions(fetchedSessions);
-      const fetchedResults = await getAllResults();
       setAllResults(fetchedResults);
-      const fetchedQuestions = await getAllQuestions();
       setAllQuestions(fetchedQuestions);
+      setAllReferentielsDb(fetchedReferentiels);
+      setAllThemesDb(fetchedThemes);
+      setAllBlocsDb(fetchedBlocs);
     };
     fetchData();
   }, []);
 
   const statsByBlock = useMemo(() => {
-    const uniqueBlocks = new Map<string, { theme: string; blockId: string }>();
-    sessions.forEach(session => {
-      session.selectionBlocs?.forEach(block => {
-        const key = `${block.theme}-${block.blockId}`;
-        if (!uniqueBlocks.has(key)) {
-          uniqueBlocks.set(key, block);
-        }
-      });
+    const filteredSessions = sessions.filter(session => {
+      if (session.status !== 'completed') return false;
+      if (!startDate && !endDate) return true;
+      const sessionDate = new Date(session.dateSession);
+      if (startDate && sessionDate < new Date(startDate)) return false;
+      if (endDate) {
+        const endOfDayEndDate = new Date(endDate);
+        endOfDayEndDate.setHours(23, 59, 59, 999);
+        if (sessionDate > endOfDayEndDate) return false;
+      }
+      return true;
     });
+    console.log(`[BlockReport] Nombre de sessions après filtre date: ${filteredSessions.length} (Période: ${startDate} au ${endDate})`);
 
-    const calculatedStats: { block: string; useCount: number; avgSuccessRate: number; avgScore: number }[] = [];
+    const uniqueNumericBlocIds = Array.from(new Set(filteredSessions.flatMap(s => s.selectedBlocIds || []).filter(id => id != null))) as number[];
 
-    uniqueBlocks.forEach(block => {
-      const stats = calculateBlockStats(block, sessions, allResults, allQuestions);
-      calculatedStats.push({
-        block: `${block.theme} - ${block.blockId}`,
-        useCount: stats.usageCount,
-        avgSuccessRate: stats.averageSuccessRate,
-        avgScore: stats.averageScore,
-      });
+    const calculatedStats: CalculatedBlockOverallStats[] = [];
+
+    uniqueNumericBlocIds.forEach(blocId => {
+      const stats = calculateBlockStats(
+        blocId,
+        filteredSessions, // Utiliser les sessions filtrées par date
+        allResults,
+        allQuestions,
+        allReferentielsDb,
+        allThemesDb,
+        allBlocsDb
+      );
+      if (stats) {
+        calculatedStats.push(stats);
+      }
     });
-
-    return calculatedStats;
-  }, [sessions, allResults, allQuestions]);
+    // Trier par référentiel, puis thème, puis code de bloc
+    return calculatedStats.sort((a, b) =>
+      a.referentielCode.localeCompare(b.referentielCode) ||
+      a.themeCode.localeCompare(b.themeCode) ||
+      a.blocCode.localeCompare(b.blocCode)
+    );
+  }, [sessions, allResults, allQuestions, allReferentielsDb, allThemesDb, allBlocsDb, startDate, endDate]);
 
   return (
     <Card>
-      <h2 className="text-xl font-bold mb-4">Rapport par Bloc de Questions</h2>
+      <h2 className="text-xl font-bold mb-4">Rapport Général par Bloc de Questions</h2>
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Référentiel</TableHead>
+            <TableHead>Thème</TableHead>
             <TableHead>Bloc</TableHead>
             <TableHead className="text-center">Utilisations</TableHead>
             <TableHead className="text-center">Taux de réussite moyen</TableHead>
@@ -69,11 +110,13 @@ const BlockReport = () => {
         </TableHeader>
         <TableBody>
           {statsByBlock.map(stat => (
-            <TableRow key={stat.block}>
-              <TableCell className="font-medium">{stat.block}</TableCell>
-              <TableCell className="text-center">{stat.useCount}</TableCell>
-              <TableCell className="text-center">{stat.avgSuccessRate.toFixed(2)}%</TableCell>
-              <TableCell className="text-center">{stat.avgScore.toFixed(2)}%</TableCell>
+            <TableRow key={`${stat.referentielCode}-${stat.themeCode}-${stat.blocCode}`}>
+              <TableCell>{stat.referentielCode}</TableCell>
+              <TableCell>{stat.themeCode}</TableCell>
+              <TableCell className="font-medium">{stat.blocCode}</TableCell>
+              <TableCell className="text-center">{stat.usageCount}</TableCell>
+              <TableCell className="text-center">{stat.averageSuccessRate.toFixed(0)}%</TableCell>
+              <TableCell className="text-center">{stat.averageScore.toFixed(1)}%</TableCell>
             </TableRow>
           ))}
         </TableBody>

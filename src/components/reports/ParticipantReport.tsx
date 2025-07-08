@@ -1,7 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions, getResultsForSession, getQuestionsForSessionBlocks } from '../../db';
-import { Session, Participant, SessionResult, QuestionWithId } from '../../types';
+import {
+  getAllSessions,
+  getResultsForSession,
+  getQuestionsForSessionBlocks,
+  getAllReferentiels,
+  getAllVotingDevices,
+  getAllThemes,
+  getAllBlocs,
+  getBlocById,
+  getThemeById,
+  getTrainerById // Ajouté pour le PDF
+} from '../../db';
+import { Session, Participant, SessionResult, QuestionWithId, Referential, VotingDevice, Theme, Bloc, ThemeScoreDetails } from '../../types';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import { saveAs } from 'file-saver';
 import {
   Table,
   TableHeader,
@@ -11,174 +25,463 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
-import { Search, ArrowLeft } from 'lucide-react';
+import { Search, ArrowLeft, ChevronDown, ChevronRight, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react';
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import Badge from '../ui/Badge';
 
-interface ProcessedSession extends Session {
+interface EnrichedQuestionForParticipantReport extends QuestionWithId {
+  resolvedThemeName?: string;
+  participantAnswer?: string;
+  pointsObtainedForAnswer?: number;
+  isCorrectAnswer?: boolean;
+}
+
+interface ProcessedSessionDetails extends Session {
+  participantRef: Participant;
   participantScore?: number;
   participantSuccess?: boolean;
+  themeScores?: { [theme: string]: ThemeScoreDetails };
+  questionsForDisplay?: EnrichedQuestionForParticipantReport[];
+}
+
+interface SessionParticipation {
+  key: string;
+  participantDisplayId: string;
+  participantRef: Participant;
+  sessionName: string;
+  sessionDate: string;
+  referentialCode: string;
+  originalSessionId: number;
+  originalParticipantAssignedGlobalDeviceId?: number | null;
 }
 
 const ParticipantReport = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [allReferentiels, setAllReferentiels] = useState<Referential[]>([]);
+  const [allVotingDevices, setAllVotingDevices] = useState<VotingDevice[]>([]);
+  const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
+  const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
-  const [processedParticipantSessions, setProcessedParticipantSessions] = useState<ProcessedSession[]>([]);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [detailedParticipation, setDetailedParticipation] = useState<ProcessedSessionDetails | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const referentialCodeMap = useMemo(() => {
+    return new Map(allReferentiels.map(ref => [ref.id, ref.code]));
+  }, [allReferentiels]);
+
+  const deviceMap = useMemo(() => {
+    return new Map(allVotingDevices.map(device => [device.id, device.serialNumber]));
+  }, [allVotingDevices]);
 
   useEffect(() => {
-    const fetchSessions = async () => {
-      const allSessions = await getAllSessions();
-      setSessions(allSessions);
+    const fetchInitialData = async () => {
+      const [
+        fetchedSessions,
+        fetchedReferentiels,
+        fetchedVotingDevices,
+        fetchedThemes,
+        fetchedBlocs
+      ] = await Promise.all([
+        getAllSessions(),
+        getAllReferentiels(),
+        getAllVotingDevices(),
+        getAllThemes(),
+        getAllBlocs()
+      ]);
+      setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+      setAllReferentiels(fetchedReferentiels);
+      setAllVotingDevices(fetchedVotingDevices);
+      setAllThemesDb(fetchedThemes);
+      setAllBlocsDb(fetchedBlocs);
     };
-    fetchSessions();
+    fetchInitialData();
   }, []);
 
-  useEffect(() => {
-    const processSessions = async () => {
-      if (selectedParticipant) {
-        const participantSessions = sessions.filter(s => s.participants?.some(p => p.nom === selectedParticipant.nom && p.prenom === selectedParticipant.prenom));
-        const processed: ProcessedSession[] = [];
+  const allSessionParticipations = useMemo(() => {
+    const participations: SessionParticipation[] = [];
+    const filteredSessionsByDate = sessions.filter(session => {
+      if (!startDate && !endDate) return true;
+      const sessionDate = new Date(session.dateSession);
+      // Ajustement pour que la date de début soit inclusive
+      const start = startDate ? new Date(startDate) : null;
+      if (start) start.setHours(0,0,0,0);
+      if (start && sessionDate < start) return false;
 
-        for (const session of participantSessions) {
-          if (session.id) {
-            const sessionResults = await getResultsForSession(session.id);
-            const sessionQuestions = await getQuestionsForSessionBlocks(session.selectionBlocs || []);
+      const end = endDate ? new Date(endDate) : null;
+      if (end) end.setHours(23, 59, 59, 999);
+      if (end && sessionDate > end) return false;
+      return true;
+    });
 
-            const currentParticipantSessionResults = sessionResults.filter(r => r.participantIdBoitier === selectedParticipant.idBoitier);
-            const score = calculateParticipantScore(currentParticipantSessionResults, sessionQuestions);
-            const themeScores = calculateThemeScores(currentParticipantSessionResults, sessionQuestions);
-            const reussite = determineIndividualSuccess(score, themeScores);
-
-            processed.push({ ...session, participantScore: score, participantSuccess: reussite });
-          }
-        }
-        setProcessedParticipantSessions(processed);
-      }
-    };
-    processSessions();
-  }, [selectedParticipant, sessions]);
-
-  const allParticipants = useMemo(() => {
-    const participantMap = new Map<string, { participant: Participant; sessionCount: number }>();
-    sessions.forEach(session => {
-      session.participants?.forEach(p => {
-        const key = `${p.nom}-${p.prenom}`;
-        if (participantMap.has(key)) {
-          participantMap.get(key)!.sessionCount++;
-        } else {
-          participantMap.set(key, { participant: p, sessionCount: 1 });
-        }
+    filteredSessionsByDate.forEach(session => {
+      if (!session.id) return;
+      session.participants?.forEach((p, index) => {
+        const participantKeyPart = p.assignedGlobalDeviceId ? p.assignedGlobalDeviceId.toString() : `paridx-${index}`;
+        participations.push({
+          key: `sess-${session.id}-part-${participantKeyPart}`,
+          participantRef: p,
+          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId) || 'N/A'}`,
+          sessionName: session.nomSession,
+          sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
+          referentialCode: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
+          originalSessionId: session.id,
+          originalParticipantAssignedGlobalDeviceId: p.assignedGlobalDeviceId,
+        });
       });
     });
-    return Array.from(participantMap.values());
-  }, [sessions]);
+    return participations;
+  }, [sessions, referentialCodeMap, deviceMap, startDate, endDate]);
 
-  const filteredParticipants = useMemo(() => {
-    return allParticipants.filter(({ participant }) => 
-      `${participant.prenom} ${participant.nom}`.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredSessionParticipations = useMemo(() => {
+    if (!searchTerm) return allSessionParticipations;
+    return allSessionParticipations.filter(participation =>
+      `${participation.participantRef.prenom} ${participation.participantRef.nom}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      participation.sessionName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      participation.referentialCode.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [allParticipants, searchTerm]);
+  }, [allSessionParticipations, searchTerm]);
 
-  const handleSelectParticipant = (participant: Participant) => {
-    setSelectedParticipant(participant);
+  const handleSelectParticipation = async (participation: SessionParticipation) => {
+    setDetailedParticipation(null);
+
+    const targetSession = sessions.find(s => s.id === participation.originalSessionId);
+    const targetParticipantRef = targetSession?.participants.find(p => p.assignedGlobalDeviceId === participation.originalParticipantAssignedGlobalDeviceId);
+
+    if (!targetSession || !targetParticipantRef || targetParticipantRef.assignedGlobalDeviceId === undefined || !deviceMap.size || !allThemesDb.length || !allBlocsDb.length) {
+      console.error("Données manquantes pour traiter la participation détaillée", {targetSession, targetParticipantRef, deviceMapSize: deviceMap.size, allThemesDbL: allThemesDb.length, allBlocsDbL: allBlocsDb.length});
+      return;
+    }
+
+    const serialNumberOfSelectedParticipant = deviceMap.get(targetParticipantRef.assignedGlobalDeviceId);
+    if (!serialNumberOfSelectedParticipant) {
+      console.error("Numéro de série non trouvé pour le participant", targetParticipantRef);
+      return;
+    }
+
+    try {
+      const sessionResults = await getResultsForSession(targetSession.id!);
+      const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
+
+      const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
+        baseSessionQuestions.map(async (question, index) => {
+          try {
+            let resolvedThemeName = 'Thème non spécifié';
+            if (question.blocId) {
+              const bloc = allBlocsDb.find(b => b.id === question.blocId);
+              if (bloc && bloc.theme_id) {
+                const theme = allThemesDb.find(t => t.id === bloc.theme_id);
+                if (theme) resolvedThemeName = theme.nom_complet;
+              }
+            }
+            const participantResult = sessionResults.find(
+              sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
+            );
+            return { ...question, resolvedThemeName, participantAnswer: participantResult?.answer, pointsObtainedForAnswer: participantResult?.pointsObtained, isCorrectAnswer: participantResult?.isCorrect };
+          } catch (error) {
+            console.error(`[ParticipantReport] Error enriching question ID ${question.id} (index ${index}):`, error);
+            return { ...question, resolvedThemeName: 'Erreur chargement thème', participantAnswer: 'Erreur', pointsObtainedForAnswer: 0, isCorrectAnswer: false };
+          }
+        })
+      );
+
+      const currentParticipantSessionResults = sessionResults.filter(r => r.participantIdBoitier === serialNumberOfSelectedParticipant);
+      const score = calculateParticipantScore(currentParticipantSessionResults, enrichedSessionQuestions);
+      const themeScores = calculateThemeScores(currentParticipantSessionResults, enrichedSessionQuestions);
+      const reussite = determineIndividualSuccess(score, themeScores);
+
+      setDetailedParticipation({
+        ...targetSession,
+        participantRef: targetParticipantRef,
+        participantScore: score,
+        participantSuccess: reussite,
+        themeScores,
+        questionsForDisplay: enrichedSessionQuestions
+      });
+    } catch (error) {
+      console.error('[ParticipantReport] Error processing participation details:', error);
+      setDetailedParticipation(null); // S'assurer de réinitialiser en cas d'erreur globale
+    }
   };
 
-  const handleBack = () => {
-    setSelectedParticipant(null);
-    setProcessedParticipantSessions([]);
+  const handleBackToList = () => {
+    setDetailedParticipation(null);
   };
 
-  if (selectedParticipant) {
-    const totalScore = processedParticipantSessions.reduce((sum, s) => sum + (s.participantScore || 0), 0);
-    const avgScore = processedParticipantSessions.length > 0 ? totalScore / processedParticipantSessions.length : 0;
-    const totalSuccess = processedParticipantSessions.filter(s => s.participantSuccess).length;
-    const successRate = processedParticipantSessions.length > 0 ? (totalSuccess / processedParticipantSessions.length) * 100 : 0;
+  const generateSingleParticipantReportPDF = async () => {
+    if (!detailedParticipation) return;
+    setIsGeneratingPdf(true);
+
+    const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
+
+    let fetchedTrainerName = 'N/A';
+    if (trainerId) {
+      const trainer = await getTrainerById(trainerId);
+      if (trainer) fetchedTrainerName = trainer.name;
+    }
+
+    const reportDate = new Date().toLocaleDateString('fr-FR');
+    const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
+
+    let pdfHtml = `
+      <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px; color: #333;">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height: 60px; margin-bottom: 20px;"/>` : ''}
+        <h1 style="font-size: 18px; text-align: center; color: #1a237e; margin-bottom: 10px;">RAPPORT INDIVIDUEL DE SESSION</h1>
+        <hr style="border: 0; border-top: 1px solid #ccc; margin-bottom: 20px;" />
+
+        <table style="width: 100%; font-size: 10px; margin-bottom: 15px; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 4px; width: 50%;"><strong>Participant :</strong> ${participantRef.prenom} ${participantRef.nom}</td>
+            <td style="padding: 4px; width: 50%;"><strong>ID Boîtier :</strong> ${deviceMap.get(participantRef.assignedGlobalDeviceId) || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px;"><strong>Session :</strong> ${nomSession}</td>
+            <td style="padding: 4px;"><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialCodeMap.get(referentielId) || 'N/A'}</td>
+            <td style="padding: 4px;"><strong>Lieu :</strong> ${location || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px;"><strong>Formateur :</strong> ${fetchedTrainerName}</td>
+            <td style="padding: 4px;"></td>
+          </tr>
+        </table>
+
+        <div style="background-color: ${participantSuccess ? '#e8f5e9' : '#ffebee'}; padding: 15px; border-radius: 4px; margin-bottom: 20px; text-align: center;">
+          <p style="font-size: 14px; font-weight: bold; margin:0;">Score Global :
+            <span style="color: ${participantSuccess ? '#2e7d32' : '#c62828'};">${participantScore !== undefined ? participantScore.toFixed(0) : 'N/A'} / 100</span>
+          </p>
+          <p style="font-size: 12px; font-weight: bold; color: ${participantSuccess ? '#2e7d32' : '#c62828'}; margin-top: 5px;">
+            Mention : ${participantSuccess ? 'RÉUSSI' : 'AJOURNÉ'}
+          </p>
+        </div>
+
+        <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Scores par Thème</h2>
+    `;
+    if (themeScores && Object.keys(themeScores).length > 0) {
+      pdfHtml += '<ul style="list-style-type: none; padding-left: 0;">';
+      for (const [themeName, details] of Object.entries(themeScores)) {
+        pdfHtml += `<li style="margin-bottom: 5px; padding: 5px; border-bottom: 1px solid #eee; ${details.score < 50 ? 'color: #c62828; font-weight: bold;' : ''}">
+          ${themeName}: ${details.score.toFixed(0)}% (${details.correct}/${details.total})
+        </li>`;
+      }
+      pdfHtml += '</ul>';
+    } else {
+      pdfHtml += '<p style="font-size: 10px; color: #555;">Scores par thème non disponibles.</p>';
+    }
+
+    pdfHtml += `<h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Questions</h2>`;
+
+    const questionsByThemeForPdf: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
+    if (questionsForDisplay) {
+      questionsForDisplay.forEach(q => {
+        const theme = q.resolvedThemeName || 'Thème non spécifié';
+        if (!questionsByThemeForPdf[theme]) questionsByThemeForPdf[theme] = [];
+        questionsByThemeForPdf[theme].push(q);
+      });
+    }
+
+    if (Object.keys(questionsByThemeForPdf).length > 0) {
+      for (const [themeName, questions] of Object.entries(questionsByThemeForPdf)) {
+        pdfHtml += `<h3 style="font-size: 12px; color: #3f51b5; margin-top: 15px; margin-bottom: 8px;">Thème : ${themeName}</h3>`;
+        questions.forEach(q => {
+          pdfHtml += `
+            <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dotted #ccc; page-break-inside: avoid;">
+              <p style="margin: 2px 0; font-weight: bold;">${q.text}</p>
+              <p style="margin: 2px 0 0 10px;">Votre réponse : <span style="font-style: italic;">${q.participantAnswer || 'Non répondu'}</span></p>
+              ${q.isCorrectAnswer === false && q.participantAnswer !== undefined ? `<p style="margin: 2px 0 0 10px; color: #d32f2f;">Bonne réponse : <span style="font-style: italic;">${q.correctAnswer}</span></p>` : ''}
+              <p style="margin: 2px 0 0 10px;">Points : ${q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</p>
+            </div>
+          `;
+        });
+      }
+    } else {
+      pdfHtml += '<p style="font-size: 10px; color: #555;">Détail des questions non disponible.</p>';
+    }
+    pdfHtml += `<p style="text-align: right; font-size: 8px; color: #777; margin-top: 30px;">Rapport généré le ${reportDate}</p>`;
+    pdfHtml += '</div>';
+
+    const element = document.createElement('div');
+    element.style.width = '1000px';
+    element.style.padding = '20px';
+    element.innerHTML = pdfHtml;
+    document.body.appendChild(element);
+
+    const canvas = await html2canvas(element, { scale: 2, useCORS: true, windowWidth: element.scrollWidth, windowHeight: element.scrollHeight });
+    const imgData = canvas.toDataURL('image/png');
+    document.body.removeChild(element);
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const imgProps = pdf.getImageProperties(imgData);
+    const ratio = imgProps.height / imgProps.width;
+    let imgHeight = pdfWidth * ratio;
+
+    if (imgHeight > pdfHeight) {
+        let pageCount = Math.ceil(imgHeight / pdfHeight);
+        for (let i = 0; i < pageCount; i++) {
+            if (i > 0) pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, pdfWidth, imgHeight);
+        }
+    } else {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+    }
+
+    const safeFileName = `Rapport_${participantRef.prenom}_${participantRef.nom}_${nomSession}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    pdf.save(safeFileName);
+
+    setIsGeneratingPdf(false);
+  };
+
+
+  if (detailedParticipation) {
+    const { participantRef, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
+
+    const questionsByTheme: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
+    if (questionsForDisplay) {
+      questionsForDisplay.forEach(q => {
+        const theme = q.resolvedThemeName || 'Thème non spécifié';
+        if (!questionsByTheme[theme]) questionsByTheme[theme] = [];
+        questionsByTheme[theme].push(q);
+      });
+    }
 
     return (
       <Card>
-        <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBack} className="mb-4">
-          Retour à la liste
-        </Button>
-        <h2 className="text-2xl font-bold mb-2">{selectedParticipant.prenom} {selectedParticipant.nom}</h2>
-        <p className="text-gray-500 mb-6">ID Boîtier: {selectedParticipant.idBoitier}</p>
-        
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <p className="text-xs text-gray-500">Score moyen global</p>
-            <p className="text-2xl font-semibold text-gray-900">{avgScore.toFixed(0)}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500">Taux de réussite global</p>
-            <p className="text-2xl font-semibold text-gray-900">{successRate.toFixed(0)}%</p>
-          </div>
+        <div className="flex justify-between items-center mb-4">
+          <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBackToList}>
+            Retour à la liste
+          </Button>
+          <Button
+            onClick={generateSingleParticipantReportPDF}
+            icon={<Download size={16} />}
+            disabled={isGeneratingPdf}
+          >
+            {isGeneratingPdf ? 'Génération PDF...' : 'Télécharger PDF'}
+          </Button>
+        </div>
+        <h2 className="text-2xl font-bold mb-1">Détail de la participation</h2>
+        <p className="text-lg mb-1">Participant : <span className="font-semibold">{participantRef.prenom} {participantRef.nom}</span></p>
+        <p className="text-md mb-1">Session : <span className="font-semibold">{detailedParticipation.nomSession}</span> ({new Date(detailedParticipation.dateSession).toLocaleDateString('fr-FR')})</p>
+        <p className="text-md mb-4">Référentiel : <Badge variant="secondary">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <Card className="p-4">
+            <h3 className="text-lg font-semibold mb-2">Performance Globale</h3>
+            <p className={participantSuccess ? 'text-green-600 font-bold text-2xl' : 'text-red-600 font-bold text-2xl'}>
+              {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
+            </p>
+            {participantSuccess !== undefined ? (
+              participantSuccess ? <Badge variant="success" size="lg">Réussi</Badge> : <Badge variant="danger" size="lg">Ajourné</Badge>
+            ) : <Badge variant="warning" size="lg">En attente</Badge>}
+          </Card>
+          <Card className="p-4">
+            <h3 className="text-lg font-semibold mb-2">Scores par Thème</h3>
+            {themeScores && Object.entries(themeScores).length > 0 ? (
+              Object.entries(themeScores).map(([themeName, themeScoreDetail]) => (
+              <div key={themeName} className="mb-1 text-sm">
+                <span className={themeScoreDetail.score < 50 ? 'text-red-500 font-semibold' : 'text-gray-700 font-semibold'}>
+                  {themeName}: </span> {themeScoreDetail.score.toFixed(0)}% ({themeScoreDetail.correct}/{themeScoreDetail.total})
+              </div>
+            ))
+            ) : (<p className="text-sm text-gray-500">Scores par thème non disponibles.</p>)}
+          </Card>
         </div>
 
-        <h3 className="text-xl font-semibold mb-4">Historique des sessions</h3>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Session</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Score</TableHead>
-              <TableHead>Résultat</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {processedParticipantSessions.map(session => (
-              <TableRow key={session.id}>
-                <TableCell>{session.nomSession}</TableCell>
-                <TableCell>{new Date(session.dateSession).toLocaleDateString('fr-FR')}</TableCell>
-                <TableCell>{session.participantScore !== undefined ? `${session.participantScore.toFixed(0)}%` : 'N/A'}</TableCell>
-                <TableCell>
-                  {session.participantSuccess !== undefined ? (
-                    session.participantSuccess ? (
-                      <Badge variant="success">Certifié</Badge>
-                    ) : (
-                      <Badge variant="danger">Ajourné</Badge>
-                    )
-                  ) : (
-                    <Badge variant="warning">En attente</Badge>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div>
+        <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Détail des Questions par Thème</h3>
+        {Object.entries(questionsByTheme).length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+              {Object.entries(questionsByTheme).map(([themeName, questions]) => (
+                <div key={themeName} className="mb-4 pt-2">
+                  <h4 className="text-md font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-300">
+                    {themeName}
+                  </h4>
+                  {questions.map((q, qIndex) => (
+                    <div key={q.id || qIndex} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
+                      <p className="flex items-start font-medium text-gray-900 mb-1">
+                        <HelpCircle size={16} className="mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <span>{q.text}</span>
+                      </p>
+                      <div className="pl-6 space-y-0.5">
+                        <p>Votre réponse : <span className="font-semibold">{q.participantAnswer || 'Non répondu'}</span></p>
+                        {q.isCorrectAnswer === false && q.participantAnswer !== undefined && (
+                          <p className="text-orange-600">Bonne réponse : <span className="font-semibold">{q.correctAnswer}</span></p>
+                        )}
+                         <p className="flex items-center">
+                            Points : <span className="font-semibold ml-1">{q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</span>
+                            {q.isCorrectAnswer === true && <CheckCircle size={15} className="ml-2 text-green-500" />}
+                            {q.isCorrectAnswer === false && q.participantAnswer !== undefined && <XCircle size={15} className="ml-2 text-red-500" />}
+                          </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (<p className="mt-4 text-sm text-gray-500">Détail des questions non disponible.</p>)}
+        </div>
       </Card>
     );
   }
 
   return (
     <Card>
-      <h2 className="text-xl font-bold mb-4">Rapport par Participant</h2>
-      <div className="mb-4">
+      <h2 className="text-xl font-bold mb-4">Rapport par Participant (Participations aux Sessions)</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <Input 
-          placeholder="Rechercher par nom..."
+          placeholder="Rechercher..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-1/3"
+          className="md:col-span-1"
           icon={<Search size={16} className="text-gray-400"/>}
+        />
+        <Input
+          type="date"
+          label="Date de début"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className=""
+        />
+        <Input
+          type="date"
+          label="Date de fin"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          className=""
         />
       </div>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Prénom</TableHead>
-            <TableHead>Nom</TableHead>
-            <TableHead className="text-center">Sessions Participées</TableHead>
+            <TableHead>Participant</TableHead>
+            <TableHead>Session</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Référentiel</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredParticipants.map(({ participant, sessionCount }) => (
-            <TableRow key={`${participant.nom}-${participant.prenom}`} onClick={() => handleSelectParticipant(participant)} className="cursor-pointer">
-              <TableCell>{participant.prenom}</TableCell>
-              <TableCell>{participant.nom}</TableCell>
-              <TableCell className="text-center">{sessionCount}</TableCell>
+          {filteredSessionParticipations.map((participation) => (
+            <TableRow
+              key={participation.key}
+              onClick={() => handleSelectParticipation(participation)}
+              className="cursor-pointer hover:bg-gray-50"
+            >
+              <TableCell>{participation.participantRef.prenom} {participation.participantRef.nom}</TableCell>
+              <TableCell>{participation.sessionName}</TableCell>
+              <TableCell>{participation.sessionDate}</TableCell>
+              <TableCell>
+                <Badge variant="secondary">{participation.referentialCode}</Badge>
+              </TableCell>
               <TableCell className="text-right">
-                <Button variant="ghost" onClick={() => handleSelectParticipant(participant)}>Détails</Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleSelectParticipation(participation); }}>
+                  Voir détails participation
+                </Button>
               </TableCell>
             </TableRow>
           ))}

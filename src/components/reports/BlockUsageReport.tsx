@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BlockUsage, calculateBlockUsage } from '../../db'; // Ajuster le chemin si besoin
-import { CACESReferential } from '../../types'; // Ajuster le chemin si besoin
+import { BlockUsage, calculateBlockUsage, getAllReferentiels } from '../../db'; // Ajout de getAllReferentiels
+import { CACESReferential, Referential } from '../../types'; // Ajout de Referential
 
 // Importer les composants UI réutilisables
 import Card from '../ui/Card';
@@ -11,17 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { ArrowUpDown } from 'lucide-react';
 
 // Options pour le filtre Référentiel (similaire à votre exemple)
-// Idéalement, cela viendrait de vos types ou d'une constante partagée
-const referentialOptions = [
-  { value: '', label: 'Tous les référentiels' },
-  { value: 'R482', label: 'R482 - Engins de chantier' },
-  { value: 'R484', label: 'R484 - Ponts roulants' },
-  { value: 'R485', label: 'R485 - Gerbeurs à conducteur accompagnant' },
-  { value: 'R486', label: 'R486 - PEMP' },
-  { value: 'R489', label: 'R489 - Chariots de manutention' },
-  { value: 'R490', label: 'R490 - Grues de chargement' },
-  // Ajouter d'autres si nécessaire
-];
+// Les referentialOptions seront maintenant dynamiques
 
 type SortKey = keyof BlockUsage | '';
 type SortDirection = 'asc' | 'desc';
@@ -30,9 +20,10 @@ const BlockUsageReport: React.FC = () => {
   const [blockUsageData, setBlockUsageData] = useState<BlockUsage[]>([]);
   const [filteredData, setFilteredData] = useState<BlockUsage[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]);
 
   // Filtres
-  const [selectedReferentiel, setSelectedReferentiel] = useState<CACESReferential | string>('');
+  const [selectedReferentiel, setSelectedReferentiel] = useState<string>(''); // ID du référentiel (string car value de Select)
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
@@ -59,14 +50,30 @@ const BlockUsageReport: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    const loadReferentiels = async () => {
+      const refs = await getAllReferentiels();
+      setAllReferentielsDb(refs.sort((a,b) => a.code.localeCompare(b.code)));
+    };
+    loadReferentiels();
+    fetchData(); // Charger les données d'utilisation des blocs
   }, []); // Charger les données initialement
+
+  const dynamicReferentialOptions = useMemo(() => {
+    return [
+      { value: '', label: 'Tous les référentiels' }, // L'value ici est string vide pour "tous"
+      ...allReferentielsDb.map(ref => ({
+        value: ref.code, // On filtre sur le code du référentiel (ex: "R489") car BlockUsage.referentiel est un code
+        label: ref.code // Afficher juste le code
+      }))
+    ];
+  }, [allReferentielsDb]);
 
   // Application des filtres et du tri
   useEffect(() => {
     let dataToFilter = [...blockUsageData];
 
-    if (selectedReferentiel) {
+    // Le champ `item.referentiel` dans `BlockUsage` est le code du référentiel (string)
+    if (selectedReferentiel) { // selectedReferentiel est le code (string)
       dataToFilter = dataToFilter.filter(item => item.referentiel === selectedReferentiel);
     }
 
@@ -124,11 +131,11 @@ const BlockUsageReport: React.FC = () => {
           <Select
             id="referentiel-filter"
             label="Référentiel"
-            options={referentialOptions}
-            value={selectedReferentiel}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedReferentiel(e.target.value as CACESReferential | string)}
-            placeholder="Tous les référentiels" // The simple Select uses this for its disabled default option
-            className="w-full" // Added for styling consistency
+            options={dynamicReferentialOptions} // Utiliser les options dynamiques
+            value={selectedReferentiel} // value est maintenant le code string
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedReferentiel(e.target.value)}
+            placeholder="Tous les référentiels"
+            className="w-full"
           />
         </div>
 
