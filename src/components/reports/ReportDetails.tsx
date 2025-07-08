@@ -24,14 +24,21 @@ import {
   calculateThemeScores,
   determineIndividualSuccess,
   calculateBlockPerformanceForSession, // Gardé pour l'instant, mais sera remplacé/supprimé
-  BlockPerformanceStats, // Gardé pour l'instant
-  calculateNumericBlockPerformanceForSession, // Ajouté
-  NumericBlockPerformanceStats // Ajouté
+  BlockPerformanceStats,
+  calculateNumericBlockPerformanceForSession,
+  NumericBlockPerformanceStats,
+  ThemeScoreDetails // Importer ThemeScoreDetails
 } from '../../utils/reportCalculators';
+
+interface ParticipantCalculatedData extends Participant {
+  score?: number;
+  reussite?: boolean;
+  idBoitier?: string; // Le serialNumber du boîtier
+  themeScores?: { [theme: string]: ThemeScoreDetails }; // Ajouté pour la cohérence
+}
 
 type ReportDetailsProps = {
   session: Session;
-  // participants n'est plus directement une prop, car session.participants sera utilisé
 };
 
 const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
@@ -211,7 +218,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
   };
 
-  const participantCalculatedData = useMemo(() => {
+  const participantCalculatedData: ParticipantCalculatedData[] = useMemo(() => {
     return participants.map(p => {
       const deviceSerialNumber = p.assignedGlobalDeviceId ? deviceMap.get(p.assignedGlobalDeviceId) : undefined;
 
@@ -219,12 +226,17 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         ? sessionResults.filter(r => r.participantIdBoitier === deviceSerialNumber)
         : [];
 
-      // Utiliser questionsForThisSession (qui sont déjà enrichies avec resolvedThemeName)
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
-      const themeScores = calculateThemeScores(participantResults, questionsForThisSession as any); // Cast car questionsForThisSession est enrichi
-      const reussite = determineIndividualSuccess(score, themeScores); // Utilise les seuils par défaut 70/50
+      const themeScores = calculateThemeScores(participantResults, questionsForThisSession as any);
+      const reussite = determineIndividualSuccess(score, themeScores);
 
-      return { ...p, score, reussite, idBoitier: deviceSerialNumber }; // Ajout de idBoitier pour référence si besoin
+      return {
+        ...p,
+        score,
+        reussite,
+        idBoitier: deviceSerialNumber,
+        themeScores // Stocker pour une utilisation potentielle future (ex: PDF détaillé depuis ici)
+      };
     });
   }, [participants, sessionResults, questionsForThisSession, deviceMap]);
 
@@ -451,29 +463,29 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {participantCalculatedData.map((participant, index) => (
-                  // Utiliser assignedGlobalDeviceId ou l'index comme clé si le premier est null/undefined
-                  <tr key={participant.assignedGlobalDeviceId || `participant-${index}`} className="hover:bg-gray-50">
+                {participantCalculatedData.map((participantData, index) => (
+                  <tr key={participantData.assignedGlobalDeviceId || `pd-${index}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{participant.nom} {participant.prenom}</div>
+                      {/* participantData est l'objet Participant enrichi, donc on accède directement à nom/prenom */}
+                      <div className="text-sm font-medium text-gray-900">{participantData.nom} {participantData.prenom}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${participant.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {participant.score !== undefined ? participant.score.toFixed(0) : '-'}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${participantData.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {participantData.score !== undefined ? participantData.score.toFixed(0) : '-'}
                         </div>
                         <div className="w-24 bg-gray-200 rounded-full h-2">
                           <div
-                            className={`h-2 rounded-full ${participant.reussite ? 'bg-green-600' : 'bg-red-600'}`}
-                            style={{ width: `${participant.score || 0}%` }}
+                            className={`h-2 rounded-full ${participantData.reussite ? 'bg-green-600' : 'bg-red-600'}`}
+                            style={{ width: `${participantData.score || 0}%` }}
                           ></div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {participant.reussite === true && <Badge variant="success">Certifié</Badge>}
-                      {participant.reussite === false && <Badge variant="danger">Ajourné</Badge>}
-                      {participant.reussite === undefined && <Badge variant="neutral">-</Badge>}
+                      {participantData.reussite === true && <Badge variant="success">Certifié</Badge>}
+                      {participantData.reussite === false && <Badge variant="danger">Ajourné</Badge>}
+                      {participantData.reussite === undefined && <Badge variant="default">-</Badge>}
                     </td>
                   </tr>
                 ))}

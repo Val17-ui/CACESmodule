@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions, getAllResults, getQuestionsForSessionBlocks, getAllThemes, getAllBlocs, getReferentialById } from '../../db'; // Ajout de getAllThemes, getAllBlocs, getReferentialById
-import { Session, SessionResult, QuestionWithId, Referential, Theme, Bloc, OverallThemeStats } from '../../types'; // Ajout de Theme, Bloc, OverallThemeStats
+import { getAllSessions, getAllResults, getAllThemes, getAllBlocs, getReferentialById, getQuestionsForSessionBlocks } from '../../db'; // getQuestionsForSessionBlocks ré-ajouté car utilisé
+import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, OverallThemeStats } from '../../types';
 import {
   Table,
   TableHeader,
@@ -10,9 +10,9 @@ import {
   TableHead,
   TableCell,
 } from '../ui/Table';
-import { calculateSessionStats, calculateOverallThemeStats } from '../../utils/reportCalculators'; // Ajout de calculateOverallThemeStats
-import Button from '../ui/Button'; // Ajouté
-import { ArrowLeft, Eye } from 'lucide-react'; // Ajouté
+import { calculateSessionStats, calculateOverallThemeStats } from '../../utils/reportCalculators';
+import Button from '../ui/Button';
+import { ArrowLeft } from 'lucide-react'; // Eye retiré car le bouton a été retiré/modifié
 
 type ReferentialReportProps = {
   startDate?: string;
@@ -52,29 +52,8 @@ const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDat
     fetchData();
   }, []);
 
-  // Calcul des questions uniques après que les sessions soient potentiellement filtrées par date
-  const relevantQuestions = useMemo(() => {
-    const filteredSessions = sessions.filter(session => {
-      if (session.status !== 'completed') return false;
-      if (!startDate && !endDate) return true;
-      const sessionDate = new Date(session.dateSession);
-      if (startDate && sessionDate < new Date(startDate)) return false;
-      if (endDate) {
-        const endOfDayEndDate = new Date(endDate);
-        endOfDayEndDate.setHours(23, 59, 59, 999);
-        if (sessionDate > endOfDayEndDate) return false;
-      }
-      return true;
-    });
-    const allUniqueBlocIds = Array.from(new Set(filteredSessions.flatMap(s => s.selectedBlocIds || []).filter(id => id != null)));
-    // Note: getQuestionsForSessionBlocks est async, ne peut pas être dans useMemo directement sans un useEffect pour le résultat
-    // Pour l'instant, on va supposer que allQuestions est chargé globalement ou on adapte.
-    // Alternative: charger toutes les questions une fois et filtrer ici.
-    // Pour simplifier, on utilise allQuestions chargé dans le useEffect initial (qui charge TOUTES les questions)
-    // Ce n'est pas optimal si les dates changent souvent, mais suffisant pour l'instant.
-    return allQuestions.filter(q => q.blocId && allUniqueBlocIds.includes(q.blocId));
-  }, [sessions, startDate, endDate, allQuestions]);
-
+  // relevantQuestions n'est plus utilisé, les questions sont filtrées dans overallThemeStatsForSelectedReferential
+  // const relevantQuestions = useMemo(() => { ... });
 
   const statsByReferential = useMemo(() => {
     const filteredSessions = sessions.filter(session => {

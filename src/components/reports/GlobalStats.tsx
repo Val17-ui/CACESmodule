@@ -20,12 +20,14 @@ const GlobalStats: React.FC<GlobalStatsProps> = ({ sessions }) => {
       let sessionsCounted = 0;
 
       for (const session of completedSessions) {
-        if (session.id) {
+        if (session.id && session.selectedBlocIds) { // Vérifier aussi selectedBlocIds pour pertinence
           const results = await getResultsForSession(session.id);
-          const questions = await getQuestionsForSessionBlocks(session.selectionBlocs || []);
-          const stats = calculateSessionStats(session, results, questions);
-          totalSuccessRates += stats.successRate;
-          sessionsCounted++;
+          const questions = await getQuestionsForSessionBlocks(session.selectedBlocIds); // Pas besoin de || [] si on vérifie avant
+          if (questions.length > 0) { // S'assurer qu'il y a des questions pour calculer les stats
+            const stats = calculateSessionStats(session, results, questions);
+            totalSuccessRates += stats.successRate;
+            sessionsCounted++;
+          }
         }
       }
 
@@ -36,12 +38,16 @@ const GlobalStats: React.FC<GlobalStatsProps> = ({ sessions }) => {
       }
     };
 
-    calculateOverallStats();
-  }, [sessions]);
+    if (completedSessions.length > 0) {
+      calculateOverallStats();
+    } else {
+      setAvgSuccessRate(0);
+    }
+  }, [completedSessions]);
 
   const totalSessions = completedSessions.length;
   const totalParticipants = completedSessions.reduce((acc, session) => acc + (session.participants?.length || 0), 0);
-  const activeReferentials = new Set(completedSessions.map(s => s.referentiel)).size;
+  const activeReferentials = new Set(completedSessions.map(s => s.referentielId)).size;
 
   return (
     <div className="mb-8">

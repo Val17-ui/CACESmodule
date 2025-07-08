@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions } from '../../db';
-import { Session, CACESReferential } from '../../types';
+import { getAllSessions, getAllReferentiels } from '../../db'; // Ajout de getAllReferentiels
+import { Session, CACESReferential, Referential } from '../../types'; // Ajout de Referential
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
@@ -15,21 +15,48 @@ import {
 } from '../ui/Table';
 import { Download } from 'lucide-react';
 
+// CustomReport.tsx
+// ... (imports existants)
+// Assurez-vous que Referential et CACESReferential (si utilisé pour les options statiques) sont importés
+// import { Referential, CACESReferential } from '../../types';
+// import { getAllReferentiels } from '../../db'; // Si vous chargez dynamiquement les options de référentiel
+
 const CustomReport = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]); // Ajouté
   const [filters, setFilters] = useState({
-    referentiel: 'all',
+    referentialId: 'all', // Changé pour referentialId, stockera l'ID (string) ou 'all'
     startDate: '',
     endDate: '',
     status: 'all',
   });
 
+  // Map pour obtenir le code du référentiel par son ID pour l'affichage
+  const referentialCodeMap = useMemo(() => {
+    return new Map(allReferentielsDb.map(ref => [ref.id, ref.code]));
+  }, [allReferentielsDb]);
+
+  // Options pour le Select, maintenant basées sur les ID et affichant les codes
+  const referentialOptionsForFilter = useMemo(() => {
+    return [
+      { value: 'all', label: 'Tous les référentiels' },
+      ...allReferentielsDb.map(ref => ({
+        value: String(ref.id), // Le filtre se fera sur l'ID
+        label: ref.code        // On affiche le code
+      }))
+    ];
+  }, [allReferentielsDb]);
+
   useEffect(() => {
-    const fetchSessions = async () => {
-      const allSessions = await getAllSessions();
-      setSessions(allSessions);
+    const loadData = async () => {
+      const [fetchedSessions, fetchedReferentiels] = await Promise.all([
+        getAllSessions(),
+        getAllReferentiels(),
+      ]);
+      setSessions(fetchedSessions);
+      setAllReferentielsDb(fetchedReferentiels.sort((a, b) => a.code.localeCompare(b.code)));
     };
-    fetchSessions();
+    loadData();
   }, []);
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -39,30 +66,36 @@ const CustomReport = () => {
 
   const filteredSessions = useMemo(() => {
     return sessions.filter(session => {
-      if (filters.referentiel !== 'all' && session.referentiel !== filters.referentiel) return false;
+      // Filtre par référentiel basé sur l'ID
+      if (filters.referentialId !== 'all' && String(session.referentielId) !== filters.referentialId) return false;
+
       if (filters.status !== 'all' && session.status !== filters.status) return false;
+
       const sessionDate = new Date(session.dateSession);
       if (filters.startDate && sessionDate < new Date(filters.startDate)) return false;
-      if (filters.endDate && sessionDate > new Date(filters.endDate)) return false;
+      if (filters.endDate) {
+        const endOfDay = new Date(filters.endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (sessionDate > endOfDay) return false;
+      }
       return true;
     });
-  }, [sessions, filters]);
+  }, [sessions, filters]); // referentialCodeMap n'est pas nécessaire ici car on filtre par ID
 
   return (
     <Card>
       <h2 className="text-xl font-bold mb-4">Rapport Personnalisé</h2>
-      <div className="grid grid-cols-4 gap-4 mb-4 p-4 border rounded-lg">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 border rounded-lg">
         <Select
-          name="referentiel"
-          value={filters.referentiel}
+          name="referentialId" // Changé pour correspondre à l'état du filtre
+          label="Référentiel"
+          value={filters.referentialId}
           onChange={handleFilterChange}
-          options={[
-            { value: 'all', label: 'Tous les référentiels' },
-            ...Object.values(CACESReferential).map(ref => ({ value: ref, label: ref }))
-          ]}
+          options={referentialOptionsForFilter} // Utilise les options dynamiques
         />
         <Select
           name="status"
+          label="Statut"
           value={filters.status}
           onChange={handleFilterChange}
           options={[
@@ -95,7 +128,8 @@ const CustomReport = () => {
             <TableRow key={session.id}>
               <TableCell>{session.nomSession}</TableCell>
               <TableCell>{new Date(session.dateSession).toLocaleDateString('fr-FR')}</TableCell>
-              <TableCell>{session.referentiel}</TableCell>
+              {/* Afficher le code du référentiel en utilisant la map */}
+              <TableCell>{session.referentielId ? referentialCodeMap.get(session.referentielId) : 'N/A'}</TableCell>
               <TableCell>{session.status}</TableCell>
             </TableRow>
           ))}

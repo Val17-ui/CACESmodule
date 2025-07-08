@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { BlockUsage, calculateBlockUsage, getAllReferentiels } from '../../db'; // Ajout de getAllReferentiels
-import { CACESReferential, Referential } from '../../types'; // Ajout de Referential
+import React, { useState, useEffect, useMemo } from 'react';
+import { BlockUsage, calculateBlockUsage, getAllReferentiels } from '../../db';
+import { CACESReferential, Referential } from '../../types';
 
 // Importer les composants UI réutilisables
 import Card from '../ui/Card';
