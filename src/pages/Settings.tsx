@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from 'react'; // Consolidated import, added useEffect
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { File, HardDrive, User, BookOpen, Database, Wrench, Plus, Package as KitIcon } from 'lucide-react'; // Added KitIcon
+import { File, HardDrive, User, BookOpen, Database, Wrench, Plus, Package as KitIcon, SlidersHorizontal } from 'lucide-react'; // SlidersHorizontal pour le nouvel onglet
 
 // Import des nouveaux composants
 import FileModelSettings from '../components/settings/FileModelSettings';
-import HardwareSettings from '../components/settings/HardwareSettings';
+// HardwareSettings et KitSettings ne sont plus importés directement ici, mais dans DeviceAndKitManagement
 import UserPreferences from '../components/settings/UserPreferences';
-import QuestionLibrary from '../components/library/QuestionLibrary'; // Réutilisation comme demandé
-import QuestionForm from '../components/library/QuestionForm'; // Added missing import for QuestionForm
+import QuestionLibrary from '../components/library/QuestionLibrary';
+import QuestionForm from '../components/library/QuestionForm';
 import BackupRestore from '../components/settings/BackupRestore';
 import TechnicalSettings from '../components/settings/TechnicalSettings';
 import TrainerSettings from '../components/settings/TrainerSettings';
 import SystemLogViewer from '../components/settings/SystemLogViewer';
-// import KitSettings from '../components/settings/KitSettings'; // Futur import
+import DeviceAndKitManagement from '../components/settings/DeviceAndKitManagement'; // Nouvel import
 import { Users2, FileText as LogIcon } from 'lucide-react';
 
 type SettingsProps = {
@@ -22,10 +22,9 @@ type SettingsProps = {
   onPageChange: (page: string) => void;
 };
 
-type AdminTab = 'files' | 'hardware' | 'kits' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical' | 'systemLog'; // Ajout de 'kits'
+type AdminTab = 'files' | 'devicesAndKits' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical' | 'systemLog'; // 'hardware' et 'kits' remplacés
 
 // Removed duplicate import of React, useState, useEffect
-// // ... other imports
 // import TechnicalSettings from '../components/settings/TechnicalSettings'; // This import is fine if not duplicated
 
 const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {

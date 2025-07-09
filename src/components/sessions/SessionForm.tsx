@@ -1668,8 +1668,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                           />
                         </td>
                       </tr>
-                    ))
-                  )}
+                    ); // Correction: Le ')' était en trop ici, déplacé après la map
+                  })}
                 </tbody>
               </table>
             </div>
