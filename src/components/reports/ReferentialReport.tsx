@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-// getQuestionsForSessionBlocks retiré, getAllQuestions ajouté (même si déjà implicite par son usage)
-import { getAllSessions, getAllResults, getAllThemes, getAllBlocs, getReferentialById, getAllQuestions } from '../../db';
+// getQuestionsForSessionBlocks retiré, getAllQuestions retiré car non utilisé
+import { getAllSessions, getAllResults, getAllThemes, getAllBlocs, getReferentialById } from '../../db'; // getAllQuestions removed
 import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, OverallThemeStats } from '../../types';
 import {
   Table,
@@ -24,7 +24,7 @@ type ReferentialReportProps = {
 const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDate, referentialMap }) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allResults, setAllResults] = useState<SessionResult[]>([]);
-  const [allQuestions, setAllQuestions] = useState<QuestionWithId[]>([]);
+  const [allQuestions] = useState<QuestionWithId[]>([]); // setAllQuestions removed as it's unused
   const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]); // Nouvel état
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);   // Nouvel état
   const [selectedReferentialForThemeStats, setSelectedReferentialForThemeStats] = useState<Referential | null>(null); // Nouvel état
@@ -126,19 +126,19 @@ const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDat
     );
   }, [selectedReferentialForThemeStats, sessions, allResults, allQuestions, allThemesDb, allBlocsDb, startDate, endDate]);
 
-  const handleSelectReferential = async (referentialIdString: string) => {
-    const referentialId = Number(referentialIdString);
-    // On doit récupérer l'objet Referential complet, pas juste le code de referentialMap
-    // Pour cela, on pourrait avoir besoin de la liste complète des référentiels ici.
-    // Ou alors, le parent (Reports.tsx) passe allReferentielsDb.
-    // Pour l'instant, on va simuler la récupération par ID.
-    const refObj = await getReferentialById(referentialId); // Assurez-vous que getReferentialById est importé
-    if (refObj) {
-      setSelectedReferentialForThemeStats(refObj);
-    } else {
-      console.warn("Référentiel non trouvé pour l'ID:", referentialId);
-    }
-  };
+  // const handleSelectReferential = async (referentialIdString: string) => { // Unused
+  //   const referentialId = Number(referentialIdString);
+  //   // On doit récupérer l'objet Referential complet, pas juste le code de referentialMap
+  //   // Pour cela, on pourrait avoir besoin de la liste complète des référentiels ici.
+  //   // Ou alors, le parent (Reports.tsx) passe allReferentielsDb.
+  //   // Pour l'instant, on va simuler la récupération par ID.
+  //   const refObj = await getReferentialById(referentialId); // Assurez-vous que getReferentialById est importé
+  //   if (refObj) {
+  //     setSelectedReferentialForThemeStats(refObj);
+  //   } else {
+  //     console.warn("Référentiel non trouvé pour l'ID:", referentialId);
+  //   }
+  // };
 
   const handleBackToReferentialList = () => {
     setSelectedReferentialForThemeStats(null);

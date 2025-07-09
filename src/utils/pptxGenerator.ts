@@ -1345,7 +1345,7 @@ export async function testConsistency(templateFile: File, questions: Question[])
       });
       
       results.push('SUCCÈS');
-    } catch (error) {
+    } catch (_error) { // error unused
       results.push('ÉCHEC: ');
     }
   }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, ChangeEvent } from 'react';
-import { FileText, Edit, Trash2, Copy, Image, AlertTriangle, TrendingUp, TrendingDown, Upload, CheckCircle, XCircle } from 'lucide-react';
+import { FileText, Edit, Trash2, Image, AlertTriangle, TrendingUp, TrendingDown, Upload, CheckCircle, XCircle } from 'lucide-react'; // Removed Copy
 import * as XLSX from 'xlsx';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
@@ -7,7 +7,8 @@ import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
 // Removed CACESReferential, referentials, questionThemes from here as they will be dynamic
-import { QuestionTheme, CACESReferential, Referential, Theme, Bloc } from '../../types';
+// Removed QuestionTheme, CACESReferential
+import { Referential, Theme, Bloc } from '../../types'; 
 import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 type QuestionLibraryProps = {
   onEditQuestion: (id: string) => void;
@@ -178,7 +179,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       }
 
       let questionsAdded = 0;
-      let errorsEncountered: string[] = [];
+      const errorsEncountered: string[] = [];
 
       for (let i = 1; i < jsonRows.length; i++) {
         const row = jsonRows[i] as any[];
@@ -601,7 +602,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   }, [questions, selectedReferential, selectedTheme, selectedBloc, selectedEliminatory, searchText, referentielsData, themesData, blocsData]);
 
   const sortedQuestions = useMemo(() => {
-    let sortableItems: StoredQuestion[] = [...filteredQuestions];
+    const sortableItems: StoredQuestion[] = [...filteredQuestions];
     sortableItems.sort((a, b) => {
       switch (sortBy) {
         case 'usage':

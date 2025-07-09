@@ -58,7 +58,7 @@ const SystemLogViewer: React.FC = () => {
                     {String((() => { // Ensure the result is explicitly cast to string
                       try {
                         return JSON.stringify(log.details, null, 2);
-                      } catch (e) {
+                      } catch (_e) { // Parameter 'e' was unused
                         // Ensure the error message is also a string, though it already is.
                         return String('Error: Unable to serialize details');
                       }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import { getAllSessions, getAllReferentiels } from '../../db'; // Ajout de getAllReferentiels
-import { Session, CACESReferential, Referential } from '../../types'; // Ajout de Referential
+import { Session, Referential } from '../../types'; // Ajout de Referential, CACESReferential enlevé
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';

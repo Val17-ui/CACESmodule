@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect } from 'react'; // ChangeEvent removed
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';

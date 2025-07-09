@@ -1,5 +1,5 @@
 import {
-  Session, SessionResult, QuestionWithId, SelectedBlock, Referential, Theme, Bloc,
+  Session, SessionResult, QuestionWithId, Referential, Theme, Bloc, // SelectedBlock removed
   ThemeScoreDetails, CalculatedBlockOverallStats, OverallThemeStats // Types maintenant importés
 } from '../types';
 
@@ -612,7 +612,7 @@ export const calculateBlockPerformanceForSession = (
   const sessionParticipantsCount = session.participants.length;
   // console.log(`[Calculator] Processing ${sessionParticipantsCount} participants for block ${blockSelection.theme} - ${blockSelection.blockId}`); // Nettoyé
 
-  session.participants.forEach((participant, pIndex) => {
+  session.participants.forEach((participant, _pIndex) => { // pIndex unused
     const deviceSerialNumber = participant.assignedGlobalDeviceId
       ? deviceMap.get(participant.assignedGlobalDeviceId)
       : undefined;

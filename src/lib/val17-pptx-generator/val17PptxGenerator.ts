@@ -114,7 +114,7 @@ function escapeXml(unsafe: string): string {
     if (unsafe === null || unsafe === undefined) return "";
     unsafe = String(unsafe);
   }
-  let cleaned = unsafe.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+  const cleaned = unsafe.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""); // prefer-const
   return cleaned
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -332,7 +332,7 @@ async function findNextAvailableSlideLayoutId(
   const nextLayoutNum = maxLayoutNum + 1;
   const allRIds = extractExistingRIds(masterRelsContent);
   const existingRIds = allRIds.map((m) => m.rId);
-  let nextRId = getNextAvailableRId(existingRIds);
+  const nextRId = getNextAvailableRId(existingRIds); // prefer-const
   return {
     layoutId: nextLayoutNum,
     layoutFileName: `slideLayout${nextLayoutNum}.xml`,
@@ -551,7 +551,7 @@ function generateTableGraphicFrame(participants: ParticipantForGenerator[], base
         colWidths.push(Math.round(tableCx * 0.335));
         colWidths.push(Math.round(tableCx * 0.335));
     }
-    let sumWidths = colWidths.reduce((a, b) => a + b, 0);
+    const sumWidths = colWidths.reduce((a, b) => a + b, 0); // prefer-const
     if (sumWidths !== tableCx && colWidths.length > 0) {
         colWidths[colWidths.length - 1] += (tableCx - sumWidths);
     }
@@ -607,7 +607,7 @@ function createIntroParticipantsSlideXml(
       newFullTblXml
     );
 
-    let baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    const baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     ${slideComment}
     <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
       <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">
@@ -667,71 +667,71 @@ function createIntroParticipantsSlideXml(
   return finalSlideXml;
 }
 
-function createIntroInstructionsSlideXml(
-  slideNumber: number,
-  instructionsText?: string
-): string {
-  const slideComment = `<!-- Intro Slide ${slideNumber}: Instructions -->`;
-  const baseId = slideNumber * 1000;
-  const defaultInstructions =
-    "Instructions de vote :\n1. Connectez-vous...\n2. Votez...\n3. Amusez-vous !";
-  const currentInstructionsText = instructionsText || defaultInstructions;
-  const titleText = "Instructions";
-  const titlePlaceholder = `<p:sp>
-    <p:nvSpPr>
-      <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>
-      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-      <p:nvPr><p:ph type="title"/></p:nvPr>
-    </p:nvSpPr>
-    <p:spPr/>
-    <p:txBody>
-      <a:bodyPr/><a:lstStyle/>
-      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-        titleText
-      )}</a:t></a:r></a:p>
-    </p:txBody>
-  </p:sp>`;
-
-  const instructionsBodyXml = currentInstructionsText
-    .split("\n")
-    .map(
-      (line) =>
-        `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-          line
-        )}</a:t></a:r></a:p>`
-    )
-    .join("");
-
-  const bodyPlaceholder = `<p:sp>
-    <p:nvSpPr>
-      <p:cNvPr id="${baseId + 2}" name="Body Placeholder"/>
-      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-      <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
-    </p:nvSpPr>
-    <p:spPr/>
-    <p:txBody>
-      <a:bodyPr/><a:lstStyle/>
-      ${instructionsBodyXml}
-    </p:txBody>
-  </p:sp>`;
-
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-  ${slideComment}
-  <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-    <p:cSld>
-      <p:spTree>
-        <p:nvGrpSpPr>
-          <p:cNvPr id="${baseId}" name="Intro Instructions Group"/>
-          <p:cNvGrpSpPr/><p:nvPr/>
-        </p:nvGrpSpPr>
-        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-        ${titlePlaceholder}
-        ${bodyPlaceholder}
-      </p:spTree>
-    </p:cSld>
-    <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-  </p:sld>`;
-}
+// function createIntroInstructionsSlideXml( // Unused
+//   slideNumber: number,
+//   instructionsText?: string
+// ): string {
+//   const slideComment = `<!-- Intro Slide ${slideNumber}: Instructions -->`;
+//   const baseId = slideNumber * 1000;
+//   const defaultInstructions =
+//     "Instructions de vote :\n1. Connectez-vous...\n2. Votez...\n3. Amusez-vous !";
+//   const currentInstructionsText = instructionsText || defaultInstructions;
+//   const titleText = "Instructions";
+//   const titlePlaceholder = `<p:sp>
+//     <p:nvSpPr>
+//       <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>
+//       <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+//       <p:nvPr><p:ph type="title"/></p:nvPr>
+//     </p:nvSpPr>
+//     <p:spPr/>
+//     <p:txBody>
+//       <a:bodyPr/><a:lstStyle/>
+//       <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
+//         titleText
+//       )}</a:t></a:r></a:p>
+//     </p:txBody>
+//   </p:sp>`;
+//
+//   const instructionsBodyXml = currentInstructionsText
+//     .split("\n")
+//     .map(
+//       (line) =>
+//         `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
+//           line
+//         )}</a:t></a:r></a:p>`
+//     )
+//     .join("");
+//
+//   const bodyPlaceholder = `<p:sp>
+//     <p:nvSpPr>
+//       <p:cNvPr id="${baseId + 2}" name="Body Placeholder"/>
+//       <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+//       <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
+//     </p:nvSpPr>
+//     <p:spPr/>
+//     <p:txBody>
+//       <a:bodyPr/><a:lstStyle/>
+//       ${instructionsBodyXml}
+//     </p:txBody>
+//   </p:sp>`;
+//
+//   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+//   ${slideComment}
+//   <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+//     <p:cSld>
+//       <p:spTree>
+//         <p:nvGrpSpPr>
+//           <p:cNvPr id="${baseId}" name="Intro Instructions Group"/>
+//           <p:cNvGrpSpPr/><p:nvPr/>
+//         </p:nvGrpSpPr>
+//         <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+//         ${titlePlaceholder}
+//         ${bodyPlaceholder}
+//       </p:spTree>
+//     </p:cSld>
+//     <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+//   </p:sld>`;
+// }
 
 function createSlideXml(
   question: string,
@@ -754,7 +754,7 @@ function createSlideXml(
   // L'ancienne méthode de calcul des IDs basée sur slideNumber * 100 est supprimée
   // pour ces éléments spécifiques dans les diapositives de questions OMBEA.
 
-  let countdownDisplayText =
+  const countdownDisplayText = // prefer-const
     ombeaConfig?.pollTimeLimit !== undefined
       ? ombeaConfig.pollTimeLimit
       : duration;
@@ -881,7 +881,7 @@ async function findLayoutByCSldName(
             }
           }
         }
-      } catch (error) {
+       } catch (_error) { // Unused
         // console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${fileEntry.name}:`, error);
       }
     }
@@ -913,7 +913,7 @@ function createSlideTagFiles(
 ): TagInfo[] {
   const baseTagNumber = calculateBaseTagNumber(questionIndexInBatch, tagOffset);
   const slideGuid = generateGUID();
-  let points = options
+  const points = options // prefer-const
     .map((_, index) =>
       correctAnswerIndex !== undefined && index === correctAnswerIndex
         ? "1.00"
@@ -1514,7 +1514,7 @@ export async function generatePPTXVal17(
   participants?: ParticipantForGenerator[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
   try {
-    const executionId = Date.now();
+    // const executionId = Date.now(); // Unused
     validateQuestions(questions);
     let currentTemplateFile: File;
     if (templateFile) {
@@ -1559,12 +1559,12 @@ export async function generatePPTXVal17(
                           preExistingQuestionSlideGuids.push(foundGuid);
                         }
                       }
-                    } catch (e) {
+                    } catch (_e) { // e unused
                       // Silently ignore errors for individual tag files
                     }
                   }
                 }
-              }).catch(err => {
+              }).catch(_err => { // err unused
                 // Silently ignore errors for individual rels files
               });
               slideProcessingPromises.push(promise);

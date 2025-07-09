@@ -1,6 +1,6 @@
 // src/utils/resultsParser.ts
 
-import { QuestionWithId } from '../db';
+// import { QuestionWithId } from '../db'; // Unused
 import { SessionResult } from '../types';
 
 // Nouvelle interface pour les données extraites et prétraitées du XML
@@ -99,7 +99,7 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
     DEBUG End */
 
     // 2b. Itérer sur chaque <ors:Response> pour cette question
-    let responseCounterForQuestion = 0;
+    // let responseCounterForQuestion = 0; // Unused
     qNode.querySelectorAll("Responses > Response").forEach(responseNode => {
       // RespondentID dans <ors:Response> est l'ID séquentiel (1, 2, 3...)
       const respondentIdSequential = responseNode.getAttribute("RespondentID");
@@ -182,7 +182,7 @@ export const transformParsedResponsesToSessionResults = (
   }
   // console.log("[Transform Log] Map dbQuestionId par SlideGUID (depuis session.questionMappings):", dbQuestionIdBySlideGuid); // DEBUG
 
-  extractedResults.forEach((extResult, index) => {
+  extractedResults.forEach((extResult, _index) => { // index unused
     const dbQuestionId = dbQuestionIdBySlideGuid.get(extResult.questionSlideGuid);
 
     /* DEBUG Start

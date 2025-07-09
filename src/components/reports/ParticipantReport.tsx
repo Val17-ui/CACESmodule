@@ -8,8 +8,8 @@ import {
   getAllVotingDevices,
   getAllThemes,
   getAllBlocs,
-  getBlocById,
-  getThemeById,
+  // getBlocById, // Unused
+  // getThemeById, // Unused
   getAdminSetting,
   getTrainerById
 } from '../../db';

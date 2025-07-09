@@ -1,6 +1,4 @@
 import React from 'react';
-import { Bell, User } from 'lucide-react';
-import Button from '../ui/Button';
 
 type HeaderProps = {
   title: string;
