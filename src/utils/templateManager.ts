@@ -1,7 +1,8 @@
 // src/utils/templateManager.ts
 import { getAdminSetting } from '../db';
 import { UserPptxTemplate } from '../components/settings/UserPreferences'; // Importer le type
-import defaultTemplateUrlPath from '@/assets/templates/default.pptx?url'; // Chemin vers le modèle par défaut de l'outil
+// Utilisation d'un chemin relatif car l'alias @ n'est pas configuré dans vite.config.ts
+import defaultTemplateUrlPath from '../assets/templates/default.pptx?url';
 
 export const TOOL_DEFAULT_TEMPLATE_ID = 'tool_default_template'; // ID constant pour le modèle de l'outil
 
