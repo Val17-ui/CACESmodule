@@ -22,7 +22,6 @@ import {
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import {
-  db, // Ajout de l'import de db explicitement
   addSession,
   updateSession,
   getSessionById,
@@ -142,8 +141,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             const defaultTrainer = trainers.find(t => t.isDefault === 1) || trainers[0];
             if (defaultTrainer?.id) setSelectedTrainerId(defaultTrainer.id);
           }
-          if (defaultKit?.id) {
-            setSelectedKitIdState(defaultKit.id);
+          if (defaultKitResult?.id) {
+            setSelectedKitIdState(defaultKitResult.id);
           } else if (kits.length > 0) {
             setSelectedKitIdState(kits[0].id!); // Fallback au premier kit si pas de défaut
           }
@@ -1592,86 +1591,102 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {participants.length === 0 ? (
-                    <tr><td className="px-4 py-4 text-center text-sm text-gray-500" colSpan={9}>Aucun participant.</td></tr>
-                  ) : (
-                    participants.map((participant, pIndex) => {
-                      // Options pour le Select du boîtier
-                      const deviceOptions = votingDevicesInSelectedKit.map(device => ({
-                        value: device.id!.toString(),
-                        label: `${device.name} (S/N: ${device.serialNumber})`,
-                        disabled: participants.some(p => p.id !== participant.id && p.assignedGlobalDeviceId === device.id)
-                      }));
-
-                      // Assurer que le boîtier actuellement assigné est dans les options, même s'il n'est plus dans le kit (cas de désynchro)
-                      const currentAssignedDevice = hardwareDevices.find(hd => hd.id === participant.assignedGlobalDeviceId);
-                      if (currentAssignedDevice && !deviceOptions.some(opt => opt.value === currentAssignedDevice.id?.toString())) {
-                        deviceOptions.unshift({
-                          value: currentAssignedDevice.id!.toString(),
-                          label: `${currentAssignedDevice.name} (S/N: ${currentAssignedDevice.serialNumber}) - HORS KIT ACTUEL`,
-                          disabled: false // Il doit pouvoir le re-sélectionner pour le "voir"
-                        });
-                      }
-
-                      return (
-                      <tr key={participant.id}>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {participant.deviceId || pIndex + 1} {/* Affiche le deviceId visuel ou l'index */}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap" style={{ minWidth: '250px' }}>
-                          {!selectedKitIdState && participant.assignedGlobalDeviceId === null ? (
-                            <span className="text-xs text-gray-400 italic">Sélectionnez un kit</span>
-                          ) : !selectedKitIdState && currentAssignedDevice ? (
-                             <span className="text-xs text-orange-600 italic">Kit non sélectionné (assignation précédente: {currentAssignedDevice.name})</span>
-                          ) : votingDevicesInSelectedKit.length === 0 && selectedKitIdState ? (
-                            <span className="text-xs text-orange-600 italic">Kit vide</span>
-                          ) : (
-                            <Select
-                              value={participant.assignedGlobalDeviceId?.toString() || ''}
-                              options={[
-                                { value: '', label: 'Non assigné', disabled: false },
-                                ...deviceOptions
-                              ]}
-                              onChange={(e) => handleParticipantChange(participant.id, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
-                              className="mb-0 text-sm"
-                              disabled={isOrsGeneratedAndNotEditable || isReadOnly || !selectedKitIdState}
-                            />
-                          )}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0 text-sm" disabled={isReadOnly} />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.lastName} onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)} placeholder="Nom" className="mb-0" disabled={isReadOnly} />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.organization || ''} onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)} placeholder="Organisation" className="mb-0" disabled={isReadOnly} />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.identificationCode || ''} onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)} placeholder="Code" className="mb-0" disabled={isReadOnly} />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">
-                          {participant.score !== undefined ? `${participant.score}%` : '-'}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">
-                          {participant.reussite === true && <Badge variant="success">Réussi</Badge>}
-                          {participant.reussite === false && <Badge variant="danger">Échec</Badge>}
-                          {participant.reussite === undefined && <Badge variant="default">-</Badge>}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
-                          <Button
-                            variant="ghost"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                            size="sm"
-                            icon={<Trash2 size={16} />}
-                            onClick={() => handleRemoveParticipant(participant.id)}
-                            title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Supprimer participant"}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
+  {participants.length === 0 ? (
+    <tr>
+      <td className="px-4 py-4 text-center text-sm text-gray-500" colSpan={9}>
+        Aucun participant.
+      </td>
+    </tr>
+  ) : (
+    participants.map((participant, pIndex) => (
+      <tr key={participant.id}>
+        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center">
+          {participant.deviceId || pIndex + 1}
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap" style={{ minWidth: '250px' }}>
+          {!selectedKitIdState && participant.assignedGlobalDeviceId === null ? (
+            <span className="text-xs text-gray-400 italic">Sélectionnez un kit</span>
+          ) : !selectedKitIdState && currentAssignedDevice ? (
+            <span className="text-xs text-orange-600 italic">
+              Kit non sélectionné (assignation précédente: {currentAssignedDevice.name})
+            </span>
+          ) : votingDevicesInSelectedKit.length === 0 && selectedKitIdState ? (
+            <span className="text-xs text-orange-600 italic">Kit vide</span>
+          ) : (
+            <Select
+              value={participant.assignedGlobalDeviceId?.toString() || ''}
+              options={[
+                { value: '', label: 'Non assigné', disabled: false },
+                ...deviceOptions
+              ]}
+              onChange={(e) => handleParticipantChange(participant.id, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
+              className="mb-0 text-sm"
+              disabled={isOrsGeneratedAndNotEditable || isReadOnly || !selectedKitIdState}
+            />
+          )}
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <Input
+            value={participant.firstName}
+            onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)}
+            placeholder="Prénom"
+            className="mb-0 text-sm"
+            disabled={isReadOnly}
+          />
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <Input
+            value={participant.lastName}
+            onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)}
+            placeholder="Nom"
+            className="mb-0"
+            disabled={isReadOnly}
+          />
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <Input
+            value={participant.organization || ''}
+            onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)}
+            placeholder="Organisation"
+            className="mb-0"
+            disabled={isReadOnly}
+          />
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <Input
+            value={participant.identificationCode || ''}
+            onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)}
+            placeholder="Code"
+            className="mb-0"
+            disabled={isReadOnly}
+          />
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">
+          {participant.score !== undefined ? `${participant.score}%` : '-'}
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap text-center">
+          {participant.reussite === true && <Badge variant="success">Réussi</Badge>}
+          {participant.reussite === false && <Badge variant="danger">Échec</Badge>}
+          {participant.reussite === undefined && <Badge variant="default">-</Badge>}
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+          <Button
+            variant="ghost"
+            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+            size="sm"
+            icon={<Trash2 size={16} />}
+            onClick={() => handleRemoveParticipant(participant.id)}
+            title={
+              isOrsGeneratedAndNotEditable
+                ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente."
+                : "Supprimer participant"
+            }
+          />
+        </td>
+      </tr>
+    ))
+  )}
+</tbody>
               </table>
             </div>
             {participants.length > 0 && (
@@ -1781,29 +1796,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       )}
     </div>
   );
-
-  // Le bloc return suivant était dupliqué et a été supprimé.
-  // return (
-  //   <div>
-  //     {renderTabNavigation()}
-  //     {renderTabContent()}
-  //     <div className="flex justify-end items-center mt-8 py-4 border-t border-gray-200">
-  //       <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
-  //         Enregistrer Brouillon
-  //       </Button>
-  //     </div>
-
-  //     {showAnomalyResolutionUI && detectedAnomalies && (
-  //       <AnomalyResolutionModal
-  //         isOpen={showAnomalyResolutionUI}
-  //         detectedAnomalies={detectedAnomalies} // Doit correspondre au type attendu par le modal
-  //         pendingValidResults={pendingValidResults}
-  //         onResolve={handleResolveAnomalies}
-  //         onCancel={handleCancelAnomalyResolution}
-  //       />
-  //     )}
-  //   </div>
-  // );
 };
 
 export default SessionForm;
