@@ -48,10 +48,10 @@ const Input: React.FC<InputProps> = ({
       {label && (
         <label
           htmlFor={inputId}
-          className="block text-sm font-medium text-gray-700 mb-1"
+          className="block text-sm font-medium text-texte-principal mb-1"
         >
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {required && <span className="text-rouge-accent ml-1">*</span>}
         </label>
       )}
       <div className="relative flex items-center">
@@ -69,10 +69,10 @@ const Input: React.FC<InputProps> = ({
           onChange={onChange}
           placeholder={placeholder}
           className={`
-            block w-full rounded-xl border-gray-300 shadow-sm
-            focus:border-blue-500 focus:ring-blue-500 sm:text-sm
-            ${error ? 'border-red-300' : 'border-gray-300'}
-            ${disabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}
+            block w-full rounded-xl border-gris-moyen shadow-sm
+            focus:border-accent-neutre focus:ring-accent-neutre sm:text-sm
+            ${error ? 'border-rouge-accent' : 'border-gris-moyen'}
+            ${disabled ? 'bg-gris-moyen/30 text-texte-principal/70 cursor-not-allowed' : ''}
             ${icon && iconPosition === 'left' ? 'pl-10' : ''}
             ${icon && iconPosition === 'right' ? 'pr-10' : ''}
           `}
@@ -89,7 +89,7 @@ const Input: React.FC<InputProps> = ({
           </span>
         )}
       </div>
-      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-sm text-rouge-accent">{error}</p>}
     </div>
   );
 };

@@ -34,8 +34,8 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
           w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg
           transition-colors duration-150 ease-in-out
           ${active 
-            ? 'bg-blue-100 text-blue-700' 
-            : 'text-gray-700 hover:bg-gray-100'
+            ? 'bg-accent-neutre/20 text-accent-neutre'
+            : 'text-texte-principal hover:bg-gris-moyen/20'
           }
         `}
       >
@@ -64,11 +64,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
   ];
 
   return (
-    <div className="w-64 bg-white h-full shadow-sm border-r border-gray-200 flex flex-col">
+    <div className="w-64 bg-fond-clair-principal h-full shadow-sm border-r border-gris-moyen/50 flex flex-col">
       <div className="p-6">
         <div className="flex items-center">
-          <HardHat size={32} className="text-blue-600 mr-2" />
-          <h1 className="text-xl font-bold text-gray-900">CACES Manager</h1>
+          <HardHat size={32} className="text-accent-neutre mr-2" />
+          <h1 className="text-xl font-bold text-texte-principal">CACES Manager</h1>
         </div>
       </div>
       
@@ -86,7 +86,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
         </ul>
       </nav>
       
-      <div className="border-t border-gray-200 px-4 py-4">
+      <div className="border-t border-gris-moyen/50 px-4 py-4">
         <ul className="space-y-1">
           {/* Lien "Journal système" retiré d'ici */}
           <SidebarItem

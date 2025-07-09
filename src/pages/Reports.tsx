@@ -124,7 +124,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-2/5"
-                icon={<Search size={16} className="text-gray-400"/>}
+                 icon={<Search size={16} className="text-gris-moyen"/>}
               />
               <Select
                 value={referentialFilter}
