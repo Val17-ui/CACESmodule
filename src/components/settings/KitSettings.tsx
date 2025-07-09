@@ -7,7 +7,7 @@ import {
   getAllDeviceKits, addDeviceKit, updateDeviceKit, deleteDeviceKit,
   setDefaultDeviceKit, getVotingDevicesForKit, assignDeviceToKit,
   removeDeviceFromKit, getAllVotingDevices, getDeviceKitById
-} from '../../db'; // Fonctions DB importées directement
+} from '../../db';
 import { DeviceKit, VotingDevice } from '../../types';
 
 const KitSettings: React.FC = () => {
@@ -32,7 +32,7 @@ const KitSettings: React.FC = () => {
   const loadKits = async () => {
     setIsLoading(true);
     try {
-      const allKits = await getAllDeviceKits(); // Corrigé
+      const allKits = await getAllDeviceKits();
       setKits(allKits);
       setError(null);
     } catch (err) {
@@ -45,7 +45,7 @@ const KitSettings: React.FC = () => {
 
   const loadAllVotingDevices = async () => {
     try {
-      const allVotingDevices = await getAllVotingDevices(); // Corrigé
+      const allVotingDevices = await getAllVotingDevices();
       setAvailableDevices(allVotingDevices);
     } catch (err) {
       console.error("Error loading all voting devices:", err);
@@ -62,7 +62,7 @@ const KitSettings: React.FC = () => {
 
   const loadDevicesForKit = async (kitId: number) => {
     try {
-      const devices = await getVotingDevicesForKit(kitId); // Corrigé
+      const devices = await getVotingDevicesForKit(kitId);
       setKitDevices(devices);
     } catch (err) {
       console.error(`Error loading devices for kit ${kitId}:`, err);
@@ -101,11 +101,11 @@ const KitSettings: React.FC = () => {
     try {
       setError(null);
       if (editingKit) {
-        await updateDeviceKit(editingKit.id!, { name: kitName, isDefault: editingKit.isDefault }); // Corrigé
+        await updateDeviceKit(editingKit.id!, { name: kitName, isDefault: editingKit.isDefault });
       } else {
-        const allKits = await getAllDeviceKits(); // Corrigé
+        const allKits = await getAllDeviceKits();
         const isFirstKit = allKits.length === 0;
-        await addDeviceKit({ name: kitName, isDefault: isFirstKit ? 1 : 0 }); // Corrigé
+        await addDeviceKit({ name: kitName, isDefault: isFirstKit ? 1 : 0 });
       }
       handleCancelForm();
       loadKits();
@@ -123,7 +123,7 @@ const KitSettings: React.FC = () => {
     if (window.confirm(`Êtes-vous sûr de vouloir supprimer le kit "${kitNameParam}" ? Toutes les assignations de boîtiers à ce kit seront également perdues.`)) {
       try {
         setError(null);
-        await deleteDeviceKit(kitId); // Corrigé
+        await deleteDeviceKit(kitId);
         loadKits();
         if (selectedKit?.id === kitId) {
           setSelectedKit(null);
@@ -138,11 +138,11 @@ const KitSettings: React.FC = () => {
   const handleSetDefaultKit = async (kitId: number) => {
     try {
       setError(null);
-      await setDefaultDeviceKit(kitId); // Corrigé
+      await setDefaultDeviceKit(kitId);
       await loadKits();
 
       if (selectedKit && selectedKit.id) {
-          const updatedSelectedKit = await getDeviceKitById(selectedKit.id); // Corrigé
+          const updatedSelectedKit = await getDeviceKitById(selectedKit.id);
           if (updatedSelectedKit) {
             setSelectedKit(updatedSelectedKit);
           } else {
@@ -168,7 +168,7 @@ const KitSettings: React.FC = () => {
     try {
       setError(null);
       for (const deviceId of devicesToAssign) {
-        await assignDeviceToKit(selectedKit.id, deviceId); // Corrigé
+        await assignDeviceToKit(selectedKit.id, deviceId);
       }
       setDevicesToAssign([]);
       loadDevicesForKit(selectedKit.id);
@@ -183,7 +183,7 @@ const KitSettings: React.FC = () => {
     if (window.confirm(`Êtes-vous sûr de vouloir retirer le boîtier "${deviceName}" du kit "${selectedKit.name}" ?`)) {
       try {
         setError(null);
-        await removeDeviceFromKit(selectedKit.id, votingDeviceId); // Corrigé
+        await removeDeviceFromKit(selectedKit.id, votingDeviceId);
         loadDevicesForKit(selectedKit.id);
       } catch (err) {
         console.error(`Error removing device ${deviceName} from kit ${selectedKit.name}:`, err);
@@ -291,7 +291,7 @@ const KitSettings: React.FC = () => {
                   <span>{device.name} (S/N: {device.serialNumber})</span>
                   <Button
                     variant="ghost"
-                    size="sm" // Modifié de "icon" à "sm"
+                    size="sm" // Corrigé de "icon" à "sm"
                     title="Retirer du kit"
                     onClick={() => handleRemoveDeviceFromSelectedKit(device.id!, device.name)}
                   >
