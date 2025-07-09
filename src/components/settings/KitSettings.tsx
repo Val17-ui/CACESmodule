@@ -275,8 +275,8 @@ const KitSettings: React.FC = () => {
                     )}
                   </div>
                   <div className="space-x-2">
-                     <Button variant="outline" size="sm" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); handleOpenEditKitForm(kit); }} icon={<Edit3 size={14}/>} disabled={isCreatingKit || editingKit}>Modifier</Button>
-                     <Button variant="danger" size="sm" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); handleDeleteKit(kit.id!, kit.name);}} icon={<Trash2 size={14}/>} disabled={isCreatingKit || editingKit}>Supprimer</Button>
+                     <Button variant="outline" size="sm" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); handleOpenEditKitForm(kit); }} icon={<Edit3 size={14}/>} disabled={isCreatingKit || !!editingKit}>Modifier</Button>
+                     <Button variant="danger" size="sm" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); handleDeleteKit(kit.id!, kit.name);}} icon={<Trash2 size={14}/>} disabled={isCreatingKit || !!editingKit}>Supprimer</Button>
                      {kit.isDefault !== 1 && (
                        <Button
                          variant="ghost"
@@ -286,7 +286,7 @@ const KitSettings: React.FC = () => {
                            handleSetDefaultKit(kit.id!);
                          }}
                          title="Définir comme kit par défaut"
-                         disabled={isCreatingKit || editingKit}
+                         disabled={isCreatingKit || !!editingKit}
                        >
                          <CheckSquare size={16} />
                        </Button>
