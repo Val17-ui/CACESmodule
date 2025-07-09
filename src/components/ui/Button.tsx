@@ -6,7 +6,7 @@ type ButtonProps = {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   icon?: React.ReactNode;
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void; // Modifié pour accepter l'événement
   disabled?: boolean;
   type?: 'button' | 'submit' | 'reset';
   title?: string;

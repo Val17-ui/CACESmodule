@@ -173,30 +173,57 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     // 1. Tri
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // Pré-traitement pour normaliser le statut undefined en 'planned'
+    const sessionsWithNormalizedStatus = rawSessions.map(session => ({
+      ...session,
+      status: session.status === undefined ? 'planned' : session.status,
+    }));
+
+    sessionsToProcess = [...sessionsWithNormalizedStatus];
+
+
     sessionsToProcess.sort((a, b) => {
       const dateA = new Date(a.dateSession); dateA.setHours(0, 0, 0, 0);
       const dateB = new Date(b.dateSession); dateB.setHours(0, 0, 0, 0);
+
+      // La fonction getCategory utilise maintenant le statut normalisé
       const getCategory = (session: DBSession, sessionDate: Date) => {
-        if (session.status === 'in-progress' || ((session.status === 'planned' || session.status === 'ready') && sessionDate.getTime() === today.getTime())) return 1; // Jour
-        if ((session.status === 'planned' || session.status === 'ready') && sessionDate.getTime() > today.getTime()) return 2; // Planifiées (futur)
-        if (session.status === 'completed') return 3; // Terminées
-        return 4; // Autres
+        const status = session.status; // status est déjà 'planned' si undefined initialement
+
+        // Catégorie 1: Sessions du jour (en cours, ou planifiées/prêtes pour aujourd'hui)
+        if (status === 'in-progress' || ((status === 'planned' || status === 'ready') && sessionDate.getTime() === today.getTime())) return 1;
+        // Catégorie 2: Sessions planifiées (planifiées/prêtes pour le futur)
+        if ((status === 'planned' || status === 'ready') && sessionDate.getTime() > today.getTime()) return 2;
+        // Catégorie 3: Sessions terminées
+        if (status === 'completed') return 3;
+        // Catégorie 4: Sessions annulées ou autres statuts non explicitement gérés ci-dessus
+        return 4;
       };
+
       const categoryA = getCategory(a, dateA);
       const categoryB = getCategory(b, dateB);
+
       if (categoryA !== categoryB) return categoryA - categoryB;
+
+      // Logique de tri à l'intérieur de chaque catégorie
       switch (categoryA) {
-        case 1: // Jour
+        case 1: // Sessions du Jour
+          // Priorité aux sessions 'in-progress'
           if (a.status === 'in-progress' && b.status !== 'in-progress') return -1;
           if (a.status !== 'in-progress' && b.status === 'in-progress') return 1;
+          // Ensuite, tri par nom de session
           return a.nomSession.localeCompare(b.nomSession);
-        case 2: // Planifiées
+        case 2: // Sessions Planifiées (futur)
+          // Tri par date, puis par nom
           if (dateA.getTime() !== dateB.getTime()) return dateA.getTime() - dateB.getTime();
           return a.nomSession.localeCompare(b.nomSession);
-        case 3: // Terminées
+        case 3: // Sessions Terminées
+          // Tri par date (plus récentes d'abord), puis par nom
           if (dateA.getTime() !== dateB.getTime()) return dateB.getTime() - dateA.getTime();
           return a.nomSession.localeCompare(b.nomSession);
-        default: // Autres
+        default: // Autres (ex: Annulées)
+          // Tri par date (plus récentes d'abord), puis par nom
           if (dateA.getTime() !== dateB.getTime()) return dateB.getTime() - dateA.getTime();
           return a.nomSession.localeCompare(b.nomSession);
       }

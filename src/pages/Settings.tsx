@@ -1,31 +1,30 @@
-import React, { useState, useEffect } from 'react'; // Consolidated import, added useEffect
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
-import Button from '../components/ui/Button'; // Added missing import for Button
-import { File, HardDrive, User, BookOpen, Database, Wrench, Plus } from 'lucide-react'; // SettingsIcon supprimé, Added Plus
+import Button from '../components/ui/Button';
+import { File, HardDrive, User, BookOpen, Database, Wrench, Plus, Package as KitIcon, SlidersHorizontal } from 'lucide-react'; // SlidersHorizontal pour le nouvel onglet
 
 // Import des nouveaux composants
 import FileModelSettings from '../components/settings/FileModelSettings';
-import HardwareSettings from '../components/settings/HardwareSettings';
+// HardwareSettings et KitSettings ne sont plus importés directement ici, mais dans DeviceAndKitManagement
 import UserPreferences from '../components/settings/UserPreferences';
-import QuestionLibrary from '../components/library/QuestionLibrary'; // Réutilisation comme demandé
-import QuestionForm from '../components/library/QuestionForm'; // Added missing import for QuestionForm
+import QuestionLibrary from '../components/library/QuestionLibrary';
+import QuestionForm from '../components/library/QuestionForm';
 import BackupRestore from '../components/settings/BackupRestore';
 import TechnicalSettings from '../components/settings/TechnicalSettings';
 import TrainerSettings from '../components/settings/TrainerSettings';
-import SystemLogViewer from '../components/settings/SystemLogViewer'; // Importer SystemLogViewer
-import { Users2, FileText as LogIcon } from 'lucide-react'; // Renommer FileText pour éviter conflit, ou utiliser directement
+import SystemLogViewer from '../components/settings/SystemLogViewer';
+import DeviceAndKitManagement from '../components/settings/DeviceAndKitManagement'; // Nouvel import
+import { Users2, FileText as LogIcon } from 'lucide-react';
 
 type SettingsProps = {
   activePage: string;
   onPageChange: (page: string) => void;
 };
 
-type AdminTab = 'files' | 'hardware' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical' | 'systemLog'; // Ajout de 'systemLog'
+type AdminTab = 'files' | 'devicesAndKits' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical' | 'systemLog'; // 'hardware' et 'kits' remplacés
 
 // Removed duplicate import of React, useState, useEffect
-// import React, { useState, useEffect } from 'react';
-// // ... other imports
 // import TechnicalSettings from '../components/settings/TechnicalSettings'; // This import is fine if not duplicated
 
 const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
@@ -56,7 +55,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
 
   const tabs: { id: AdminTab; label: string; icon: JSX.Element }[] = [
     { id: 'files', label: 'Fichiers et Modèles', icon: <File size={20} /> },
-    { id: 'hardware', label: 'Matériel', icon: <HardDrive size={20} /> },
+    { id: 'devicesAndKits', label: 'Matériel & Kits', icon: <SlidersHorizontal size={20} /> },
     { id: 'preferences', label: 'Préférences', icon: <User size={20} /> },
     { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
     { id: 'trainers', label: 'Formateurs', icon: <Users2 size={20} /> },
@@ -68,13 +67,10 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'files':
-        // setEditingQuestionId(null); // REMOVED - Handled by useEffect
         return <FileModelSettings />;
-      case 'hardware':
-        // setEditingQuestionId(null); // REMOVED
-        return <HardwareSettings />;
+      case 'devicesAndKits':
+        return <DeviceAndKitManagement />;
       case 'preferences':
-        // setEditingQuestionId(null); // REMOVED
         return <UserPreferences />;
       case 'library':
         if (editingQuestionId === 'new') { // Handle creation

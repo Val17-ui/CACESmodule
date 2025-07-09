@@ -2,11 +2,13 @@ import Dexie, { Table } from 'dexie';
 import {
   CACESReferential, Session, SessionResult, Trainer, // Participant removed
   SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-  QuestionWithId, VotingDevice // Types maintenant importés
+  QuestionWithId, VotingDevice, // Types maintenant importés
+  DeviceKit, DeviceKitAssignment // Nouveaux types pour les kits
 } from './types';
 import { logger } from './utils/logger'; // Importer le logger
 
 // Les interfaces QuestionWithId et VotingDevice sont maintenant dans ../types
+// Les interfaces DeviceKit et DeviceKitAssignment sont maintenant dans ../types
 
 export class MySubClassedDexie extends Dexie {
   questions!: Table<QuestionWithId, number>;
@@ -22,6 +24,8 @@ export class MySubClassedDexie extends Dexie {
   referentiels!: Table<Referential, number>;
   themes!: Table<Theme, number>;
   blocs!: Table<Bloc, number>;
+  deviceKits!: Table<DeviceKit, number>; // Nouvelle table pour les kits
+  deviceKitAssignments!: Table<DeviceKitAssignment, number>; // Nouvelle table pour les assignations kit-boîtier
 
   constructor() {
     super('myDatabase');
@@ -383,42 +387,53 @@ export class MySubClassedDexie extends Dexie {
           if (referentielObj) {
             session.referentielId = referentielObj.id;
           } else {
-            // Gérer le cas où le code du référentiel n'existe pas :
-            // peut-être créer un référentiel par défaut ou laisser referentielId undefined/null
-            // Pour l'instant, on logue une erreur et on ne met pas de referentielId
             console.warn(`Migration v14: Référentiel avec code "${refCode}" non trouvé pour la session ID ${session.id}. referentielId ne sera pas défini.`);
             session.referentielId = null;
           }
         } else if (session.referentiel && typeof session.referentiel === 'number') {
-             // Si c'était déjà un ID par hasard (peu probable vu la structure précédente)
             session.referentielId = session.referentiel;
         }
-        delete session.referentiel; // Supprimer l'ancien champ
+        delete session.referentiel;
 
-        // Migration de selectionBlocs vers selectedBlocIds
-        // L'ancienne structure de selectionBlocs était { theme: string (nom du theme), blockId: string (lettre A, B...) }
-        // La nouvelle structure attend un tableau d'IDs de blocs numériques.
-        // Cette migration sera complexe car elle nécessite de retrouver les IDs à partir des noms/codes.
-        // Pour simplifier, si selectionBlocs existe, on le met à un tableau vide,
-        // car la logique de sélection des blocs sera revue.
-        // Une migration plus poussée nécessiterait de :
-        // 1. Pour chaque item dans session.selectionBlocs:
-        //    a. Trouver le themeId basé sur themeName (et potentiellement referentielId si les noms de thèmes ne sont pas uniques globalement)
-        //    b. Trouver le blocId basé sur blockLetter et themeId.
-        //    c. Ajouter ce blocId numérique à selectedBlocIds.
         if (session.selectionBlocs && Array.isArray(session.selectionBlocs)) {
-            // Logique de migration complexe omise pour l'instant.
-            // On va juste initialiser selectedBlocIds comme un tableau vide.
-            // Les sessions existantes perdront leur ancienne sélection de blocs,
-            // mais la nouvelle logique de génération les recréera.
-            console.warn(`Migration v14: Session ID ${session.id} avait 'selectionBlocs'. Il sera réinitialisé. Les blocs devront être re-sélectionnés si la session n'est pas encore 'completed'.`);
+            console.warn(`Migration v14: Session ID ${session.id} avait 'selectionBlocs'. Il sera réinitialisé.`);
             session.selectedBlocIds = [];
         } else {
-            session.selectedBlocIds = []; // Initialiser s'il n'existait pas
+            session.selectedBlocIds = session.selectedBlocIds || []; // Assurer que le champ existe
         }
         delete session.selectionBlocs;
       });
       console.log("DB version 14 upgrade: Sessions table modified.");
+    });
+
+    // Version 15: Ajout des tables pour les Kits de boîtiers et selectedKitId à sessions
+    this.version(15).stores({
+      // Reprise des tables existantes
+      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options',
+      referentiels: '++id, &code',
+      themes: '++id, &code_theme, referentiel_id',
+      blocs: '++id, &code_bloc, theme_id',
+      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
+      adminSettings: '&key',
+      votingDevices: '++id, name, &serialNumber', // Assurez-vous que VotingDevice a id, name, serialNumber
+      trainers: '++id, name, isDefault',
+      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
+      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber',
+
+      // Modification de la table sessions
+      sessions: '++id, nomSession, dateSession, referentielId, *selectedBlocIds, selectedKitId, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Ajout de selectedKitId
+
+      // Nouvelles tables pour les kits
+      deviceKits: '++id, name, isDefault', // Nom du kit, isDefault (pour requêtes faciles)
+      deviceKitAssignments: '++id, kitId, votingDeviceId, &[kitId+votingDeviceId]' // Liaison entre kits et boîtiers
+    }).upgrade(async tx => {
+      // Initialiser selectedKitId à null pour les sessions existantes
+      await tx.table('sessions').toCollection().modify(session => {
+        session.selectedKitId = null;
+      });
+      // Potentiellement créer un kit par défaut "Général" avec tous les boîtiers existants si aucun kit n'existe ?
+      // Pour l'instant, on laisse la création des kits manuelle.
+      console.log("DB version 15 upgrade: Added deviceKits, deviceKitAssignments tables and selectedKitId to sessions. Initialized selectedKitId to null for existing sessions.");
     });
   }
 }
@@ -462,6 +477,157 @@ export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
   } catch (error) {
     console.error("Error getting all questions: ", error);
     return [];
+  }
+};
+
+// --- CRUD pour DeviceKits ---
+
+export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
+  try {
+    if (kit.isDefault === 1) {
+      // S'assurer qu'aucun autre kit n'est par défaut
+      await db.deviceKits.where('isDefault').equals(1).modify({ isDefault: 0 });
+    }
+    const id = await db.deviceKits.add(kit as DeviceKit);
+    return id;
+  } catch (error) {
+    console.error("Error adding device kit: ", error);
+    throw error;
+  }
+};
+
+export const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
+  try {
+    return await db.deviceKits.orderBy('name').toArray();
+  } catch (error) {
+    console.error("Error getting all device kits: ", error);
+    return [];
+  }
+};
+
+export const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
+  try {
+    return await db.deviceKits.get(id);
+  } catch (error) {
+    console.error(`Error getting device kit with id ${id}: `, error);
+  }
+};
+
+export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'>>): Promise<number | undefined> => {
+  try {
+    if (updates.isDefault === 1) {
+      // S'assurer qu'aucun autre kit n'est par défaut
+      await db.deviceKits.where('isDefault').equals(1).and(k => k.id !== id).modify({ isDefault: 0 });
+    }
+    await db.deviceKits.update(id, updates);
+    return id;
+  } catch (error) {
+    console.error(`Error updating device kit with id ${id}: `, error);
+    throw error;
+  }
+};
+
+export const deleteDeviceKit = async (id: number): Promise<void> => {
+  try {
+    // Supprimer d'abord les assignations liées à ce kit
+    await db.deviceKitAssignments.where('kitId').equals(id).delete();
+    // Ensuite supprimer le kit lui-même
+    await db.deviceKits.delete(id);
+    // Optionnel: vérifier si le kit supprimé était le défaut, et si oui, en désigner un autre ou aucun.
+    // Pour l'instant, on laisse cette logique à l'UI ou à une fonction séparée si besoin.
+  } catch (error) {
+    console.error(`Error deleting device kit with id ${id}: `, error);
+    throw error;
+  }
+};
+
+export const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
+  try {
+    return await db.deviceKits.where('isDefault').equals(1).first();
+  } catch (error) {
+    console.error("Error getting default device kit: ", error);
+  }
+};
+
+export const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
+  try {
+    await db.transaction('rw', db.deviceKits, async () => {
+      await db.deviceKits.where('isDefault').equals(1).modify({ isDefault: 0 });
+      await db.deviceKits.update(kitId, { isDefault: 1 });
+    });
+  } catch (error) {
+    console.error(`Error setting default device kit for id ${kitId}:`, error);
+    throw error;
+  }
+};
+
+// --- CRUD pour DeviceKitAssignments ---
+
+export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
+  try {
+    // Vérifier si l'assignation existe déjà pour éviter les doublons (bien que l'index unique devrait le gérer)
+    const existingAssignment = await db.deviceKitAssignments.where({ kitId, votingDeviceId }).first();
+    if (existingAssignment) {
+      return existingAssignment.id;
+    }
+    const id = await db.deviceKitAssignments.add({ kitId, votingDeviceId });
+    return id;
+  } catch (error) {
+    console.error(`Error assigning device ${votingDeviceId} to kit ${kitId}: `, error);
+    throw error;
+  }
+};
+
+export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promise<void> => {
+  try {
+    await db.deviceKitAssignments.where({ kitId, votingDeviceId }).delete();
+  } catch (error) {
+    console.error(`Error removing device ${votingDeviceId} from kit ${kitId}: `, error);
+    throw error;
+  }
+};
+
+export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
+  try {
+    const assignments = await db.deviceKitAssignments.where('kitId').equals(kitId).toArray();
+    const deviceIds = assignments.map(a => a.votingDeviceId);
+    if (deviceIds.length === 0) return [];
+    const devices = await db.votingDevices.bulkGet(deviceIds);
+    return devices.filter((d): d is VotingDevice => d !== undefined).sort((a,b) => (a.name).localeCompare(b.name)); // Tri par nom pour affichage cohérent
+  } catch (error) {
+    console.error(`Error getting voting devices for kit ${kitId}: `, error);
+    return [];
+  }
+};
+
+export const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit[]> => {
+  try {
+    const assignments = await db.deviceKitAssignments.where('votingDeviceId').equals(votingDeviceId).toArray();
+    const kitIds = assignments.map(a => a.kitId);
+    if (kitIds.length === 0) return [];
+    const kits = await db.deviceKits.bulkGet(kitIds);
+    return kits.filter((k): k is DeviceKit => k !== undefined);
+  } catch (error) {
+    console.error(`Error getting kits for voting device ${votingDeviceId}: `, error);
+    return [];
+  }
+};
+
+export const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
+  try {
+    await db.deviceKitAssignments.where('kitId').equals(kitId).delete();
+  } catch (error) {
+    console.error(`Error removing assignments by kitId ${kitId}:`, error);
+    throw error;
+  }
+};
+
+export const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number): Promise<void> => {
+  try {
+    await db.deviceKitAssignments.where('votingDeviceId').equals(votingDeviceId).delete();
+  } catch (error) {
+    console.error(`Error removing assignments by votingDeviceId ${votingDeviceId}:`, error);
+    throw error;
   }
 };
 

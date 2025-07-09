@@ -13,13 +13,16 @@ import {
   Trainer,
   SessionQuestion,
   SessionBoitier,
-  Referential, // Ajouté pour typer referentielsData
-  Theme,       // Ajouté pour typer allThemesData
-  Bloc,        // Ajouté pour typer allBlocsData
+  Referential,
+  Theme,
+  Bloc,
+  QuestionWithId as StoredQuestion, // Déplacé depuis l'import de db.ts
+  VotingDevice,                   // Déplacé depuis l'import de db.ts
+  DeviceKit                       // Confirmé ici
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import {
-  QuestionWithId as StoredQuestion,
+  // db, // Retiré car les fonctions sont appelées globalement
   addSession,
   updateSession,
   getSessionById,
@@ -27,7 +30,7 @@ import {
   getResultsForSession,
   getQuestionsByIds,
   getAllVotingDevices,
-  VotingDevice,
+  // VotingDevice, // Type maintenant importé de ../../types
   getGlobalPptxTemplate,
   getAdminSetting,
   getAllTrainers,
@@ -37,10 +40,11 @@ import {
   deleteSessionBoitiersBySessionId,
   getSessionQuestionsBySessionId,
   getSessionBoitiersBySessionId,
-  // getAllReferentiels, // Ces fonctions sont maintenant sur StorageManager
-  // getAllThemes,
-  // getAllBlocs,
+  getAllDeviceKits,
+  getDefaultDeviceKit,
+  getVotingDevicesForKit // Assurez-vous que cette fonction est bien exportée de db.ts
 } from '../../db';
+// import { DeviceKit } from '../../types'; // Déjà importé plus haut
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
@@ -98,40 +102,79 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [allThemesData, setAllThemesData] = useState<Theme[]>([]);
   const [allBlocsData, setAllBlocsData] = useState<Bloc[]>([]);
 
+  // États pour les kits de boîtiers
+  const [deviceKitsList, setDeviceKitsList] = useState<DeviceKit[]>([]);
+  const [selectedKitIdState, setSelectedKitIdState] = useState<number | null>(null);
+  const [isLoadingKits, setIsLoadingKits] = useState(true);
+  const [votingDevicesInSelectedKit, setVotingDevicesInSelectedKit] = useState<VotingDevice[]>([]);
+
 
   const [detectedAnomalies, setDetectedAnomalies] = useState<DetectedAnomalies | null>(null);
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
 
-  // Charger les données globales (Référentiels, Thèmes, Blocs, Boîtiers, Formateurs)
+  // Charger les données globales (Référentiels, Thèmes, Blocs, Boîtiers, Formateurs, Kits)
   useEffect(() => {
     const fetchGlobalData = async () => {
+      setIsLoadingKits(true);
       try {
-        const [devices, trainers, refs, themes, blocs] = await Promise.all([
-          getAllVotingDevices(),
+        const [devices, trainers, refs, themes, blocs, kits, defaultKitResult] = await Promise.all([
+          getAllVotingDevices(), // Appel direct
           getAllTrainers(),
-          StorageManager.getAllReferentiels(), // Utilise la fonction sur StorageManager
-          StorageManager.getAllThemes(),       // Utilise la fonction sur StorageManager
-          StorageManager.getAllBlocs()        // Utilise la fonction sur StorageManager
+          StorageManager.getAllReferentiels(),
+          StorageManager.getAllThemes(),
+          StorageManager.getAllBlocs(),
+          getAllDeviceKits(), // Appel direct
+          getDefaultDeviceKit() // Appel direct
         ]);
         setHardwareDevices(devices.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
         setTrainersList(trainers.sort((a, b) => a.name.localeCompare(b.name)));
         setReferentielsData(refs);
         setAllThemesData(themes);
         setAllBlocsData(blocs);
-        setHardwareLoaded(true); // Indique que les boîtiers sont chargés, utile pour le chargement de session
+        setDeviceKitsList(kits);
 
-        if (!sessionIdToLoad && trainers.length > 0) { // Pré-sélectionner formateur pour nouvelle session
-          const defaultTrainer = trainers.find(t => t.isDefault === 1) || trainers[0];
-          if (defaultTrainer?.id) setSelectedTrainerId(defaultTrainer.id);
+        setHardwareLoaded(true);
+        setIsLoadingKits(false);
+
+        if (!sessionIdToLoad) { // Pour une nouvelle session
+          if (trainers.length > 0) {
+            const defaultTrainer = trainers.find(t => t.isDefault === 1) || trainers[0];
+            if (defaultTrainer?.id) setSelectedTrainerId(defaultTrainer.id);
+          }
+          if (defaultKitResult?.id) { // Corrigé: defaultKit -> defaultKitResult
+            setSelectedKitIdState(defaultKitResult.id);
+          } else if (kits.length > 0 && kits[0].id !== undefined) { // S'assurer que kits[0].id existe
+            setSelectedKitIdState(kits[0].id);
+          }
         }
       } catch (error) {
         console.error("Erreur lors du chargement des données globales:", error);
         setImportSummary("Erreur de chargement des données initiales.");
+        setIsLoadingKits(false);
       }
     };
     fetchGlobalData();
-  }, [sessionIdToLoad]);
+  }, [sessionIdToLoad]); // sessionIdToLoad en dépendance pour réinitialiser si on passe de edit à new
+
+  // Charger les boîtiers du kit sélectionné
+  useEffect(() => {
+    const fetchDevicesInKit = async () => {
+      if (selectedKitIdState !== null) {
+        try {
+          const devices = await getVotingDevicesForKit(selectedKitIdState); // Corrigé
+          setVotingDevicesInSelectedKit(devices);
+        } catch (error) {
+          console.error(`Erreur lors du chargement des boîtiers pour le kit ${selectedKitIdState}:`, error);
+          setVotingDevicesInSelectedKit([]);
+          // Peut-être afficher une erreur à l'utilisateur ici
+        }
+      } else {
+        setVotingDevicesInSelectedKit([]); // Vider si aucun kit n'est sélectionné
+      }
+    };
+    fetchDevicesInKit();
+  }, [selectedKitIdState]);
 
 
   const resetFormTactic = useCallback(() => {
@@ -186,6 +229,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setLocation(sessionData.location || '');
             setNotes(sessionData.notes || '');
             setSelectedTrainerId(sessionData.trainerId || null);
+            setSelectedKitIdState(sessionData.selectedKitId || null); // Charger le kit sélectionné de la session
             setModifiedAfterOrsGeneration(false);
 
             const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
@@ -251,19 +295,38 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const handleAddParticipant = () => {
     if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
 
-    const existingDeviceVisualIds = participants
-      .map(p => p.deviceId)
-      .filter(id => id !== null) as number[];
-    existingDeviceVisualIds.sort((a, b) => a - b);
+    if (!selectedKitIdState) {
+      alert("Veuillez d'abord sélectionner un kit de boîtiers dans l'onglet 'Détails Session'.");
+      return;
+    }
 
-    let nextVisualDeviceId = 1;
-    for (const id of existingDeviceVisualIds) {
-      if (id === nextVisualDeviceId) {
-        nextVisualDeviceId++;
-      } else if (id > nextVisualDeviceId) {
+    if (votingDevicesInSelectedKit.length === 0) {
+      alert("Le kit sélectionné ne contient aucun boîtier. Veuillez ajouter des boîtiers au kit ou en sélectionner un autre.");
+      return;
+    }
+
+    const assignedDeviceIdsInSession = new Set(
+      participants.map(p => p.assignedGlobalDeviceId).filter(id => id !== null)
+    );
+
+    let nextAvailableDevice: VotingDevice | null = null;
+    // Trouver le premier boîtier du kit qui n'est pas déjà assigné dans cette session
+    for (const deviceInKit of votingDevicesInSelectedKit) { // votingDevicesInSelectedKit est trié par nom
+      if (deviceInKit.id && !assignedDeviceIdsInSession.has(deviceInKit.id)) {
+        nextAvailableDevice = deviceInKit;
         break;
       }
     }
+
+    if (!nextAvailableDevice) {
+      alert("Tous les boîtiers du kit sélectionné sont déjà assignés dans cette session.");
+      return;
+    }
+
+    // Déterminer le prochain deviceId visuel (simple compteur)
+    const nextVisualDeviceId = participants.length > 0
+        ? Math.max(...participants.map(p => p.deviceId || 0)) + 1
+        : 1;
 
     const newParticipant: FormParticipant = {
       nom: '',
@@ -271,13 +334,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       identificationCode: '',
       score: undefined,
       reussite: undefined,
-      assignedGlobalDeviceId: (hardwareDevices[nextVisualDeviceId - 1]) ? hardwareDevices[nextVisualDeviceId - 1].id! : null,
+      assignedGlobalDeviceId: nextAvailableDevice.id!,
       statusInSession: 'present',
       id: Date.now().toString(),
       firstName: '',
       lastName: '',
       organization: '',
-      deviceId: nextVisualDeviceId,
+      deviceId: nextVisualDeviceId, // Numéro visuel simple
       hasSigned: false,
     };
     setParticipants([...participants, newParticipant]);
@@ -456,9 +519,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       id: currentSessionDbId || undefined,
       nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
       dateSession: sessionDate || new Date().toISOString().split('T')[0],
-      referentielId: currentReferentielId, // CORRIGÉ: Utiliser referentielId avec l'ID numérique
+      referentielId: currentReferentielId,
       participants: dbParticipants,
-      selectedBlocIds: editingSessionData?.selectedBlocIds || [], // Conserver les selectedBlocIds existants ou initialiser
+      selectedBlocIds: editingSessionData?.selectedBlocIds || [],
+      selectedKitId: selectedKitIdState, // SAUVEGARDE DU KIT ID
       donneesOrs: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.donneesOrs,
       status: editingSessionData?.status || 'planned',
       location: location,
@@ -1405,9 +1469,45 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 label="Formateur"
                 options={trainersList.map((t: Trainer) => ({ value: t.id?.toString() || '', label: t.name }))} // Assurez-vous que trainersList (état) est défini et peuplé
                 value={selectedTrainerId?.toString() || ''} // Assurez-vous que selectedTrainerId (état) est défini
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null)} // Assurez-vous que setSelectedTrainerId (état) est défini
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null)}
                 placeholder="Sélectionner un formateur"
                 disabled={isReadOnly}
+              />
+              <Select
+                label="Kit de Boîtiers"
+                options={deviceKitsList.map(kit => ({ value: kit.id!.toString(), label: kit.name }))}
+                value={selectedKitIdState?.toString() || ''}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                  const newKitIdValue = e.target.value;
+                  const newKitId = newKitIdValue ? parseInt(newKitIdValue, 10) : null;
+
+                  if (newKitId !== selectedKitIdState) { // Si le kit a réellement changé
+                    if (participants.length > 0) {
+                      if (window.confirm("Changer de kit réinitialisera les assignations de boîtiers pour tous les participants de cette session. Voulez-vous continuer ?")) {
+                        setParticipants(prevParticipants =>
+                          prevParticipants.map(p => ({ ...p, assignedGlobalDeviceId: null /*, deviceId: null */ })) // deviceId visuel aussi? Pour l'instant non.
+                        );
+                        setSelectedKitIdState(newKitId);
+                        if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
+                          setModifiedAfterOrsGeneration(true);
+                        }
+                      } else {
+                        // L'utilisateur a annulé, ne rien faire, le Select devrait revenir à selectedKitIdState
+                        // Pour forcer le Select à revenir à l'ancienne valeur si l'UI ne le fait pas automatiquement:
+                        e.target.value = selectedKitIdState?.toString() || '';
+                        return;
+                      }
+                    } else {
+                      setSelectedKitIdState(newKitId);
+                      if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
+                        setModifiedAfterOrsGeneration(true);
+                      }
+                    }
+                  }
+                }}
+                placeholder="Sélectionner un kit de boîtiers"
+                disabled={isReadOnly || isLoadingKits}
+                required
               />
             </div>
             <div className="mt-4">
@@ -1479,8 +1579,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro de boîtier</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Assigné</th>
+                    {/* La colonne "Numéro de boîtier" (visuel) est conservée pour l'ordre, mais non modifiable directement */}
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Assigné (Nom et S/N)</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
@@ -1490,68 +1591,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     <th className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {participants.length === 0 ? (
-                    <tr><td className="px-4 py-4 text-center text-sm text-gray-500" colSpan={9}>Aucun participant.</td></tr>
-                  ) : (
-                    participants.map((participant) => (
-                      <tr key={participant.id}>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input
-                            type="number"
-                            value={participant.deviceId === null ? '' : participant.deviceId?.toString()}
-                            onChange={(e) => handleParticipantChange(participant.id, 'deviceId', e.target.value === '' ? null : (parseInt(e.target.value,10) || null))}
-                            className="mb-0 w-24 text-center"
-                            placeholder="N/A"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                          />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
-                          {(() => {
-                            if (participant.assignedGlobalDeviceId === null || participant.assignedGlobalDeviceId === undefined) {
-                              return <span className="text-gray-500">Non assigné</span>;
-                            }
-                            const assignedDevice = hardwareDevices.find(hd => hd.id === participant.assignedGlobalDeviceId);
-                            if (assignedDevice) {
-                              return assignedDevice.serialNumber; // Afficher le numéro de série
-                            }
-                            return <span className="text-red-500">Boîtier introuvable (ID: {participant.assignedGlobalDeviceId})</span>;
-                          })()}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.firstName} onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)} placeholder="Prénom" className="mb-0" disabled={isReadOnly} />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.lastName} onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)} placeholder="Nom" className="mb-0" disabled={isReadOnly} />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.organization || ''} onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)} placeholder="Organisation" className="mb-0" disabled={isReadOnly} />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <Input value={participant.identificationCode || ''} onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)} placeholder="Code" className="mb-0" disabled={isReadOnly} />
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">
-                          {participant.score !== undefined ? `${participant.score}%` : '-'}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">
-                          {participant.reussite === true && <Badge variant="success">Réussi</Badge>}
-                          {participant.reussite === false && <Badge variant="danger">Échec</Badge>}
-                          {participant.reussite === undefined && <Badge variant="default">-</Badge>}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
-                          <Button
-                            variant="ghost"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                            size="sm"
-                            icon={<Trash2 size={16} />}
-                            onClick={() => handleRemoveParticipant(participant.id)}
-                            title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Supprimer participant"}
-                          />
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
+                feat/session-list-reorg
               </table>
             </div>
             {participants.length > 0 && (
@@ -1654,28 +1694,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         <AnomalyResolutionModal
           isOpen={showAnomalyResolutionUI}
           detectedAnomalies={detectedAnomalies}
-          pendingValidResults={pendingValidResults}
-          onResolve={handleResolveAnomalies}
-          onCancel={handleCancelAnomalyResolution}
-        />
-      )}
-    </div>
-  );
-
-  return (
-    <div>
-      {renderTabNavigation()}
-      {renderTabContent()}
-      <div className="flex justify-end items-center mt-8 py-4 border-t border-gray-200">
-        <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
-          Enregistrer Brouillon
-        </Button>
-      </div>
-
-      {showAnomalyResolutionUI && detectedAnomalies && (
-        <AnomalyResolutionModal
-          isOpen={showAnomalyResolutionUI}
-          detectedAnomalies={detectedAnomalies} // Doit correspondre au type attendu par le modal
           pendingValidResults={pendingValidResults}
           onResolve={handleResolveAnomalies}
           onCancel={handleCancelAnomalyResolution}
