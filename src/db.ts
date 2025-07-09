@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import {
-  CACESReferential, Session, Participant, SessionResult, Trainer,
+  CACESReferential, Session, SessionResult, Trainer, // Participant removed
   SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
   QuestionWithId, VotingDevice // Types maintenant importés
 } from './types';
@@ -135,7 +135,7 @@ export class MySubClassedDexie extends Dexie {
       // il faudra peut-être la revoir. Pour l'instant, on la laisse telle quelle.
       console.log("Executing DB version 10 upgrade logic (trainers table)...");
       const trainersTable = tx.table('trainers');
-      let allTrainersFromOldSchema = await trainersTable.toArray(); // Lire les données AVANT de potentiellement modifier la table.
+      const allTrainersFromOldSchema = await trainersTable.toArray(); // prefer-const // Lire les données AVANT de potentiellement modifier la table.
 
       // Étape 1: Nettoyer les données en mémoire et s'assurer de l'unicité de isDefault
       // et que isDefault est toujours un booléen.
@@ -546,7 +546,7 @@ export const calculateBlockUsage = async (startDate?: string | Date, endDate?: s
   try {
     // let query = db.sessions.where('status').equals('completed'); // Unused variable
 
-    let sessionsQuery = db.sessions.where('status').equals('completed');
+    const sessionsQuery = db.sessions.where('status').equals('completed'); // prefer-const
 
     // Date filtering logic remains the same, but applied after fetching all completed sessions.
     // For very large datasets, fetching all then filtering in JS can be inefficient.

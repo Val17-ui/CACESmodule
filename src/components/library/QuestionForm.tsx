@@ -16,11 +16,10 @@ interface QuestionFormProps {
   initialData?: Partial<Omit<StoredQuestion, 'id'>>;
 }
 
-// Helper type for select options
-interface SelectOption {
-  value: string;
-  label: string;
-}
+// interface SelectOption { // Unused
+//   value: string;
+//   label: string;
+// }
 
 const QuestionForm: React.FC<QuestionFormProps> = ({
   onSave,
@@ -59,7 +58,9 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         }
       }
       // Ensure 'referential' and 'theme' are not spread from restInitialData if they exist
-      const { referential, theme, ...validRestInitialData } = restInitialData as any;
+      // const { referential, theme, ...validRestInitialData } = restInitialData as any; // referential and theme are unused
+      const { ...validRestInitialData } = restInitialData as any;
+
 
       baseState = { ...baseState, ...validRestInitialData, type: mappedType, blocId: initialBlocId };
     }
@@ -75,18 +76,18 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   // States for cascading selects
-  const [referentiels, setReferentiels] = useState<Referential[]>([]);
+  // const [referentiels, setReferentiels] = useState<Referential[]>([]); // Unused
   const [themes, setThemes] = useState<Theme[]>([]);
   const [blocs, setBlocs] = useState<Bloc[]>([]);
 
   const [selectedReferentialId, setSelectedReferentialId] = useState<string>('');
   const [selectedThemeId, setSelectedThemeId] = useState<string>('');
-  const [selectedBlocId, setSelectedBlocId] = useState<string>(''); // This will hold the final Bloc.id for question.blocId
+  // const [selectedBlocId, setSelectedBlocId] = useState<string>(''); // Unused // This will hold the final Bloc.id for question.blocId
 
   // Load referentiels on mount
   useEffect(() => {
     StorageManager.getAllReferentiels().then(data => {
-      setReferentiels(data);
+      // setReferentiels(data); // Unused
       // If there's a forcedReferential (by code, e.g., "R489"), find its ID
       if (forcedReferential) {
         const forcedRef = data.find(r => r.code === forcedReferential);
@@ -104,13 +105,13 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         setThemes(data);
         setSelectedThemeId(''); // Reset theme selection
         setBlocs([]); // Reset blocs
-        setSelectedBlocId(''); // Reset bloc selection
+        // setSelectedBlocId(''); // Reset bloc selection // Unused state
       });
     } else {
       setThemes([]);
       setBlocs([]);
       setSelectedThemeId('');
-      setSelectedBlocId('');
+      // setSelectedBlocId(''); // Unused state
     }
   }, [selectedReferentialId]);
 
@@ -119,11 +120,11 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     if (selectedThemeId) {
       StorageManager.getBlocsByThemeId(parseInt(selectedThemeId,10)).then(data => {
         setBlocs(data);
-        setSelectedBlocId(''); // Reset bloc selection
+        // setSelectedBlocId(''); // Reset bloc selection // Unused state
       });
     } else {
       setBlocs([]);
-      setSelectedBlocId('');
+      // setSelectedBlocId(''); // Unused state
     }
   }, [selectedThemeId]);
 
@@ -246,19 +247,19 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     setQuestion(prev => ({ ...prev, [name]: name === 'timeLimit' ? parseInt(value, 10) : value }));
   };
 
-  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    if (name === 'selectedReferentialId') {
-      setSelectedReferentialId(value);
-    } else if (name === 'selectedThemeId') {
-      setSelectedThemeId(value);
-    } else if (name === 'selectedBlocId') {
-      setSelectedBlocId(value);
-    } else {
-      // For other selects like question.type
-      setQuestion(prev => ({ ...prev, [name]: value }));
-    }
-  };
+  // const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => { // Unused function
+  //   const { name, value } = e.target;
+  //   if (name === 'selectedReferentialId') {
+  //     setSelectedReferentialId(value);
+  //   } else if (name === 'selectedThemeId') {
+  //     setSelectedThemeId(value);
+  //   } else if (name === 'selectedBlocId') {
+  //     // setSelectedBlocId(value); // Unused state
+  //   } else {
+  //     // For other selects like question.type
+  //     setQuestion(prev => ({ ...prev, [name]: value }));
+  //   }
+  // };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;

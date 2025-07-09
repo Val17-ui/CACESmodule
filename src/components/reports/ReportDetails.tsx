@@ -207,11 +207,11 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         const imgWidth = canvas.width;
         const imgHeight = canvas.height;
         const ratio = imgHeight / imgWidth;
-        let newImgHeight = pdfWidth * ratio;
-        let position = 0;
+        const newImgHeight = pdfWidth * ratio; // prefer-const
+        // let position = 0; // Unused
 
         if (newImgHeight > pdfPageHeight) {
-            let pageCount = Math.ceil(newImgHeight / pdfPageHeight);
+            const pageCount = Math.ceil(newImgHeight / pdfPageHeight); // prefer-const
             for (let i = 0; i < pageCount; i++) {
                 if (i > 0) pdf.addPage();
                 pdf.addImage(imgData, 'PNG', 0, -i * pdfPageHeight, pdfWidth, newImgHeight);

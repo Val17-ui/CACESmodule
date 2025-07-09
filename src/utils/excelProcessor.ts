@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { Question, QuestionType, CACESReferential, QuestionTheme, referentials, questionThemes } from '../types';
+import { Question, QuestionType } from '../types'; // CACESReferential, QuestionTheme, referentials, questionThemes removed
 
 export interface RawExcelQuestion {
   text?: string;
@@ -19,7 +19,7 @@ export interface RawExcelQuestion {
 export async function parseQuestionsExcel(file: File): Promise<{ data: RawExcelQuestion[], errors: string[], columnHeaders: string[] }> {
   const errors: string[] = [];
   const data: RawExcelQuestion[] = [];
-  let columnHeaders: string[] = [];
+  const columnHeaders: string[] = []; // prefer-const
 
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -34,7 +34,7 @@ export async function parseQuestionsExcel(file: File): Promise<{ data: RawExcelQ
 
     // Lire les en-têtes (première ligne)
     const headerRow = worksheet.getRow(1);
-    headerRow.eachCell((cell, colNumber) => {
+    headerRow.eachCell((cell, _colNumber) => { // colNumber unused here
       columnHeaders.push(cell.value?.toString().trim() || '');
     });
 

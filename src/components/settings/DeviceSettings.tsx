@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Usb, CheckCircle, XCircle } from 'lucide-react';
-import Card from '../ui/Card';
+import { Plus, Trash2, CheckCircle, XCircle } from 'lucide-react'; // Usb removed
+// import Card from '../ui/Card'; // Card removed
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { DeviceMapping } from '../../types';

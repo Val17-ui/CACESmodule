@@ -1,17 +1,10 @@
 import React from 'react';
 import { 
   LayoutDashboard, 
-  ClipboardList, 
   Users, 
-  FileSpreadsheet, 
   BarChart3, 
   Settings, 
-  LogOut,
-  HardHat,
-  FileText,
-  BookOpen
 } from 'lucide-react';
-import { useLogStore } from '../../stores/logStore';
 
 type SidebarItemProps = {
   icon: React.ReactNode;
@@ -52,7 +45,7 @@ type SidebarProps = {
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
-  const { openLogViewer } = useLogStore();
+  // const { openLogViewer } = useLogStore(); // Non utilisé ici
 
   const menuItems = [
     { id: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard size={20} /> },

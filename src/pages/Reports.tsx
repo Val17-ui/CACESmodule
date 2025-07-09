@@ -12,7 +12,7 @@ import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
 import { getAllSessions, getSessionById, getAllTrainers, getAllReferentiels } from '../db'; // Ajout de getAllReferentiels
-import { Session, Participant, CACESReferential, Trainer, Referential } from '../types'; // Ajout de Referential
+import { Session, Participant, Trainer, Referential } from '../types'; // Ajout de Referential, CACESReferential enlevé
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 
