@@ -1782,27 +1782,28 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     </div>
   );
 
-  return (
-    <div>
-      {renderTabNavigation()}
-      {renderTabContent()}
-      <div className="flex justify-end items-center mt-8 py-4 border-t border-gray-200">
-        <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
-          Enregistrer Brouillon
-        </Button>
-      </div>
+  // Le bloc return suivant était dupliqué et a été supprimé.
+  // return (
+  //   <div>
+  //     {renderTabNavigation()}
+  //     {renderTabContent()}
+  //     <div className="flex justify-end items-center mt-8 py-4 border-t border-gray-200">
+  //       <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
+  //         Enregistrer Brouillon
+  //       </Button>
+  //     </div>
 
-      {showAnomalyResolutionUI && detectedAnomalies && (
-        <AnomalyResolutionModal
-          isOpen={showAnomalyResolutionUI}
-          detectedAnomalies={detectedAnomalies} // Doit correspondre au type attendu par le modal
-          pendingValidResults={pendingValidResults}
-          onResolve={handleResolveAnomalies}
-          onCancel={handleCancelAnomalyResolution}
-        />
-      )}
-    </div>
-  );
+  //     {showAnomalyResolutionUI && detectedAnomalies && (
+  //       <AnomalyResolutionModal
+  //         isOpen={showAnomalyResolutionUI}
+  //         detectedAnomalies={detectedAnomalies} // Doit correspondre au type attendu par le modal
+  //         pendingValidResults={pendingValidResults}
+  //         onResolve={handleResolveAnomalies}
+  //         onCancel={handleCancelAnomalyResolution}
+  //       />
+  //     )}
+  //   </div>
+  // );
 };
 
 export default SessionForm;
