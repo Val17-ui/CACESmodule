@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'; // React retiré
+import { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import {
   getAllSessions,
@@ -8,16 +8,15 @@ import {
   getAllVotingDevices,
   getAllThemes,
   getAllBlocs,
-  // getBlocById, // Non utilisé
-  // getThemeById, // Non utilisé
+  getBlocById,
+  getThemeById,
   getAdminSetting,
   getTrainerById
 } from '../../db';
-// SessionResult non utilisé directement ici, saveAs non plus
 import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails } from '../../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { saveAs } from 'file-saver'; // Ré-ajouté car utilisé
+// import { saveAs } from 'file-saver'; // Retiré car pdf.save() le gère
 import {
   Table,
   TableHeader,
@@ -27,6 +26,7 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
+// ChevronDown, ChevronRight retirés
 import { Search, ArrowLeft, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react';
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
@@ -124,11 +124,11 @@ const ParticipantReport = () => {
         participations.push({
           key: `sess-${session.id}-part-${participantKeyPart}`,
           participantRef: p,
-          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId) || 'N/A'}`,
+          participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId === null ? undefined : p.assignedGlobalDeviceId) || 'N/A'}`,
           sessionName: session.nomSession,
           sessionDate: new Date(session.dateSession).toLocaleDateString('fr-FR'),
           referentialCode: session.referentielId ? (referentialCodeMap.get(session.referentielId) || 'N/A') : 'N/A',
-          originalSessionId: session.id as number, // TypeScript satisfait avec l'assertion
+          originalSessionId: session.id as number,
           originalParticipantAssignedGlobalDeviceId: p.assignedGlobalDeviceId,
         });
       });
@@ -156,14 +156,14 @@ const ParticipantReport = () => {
       return;
     }
 
-    const serialNumberOfSelectedParticipant = deviceMap.get(targetParticipantRef.assignedGlobalDeviceId);
+    const serialNumberOfSelectedParticipant = deviceMap.get(targetParticipantRef.assignedGlobalDeviceId === null ? undefined : targetParticipantRef.assignedGlobalDeviceId);
     if (!serialNumberOfSelectedParticipant) {
       console.error("Numéro de série non trouvé pour le participant", targetParticipantRef);
       return;
     }
 
     try {
-      const sessionResults = await getResultsForSession(targetSession.id);
+      const sessionResults = await getResultsForSession(targetSession.id!);
       const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
 
       const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
@@ -225,7 +225,10 @@ const ParticipantReport = () => {
 
     const reportDate = new Date().toLocaleDateString('fr-FR');
     const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
-    const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId) || 'N/A';
+    const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId === null ? undefined : participantRef.assignedGlobalDeviceId) || 'N/A';
+
+    const currentReferential = referentielId ? allReferentiels.find(r => r.id === referentielId) : null;
+    const referentialDisplayForPdf = currentReferential ? `${currentReferential.code} - ${currentReferential.nom_complet}` : 'N/A';
 
     let pdfHtml = `
       <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px; color: #333;">
@@ -242,7 +245,7 @@ const ParticipantReport = () => {
             <td style="padding: 4px;"><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</td>
           </tr>
           <tr>
-            <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialCodeMap.get(referentielId) || 'N/A'}</td>
+            <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialDisplayForPdf}</td>
             <td style="padding: 4px;"><strong>Lieu :</strong> ${location || 'N/A'}</td>
           </tr>
           <tr>
@@ -281,16 +284,31 @@ const ParticipantReport = () => {
     }
     if (Object.keys(questionsByThemeForPdf).length > 0) {
       for (const [themeName, questions] of Object.entries(questionsByThemeForPdf)) {
-        pdfHtml += `<h3 style="font-size: 12px; color: #3f51b5; margin-top: 15px; margin-bottom: 8px;">Thème : ${themeName}</h3>`;
-        questions.forEach(q => {
-          pdfHtml += `
-            <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dotted #ccc; page-break-inside: avoid;">
-              <p style="margin: 2px 0; font-weight: bold;">${q.text}</p>
-              <p style="margin: 2px 0 0 10px;">Votre réponse : <span style="font-style: italic;">${q.participantAnswer || 'Non répondu'}</span></p>
-              ${q.isCorrectAnswer === false && q.participantAnswer !== undefined ? `<p style="margin: 2px 0 0 10px; color: #d32f2f;">Bonne réponse : <span style="font-style: italic;">${q.correctAnswer}</span></p>` : ''}
-              <p style="margin: 2px 0 0 10px;">Points : ${q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</p>
-            </div>`;
-        });
+        pdfHtml += `<h3 style="font-size: 12px; color: #3f51b5; margin-top: 15px; margin-bottom: 8px; width:100%; page-break-before: auto; page-break-after: avoid;">Thème : ${themeName}</h3>`;
+        pdfHtml += `<div style="width: 100%; overflow: auto; page-break-inside: avoid;">`;
+
+        const questionsPerColumn = Math.ceil(questions.length / 3);
+        for (let col = 0; col < 3; col++) {
+          const marginRight = col < 2 ? '1%' : '0';
+          pdfHtml += `<div style="display: inline-block; width: 32%; vertical-align: top; margin-right: ${marginRight}; page-break-inside: avoid;">`;
+
+          const startIndex = col * questionsPerColumn;
+          const endIndex = Math.min(startIndex + questionsPerColumn, questions.length);
+
+          for (let i = startIndex; i < endIndex; i++) {
+            const q = questions[i];
+            pdfHtml += `
+              <div style="margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dotted #ccc; page-break-inside: avoid;">
+                <p style="margin: 1px 0; font-weight: bold; font-size: 9px;">${q.text}</p>
+                <p style="margin: 1px 0 0 8px; font-size: 9px;">Réponse : <span style="font-style: italic;">${q.participantAnswer || 'N/R'}</span></p>
+                ${q.isCorrectAnswer === false && q.participantAnswer !== undefined ? `<p style="margin: 1px 0 0 8px; color: #d32f2f; font-size: 9px;">Correction : <span style="font-style: italic;">${q.correctAnswer}</span></p>` : ''}
+                <p style="margin: 1px 0 0 8px; font-size: 9px;">Points : ${q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</p>
+              </div>`;
+          }
+          pdfHtml += `</div>`;
+        }
+        pdfHtml += `</div>`;
+        pdfHtml += `<div style="clear: both;"></div>`;
       }
     } else {
       pdfHtml += '<p style="font-size: 10px; color: #555;">Détail des questions non disponible.</p>';
@@ -334,12 +352,15 @@ const ParticipantReport = () => {
       finalImgWidth = usableHeight / aspectRatio;
     }
 
-    // Logique de découpage manuel pour html2canvas
     const sourceCanvas = canvas;
     const pageCanvas = document.createElement('canvas');
     const pageCtx = pageCanvas.getContext('2d');
 
-    const sliceHeightPx = (usableHeight / finalImgHeight) * sourceCanvas.height;
+    let sliceHeightPx = sourceCanvas.height * (usableHeight / finalImgHeight);
+    if (finalImgHeight < usableHeight) {
+        sliceHeightPx = sourceCanvas.height;
+    }
+
     pageCanvas.width = sourceCanvas.width;
     pageCanvas.height = sliceHeightPx;
 
@@ -351,14 +372,19 @@ const ParticipantReport = () => {
         pdf.addPage();
       }
       pageCtx?.clearRect(0,0, pageCanvas.width, pageCanvas.height);
-      pageCtx?.drawImage(sourceCanvas, 0, yOffsetPx, sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx), 0, 0, sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx));
+      pageCtx?.drawImage(sourceCanvas,
+        0, yOffsetPx,
+        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx),
+        0, 0,
+        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx)
+      );
       const pageImgData = pageCanvas.toDataURL('image/png');
 
       let currentSlicePdfHeight = usableHeight;
       if (yOffsetPx + sliceHeightPx > sourceCanvas.height) {
           currentSlicePdfHeight = ((sourceCanvas.height - yOffsetPx) / sliceHeightPx) * usableHeight;
       }
-      // S'assurer que la largeur de l'image ajoutée ne dépasse pas la largeur utilisable
+
       const currentSlicePdfWidth = Math.min(finalImgWidth, usableWidth);
 
       pdf.addImage(pageImgData, 'PNG', PADDING + (usableWidth - currentSlicePdfWidth) / 2, PADDING, currentSlicePdfWidth, currentSlicePdfHeight);
@@ -440,7 +466,7 @@ const ParticipantReport = () => {
                     {themeName}
                   </h4>
                   {questions.map((q, qIndex) => (
-                    <div key={q.id || qIndex} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
+                    <div key={q.id || `q-${qIndex}`} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
                       <p className="flex items-start font-medium text-gray-900 mb-1">
                         <HelpCircle size={16} className="mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
                         <span>{q.text}</span>

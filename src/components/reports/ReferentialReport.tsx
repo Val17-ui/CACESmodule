@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions, getAllResults, getAllThemes, getAllBlocs, getReferentialById, getQuestionsForSessionBlocks } from '../../db'; // getQuestionsForSessionBlocks ré-ajouté car utilisé
+// getQuestionsForSessionBlocks retiré, getAllQuestions ajouté (même si déjà implicite par son usage)
+import { getAllSessions, getAllResults, getAllThemes, getAllBlocs, getReferentialById, getAllQuestions } from '../../db';
 import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, OverallThemeStats } from '../../types';
 import {
   Table,
