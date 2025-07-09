@@ -52,8 +52,8 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
     return (
       <Layout
         title="Tableau de bord"
-        subtitle="Vue d'ensemble des activités CACES"
-        actions={headerActions}
+        subtitle="Vue d'ensemble des activités" // MODIFIÉ
+        // actions={headerActions} // SUPPRIMÉ
         activePage={activePage}
         onPageChange={onPageChange}
       >
@@ -65,8 +65,8 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
   return (
     <Layout
       title="Tableau de bord"
-      subtitle="Vue d'ensemble des activités CACES"
-      actions={headerActions}
+      subtitle="Vue d'ensemble des activités" // MODIFIÉ
+      // actions={headerActions} // SUPPRIMÉ
       activePage={activePage}
       onPageChange={onPageChange}
     >

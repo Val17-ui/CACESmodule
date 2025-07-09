@@ -99,7 +99,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
                 <tr key={session.id} className="hover:bg-gray-50 transition-colors duration-150 ease-in-out">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 p-2 rounded-lg bg-blue-100 text-blue-700"><CalendarClock size={20} /></div>
+                      <div className="flex-shrink-0 p-2 rounded-lg bg-accent-neutre/10 text-accent-neutre"><CalendarClock size={20} /></div>
                       <div className="ml-4">
                         <div className="text-sm font-semibold text-gray-900">{session.nomSession || 'Session sans nom'}</div>
                         <div className="text-xs text-gray-500">ID: {session.id}</div>
