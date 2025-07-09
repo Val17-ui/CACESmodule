@@ -46,13 +46,16 @@ const KitSettings: React.FC = () => {
   const loadAllVotingDevices = async () => {
     try {
       const allVotingDevices = await getAllVotingDevices();
+      console.log('[KitSettings] Loaded availableDevices:', allVotingDevices); // LOG AJOUTÉ
       setAvailableDevices(allVotingDevices);
     } catch (err) {
       console.error("Error loading all voting devices:", err);
+      setError("Erreur critique: Impossible de charger la liste des boîtiers disponibles pour l'assignation."); // Erreur plus visible
     }
   };
 
   useEffect(() => {
+    console.log('[KitSettings] Selected kit changed:', selectedKit); // LOG AJOUTÉ
     if (selectedKit && selectedKit.id) {
       loadDevicesForKit(selectedKit.id);
     } else {
@@ -164,17 +167,50 @@ const KitSettings: React.FC = () => {
   };
 
   const handleAddSelectedDevicesToKit = async () => {
-    if (!selectedKit || !selectedKit.id || devicesToAssign.length === 0) return;
-    try {
-      setError(null);
-      for (const deviceId of devicesToAssign) {
-        await assignDeviceToKit(selectedKit.id, deviceId);
+    if (!selectedKit || !selectedKit.id || devicesToAssign.length === 0) {
+      console.warn('[KitSettings] handleAddSelectedDevicesToKit - Conditions non remplies:', {selectedKit, devicesToAssign});
+      return;
+    }
+
+    const kitId = selectedKit.id;
+    let successCount = 0;
+    const errorMessages: string[] = [];
+    const currentKitName = selectedKit.name;
+
+    console.log(`[KitSettings] Début de l'ajout de ${devicesToAssign.length} boîtier(s) au kit "${currentKitName}" (ID: ${kitId})`);
+    setError(null);
+
+    for (const deviceId of devicesToAssign) {
+      try {
+        console.log(`[KitSettings] Assignation du boîtier ID ${deviceId} au kit ID ${kitId}`);
+        await assignDeviceToKit(kitId, deviceId);
+        successCount++;
+      } catch (err: any) {
+        console.error(`[KitSettings] Erreur lors de l'assignation du boîtier ${deviceId} au kit ${kitId} ("${currentKitName}"):`, err);
+        let deviceName = availableDevices.find(d => d.id === deviceId)?.name || `ID ${deviceId}`;
+        if (err.message && err.message.toLowerCase().includes('constraint')) {
+          errorMessages.push(`Le boîtier "${deviceName}" est peut-être déjà assigné (erreur de contrainte).`);
+        } else {
+          errorMessages.push(`Échec de l'assignation pour "${deviceName}".`);
+        }
       }
-      setDevicesToAssign([]);
-      loadDevicesForKit(selectedKit.id);
-    } catch (err) {
-      console.error("Error adding devices to kit:", err);
-      setError("Erreur lors de l'ajout des boîtiers au kit.");
+    }
+
+    console.log(`[KitSettings] Fin de la boucle d'assignation. Succès: ${successCount}, Erreurs: ${errorMessages.length}`);
+    setDevicesToAssign([]);
+    await loadDevicesForKit(kitId);
+
+    if (errorMessages.length > 0) {
+      setError(`Erreurs lors de l'ajout au kit "${currentKitName}": ${errorMessages.join('; ')} (${successCount} boîtiers ajoutés avec succès).`);
+    } else if (successCount > 0) {
+      setError(null);
+      console.log(`[KitSettings] ${successCount} boîtier(s) ajouté(s) avec succès au kit "${currentKitName}".`);
+      // Optionnel: feedback de succès
+      // setSuccessMessage(`${successCount} boîtier(s) ajouté(s) avec succès.`);
+      // setTimeout(() => setSuccessMessage(''), 3000);
+    } else {
+      // Aucun succès et aucun échec explicite, peut indiquer un problème si devicesToAssign n'était pas vide
+      console.warn('[KitSettings] handleAddSelectedDevicesToKit - Terminé sans succès ni erreur explicite, devicesToAssign était:', devicesToAssign);
     }
   };
 
@@ -192,7 +228,7 @@ const KitSettings: React.FC = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && kits.length === 0) { // Afficher chargement seulement si la liste initiale des kits est vide
     return (
       <Card title="Gestion des Kits de Boîtiers">
         <p>Chargement des kits...</p>
@@ -200,8 +236,14 @@ const KitSettings: React.FC = () => {
     );
   }
 
+  console.log('[KitSettings] Rendering. isLoading:', isLoading, 'Error state:', error, 'AvailableDevices count:', availableDevices.length);
+
+
   return (
     <div className="space-y-6">
+      {/* Affichage global des erreurs si non lié à un kit sélectionné */}
+      {error && !selectedKit && <p className="text-red-500 mb-2 p-3 bg-red-50 border border-red-200 rounded-md">{error}</p>}
+
       {!isCreatingKit && !editingKit && (
         <Card title="Liste des Kits de Boîtiers">
           <div className="mb-4">
@@ -209,8 +251,8 @@ const KitSettings: React.FC = () => {
               Nouveau Kit
             </Button>
           </div>
-          {error && !selectedKit && <p className="text-red-500 mb-2">{error}</p> }
-          {kits.length === 0 ? (
+          {/* {error && !selectedKit && <p className="text-red-500 mb-2">{error}</p> } */}
+          {kits.length === 0 && !isLoading ? ( // Afficher seulement si pas en chargement et vide
             <p className="text-sm text-gray-500 italic">Aucun kit configuré pour le moment.</p>
           ) : (
             <ul className="space-y-2">
@@ -259,10 +301,11 @@ const KitSettings: React.FC = () => {
 
       {isCreatingKit || editingKit ? (
         <Card title={editingKit ? `Modifier le Kit : ${editingKit.name}` : "Créer un Nouveau Kit"}>
-          {error && <p className="text-red-500 mb-2">{error}</p>}
+          {/* Erreur spécifique au formulaire de création/édition */}
+          {error && <p className="text-red-500 mb-3 p-2 bg-red-50 border border-red-200 rounded-md">{error}</p>}
           <div className="space-y-4">
             <Input
-              label="Nom du Kit"
+              label="Nom du Kit *"
               value={kitName}
               onChange={(e) => setKitName(e.target.value)}
               placeholder="Ex: Boîtiers Salle A"
@@ -279,11 +322,12 @@ const KitSettings: React.FC = () => {
       ) : null}
 
       {selectedKit && !isCreatingKit && !editingKit && (
-        <Card title={`Boîtiers dans le Kit : ${selectedKit.name}`}>
-           {error && <p className="text-red-500 mb-2">{error}</p>}
+        <Card title={`Gérer les Boîtiers du Kit : ${selectedKit.name}`}>
+           {/* Erreur spécifique à la gestion du kit sélectionné */}
+           {error && <p className="text-red-500 mb-3 p-2 bg-red-50 border border-red-200 rounded-md">{error}</p>}
           <p className="mb-2 text-sm text-gray-700">Boîtiers actuellement dans ce kit :</p>
           {kitDevices.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">Aucun boîtier dans ce kit.</p>
+            <p className="text-sm text-gray-500 italic mb-3">Aucun boîtier dans ce kit.</p>
           ) : (
             <ul className="space-y-1 mb-4">
               {kitDevices.map(device => (
@@ -303,45 +347,60 @@ const KitSettings: React.FC = () => {
           )}
 
           <hr className="my-4"/>
-          <h4 className="text-md font-semibold mb-2">Ajouter des boîtiers à "{selectedKit.name}" :</h4>
-          <p className="text-sm text-gray-600 mb-3">Cochez les boîtiers disponibles ci-dessous que vous souhaitez inclure dans ce kit.</p>
-          {availableDevices.length === 0 ? (
-             <p className="text-sm text-gray-500 italic">Aucun boîtier global n'est configuré. Veuillez les ajouter dans "Matériel Principal" d'abord.</p>
-          ) : (
-            <div className="space-y-2 max-h-60 overflow-y-auto border p-3 rounded-md bg-gray-50/50">
+          <h4 className="text-md font-semibold mb-2">Ajouter des boîtiers au kit "{selectedKit.name}" :</h4>
+          <p className="text-sm text-gray-600 mb-3">Cochez les boîtiers disponibles ci-dessous que vous souhaitez inclure dans ce kit. Les boîtiers déjà présents dans ce kit sont désactivés.</p>
+
+          {/* Section d'assignation des boîtiers */}
+          {availableDevices.length === 0 && !isLoading ? ( // Vérifier aussi isLoading pour ne pas afficher prématurément
+             <p className="text-sm text-gray-500 italic p-3 border rounded-md bg-gray-50">Aucun boîtier global n'est configuré dans l'application. Veuillez d'abord les ajouter via l'onglet "Gestion des Boîtiers".</p>
+          ) : availableDevices.length > 0 ? (
+            <div className="space-y-2 max-h-60 overflow-y-auto border p-3 rounded-md bg-gray-50">
               {availableDevices.map(device => {
                 const isAssignedToCurrentKit = kitDevices.some(kd => kd.id === device.id);
                 return (
                   <label
                     key={device.id}
-                    className={`flex items-center p-2 rounded hover:bg-gray-100
-                                ${isAssignedToCurrentKit ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                    className={`flex items-center p-2 rounded-md transition-colors
+                                ${isAssignedToCurrentKit
+                                  ? 'bg-gray-200 opacity-70 cursor-not-allowed'
+                                  : devicesToAssign.includes(device.id!)
+                                    ? 'bg-blue-100 hover:bg-blue-200 cursor-pointer'
+                                    : 'hover:bg-gray-100 cursor-pointer'
+                                }`}
                   >
                     <input
                       type="checkbox"
-                      className="mr-3 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      checked={devicesToAssign.includes(device.id!)}
+                      className="mr-3 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                      checked={devicesToAssign.includes(device.id!) || isAssignedToCurrentKit}
                       onChange={() => {
-                        if(isAssignedToCurrentKit) return;
+                        if(isAssignedToCurrentKit) return; // Ne rien faire si déjà assigné
                         handleToggleDeviceToAssign(device.id!);
                       }}
                       disabled={isAssignedToCurrentKit}
+                      id={`device-assign-${device.id}`}
                     />
-                    <span className="flex-grow">{device.name} <span className="text-xs text-gray-500">(S/N: {device.serialNumber})</span></span>
-                    {isAssignedToCurrentKit && <span className="ml-auto text-xs text-green-600 font-medium">Déjà dans ce kit</span>}
+                    <span className="flex-grow text-sm">
+                      {device.name} <span className="text-xs text-gray-500">(S/N: {device.serialNumber})</span>
+                    </span>
+                    {isAssignedToCurrentKit && <span className="ml-auto text-xs text-green-700 font-semibold px-2 py-0.5 bg-green-100 rounded-full">Assigné</span>}
                   </label>
                 );
               })}
             </div>
+          ) : isLoading ? (
+            <p className="text-sm text-gray-500 italic">Chargement des boîtiers disponibles...</p>
+          ) : null /* Cas où availableDevices est vide après chargement et !isLoading est déjà géré */}
+
+          {availableDevices.length > 0 && (
+            <Button
+              onClick={handleAddSelectedDevicesToKit}
+              className="mt-4"
+              disabled={devicesToAssign.length === 0}
+              icon={<Plus size={16}/>}
+            >
+              Ajouter {devicesToAssign.length > 0 ? `${devicesToAssign.length} ` : ''}boîtier(s) sélectionné(s) au kit
+            </Button>
           )}
-          <Button
-            onClick={handleAddSelectedDevicesToKit}
-            className="mt-4"
-            disabled={devicesToAssign.length === 0}
-            icon={<Plus size={16}/>}
-          >
-            Ajouter les {devicesToAssign.length || ''} boîtier(s) sélectionné(s)
-          </Button>
         </Card>
       )}
     </div>

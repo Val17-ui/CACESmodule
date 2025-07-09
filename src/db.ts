@@ -564,16 +564,19 @@ export const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
 // --- CRUD pour DeviceKitAssignments ---
 
 export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
+  console.log(`[DB_TRACE] Tentative d'assignation du boîtier ${votingDeviceId} au kit ${kitId}`);
   try {
     // Vérifier si l'assignation existe déjà pour éviter les doublons (bien que l'index unique devrait le gérer)
     const existingAssignment = await db.deviceKitAssignments.where({ kitId, votingDeviceId }).first();
     if (existingAssignment) {
+      console.log(`[DB_TRACE] Assignation déjà existante pour kit ${kitId} et boîtier ${votingDeviceId}. ID: ${existingAssignment.id}`);
       return existingAssignment.id;
     }
     const id = await db.deviceKitAssignments.add({ kitId, votingDeviceId });
+    console.log(`[DB_TRACE] Boîtier ${votingDeviceId} assigné au kit ${kitId}. Nouvel ID d'assignation: ${id}`);
     return id;
   } catch (error) {
-    console.error(`Error assigning device ${votingDeviceId} to kit ${kitId}: `, error);
+    console.error(`[DB_ERROR] Erreur lors de l'assignation du boîtier ${votingDeviceId} au kit ${kitId}: `, error);
     throw error;
   }
 };
@@ -588,14 +591,25 @@ export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number)
 };
 
 export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
+  console.log(`[DB_TRACE] Récupération des boîtiers pour le kit ${kitId}`);
   try {
     const assignments = await db.deviceKitAssignments.where('kitId').equals(kitId).toArray();
+    console.log(`[DB_TRACE] Assignations trouvées pour kit ${kitId}:`, assignments.length);
     const deviceIds = assignments.map(a => a.votingDeviceId);
-    if (deviceIds.length === 0) return [];
+
+    if (deviceIds.length === 0) {
+      console.log(`[DB_TRACE] Aucun boîtier assigné au kit ${kitId}.`);
+      return [];
+    }
+
+    console.log(`[DB_TRACE] IDs des boîtiers à récupérer pour kit ${kitId}:`, deviceIds);
     const devices = await db.votingDevices.bulkGet(deviceIds);
-    return devices.filter((d): d is VotingDevice => d !== undefined).sort((a,b) => (a.name).localeCompare(b.name)); // Tri par nom pour affichage cohérent
+    const validDevices = devices.filter((d): d is VotingDevice => d !== undefined);
+    console.log(`[DB_TRACE] Boîtiers valides récupérés pour kit ${kitId}:`, validDevices.length);
+
+    return validDevices.sort((a,b) => (a.name).localeCompare(b.name)); // Tri par nom pour affichage cohérent
   } catch (error) {
-    console.error(`Error getting voting devices for kit ${kitId}: `, error);
+    console.error(`[DB_ERROR] Erreur lors de la récupération des boîtiers pour le kit ${kitId}: `, error);
     return [];
   }
 };
@@ -1011,10 +1025,13 @@ export const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise
 };
 
 export const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
+  console.log(`[DB_TRACE] Récupération de tous les boîtiers votants.`);
   try {
-    return await db.votingDevices.toArray();
+    const allDevices = await db.votingDevices.orderBy('name').toArray(); // Tri par nom pour cohérence
+    console.log(`[DB_TRACE] Nombre total de boîtiers récupérés: ${allDevices.length}`);
+    return allDevices;
   } catch (error) {
-    console.error("Error getting all voting devices:", error);
+    console.error("[DB_ERROR] Erreur lors de la récupération de tous les boîtiers votants:", error);
     return [];
   }
 };
