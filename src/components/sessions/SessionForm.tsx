@@ -1591,7 +1591,84 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     <th className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                feat/session-list-reorg
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {participants.map((participant, index) => {
+                    const assignedDevice = votingDevicesInSelectedKit.find(d => d.id === participant.assignedGlobalDeviceId);
+                    return (
+                      <tr key={participant.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{participant.deviceId || index + 1}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {assignedDevice
+                            ? `${assignedDevice.name} (S/N: ${assignedDevice.serialNumber})`
+                            : <span className="text-xs text-red-500 italic">Non assigné / Kit changé</span>
+                          }
+                           {/* Select pour changer/assigner un boîtier du kit (optionnel, peut être complexe ici) */}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Input
+                            type="text"
+                            value={participant.firstName}
+                            onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)}
+                            className="mt-1 block w-full sm:text-sm"
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Input
+                            type="text"
+                            value={participant.lastName}
+                            onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)}
+                            className="mt-1 block w-full sm:text-sm"
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Input
+                            type="text"
+                            value={participant.organization || ''}
+                            onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)}
+                            className="mt-1 block w-full sm:text-sm"
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Input
+                            type="text"
+                            value={participant.identificationCode || ''}
+                            onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)}
+                            className="mt-1 block w-full sm:text-sm"
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                          />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                          {participant.score !== undefined ? `${participant.score}%` : 'N/A'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {participant.reussite === undefined ? <Badge color="gray">N/A</Badge> :
+                           participant.reussite ? <Badge color="green">Réussi</Badge> : <Badge color="red">Échoué</Badge>}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveParticipant(participant.id)}
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                            title="Supprimer participant"
+                          >
+                            <Trash2 size={16} className="text-red-500 hover:text-red-700" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {participants.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="text-center py-10 text-sm text-gray-500 italic">
+                        Aucun participant ajouté à cette session.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
               </table>
             </div>
             {participants.length > 0 && (
