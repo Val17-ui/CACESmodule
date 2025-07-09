@@ -29,6 +29,20 @@ export interface Session {
     unknownDevices: UnknownDeviceResolution[];
     resolvedAt: string;
   } | null;
+  selectedKitId?: number | null; // ID du kit de boîtiers sélectionné pour la session
+}
+
+// --- Nouveaux types pour la gestion des Kits de Boîtiers ---
+export interface DeviceKit {
+  id?: number; // Auto-incremented primary key
+  name: string; // Nom du kit, ex: "Salle A"
+  isDefault?: 0 | 1; // 0 pour false, 1 pour true (un seul kit par défaut)
+}
+
+export interface DeviceKitAssignment {
+  id?: number; // Auto-incremented primary key
+  kitId: number; // FK vers DeviceKit.id
+  votingDeviceId: number; // FK vers VotingDevice.id
 }
 
 // --- Types pour la résolution des anomalies d'import (partagés) ---
