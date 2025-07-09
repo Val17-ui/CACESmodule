@@ -67,8 +67,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
     <div className="w-64 bg-fond-clair-principal h-full shadow-sm border-r border-gris-moyen/50 flex flex-col">
       <div className="p-6">
         <div className="flex items-center">
-          <HardHat size={32} className="text-accent-neutre mr-2" />
-          <h1 className="text-xl font-bold text-texte-principal">CACES Manager</h1>
+          <img src="https://static.wixstatic.com/media/76e58b_2c597a8efc3e4dd6a3658edec55ec801~mv2.png" alt="easy'certif Logo" className="h-10" />
         </div>
       </div>
       
