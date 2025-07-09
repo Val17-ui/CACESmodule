@@ -124,7 +124,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-2/5"
-                icon={<Search size={16} className="text-gray-400"/>}
+                 icon={<Search size={16} className="text-rouge-accent"/>}
               />
               <Select
                 value={referentialFilter}
@@ -213,14 +213,14 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const headerActions = (
     <div className="flex items-center space-x-3">
       {activeReport && (
-        <Button variant="outline" icon={<ArrowLeft size={16} />} onClick={handleBack}>
+        <Button variant="outline" icon={<ArrowLeft size={16} className="text-rouge-accent" />} onClick={handleBack}>
           Retour
         </Button>
       )}
       {selectedSession && (
         <>
-          <Button variant="outline" icon={<Download size={16} />}>Exporter PDF</Button>
-          <Button variant="outline" icon={<Printer size={16} />}>Imprimer</Button>
+          <Button variant="outline" icon={<Download size={16} className="text-rouge-accent" />}>Exporter PDF</Button>
+          <Button variant="outline" icon={<Printer size={16} className="text-rouge-accent" />}>Imprimer</Button>
         </>
       )}
     </div>

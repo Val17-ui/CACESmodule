@@ -12,10 +12,10 @@ const Checkbox: React.FC<CheckboxProps> = ({ id, label, className, ...props }) =
         type="checkbox"
         id={id}
         {...props}
-        className={`h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 ${className || ''}`}
+        className={`h-4 w-4 text-accent-neutre border-gris-moyen rounded focus:ring-accent-neutre ${className || ''}`}
       />
       {label && (
-        <label htmlFor={id} className="ml-2 block text-sm text-gray-900">
+        <label htmlFor={id} className="ml-2 block text-sm text-texte-principal">
           {label}
         </label>
       )}

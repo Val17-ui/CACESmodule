@@ -9,10 +9,10 @@ type CardProps = {
 
 const Card: React.FC<CardProps> = ({ title, children, className = '', onClick }) => { // Added onClick to destructuring
   return (
-    <div className={`bg-white rounded-2xl shadow-md overflow-hidden ${className}`} onClick={onClick}>
+    <div className={`bg-fond-clair-principal rounded-2xl shadow-md overflow-hidden ${className}`} onClick={onClick}>
       {title && (
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+        <div className="px-6 py-4 border-b border-gris-moyen/50">
+          <h3 className="text-lg font-medium text-texte-principal">{title}</h3>
         </div>
       )}
       <div className="p-6">{children}</div>

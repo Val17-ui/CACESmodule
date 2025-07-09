@@ -26,13 +26,13 @@ const Button: React.FC<ButtonProps> = ({
   const baseStyles = 'inline-flex items-center justify-center rounded-xl transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-offset-2';
   
   const variantStyles = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500',
-    secondary: 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500',
-    success: 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500',
-    danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',
-    warning: 'bg-amber-500 hover:bg-amber-600 text-white focus:ring-amber-500',
-    outline: 'border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 focus:ring-blue-500',
-    ghost: 'bg-transparent hover:bg-gray-100 text-gray-700 focus:ring-gray-500',
+    primary: 'bg-accent-neutre hover:bg-accent-neutre-hover text-white focus:ring-accent-neutre',
+    secondary: 'bg-gris-moyen hover:bg-gray-500 text-texte-principal focus:ring-gris-moyen', // Utilise gray-500 pour le hover pour l'instant
+    success: 'bg-vert-validation hover:brightness-90 text-white focus:ring-vert-validation',
+    danger: 'bg-rouge-accent hover:brightness-90 text-white focus:ring-rouge-accent',
+    warning: 'bg-amber-500 hover:bg-amber-600 text-white focus:ring-amber-500', // Laissé tel quel pour l'instant
+    outline: 'border border-gris-moyen bg-fond-clair-principal hover:bg-gris-moyen/20 text-texte-principal focus:ring-accent-neutre',
+    ghost: 'bg-transparent hover:bg-gris-moyen/20 text-texte-principal focus:ring-gris-moyen',
   };
   
   const sizeStyles = {

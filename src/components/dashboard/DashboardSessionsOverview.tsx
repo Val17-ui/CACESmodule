@@ -59,26 +59,26 @@ const SessionRow: React.FC<{session: Session, onPageChange: (page: string, sessi
   return (
     <div
       key={session.id}
-      className="py-3 first:pt-0 last:pb-0 cursor-pointer hover:bg-gray-50"
+      className="py-3 first:pt-0 last:pb-0 cursor-pointer hover:bg-gris-moyen/10"
       onClick={handleSessionClick}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-start space-x-3">
-          <div className={`p-2 rounded-lg ${session.status === 'in-progress' ? 'bg-yellow-50 text-yellow-600' : 'bg-blue-50 text-blue-600'}`}>
+          <div className={`p-2 rounded-lg ${session.status === 'in-progress' ? 'bg-yellow-50 text-yellow-600' : 'bg-accent-neutre/10 text-accent-neutre'}`}>
             <CalendarClock size={20} />
           </div>
           <div>
-            <p className="font-medium text-gray-900">{session.nomSession}</p>
+            <p className="font-medium text-texte-principal">{session.nomSession}</p>
             <div className="flex items-center mt-1 space-x-2 flex-wrap">
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-texte-principal/80">
                 {formatDate(session.dateSession)}
               </span>
-              <span className="text-gray-300 hidden sm:inline">•</span>
-              <span className="text-sm text-gray-500 block sm:inline mt-1 sm:mt-0">
+              <span className="text-gris-moyen hidden sm:inline">•</span>
+              <span className="text-sm text-texte-principal/80 block sm:inline mt-1 sm:mt-0">
                 {session.referentiel}
               </span>
-              <span className="text-gray-300 hidden sm:inline">•</span>
-              <span className="text-sm text-gray-500 block sm:inline mt-1 sm:mt-0">
+              <span className="text-gris-moyen hidden sm:inline">•</span>
+              <span className="text-sm text-texte-principal/80 block sm:inline mt-1 sm:mt-0">
                 {session.participants ? session.participants.length : 0} participant(s)
               </span>
             </div>
@@ -86,7 +86,7 @@ const SessionRow: React.FC<{session: Session, onPageChange: (page: string, sessi
         </div>
         <div className="flex items-center space-x-3">
           {getStatusBadge(session.status)}
-          <ChevronRight size={20} className="text-gray-400" />
+          <ChevronRight size={20} className="text-gris-moyen" />
         </div>
       </div>
     </div>
@@ -118,15 +118,15 @@ const DashboardSessionsOverview: React.FC<DashboardSessionsOverviewProps> = ({ s
 
   const renderSection = (title: string, sessionList: Session[], emptyMessage: string) => (
     <div className="mb-6">
-      <h3 className="text-lg font-medium text-gray-800 mb-2">{title}</h3>
+      <h3 className="text-lg font-medium text-texte-principal mb-2">{title}</h3>
       {sessionList.length > 0 ? (
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gris-moyen/50">
           {sessionList.map(session => (
             <SessionRow key={session.id} session={session} onPageChange={onPageChange} />
           ))}
         </div>
       ) : (
-        <p className="text-sm text-gray-500 italic">{emptyMessage}</p>
+        <p className="text-sm text-texte-principal/70 italic">{emptyMessage}</p>
       )}
     </div>
   );
@@ -137,10 +137,10 @@ const DashboardSessionsOverview: React.FC<DashboardSessionsOverviewProps> = ({ s
       {renderSection("Prochaines sessions planifiées", sessionsPlanifiees, "Aucune autre session planifiée pour le moment.")}
       {renderSection("Dernières sessions terminées", sessionsTerminees, "Aucune session terminée récemment.")}
 
-      <div className="mt-4 pt-4 border-t border-gray-200">
+      <div className="mt-4 pt-4 border-t border-gris-moyen/50">
         <button
           onClick={() => onPageChange('sessions')}
-          className="text-sm font-medium text-blue-600 hover:text-blue-700"
+          className="text-sm font-medium text-rouge-accent hover:text-rouge-accent/80"
         >
           Voir toutes les sessions
         </button>
