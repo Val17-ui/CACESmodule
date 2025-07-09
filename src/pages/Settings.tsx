@@ -55,7 +55,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
 
   const tabs: { id: AdminTab; label: string; icon: JSX.Element }[] = [
     { id: 'files', label: 'Fichiers et Modèles', icon: <File size={20} /> },
-    { id: 'hardware', label: 'Matériel', icon: <HardDrive size={20} /> },
+    { id: 'devicesAndKits', label: 'Matériel & Kits', icon: <SlidersHorizontal size={20} /> },
     { id: 'preferences', label: 'Préférences', icon: <User size={20} /> },
     { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
     { id: 'trainers', label: 'Formateurs', icon: <Users2 size={20} /> },
@@ -67,13 +67,10 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'files':
-        // setEditingQuestionId(null); // REMOVED - Handled by useEffect
         return <FileModelSettings />;
-      case 'hardware':
-        // setEditingQuestionId(null); // REMOVED
-        return <HardwareSettings />;
+      case 'devicesAndKits':
+        return <DeviceAndKitManagement />;
       case 'preferences':
-        // setEditingQuestionId(null); // REMOVED
         return <UserPreferences />;
       case 'library':
         if (editingQuestionId === 'new') { // Handle creation
