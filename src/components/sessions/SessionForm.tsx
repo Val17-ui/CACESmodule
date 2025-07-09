@@ -116,16 +116,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   // Charger les données globales (Référentiels, Thèmes, Blocs, Boîtiers, Formateurs, Kits)
   useEffect(() => {
     const fetchGlobalData = async () => {
-      setIsLoadingKits(true); // Pour les kits aussi
+      setIsLoadingKits(true);
       try {
-        const [devices, trainers, refs, themes, blocs, kits, defaultKit] = await Promise.all([
-          getAllVotingDevices(),
+        const [devices, trainers, refs, themes, blocs, kits, defaultKitResult] = await Promise.all([
+          getAllVotingDevices(), // Appel direct
           getAllTrainers(),
           StorageManager.getAllReferentiels(),
           StorageManager.getAllThemes(),
           StorageManager.getAllBlocs(),
-          getAllDeviceKits(),
-          getDefaultDeviceKit()
+          getAllDeviceKits(), // Appel direct
+          getDefaultDeviceKit() // Appel direct
         ]);
         setHardwareDevices(devices.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
         setTrainersList(trainers.sort((a, b) => a.name.localeCompare(b.name)));
@@ -162,7 +162,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     const fetchDevicesInKit = async () => {
       if (selectedKitIdState !== null) {
         try {
-          const devices = await db.getVotingDevicesForKit(selectedKitIdState);
+          const devices = await getVotingDevicesForKit(selectedKitIdState); // Corrigé
           setVotingDevicesInSelectedKit(devices);
         } catch (error) {
           console.error(`Erreur lors du chargement des boîtiers pour le kit ${selectedKitIdState}:`, error);
