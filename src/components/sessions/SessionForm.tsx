@@ -637,13 +637,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       setIsGeneratingOrs(false); return;
     }
 
-    setImportSummary("Vérification du modèle PPTX global...");
-    const globalPptxTemplate = await getGlobalPptxTemplate();
-    if (!globalPptxTemplate) {
-      setImportSummary("Aucun modèle PPTX global n'est configuré.");
-      setIsGeneratingOrs(false); return;
-    }
-    setImportSummary("Génération .ors...");
+    // La récupération du modèle est maintenant gérée par pptxOrchestrator via templateManager
+    // Il n'est plus nécessaire de charger globalPptxTemplate ici.
+    // La fonction generatePresentation s'attend maintenant à un selectedTemplateId (optionnel)
+    // ou utilisera la logique de fallback (défaut utilisateur -> défaut outil).
+    setImportSummary("Préparation du modèle PPTX et génération .ors...");
     let allSelectedQuestionsForPptx: StoredQuestion[] = [];
     let selectedBlocIdsForSession: number[] = [];
 
@@ -731,7 +729,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setIsGeneratingOrs(false); return;
       }
 
-      const generationOutput = await generatePresentation(sessionInfoForPptx, participantsForGenerator as DBParticipantType[], allSelectedQuestionsForPptx, globalPptxTemplate, adminSettings);
+      // Le 4ème argument est maintenant `selectedTemplateId?: string`.
+      // Passer `undefined` pour utiliser la logique de fallback (défaut utilisateur ou défaut outil).
+      const generationOutput = await generatePresentation(
+        sessionInfoForPptx,
+        participantsForGenerator as DBParticipantType[],
+        allSelectedQuestionsForPptx,
+        undefined, // Indique à pptxOrchestrator d'utiliser le modèle par défaut (utilisateur ou outil)
+        adminSettings
+      );
+
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) { // Utiliser sessionDataWithSelectedBlocs
         const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;
         try {
@@ -1473,42 +1480,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 placeholder="Sélectionner un formateur"
                 disabled={isReadOnly}
               />
-              <Select
-                label="Kit de Boîtiers"
-                options={deviceKitsList.map(kit => ({ value: kit.id!.toString(), label: kit.name }))}
-                value={selectedKitIdState?.toString() || ''}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                  const newKitIdValue = e.target.value;
-                  const newKitId = newKitIdValue ? parseInt(newKitIdValue, 10) : null;
-
-                  if (newKitId !== selectedKitIdState) { // Si le kit a réellement changé
-                    if (participants.length > 0) {
-                      if (window.confirm("Changer de kit réinitialisera les assignations de boîtiers pour tous les participants de cette session. Voulez-vous continuer ?")) {
-                        setParticipants(prevParticipants =>
-                          prevParticipants.map(p => ({ ...p, assignedGlobalDeviceId: null /*, deviceId: null */ })) // deviceId visuel aussi? Pour l'instant non.
-                        );
-                        setSelectedKitIdState(newKitId);
-                        if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
-                          setModifiedAfterOrsGeneration(true);
-                        }
-                      } else {
-                        // L'utilisateur a annulé, ne rien faire, le Select devrait revenir à selectedKitIdState
-                        // Pour forcer le Select à revenir à l'ancienne valeur si l'UI ne le fait pas automatiquement:
-                        e.target.value = selectedKitIdState?.toString() || '';
-                        return;
-                      }
-                    } else {
-                      setSelectedKitIdState(newKitId);
-                      if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
-                        setModifiedAfterOrsGeneration(true);
-                      }
-                    }
-                  }
-                }}
-                placeholder="Sélectionner un kit de boîtiers"
-                disabled={isReadOnly || isLoadingKits}
-                required
-              />
+              {/* Le Select "Kit de Boîtiers" est déplacé vers l'onglet Participants */}
             </div>
             <div className="mt-4">
               <Input
@@ -1547,6 +1519,48 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       case 'participants':
         return (
           <Card title="Participants" className="mb-6">
+            {/* Champ Kit de Boîtiers déplacé ici */}
+            <div className="mb-6 pb-4 border-b border-gray-200">
+              <Select
+                label="Kit de Boîtiers Actif pour cette Session *"
+                options={deviceKitsList.map(kit => ({ value: kit.id!.toString(), label: kit.name }))}
+                value={selectedKitIdState?.toString() || ''}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                  const newKitIdValue = e.target.value;
+                  const newKitId = newKitIdValue ? parseInt(newKitIdValue, 10) : null;
+
+                  if (newKitId !== selectedKitIdState) {
+                    if (participants.length > 0) {
+                      if (window.confirm("Changer de kit réinitialisera les assignations de boîtiers pour tous les participants de cette session et videra la liste des participants actuels. Voulez-vous continuer ?")) {
+                        setParticipants([]); // Vider les participants car les assignations de boîtiers ne sont plus valides
+                        setSelectedKitIdState(newKitId);
+                        if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
+                          setModifiedAfterOrsGeneration(true);
+                        }
+                      } else {
+                        e.target.value = selectedKitIdState?.toString() || '';
+                        return;
+                      }
+                    } else {
+                      setSelectedKitIdState(newKitId);
+                      if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
+                        setModifiedAfterOrsGeneration(true);
+                      }
+                    }
+                  }
+                }}
+                placeholder="Sélectionner un kit de boîtiers"
+                disabled={isReadOnly || isLoadingKits} // Laisser modifiable même si ORS généré pour permettre de changer de kit si besoin de réassigner avant import résultats ? À discuter. Pour l'instant, suit isReadOnly.
+                required
+              />
+               {!selectedKitIdState && !isReadOnly && (
+                <p className="mt-1 text-xs text-red-600">La sélection d'un kit est requise pour ajouter des participants.</p>
+              )}
+               {selectedKitIdState && votingDevicesInSelectedKit.length === 0 && !isReadOnly && (
+                 <p className="mt-1 text-xs text-yellow-600">Le kit sélectionné ne contient aucun boîtier. Ajoutez des boîtiers au kit dans les paramètres.</p>
+               )}
+            </div>
+
             <div className="mb-4 flex items-center justify-between">
               <p className="text-sm text-gray-500">Gérez la liste des participants.</p>
               <div className="flex space-x-3">
