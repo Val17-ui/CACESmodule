@@ -13,13 +13,16 @@ import {
   Trainer,
   SessionQuestion,
   SessionBoitier,
-  Referential, // Ajouté pour typer referentielsData
-  Theme,       // Ajouté pour typer allThemesData
-  Bloc,        // Ajouté pour typer allBlocsData
+  Referential,
+  Theme,
+  Bloc,
+  QuestionWithId as StoredQuestion, // Déplacé depuis l'import de db.ts
+  VotingDevice,                   // Déplacé depuis l'import de db.ts
+  DeviceKit                       // Confirmé ici
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import {
-  QuestionWithId as StoredQuestion,
+  db, // Ajout de l'import de db explicitement
   addSession,
   updateSession,
   getSessionById,
@@ -27,7 +30,7 @@ import {
   getResultsForSession,
   getQuestionsByIds,
   getAllVotingDevices,
-  VotingDevice,
+  // VotingDevice, // Type maintenant importé de ../../types
   getGlobalPptxTemplate,
   getAdminSetting,
   getAllTrainers,
@@ -37,13 +40,11 @@ import {
   deleteSessionBoitiersBySessionId,
   getSessionQuestionsBySessionId,
   getSessionBoitiersBySessionId,
-  // getAllReferentiels, // Ces fonctions sont maintenant sur StorageManager
-  // getAllThemes,
-  // getAllBlocs,
-  getAllDeviceKits, // Ajout pour les kits
-  getDefaultDeviceKit, // Ajout pour le kit par défaut
+  getAllDeviceKits,
+  getDefaultDeviceKit,
+  getVotingDevicesForKit // Assurez-vous que cette fonction est bien exportée de db.ts
 } from '../../db';
-import { DeviceKit } from '../../types'; // Ajout type DeviceKit
+// import { DeviceKit } from '../../types'; // Déjà importé plus haut
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
