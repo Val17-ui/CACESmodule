@@ -16,7 +16,7 @@ const DeviceAndKitManagement: React.FC = () => {
           onClick={() => setActiveView('devices')}
           size="sm"
         >
-          Gestion des Boîtiers Globaux
+          Gestion des Boîtiers
         </Button>
         <Button
           variant={activeView === 'kits' ? 'primary' : 'outline'}

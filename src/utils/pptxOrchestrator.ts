@@ -13,6 +13,7 @@ import {
   QuestionMapping, // Importer directement
   SessionInfo as Val17SessionInfo
 } from '../lib/val17-pptx-generator/val17PptxGenerator';
+import { getActivePptxTemplateFile } from '../utils/templateManager'; // Import de la nouvelle fonction
 
 // Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
 export type { QuestionMapping };
@@ -172,12 +173,9 @@ export async function generatePresentation(
   sessionInfo: { name: string; date: string; referential: string },
   _participants: Participant[], // Ce sont les FormParticipant
   storedQuestions: StoredQuestion[], // Ce sont les QuestionWithId (de la DB)
-  templateFileFromUser: File,
+  selectedTemplateId: string | undefined, // Remplacer templateFileFromUser par selectedTemplateId
   adminSettings: AdminPPTXSettings
 ): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
-
-  // console.log(`generatePresentation called. User template: "${templateFileFromUser.name}", Questions: ${storedQuestions.length}`); // DEBUG
-  // console.log('[DEBUG_ORCHESTRATOR] _participants reçus dans generatePresentation:', JSON.stringify(_participants)); // DEBUG
 
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
 
@@ -205,10 +203,14 @@ export async function generatePresentation(
   };
 
   try {
+    // Récupérer le fichier de template actif en utilisant la nouvelle logique
+    const actualTemplateFile = await getActivePptxTemplateFile(selectedTemplateId);
+    // console.log(`[pptxOrchestrator] Using template: "${actualTemplateFile.name}" for generation.`); // DEBUG
+
     // Log data being passed to the generator for debugging
     /* DEBUG Start
     console.log("Data being passed to generatePPTXVal17:", JSON.stringify({
-      templateName: templateFileFromUser.name,
+      templateName: actualTemplateFile.name, // Utiliser le nom du fichier actuel
       questionsCount: transformedQuestions.length,
       // Log first 2 questions to check structure, especially correctAnswerIndex and points
       questionsSample: transformedQuestions.slice(0, 2).map(q => ({
@@ -240,7 +242,7 @@ export async function generatePresentation(
     }));
 
     const generatedData = await generatePPTXVal17(
-      templateFileFromUser,
+      actualTemplateFile, // Utiliser le fichier template récupéré
       transformedQuestions,
       generationOptions,
       val17SessionInfo,

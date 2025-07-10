@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { File, HardDrive, User, BookOpen, Database, Wrench, Plus, Package as KitIcon, SlidersHorizontal } from 'lucide-react'; // SlidersHorizontal pour le nouvel onglet
+import { User, BookOpen, Database, Wrench, Plus, SlidersHorizontal } from 'lucide-react'; // File retirée, SlidersHorizontal pour le nouvel onglet
 
 // Import des nouveaux composants
-import FileModelSettings from '../components/settings/FileModelSettings';
+// FileModelSettings n'est plus importé
 // HardwareSettings et KitSettings ne sont plus importés directement ici, mais dans DeviceAndKitManagement
 import UserPreferences from '../components/settings/UserPreferences';
 import QuestionLibrary from '../components/library/QuestionLibrary';
@@ -22,13 +22,15 @@ type SettingsProps = {
   onPageChange: (page: string) => void;
 };
 
-type AdminTab = 'files' | 'devicesAndKits' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical' | 'systemLog'; // 'hardware' et 'kits' remplacés
+// 'files' retiré de AdminTab
+type AdminTab = 'devicesAndKits' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical' | 'systemLog';
 
 // Removed duplicate import of React, useState, useEffect
 // import TechnicalSettings from '../components/settings/TechnicalSettings'; // This import is fine if not duplicated
 
 const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
-  const [activeTab, setActiveTab] = useState<AdminTab>('files');
+  // Mettre à jour l'état initial pour pointer vers un onglet valide, par exemple 'devicesAndKits'
+  const [activeTab, setActiveTab] = useState<AdminTab>('devicesAndKits');
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null); // For QuestionForm
 
   // Effect to reset editingQuestionId when activeTab changes to something other than 'library'
@@ -54,7 +56,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
   };
 
   const tabs: { id: AdminTab; label: string; icon: JSX.Element }[] = [
-    { id: 'files', label: 'Fichiers et Modèles', icon: <File size={20} /> },
+    // Onglet 'files' retiré
     { id: 'devicesAndKits', label: 'Matériel & Kits', icon: <SlidersHorizontal size={20} /> },
     { id: 'preferences', label: 'Préférences', icon: <User size={20} /> },
     { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
@@ -66,8 +68,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
 
   const renderActiveTab = () => {
     switch (activeTab) {
-      case 'files':
-        return <FileModelSettings />;
+      // Case 'files' retiré
       case 'devicesAndKits':
         return <DeviceAndKitManagement />;
       case 'preferences':
