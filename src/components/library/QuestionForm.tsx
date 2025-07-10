@@ -390,7 +390,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     addOption();
   };
 
-  if (isLoading && questionId) {
+  // Define useMemo hooks at the top level of the component body
   const themeOptions = useMemo(() => {
     return themes.map(t => ({ value: t.id!.toString(), label: t.name }));
   }, [themes]);
@@ -399,10 +399,12 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     return blocs.map(b => ({ value: b.id!.toString(), label: b.name }));
   }, [blocs]);
 
+  // Single conditional return for loading state
   if (isLoading && questionId) {
     return <div className="p-4">Chargement de la question...</div>;
   }
 
+  // Main component return
   return (
     <div>
       <Card title="Informations générales" className="mb-6">
