@@ -8,10 +8,15 @@ type DashboardCardsProps = {
 };
 
 const DashboardCards: React.FC<DashboardCardsProps> = ({ sessions }) => {
-  const plannedSessionsCount = sessions.filter(s => s.status === 'planned').length;
+  // Débogage : inspecter les sessions reçues
+  console.log('Sessions dans DashboardCards :', sessions);
 
+  // Compter les sessions planifiées (planned ou ready)
+  const plannedSessionsCount = sessions.filter(s => s.status === 'planned' || s.status === 'ready').length;
+
+  // Compter les participants dans les sessions planned, ready ou in-progress
   const totalParticipantsInPlannedOrInProgress = sessions
-    .filter(s => s.status === 'planned' || s.status === 'in-progress')
+    .filter(s => s.status === 'planned' || s.status === 'ready' || s.status === 'in-progress')
     .reduce((acc, session) => acc + (session.participants?.length || 0), 0);
 
   // TODO: Calculer le taux de réussite et les certifications à partir des données réelles si possible.
