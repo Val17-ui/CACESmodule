@@ -304,7 +304,7 @@ export interface QuestionWithId {
   correctAnswer: string;
   timeLimit?: number;
   isEliminatory: boolean;
-  blocId?: number;
+  blocId: number; // Made mandatory
   image?: Blob | null;
   createdAt?: string;
   updatedAt?: string;

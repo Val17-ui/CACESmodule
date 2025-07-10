@@ -1,25 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, Save, Image as ImageIconLucide } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import { QuestionType, CACESReferential, Referential, Theme, Bloc } from '../../types'; // Removed referentials
-import { StorageManager, StoredQuestion } from '../../services/StorageManager';
+import { QuestionType, CACESReferential, Referential, Theme, Bloc, StoredQuestion } from '../../types';
+import { StorageManager } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
 interface QuestionFormProps {
   onSave: (question: StoredQuestion) => void;
   onCancel: () => void;
   questionId?: number | null;
-  forcedReferential?: CACESReferential; // This might need to be an ID if we want to force a specific referential
+  forcedReferential?: CACESReferential; // This represents the CACES code e.g. "R489"
   initialData?: Partial<Omit<StoredQuestion, 'id'>>;
 }
-
-// interface SelectOption { // Unused
-//   value: string;
-//   label: string;
-// }
 
 const QuestionForm: React.FC<QuestionFormProps> = ({
   onSave,
@@ -29,19 +24,19 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   initialData
 }) => {
   const getInitialState = useCallback((): StoredQuestion => {
-    let baseState: Omit<StoredQuestion, 'referential' | 'theme'> & { blocId?: number } = { // Removed referential and theme from base
+    let baseState: Omit<StoredQuestion, 'referential' | 'theme'> & { blocId?: number | undefined } = {
       text: '',
       type: 'multiple-choice',
       options: ['', '', '', ''],
       correctAnswer: '',
       timeLimit: 30,
       isEliminatory: false,
-      // referential and theme are removed, blocId will be set based on selections
       image: undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       usageCount: 0,
-      correctResponseRate: 0
+      correctResponseRate: 0,
+      blocId: undefined,
     };
 
     if (initialData) {
@@ -57,15 +52,11 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
           logger.info(`WARN: Initial data has unmapped or incompatible question type: ${initialDataType}. Using default type '${mappedType}'.`);
         }
       }
-      // Ensure 'referential' and 'theme' are not spread from restInitialData if they exist
-      // const { referential, theme, ...validRestInitialData } = restInitialData as any; // referential and theme are unused
-      const { ...validRestInitialData } = restInitialData as any;
-
+      const { referential, theme, ...validRestInitialData } = restInitialData as any;
 
       baseState = { ...baseState, ...validRestInitialData, type: mappedType, blocId: initialBlocId };
     }
-    // forcedReferential logic will be handled by setting selectedReferentialId state and disabling the select
-    return baseState as StoredQuestion; // Cast as StoredQuestion, blocId might be undefined initially
+    return baseState as StoredQuestion;
   }, [initialData]);
 
   const [question, setQuestion] = useState<StoredQuestion>(getInitialState);
@@ -75,59 +66,64 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  // States for cascading selects
-  // const [referentiels, setReferentiels] = useState<Referential[]>([]); // Unused
+  const [availableReferentiels, setAvailableReferentiels] = useState<Referential[]>([]);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [blocs, setBlocs] = useState<Bloc[]>([]);
 
   const [selectedReferentialId, setSelectedReferentialId] = useState<string>('');
   const [selectedThemeId, setSelectedThemeId] = useState<string>('');
-  // const [selectedBlocId, setSelectedBlocId] = useState<string>(''); // Unused // This will hold the final Bloc.id for question.blocId
+  const [selectedBlocId, setSelectedBlocId] = useState<string>('');
 
-  // Load referentiels on mount
   useEffect(() => {
     StorageManager.getAllReferentiels().then(data => {
-      // setReferentiels(data); // Unused
-      // If there's a forcedReferential (by code, e.g., "R489"), find its ID
+      setAvailableReferentiels(data);
       if (forcedReferential) {
-        const forcedRef = data.find(r => r.code === forcedReferential);
-        if (forcedRef && forcedRef.id !== undefined) {
-          setSelectedReferentialId(forcedRef.id.toString());
+        const forcedRefObject = data.find(r => r.code === forcedReferential);
+        if (forcedRefObject && forcedRefObject.id !== undefined) {
+          setSelectedReferentialId(forcedRefObject.id.toString());
         }
       }
     });
   }, [forcedReferential]);
 
-  // Load themes when selectedReferentialId changes
+  const referentialOptions = useMemo(() => {
+    return availableReferentiels.map(r => ({
+      value: r.id!.toString(),
+      label: r.code
+    }));
+  }, [availableReferentiels]);
+
   useEffect(() => {
     if (selectedReferentialId) {
-      StorageManager.getThemesByReferentialId(parseInt(selectedReferentialId,10)).then(data => {
+      StorageManager.getThemesByReferentialId(parseInt(selectedReferentialId, 10)).then(data => {
         setThemes(data);
-        setSelectedThemeId(''); // Reset theme selection
-        setBlocs([]); // Reset blocs
-        // setSelectedBlocId(''); // Reset bloc selection // Unused state
+        setSelectedThemeId('');
+        setBlocs([]);
+        setSelectedBlocId('');
       });
     } else {
       setThemes([]);
       setBlocs([]);
       setSelectedThemeId('');
-      // setSelectedBlocId(''); // Unused state
+      setSelectedBlocId('');
     }
   }, [selectedReferentialId]);
 
-  // Load blocs when selectedThemeId changes
   useEffect(() => {
     if (selectedThemeId) {
-      StorageManager.getBlocsByThemeId(parseInt(selectedThemeId,10)).then(data => {
+      StorageManager.getBlocsByThemeId(parseInt(selectedThemeId, 10)).then(data => {
         setBlocs(data);
-        // setSelectedBlocId(''); // Reset bloc selection // Unused state
+        setSelectedBlocId('');
       });
     } else {
       setBlocs([]);
-      // setSelectedBlocId(''); // Unused state
+      setSelectedBlocId('');
     }
   }, [selectedThemeId]);
 
+  useEffect(() => {
+    setQuestion((prev: StoredQuestion) => ({ ...prev, blocId: selectedBlocId ? parseInt(selectedBlocId, 10) : undefined }));
+  }, [selectedBlocId]);
 
   useEffect(() => {
     return () => {
@@ -148,26 +144,19 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             setQuestion(existingQuestion); // This is StoredQuestion, so it has blocId
 
             if (existingQuestion.blocId) {
-              // Need to find the referential, theme, and bloc from blocId
-              // This is a bit complex as we need to go up the chain:
-              // Bloc -> Theme -> Referential
-              const bloc = await StorageManager.getAllBlocs().then(allBlocs => allBlocs.find(b => b.id === existingQuestion.blocId));
+              const bloc = await StorageManager.getBlocById(existingQuestion.blocId);
               if (bloc && bloc.theme_id) {
-                const theme = await StorageManager.getAllThemes().then(allThemes => allThemes.find(t => t.id === bloc.theme_id));
+                const theme = await StorageManager.getThemeById(bloc.theme_id);
                 if (theme && theme.referentiel_id) {
-                  // Now set the select values. This will trigger downstream useEffects to load options.
                   setSelectedReferentialId(theme.referentiel_id.toString());
-                  // Need to wait for themes to load for this referential before setting themeId
-                  // and for blocs to load for this theme before setting blocId
-                  // This can be handled by chaining promises or by allowing useEffects to populate them.
-                  // For simplicity, we'll set them and let the dependent useEffects populate the lists.
-                  // The actual selection will be set in subsequent effects after lists are populated.
-
-                  // Store these to be set after dependent data loads
-                  sessionStorage.setItem('pendingThemeId', theme.id!.toString());
-                  sessionStorage.setItem('pendingBlocId', bloc.id!.toString());
+                  sessionStorage.setItem('pendingThemeIdForEdit', theme.id!.toString());
+                  sessionStorage.setItem('pendingBlocIdForEdit', bloc.id!.toString());
                 }
               }
+            } else {
+                if (!forcedReferential) setSelectedReferentialId('');
+                setSelectedThemeId('');
+                setSelectedBlocId('');
             }
 
             if (existingQuestion.image instanceof Blob) {
@@ -219,52 +208,36 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionId, getInitialState]); // forcedReferential is handled by referential load effect
 
-  // Effect to set theme selection once themes are loaded (for editing)
   useEffect(() => {
-    if (themes.length > 0) {
-        const pendingThemeId = sessionStorage.getItem('pendingThemeId');
+    if (themes.length > 0 && questionId) {
+        const pendingThemeId = sessionStorage.getItem('pendingThemeIdForEdit');
         if (pendingThemeId && themes.some(t => t.id?.toString() === pendingThemeId)) {
             setSelectedThemeId(pendingThemeId);
-            sessionStorage.removeItem('pendingThemeId'); // Clean up
+            sessionStorage.removeItem('pendingThemeIdForEdit');
         }
     }
-  }, [themes]);
+  }, [themes, questionId]);
 
-  // Effect to set bloc selection once blocs are loaded (for editing)
   useEffect(() => {
-    if (blocs.length > 0) {
-        const pendingBlocId = sessionStorage.getItem('pendingBlocId');
+    if (blocs.length > 0 && questionId) {
+        const pendingBlocId = sessionStorage.getItem('pendingBlocIdForEdit');
         if (pendingBlocId && blocs.some(b => b.id?.toString() === pendingBlocId)) {
             setSelectedBlocId(pendingBlocId);
-            sessionStorage.removeItem('pendingBlocId'); // Clean up
+            sessionStorage.removeItem('pendingBlocIdForEdit');
         }
     }
-  }, [blocs]);
+  }, [blocs, questionId]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setQuestion(prev => ({ ...prev, [name]: name === 'timeLimit' ? parseInt(value, 10) : value }));
+    setQuestion((prev: StoredQuestion) => ({ ...prev, [name]: name === 'timeLimit' ? parseInt(value, 10) : value }));
   };
-
-  // const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => { // Unused function
-  //   const { name, value } = e.target;
-  //   if (name === 'selectedReferentialId') {
-  //     setSelectedReferentialId(value);
-  //   } else if (name === 'selectedThemeId') {
-  //     setSelectedThemeId(value);
-  //   } else if (name === 'selectedBlocId') {
-  //     // setSelectedBlocId(value); // Unused state
-  //   } else {
-  //     // For other selects like question.type
-  //     setQuestion(prev => ({ ...prev, [name]: value }));
-  //   }
-  // };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
     if (name === 'isEliminatory') {
-      setQuestion(prev => ({ ...prev, [name]: checked }));
+      setQuestion((prev: StoredQuestion) => ({ ...prev, [name]: checked }));
     } else if (name === 'hasImageToggle') {
       setHasImage(checked);
       if (!checked) {
@@ -273,7 +246,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         }
         setImageFile(null);
         setImagePreview(null);
-        setQuestion(prev => ({ ...prev, image: undefined }));
+        setQuestion((prev: StoredQuestion) => ({ ...prev, image: undefined }));
       }
     }
   };
@@ -281,23 +254,23 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   const handleOptionChange = (index: number, value: string) => {
     const newOptions = [...(question.options || [])];
     newOptions[index] = value;
-    setQuestion(prev => ({ ...prev, options: newOptions }));
+    setQuestion((prev: StoredQuestion) => ({ ...prev, options: newOptions }));
   };
 
   const addOption = () => {
     if ((question.options?.length || 0) < 4) {
-     setQuestion(prev => ({ ...prev, options: [...(prev.options || []), ''] }));
+     setQuestion((prev: StoredQuestion) => ({ ...prev, options: [...(prev.options || []), ''] }));
     }
   };
 
   const removeOption = (index: number) => {
     if ((question.options?.length || 0) > 2) {
-      const newOptions = (question.options || []).filter((_, i) => i !== index);
-      setQuestion(prev => ({ ...prev, options: newOptions }));
+      const newOptions = (question.options || []).filter((_: string, i: number) => i !== index);
+      setQuestion((prev: StoredQuestion) => ({ ...prev, options: newOptions }));
       if (Number(question.correctAnswer) === index) {
-        setQuestion(prev => ({...prev, correctAnswer: '0'}));
+        setQuestion((prev: StoredQuestion) => ({...prev, correctAnswer: '0'}));
       } else if (Number(question.correctAnswer) > index) {
-         setQuestion(prev => ({...prev, correctAnswer: (Number(prev.correctAnswer) -1).toString()}));
+         setQuestion((prev: StoredQuestion) => ({...prev, correctAnswer: (Number(prev.correctAnswer) -1).toString()}));
       }
     }
   };
@@ -356,55 +329,58 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
   const handleSave = async () => {
     if (!validateForm()) {
-      logger.info('WARN: Validation échouée', errors); // Changed logger
+      logger.warn('Validation échouée', errors);
       return;
+    }
+
+    const finalBlocId = selectedBlocId ? parseInt(selectedBlocId, 10) : undefined;
+    if (!finalBlocId) {
+        setErrors(prev => ({...prev, bloc: 'Un bloc de compétences doit être sélectionné.'}));
+        logger.warn('Validation échouée: Bloc de compétences non sélectionné.');
+        return;
     }
 
     let imageToSave: Blob | undefined = undefined;
     if (hasImage && imageFile) {
-      if (imageFile instanceof File) {
-        imageToSave = new Blob([imageFile], { type: imageFile.type });
-      } else {
-        imageToSave = imageFile; // Already a Blob
-      }
+      imageToSave = imageFile instanceof File ? new Blob([imageFile], { type: imageFile.type }) : imageFile;
     }
 
-    // Prepare data for saving, ensuring ID is handled correctly for add/update
-    // The 'id' property should not be sent for new questions.
-    // For existing questions, 'id' from question state is used for update.
-    const { id: currentId, ...dataToSave } = question;
+    const { referential, theme, id: currentId, ...dataToSave } = question;
 
-    const questionData: Omit<StoredQuestion, 'id'> & { id?: number } = {
+    const questionDataForSave: Omit<StoredQuestion, 'id' | 'referential' | 'theme'> & { id?: number, blocId: number } = {
       ...dataToSave,
+      blocId: finalBlocId,
       image: imageToSave,
-      options: question.options?.map(opt => opt.toString()) || [],
+      options: question.options?.map((opt: string) => opt.toString()) || [],
       createdAt: currentId ? question.createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       correctAnswer: question.correctAnswer,
     };
 
-    logger.info("Data prepared for saving in handleSave:", questionData);
+    logger.info("Data prepared for saving in handleSave:", questionDataForSave);
 
     try {
       setIsLoading(true);
       let savedQuestionResult: StoredQuestion;
 
       if (questionId) {
-        logger.info(`Calling StorageManager.updateQuestion for ID ${questionId} with theme: "${questionData.theme}"`);
-        await StorageManager.updateQuestion(questionId, questionData);
+        logger.info(`Calling StorageManager.updateQuestion for ID ${questionId}`);
+        await StorageManager.updateQuestion(questionId, questionDataForSave);
         logger.success('Question modifiée avec succès');
-        savedQuestionResult = { ...questionData, id: questionId };
+        savedQuestionResult = { ...questionDataForSave, id: questionId };
       } else {
-        logger.info(`Calling StorageManager.addQuestion with theme: "${questionData.theme}"`);
-        const newId = await StorageManager.addQuestion(questionData);
+        logger.info(`Calling StorageManager.addQuestion`);
+        const newId = await StorageManager.addQuestion(questionDataForSave as Omit<StoredQuestion, 'id'>);
         logger.success(`Question créée avec succès avec l'ID: ${newId}`);
         if (newId === undefined) {
           throw new Error("Failed to create question, new ID is undefined.");
         }
-        savedQuestionResult = { ...questionData, id: newId };
+        savedQuestionResult = { ...questionDataForSave, id: newId };
       }
       onSave(savedQuestionResult);
     } catch (error) {
       logger.error("Error saving question in handleSave: ", error);
+      setErrors((prev: Record<string, string>) => ({...prev, form: `Erreur lors de la sauvegarde: ${error instanceof Error ? error.message : String(error)}`}));
     } finally {
       setIsLoading(false);
     }
@@ -414,33 +390,60 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     addOption();
   };
 
+  // Define useMemo hooks at the top level of the component body
+  const themeOptions = useMemo(() => {
+    return themes.map(t => ({ value: t.id!.toString(), label: t.name }));
+  }, [themes]);
+
+  const blocOptions = useMemo(() => {
+    return blocs.map(b => ({ value: b.id!.toString(), label: b.name }));
+  }, [blocs]);
+
+  // Single conditional return for loading state
   if (isLoading && questionId) {
-    return <div>Chargement de la question...</div>;
+    return <div className="p-4">Chargement de la question...</div>;
   }
 
+  // Main component return
   return (
     <div>
       <Card title="Informations générales" className="mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Select
-            label="Recommandation CACES"
+            label="Recommandation CACES *"
             options={referentialOptions}
-            value={question.referential} // This will be correctly set by getInitialState or useEffect
-            onChange={handleInputChange} // Use existing handleInputChange which has protection
-            name="referential" // Ensure name is set for handleInputChange
+            value={selectedReferentialId}
+            onChange={(e) => setSelectedReferentialId(e.target.value)}
+            name="selectedReferentialId"
             placeholder="Sélectionner une recommandation"
             required
-            disabled={!!forcedReferential} // Disable if referential is forced
+            disabled={!!forcedReferential || isLoading}
+            error={errors.referential}
           />
-          <Input
-            label="Thème"
-            name="theme" // Ensure name is set for handleInputChange
-            value={question.theme}
-            onChange={handleInputChange} // Use existing handleInputChange
-            placeholder="Ex: securite_A, technique_B"
+          <Select
+            label="Thème *"
+            options={themeOptions}
+            value={selectedThemeId}
+            onChange={(e) => setSelectedThemeId(e.target.value)}
+            name="selectedThemeId"
+            placeholder={selectedReferentialId ? "Sélectionner un thème" : "Choisir d'abord une recommandation"}
             required
+            disabled={!selectedReferentialId || isLoading}
+            error={errors.theme}
+          />
+          <Select
+            label="Bloc de compétences *"
+            options={blocOptions}
+            value={selectedBlocId}
+            onChange={(e) => setSelectedBlocId(e.target.value)}
+            name="selectedBlocId"
+            placeholder={selectedThemeId ? "Sélectionner un bloc" : "Choisir d'abord un thème"}
+            required
+            disabled={!selectedThemeId || isLoading}
+            error={errors.bloc}
           />
         </div>
+        {errors.form && <p className="text-red-500 text-xs mt-2">{errors.form}</p>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
           <Input
             label="Temps limite (secondes)"
@@ -450,6 +453,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             onChange={handleInputChange}
             min={5}
             max={120}
+            error={errors.timeLimit}
           />
           <div className="flex items-center space-x-4 mt-6">
             <label htmlFor="isEliminatoryCheckbox" className="flex items-center cursor-pointer">
@@ -457,7 +461,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
                 type="checkbox"
                 id="isEliminatoryCheckbox"
                 name="isEliminatory"
-                checked={question.isEliminatory}
+                checked={!!question.isEliminatory}
                 onChange={handleCheckboxChange}
                 className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
@@ -546,15 +550,15 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
       <Card title="Options de réponse" className="mb-6">
         <div className="space-y-4">
-          {(question.options || []).map((option, index) => (
+          {(question.options || []).map((option: string, index: number) => (
             <div key={index} className="flex items-center gap-4">
               <div className="flex-shrink-0">
                 <input
                   type="radio"
-                  name="correctAnswer" // This should be consistent for the radio group
-                  value={index.toString()} // Value is the index
-                  checked={question.correctAnswer === index.toString()} // Compare with index string
-                  onChange={(e) => setQuestion(prev => ({...prev, correctAnswer: e.target.value}))}
+                  name={`correctAnswerRadio`} // Common name for the radio group
+                  value={index.toString()}
+                  checked={question.correctAnswer === index.toString()}
+                  onChange={(e) => setQuestion((prev: StoredQuestion) => ({ ...prev, correctAnswer: e.target.value }))}
                   className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
               </div>
@@ -563,7 +567,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
                   placeholder={`Option ${String.fromCharCode(65 + index)}`}
                   value={option}
                   onChange={(e) => handleOptionChange(index, e.target.value)}
-                  className="mb-0"
+                  className="mb-0" // Ensure styles are applied if this class is functional
                 />
               </div>
               <div className="flex-shrink-0">

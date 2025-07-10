@@ -26,9 +26,13 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   const [error, setError] = useState<string | null>(null);
 
   // Data for filters
-  const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
-  const [themesData, setThemesData] = useState<Theme[]>([]);
-  const [blocsData, setBlocsData] = useState<Bloc[]>([]);
+  const [referentielsData, setReferentielsData] = useState<Referential[]>([]); // For filters and enrichment
+  const [themesData, setThemesData] = useState<Theme[]>([]); // For filter dropdowns
+  const [blocsData, setBlocsData] = useState<Bloc[]>([]); // For filter dropdowns
+
+  const [allThemesData, setAllThemesData] = useState<Theme[]>([]); // For enrichment lookup
+  const [allBlocsData, setAllBlocsData] = useState<Bloc[]>([]); // For enrichment lookup
+
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
 
   const [isImporting, setIsImporting] = useState(false);
@@ -72,39 +76,55 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   const loadFilterData = async () => {
     try {
       const refs = await StorageManager.getAllReferentiels();
-      setReferentielsData(refs);
-      // Initial load for themes and blocs can be empty or based on a default selection if any
-      setThemesData([]);
-      setBlocsData([]);
+      setReferentielsData(refs); // Used for filters and enrichment
+
+      const allThemes = await StorageManager.getAllThemes();
+      setAllThemesData(allThemes); // Used for enrichment
+
+      const allBlocs = await StorageManager.getAllBlocs();
+      setAllBlocsData(allBlocs); // Used for enrichment
+
+      // Initial load for filter-specific themes and blocs can be empty
+      // or based on a default selection if any.
+      // These will be populated by the useEffect hooks below based on filter selections.
+      setThemesData([]); // For filter dropdown
+      setBlocsData([]);  // For filter dropdown
+
     } catch (error) {
       console.error("Error loading filter data:", error);
-      // Handle error (e.g., show a notification to the user)
+      setError("Erreur lors du chargement des données de filtre.");
     }
   };
 
   useEffect(() => {
-    // Load themes when selectedReferential changes
+    // Load themes for FILTER dropdown when selectedReferential changes
     if (selectedReferential) {
       StorageManager.getThemesByReferentialId(parseInt(selectedReferential, 10))
-        .then(setThemesData)
-        .catch(console.error);
-      setSelectedTheme(''); // Reset theme selection
-      setBlocsData([]); // Clear blocs
+        .then(themes => setThemesData(themes)) // Populates themesData for the filter dropdown
+        .catch(error => {
+          console.error("Error loading themes for filter:", error);
+          setThemesData([]); // Ensure it's reset on error
+        });
+      setSelectedTheme(''); // Reset theme filter selection
+      setBlocsData([]);   // Clear bloc filter dropdown
     } else {
-      setThemesData([]);
-      setBlocsData([]);
+      setThemesData([]); // Clear theme filter dropdown if no referential is selected
+      setBlocsData([]);   // Clear bloc filter dropdown
     }
   }, [selectedReferential]);
 
   useEffect(() => {
-    // Load blocs when selectedTheme changes
+    // Load blocs for FILTER dropdown when selectedTheme changes
     if (selectedTheme) {
       StorageManager.getBlocsByThemeId(parseInt(selectedTheme, 10))
-        .then(setBlocsData)
-        .catch(console.error);
-      setSelectedBloc(''); // Reset bloc selection
+        .then(blocs => setBlocsData(blocs)) // Populates blocsData for the filter dropdown
+        .catch(error => {
+          console.error("Error loading blocs for filter:", error);
+          setBlocsData([]); // Ensure it's reset on error
+        });
+      setSelectedBloc(''); // Reset bloc filter selection
     } else {
-      setBlocsData([]);
+      setBlocsData([]); // Clear bloc filter dropdown if no theme is selected
     }
   }, [selectedTheme]);
 
@@ -621,38 +641,47 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
   // Enrichir les questions avec les noms de référentiel, thème, bloc
   const enrichedQuestions = useMemo(() => {
-    if (isLoading || !referentielsData.length || !themesData.length || !blocsData.length) {
-        // If data isn't fully loaded, or if we are in an initial loading state for questions,
-        // return the questions as is, or an empty array if questions themselves haven't loaded.
-        // The table rendering will need to handle potentially missing enriched data gracefully (e.g., show IDs or 'Loading...').
+    // Use allReferentielsData, allThemesData, allBlocsData for enrichment lookups
+    // Ensure these are populated before trying to enrich.
+    // referentielsData is also fine as it contains all referentiels.
+    if (isLoading || !referentielsData.length || !allThemesData.length || !allBlocsData.length) {
+        // Show placeholders if master lookup data is not ready or questions are loading
         return sortedQuestions.map(q => ({
             ...q,
-            referentialName: q.blocId ? `BlocID: ${q.blocId}` : 'N/A', // Placeholder
-            themeName: 'Chargement...',
-            blocName: 'Chargement...'
+            referentialCode: q.blocId ? `ID Bloc: ${q.blocId}` : 'N/A', // Placeholder will be replaced by actual code or N/A
+            themeName: q.blocId ? 'Chargement...' : 'N/A',
+            blocName: q.blocId ? 'Chargement...' : 'N/A'
         }));
     }
 
     return sortedQuestions.map(question => {
-      if (!question.blocId) return { ...question, referentialName: 'N/A', themeName: 'N/A', blocName: 'N/A' };
+      if (!question.blocId) {
+        return { ...question, referentialCode: 'N/A', themeName: 'N/A', blocName: 'N/A' };
+      }
 
-      const bloc = blocsData.find(b => b.id === question.blocId);
-      if (!bloc) return { ...question, referentialName: 'Erreur', themeName: 'Erreur', blocName: `ID Bloc: ${question.blocId}` };
+      const bloc = allBlocsData.find(b => b.id === question.blocId);
+      if (!bloc) {
+        return { ...question, referentialCode: 'Erreur Bloc', themeName: 'Erreur Bloc', blocName: `ID Bloc: ${question.blocId}` };
+      }
 
-      const theme = themesData.find(t => t.id === bloc.theme_id);
-      if (!theme) return { ...question, referentialName: 'Erreur', themeName: `ID Thème: ${bloc.theme_id}`, blocName: bloc.code_bloc };
+      const theme = allThemesData.find(t => t.id === bloc.theme_id);
+      if (!theme) {
+        return { ...question, referentialCode: 'Erreur Thème', themeName: `ID Thème: ${bloc.theme_id}`, blocName: bloc.code_bloc };
+      }
 
-      const referentiel = referentielsData.find(r => r.id === theme.referentiel_id);
-      if (!referentiel) return { ...question, referentialName: `ID Réf: ${theme.referentiel_id}`, themeName: theme.nom_complet, blocName: bloc.code_bloc };
+      const referentiel = referentielsData.find(r => r.id === theme.referentiel_id); // referentielsData has all referentiels
+      if (!referentiel) {
+        return { ...question, referentialCode: `ID Réf: ${theme.referentiel_id}`, themeName: theme.nom_complet, blocName: bloc.code_bloc };
+      }
 
       return {
         ...question,
-        referentialName: referentiel.nom_complet,
-        themeName: theme.nom_complet,
-        blocName: bloc.code_bloc,
+        referentialCode: referentiel.code, // Use referentiel.code for display
+        themeName: theme.nom_complet,    // Use theme.nom_complet for display
+        blocName: bloc.code_bloc,        // Use bloc.code_bloc for display
       };
     });
-  }, [sortedQuestions, referentielsData, themesData, blocsData, isLoading]);
+  }, [sortedQuestions, referentielsData, allThemesData, allBlocsData, isLoading]);
 
 
   useEffect(() => {
@@ -906,9 +935,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Thème
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Utilisation
-                </th>
+                {/* Utilisation column removed */}
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Taux de réussite
                 </th>
@@ -921,9 +948,9 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {enrichedQuestions.map((question) => { // Utiliser enrichedQuestions ici
-                // Cast question to include new properties for type safety in JSX, if not already part of StoredQuestion type
-                const displayQuestion = question as StoredQuestion & { referentialName?: string; themeName?: string; blocName?: string; };
+              {enrichedQuestions.map((question) => {
+                // Cast question to include new properties for type safety in JSX
+                const displayQuestion = question as StoredQuestion & { referentialCode?: string; themeName?: string; blocName?: string; };
                 const imageUrl = displayQuestion.id ? imagePreviews[displayQuestion.id.toString()] : null;
                 return (
                   <tr key={displayQuestion.id} className="hover:bg-gray-50">
@@ -964,15 +991,13 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant="primary">{displayQuestion.referentialName || 'N/A'}</Badge>
+                      <Badge variant="primary">{displayQuestion.referentialCode || 'N/A'}</Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {displayQuestion.themeName || 'N/A'} <br />
                       <span className="text-xs text-gray-400">{displayQuestion.blocName || 'N/A'}</span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {displayQuestion.usageCount || 0} fois
-                    </td>
+                    {/* Corresponding <td> for "Utilisation" removed */}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <span className="text-sm text-gray-900 mr-2">
