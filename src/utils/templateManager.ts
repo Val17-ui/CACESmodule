@@ -60,7 +60,16 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
         throw new Error(`HTTP error when fetching tool default template! status: ${response.status} - ${response.statusText}`);
       }
       const blob = await response.blob();
+
+      // LOG AJOUTÉ ICI
+      console.log(`[templateManager] Default tool template blob details: Name: default_tool_template.pptx, Size: ${blob.size} bytes, Type: ${blob.type}`);
+
       const mimeType = blob.type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      // Vérifier si le type MIME est suspect
+      if (mimeType !== 'application/vnd.openxmlformats-officedocument.presentationml.presentation' && !mimeType.startsWith('application/vnd.ms-powerpoint') && mimeType !== 'application/zip' && mimeType !== 'application/octet-stream') {
+          console.warn(`[templateManager] Suspicious MIME type for default template: ${mimeType}. Expected a PowerPoint type or application/zip.`);
+      }
+
       return new File([blob], "default_tool_template.pptx", { type: mimeType });
     } catch (error) {
       console.error("[templateManager] Failed to fetch or process the tool's default PPTX template:", error);

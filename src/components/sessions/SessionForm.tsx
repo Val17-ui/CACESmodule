@@ -1642,4 +1642,3 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 };
 
 export default SessionForm;
-```
