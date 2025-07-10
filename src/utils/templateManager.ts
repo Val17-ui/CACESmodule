@@ -56,7 +56,6 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
     // Utiliser le modèle par défaut de l'outil
     console.log("[templateManager] Utilisation du modèle PowerPoint par défaut de l'outil.");
     try {
-      console.log('[templateManager] Fetching template from URL:', defaultTemplateUrlPath);
       const response = await fetch(defaultTemplateUrlPath);
       if (!response.ok) {
         throw new Error(`HTTP error when fetching tool default template! status: ${response.status} - ${response.statusText}`);
