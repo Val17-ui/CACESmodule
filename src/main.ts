@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
-import db, * as dbFunctions from './db'; // Importez la config DB et les fonctions CRUD
+import * as dbFunctions from './db'; // Importe seulement les fonctions nommées
 
 // Gestionnaire IPC pour insérer un participant (table générale 'participants')
 ipcMain.handle('insert-participant', async (event, nom: string) => {
@@ -10,6 +10,26 @@ ipcMain.handle('insert-participant', async (event, nom: string) => {
     return { success: true, id: newId, nom: nom, message: `Participant traité avec ID: ${newId}` };
   } catch (error: any) {
     console.error('IPC Error insert-participant (general):', error);
+    return { success: false, message: error.message };
+  }
+});
+
+// --- Handler IPC pour récupérer le contenu du template PPTX par défaut ---
+import fs from 'fs/promises'; // Assurez-vous que fs/promises est importé en haut du fichier
+
+ipcMain.handle('get-default-template-content', async () => {
+  try {
+    // Construire le chemin vers le template dans le dossier 'public'
+    // En développement, app.getAppPath() est la racine du projet.
+    // En production (packagé), app.getAppPath() est le dossier 'resources/app.asar' (ou 'app' si non asar).
+    // Les fichiers dans 'public' seront copiés à la racine de 'resources/app' par electron-packager.
+    const templatePath = path.join(app.getAppPath(), 'public', 'assets', 'templates', 'default.pptx');
+
+    console.log(`Tentative de lecture du template depuis: ${templatePath}`);
+    const content = await fs.readFile(templatePath); // readFile retourne un Buffer
+    return { success: true, data: content };
+  } catch (error: any) {
+    console.error("Erreur IPC get-default-template-content:", error);
     return { success: false, message: error.message };
   }
 });
@@ -942,13 +962,12 @@ app.on('window-all-closed', function () {
   }
 });
 
-app.on('quit', () => {
+app.on('quit', async () => {
   // Fermer la connexion à la base de données lorsque l'application se termine
-  db.close((err) => {
-    if (err) {
-      console.error('Erreur lors de la fermeture de la base de données SQLite dans main.ts', err.message);
-    } else {
-      console.log('Base de données SQLite fermée depuis main.ts.');
-    }
-  });
+  try {
+    await dbFunctions.closeDb(); // Utilise la fonction exportée depuis le backend db.ts
+    console.log('Base de données SQLite fermée avec succès via dbFunctions.closeDb().');
+  } catch (err: any) {
+    console.error('Erreur lors de la fermeture de la base de données SQLite via dbFunctions.closeDb():', err.message);
+  }
 });

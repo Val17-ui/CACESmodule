@@ -1,14 +1,27 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "commonjs",
+    "module": "commonjs", // Garder commonjs pour le code du processus principal d'Electron
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true, // Utile pour certaines interopérabilités de modules
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx", // Activation de JSX pour React
+    "moduleResolution": "node", // Classique pour les projets Node/Electron
+    "resolveJsonModule": true, // Permet d'importer des fichiers .json
+    "baseUrl": "./src", // Permet des imports basés sur src/ (ex: 'components/Layout')
+    "paths": { // Si vous utilisez des alias d'importation, configurez-les ici
+      "@/*": ["*"] // Exemple : import Button from '@/components/ui/Button'
+    },
+    "lib": ["dom", "dom.iterable", "esnext"] // Ajouter 'dom' et 'dom.iterable' pour les types liés au navigateur (renderer)
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", ".vscode"]
+  "include": [
+    "src/**/*.ts", // Inclure explicitement les fichiers .ts
+    "src/**/*.tsx", // Inclure explicitement les fichiers .tsx
+    "src/renderer.d.ts" // S'assurer que ce fichier de déclaration est inclus
+  ],
+  "exclude": ["node_modules", ".vscode", "dist"]
 }

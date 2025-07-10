@@ -1,9 +1,8 @@
 // src/utils/templateManager.ts
 import { getAdminSetting } from '../db';
 import { UserPptxTemplate } from '../components/settings/UserPreferences'; // Importer le type
-// Utilisation d'un chemin relatif car l'alias @ n'est pas configuré dans vite.config.ts
-// import defaultTemplateUrlPathOld from '../assets/templates/default.pptx?url'; // Ancienne méthode
-const defaultTemplateUrlPath = new URL('../assets/templates/default.pptx', import.meta.url).href;
+// La ligne avec import.meta.url est supprimée.
+// Nous utiliserons un appel IPC pour obtenir le contenu du template par défaut.
 
 export const TOOL_DEFAULT_TEMPLATE_ID = 'tool_default_template'; // ID constant pour le modèle de l'outil
 
@@ -56,26 +55,30 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
     // Utiliser le modèle par défaut de l'outil
     console.log("[templateManager] Utilisation du modèle PowerPoint par défaut de l'outil.");
     try {
-      const response = await fetch(defaultTemplateUrlPath);
-      if (!response.ok) {
-        throw new Error(`HTTP error when fetching tool default template! status: ${response.status} - ${response.statusText}`);
+      const ipcResponse = await window.electronAPI.invoke('get-default-template-content');
+      if (!ipcResponse.success || !ipcResponse.data) {
+        throw new Error(ipcResponse.message || "Contenu du template par défaut non reçu ou invalide depuis le processus principal.");
       }
-      const blob = await response.blob();
+
+      let templateBuffer: Buffer;
+      if (ipcResponse.data instanceof Buffer) {
+        templateBuffer = ipcResponse.data;
+      } else if (ipcResponse.data.type === 'Buffer' && Array.isArray(ipcResponse.data.data)) {
+        templateBuffer = Buffer.from(ipcResponse.data.data);
+      } else {
+        throw new Error("Format de données du template par défaut inattendu depuis le processus principal.");
+      }
 
       // Nom du fichier dans le log correspondra au nom source
-      console.log(`[templateManager] Default tool template ('default.pptx') blob details: Size: ${blob.size} bytes, Type: ${blob.type}`);
+      console.log(`[templateManager] Default tool template ('default.pptx') buffer details: Size: ${templateBuffer.length} bytes`);
 
-      const mimeType = blob.type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-      // Vérifier si le type MIME est suspect
-      if (mimeType !== 'application/vnd.openxmlformats-officedocument.presentationml.presentation' && !mimeType.startsWith('application/vnd.ms-powerpoint') && mimeType !== 'application/zip' && mimeType !== 'application/octet-stream') {
-          console.warn(`[templateManager] Suspicious MIME type for default template: ${mimeType}. Expected a PowerPoint type or application/zip.`);
-      }
+      const mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'; // Type MIME connu pour .pptx
 
       // Utiliser le nom original pour l'objet File
-      return new File([blob], "default.pptx", { type: mimeType });
-    } catch (error) {
-      console.error("[templateManager] Failed to fetch or process the tool's default PPTX template:", error);
-      throw new Error("Impossible de charger le modèle PowerPoint par défaut de l'outil. Vérifiez la console pour plus de détails.");
+      return new File([templateBuffer], "default.pptx", { type: mimeType });
+    } catch (error: any) {
+      console.error("[templateManager] Failed to fetch or process the tool's default PPTX template via IPC:", error);
+      throw new Error(`Impossible de charger le modèle PowerPoint par défaut de l'outil: ${error.message}`);
     }
   } else {
     // Utiliser le modèle personnalisé (templateToUse est non null ici)

@@ -8,22 +8,51 @@
     "build": "tsc",
     "watch": "tsc -w",
     "lint": "eslint . --ext .ts",
+    "preview": "npm run build && electron .",
+    "dev": "npm run watch",
     "package-win": "npm run build && electron-packager . EasyCertif --platform=win32 --arch=x64 --overwrite --out=release-build --icon=public/icon.ico"
   },
   "keywords": [
     "Electron",
-    "EasyCertif"
+    "EasyCertif",
+    "React"
   ],
   "author": "",
   "license": "ISC",
+  "dependencies": {
+    "sqlite3": "^5.1.7",
+    "@types/jspdf": "^1.3.3",
+    "date-fns": "^3.3.1",
+    "dexie": "^4.0.11",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.344.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-dropzone": "^14.3.8",
+    "ts-node": "^10.9.2",
+    "xlsx": "^0.18.5",
+    "zustand": "^4.5.2"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/sqlite3": "^3.1.11",
     "electron": "^28.0.0",
     "electron-packager": "^17.1.2",
-    "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "sqlite3": "^5.1.7"
+    "typescript": "^5.8.3",
+    "@eslint/js": "^9.9.1",
+    "@types/file-saver": "^2.0.7",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@types/xlsx": "^0.0.35",
+    "autoprefixer": "^10.4.18",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "globals": "^15.9.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1"
   }
 }

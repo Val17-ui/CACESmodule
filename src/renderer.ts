@@ -1,3 +1,4 @@
+/// <reference path="./renderer.d.ts" />
 // Ce fichier sera utilisé pour la logique du frontend de votre application.
 // Il s'exécute dans le processus de rendu (la fenêtre du navigateur).
 
