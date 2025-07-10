@@ -126,12 +126,12 @@ const SessionsList: React.FC<SessionsListProps> = ({
                     <div className="flex justify-end space-x-2">
                       <Button variant="outline" size="sm" icon={<ClipboardList size={16} />} onClick={() => session.id && onManageSession(session.id)} title="Gérer la session">Gérer</Button>
                       {session.donneesOrs instanceof Blob && (
-                        <Button variant="outline" size="sm" icon={<Download size={16} />} onClick={() => handleDownloadOrs(session)} title="Télécharger .ors">.ORS</Button>
+                        <Button variant="secondary" size="sm" icon={<Download size={16} />} onClick={() => handleDownloadOrs(session)} title="Télécharger .ors">.ORS</Button>
                       )}
                       {/* Le statut est déjà normalisé, donc !session.status n'est plus nécessaire pour 'planned' */}
-                      {(session.status === 'planned' || session.status === 'ready') && session.donneesOrs instanceof Blob && (
+                      {/* {(session.status === 'planned' || session.status === 'ready') && session.donneesOrs instanceof Blob && (
                         <Button variant="primary" size="sm" icon={<Play size={16} />} onClick={() => session.id && onStartExam(session.id)} title="Démarrer l'examen">Démarrer Examen</Button>
-                      )}
+                      )} */}
                     </div>
                   </td>
                 </tr>
