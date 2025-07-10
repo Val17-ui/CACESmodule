@@ -391,9 +391,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   };
 
   if (isLoading && questionId) {
-    return <div className="p-4">Chargement de la question...</div>;
-  }
-
   const themeOptions = useMemo(() => {
     return themes.map(t => ({ value: t.id!.toString(), label: t.name }));
   }, [themes]);
@@ -401,6 +398,10 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   const blocOptions = useMemo(() => {
     return blocs.map(b => ({ value: b.id!.toString(), label: b.name }));
   }, [blocs]);
+
+  if (isLoading && questionId) {
+    return <div className="p-4">Chargement de la question...</div>;
+  }
 
   return (
     <div>
