@@ -2,7 +2,8 @@
 import { getAdminSetting } from '../db';
 import { UserPptxTemplate } from '../components/settings/UserPreferences'; // Importer le type
 // Utilisation d'un chemin relatif car l'alias @ n'est pas configuré dans vite.config.ts
-import defaultTemplateUrlPath from '../assets/templates/default.pptx?url';
+// import defaultTemplateUrlPathOld from '../assets/templates/default.pptx?url'; // Ancienne méthode
+const defaultTemplateUrlPath = new URL('../assets/templates/default.pptx', import.meta.url).href;
 
 export const TOOL_DEFAULT_TEMPLATE_ID = 'tool_default_template'; // ID constant pour le modèle de l'outil
 
@@ -55,6 +56,7 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
     // Utiliser le modèle par défaut de l'outil
     console.log("[templateManager] Utilisation du modèle PowerPoint par défaut de l'outil.");
     try {
+      console.log('[templateManager] Fetching template from URL:', defaultTemplateUrlPath);
       const response = await fetch(defaultTemplateUrlPath);
       if (!response.ok) {
         throw new Error(`HTTP error when fetching tool default template! status: ${response.status} - ${response.statusText}`);
