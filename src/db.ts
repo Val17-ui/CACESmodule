@@ -1,1322 +1,602 @@
-import Dexie, { Table } from 'dexie';
+// Ce fichier sert maintenant de couche d'abstraction pour communiquer
+// avec le processus principal (et donc SQLite) via IPC.
+// Les opérations Dexie ont été remplacées par des appels window.electronAPI.invoke(...).
+
 import {
-  CACESReferential, Session, SessionResult, Trainer, // Participant removed
+  // CACESReferential, // Utilisé dans BlockUsage, à voir si ce type est toujours pertinent ici
+  Session, SessionResult, Trainer,
   SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-  QuestionWithId, VotingDevice, // Types maintenant importés
-  DeviceKit, DeviceKitAssignment // Nouveaux types pour les kits
-} from './types';
-import { logger } from './utils/logger'; // Importer le logger
+  QuestionWithId, VotingDevice,
+  DeviceKit, DeviceKitAssignment, Participant // Participant ajouté pour la signature de Session
+} from './types'; // Assurez-vous que ce chemin est correct et que les types sont disponibles
+import { logger } from './utils/logger'; // Maintenu, en supposant qu'il est configuré pour le renderer
 
-// Les interfaces QuestionWithId et VotingDevice sont maintenant dans ../types
-// Les interfaces DeviceKit et DeviceKitAssignment sont maintenant dans ../types
-
-export class MySubClassedDexie extends Dexie {
-  questions!: Table<QuestionWithId, number>;
-  sessions!: Table<Session, number>;
-  sessionResults!: Table<SessionResult, number>;
-  adminSettings!: Table<{ key: string; value: any }, string>;
-  votingDevices!: Table<VotingDevice, number>;
-  trainers!: Table<Trainer, number>;
-  sessionQuestions!: Table<SessionQuestion, number>;
-  sessionBoitiers!: Table<SessionBoitier, number>;
-
-  // Nouvelles tables
-  referentiels!: Table<Referential, number>;
-  themes!: Table<Theme, number>;
-  blocs!: Table<Bloc, number>;
-  deviceKits!: Table<DeviceKit, number>; // Nouvelle table pour les kits
-  deviceKitAssignments!: Table<DeviceKitAssignment, number>; // Nouvelle table pour les assignations kit-boîtier
-
-  constructor() {
-    super('myDatabase');
-    this.version(1).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options'
-    });
-    this.version(2).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, *options', // 'referentiel' au lieu de 'referential'
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
-    });
-    this.version(3).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
-    });
-    this.version(4).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
-    });
-    this.version(5).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp'
-    });
-    this.version(6).stores({
-      adminSettings: '&key'
-    });
-    this.version(7).stores({
-      votingDevices: '++id, &physicalId'
-    });
-    // Nouvelle version pour ajouter la table trainers et le champ trainerId à sessions
-    this.version(8).stores({
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Ajout de trainerId
-      trainers: '++id, name, isDefault' // Suppression de l'index unique sur isDefault
-    });
-
-    // Version 9: Mise à jour de votingDevices (name, serialNumber) et sessions (participants.assignedGlobalDeviceId)
-    // IMPORTANT: Le changement de l'index de la table trainers doit être fait dans une NOUVELLE version de la base de données.
-    // Si la version 9 est la dernière déployée et que des utilisateurs l'ont déjà,
-    // nous devons passer à la version 10 pour modifier la table trainers.
-    // Si la version 9 n'a jamais été en production ou si la base de données peut être réinitialisée pour le développement,
-    // on pourrait modifier la v9. Cependant, la bonne pratique est d'incrémenter la version.
-
-    // Supposons que nous devons créer une nouvelle version (v10) pour ce changement.
-    // Si la v9 est déjà utilisée, la modification de 'trainers' dans la v9 ci-dessous serait incorrecte.
-    // Pour cet exercice, je vais modifier la définition dans la v9 et ajouter une v10 pour illustrer la migration si nécessaire.
-    // Mais pour le problème spécifique de l'index, il suffit de le changer là où il est défini.
-    // La question est de savoir si la DB a déjà été ouverte avec v9 par des utilisateurs.
-    // Pour l'instant, je corrige la définition dans la v9. Si cela cause des problèmes de migration, il faudra une nouvelle version.
-
-    this.version(9).stores({
-      votingDevices: '++id, name, &serialNumber', // physicalId -> serialNumber, ajout de name
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId',
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      trainers: '++id, name, isDefault' // Corrigé ici aussi pour la v9
-    }).upgrade(async tx => {
-      // 1. Migration pour votingDevices
-      await tx.table('votingDevices').toCollection().modify(device => {
-        // Renommer physicalId en serialNumber et ajouter un nom par défaut
-        // @ts-ignore
-        device.serialNumber = device.physicalId;
-        // @ts-ignore
-        delete device.physicalId;
-        device.name = `Boîtier SN: ${device.serialNumber}`; // Nom par défaut
-      });
-
-      // 2. Migration pour sessions (participants)
-      // On a besoin de la liste des votingDevices migrés pour trouver les IDs
-      const allMigratedVotingDevices = await tx.table('votingDevices').toArray();
-      const deviceMapBySerial = new Map(allMigratedVotingDevices.map(d => [d.serialNumber, d.id]));
-
-      await tx.table('sessions').toCollection().modify(session => {
-        if (session.participants && Array.isArray(session.participants)) {
-          session.participants.forEach((participant: any) => {
-            const oldIdBoitier = participant.idBoitier; // Ancien serialNumber
-            delete participant.idBoitier; // Supprimer l'ancien champ
-
-            if (oldIdBoitier) {
-              const globalDeviceId = deviceMapBySerial.get(oldIdBoitier);
-              if (globalDeviceId !== undefined) {
-                participant.assignedGlobalDeviceId = globalDeviceId;
-              } else {
-                participant.assignedGlobalDeviceId = null; // ou logguer une erreur si un idBoitier ne correspond plus
-                console.warn(`Impossible de trouver le GlobalDevice pour l'ancien idBoitier: ${oldIdBoitier} dans la session ${session.id}`);
-              }
-            } else {
-              participant.assignedGlobalDeviceId = null;
-            }
-          });
-        }
-      });
-    });
-
-    // Version 10: S'assurer que l'index sur trainers.isDefault n'est pas unique.
-    // Cette version est ajoutée pour forcer une mise à jour du schéma si les modifications
-    // précédentes dans v8 et v9 n'ont pas été correctement appliquées à cause du caching du schéma par Dexie.
-    this.version(10).stores({
-      // On reprend toutes les tables de la v9
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault' // Assurer que isDefault n'est pas unique ('&')
-    }).upgrade(async tx => {
-      // Cette migration était pour la v10, si elle doit être rejouée ou si de nouvelles données pour trainers sont problématiques
-      // il faudra peut-être la revoir. Pour l'instant, on la laisse telle quelle.
-      console.log("Executing DB version 10 upgrade logic (trainers table)...");
-      const trainersTable = tx.table('trainers');
-      const allTrainersFromOldSchema = await trainersTable.toArray(); // prefer-const // Lire les données AVANT de potentiellement modifier la table.
-
-      // Étape 1: Nettoyer les données en mémoire et s'assurer de l'unicité de isDefault
-      // et que isDefault est toujours un booléen.
-      let defaultTrainerId: number | undefined = undefined; // Utiliser undefined pour être clair qu'aucun ID n'a été trouvé
-
-      // Première passe pour convertir isDefault en 0 ou 1 et trouver un candidat par défaut
-      let cleanedTrainers = allTrainersFromOldSchema.map(trainer => {
-        let numericIsDefault: 0 | 1 = 0;
-        if (trainer.isDefault === true || trainer.isDefault === 1) {
-          numericIsDefault = 1;
-        }
-        // Conserver le premier ID de formateur marqué comme défaut (booléen ou numérique)
-        if (numericIsDefault === 1 && defaultTrainerId === undefined) {
-          defaultTrainerId = trainer.id;
-        }
-        return { ...trainer, name: trainer.name || "Nom Inconnu", isDefault: numericIsDefault };
-      });
-
-      // Deuxième passe pour forcer un seul par défaut, en utilisant la valeur numérique 1
-      let foundActiveDefault = false;
-      cleanedTrainers = cleanedTrainers.map(trainer => {
-        if (trainer.id === defaultTrainerId && trainer.id !== undefined) { // S'assurer que defaultTrainerId a été trouvé et est valide
-          foundActiveDefault = true;
-          return { ...trainer, isDefault: 1 as const };
-        }
-        return { ...trainer, isDefault: 0 as const };
-      });
-
-      // S'il n'y avait aucun formateur par défaut valablement identifié,
-      // et que la liste n'est pas vide, définir le premier (trié par ID) comme par défaut.
-      if (!foundActiveDefault && cleanedTrainers.length > 0) {
-        const sortedTrainers = cleanedTrainers.sort((a, b) => (a.id || 0) - (b.id || 0));
-        if (sortedTrainers.length > 0 && sortedTrainers[0].id !== undefined) {
-            sortedTrainers[0].isDefault = 1; // Définir comme 1
-             console.log(`No default trainer was clearly identified or valid. Setting trainer ID ${sortedTrainers[0].id} as default (1) during v10 migration.`);
-        }
-      }
-
-      // Filtrer les trainers sans ID valide avant bulkAdd, car `id` est la clé primaire.
-      const validTrainersForBulkAdd = cleanedTrainers.filter(trainer => trainer.id !== undefined);
-
-      // Étape 2: Vider la table et la repeupler
-      // Note: La table est déjà en cours de transaction (tx), donc les opérations sont atomiques pour cette version.
-      await trainersTable.clear();
-      console.log("'trainers' table cleared during v10 migration.");
-
-      if (validTrainersForBulkAdd.length > 0) {
-        await trainersTable.bulkAdd(validTrainersForBulkAdd);
-        console.log(`'trainers' table repopulated with ${validTrainersForBulkAdd.length} entries after v10 cleaning.`);
-      } else {
-        console.log("'trainers' table is empty after v10 cleaning or all entries had invalid IDs.");
-      }
-
-      // return tx.done; // Dexie handles promise completion for async upgrade functions implicitly.
-      return;
-    });
-
-    // Version 11: Ajout des tables sessionQuestions, sessionBoitiers et du champ testSlideGuid à sessions
-    this.version(11).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, testSlideGuid', // Ajout de testSlideGuid
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault',
-      // Nouvelles tables
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId', // Index pour recherche par sessionId
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber' // Index pour recherche par sessionId
-    }).upgrade(async tx => {
-      // Logique de migration pour la v11 si nécessaire (par exemple, initialiser testSlideGuid à null pour les sessions existantes)
-      // Pour l'instant, Dexie gérera l'ajout de nouvelles tables et champs avec des valeurs undefined par défaut.
-      // Si testSlideGuid doit être explicitement null pour les anciennes sessions:
-      await tx.table('sessions').toCollection().modify(session => {
-        if (session.testSlideGuid === undefined) { // Champ de la v10 et avant
-          session.testSlideGuid = null;
-        }
-      });
-      console.log("DB version 11 upgrade: Added sessionQuestions, sessionBoitiers tables and testSlideGuid to sessions. Ensured testSlideGuid is null for existing sessions if it was undefined.");
-    });
-
-    // Version 12: Remplacement de testSlideGuid par ignoredSlideGuids[] dans la table sessions
-    this.version(12).stores({
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Ajout de resolvedImportAnomalies
-      // Reprise des autres tables pour que Dexie sache qu'elles existent toujours
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault',
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
-    }).upgrade(async tx => {
-      await tx.table('sessions').toCollection().modify(session => {
-        // @ts-ignore (pour accéder à l'ancien champ testSlideGuid qui n'est plus dans le type Session)
-        const oldTestSlideGuid = session.testSlideGuid;
-
-        if (typeof oldTestSlideGuid === 'string' && oldTestSlideGuid.trim() !== '') {
-          session.ignoredSlideGuids = [oldTestSlideGuid];
-        } else {
-          session.ignoredSlideGuids = []; // Initialiser comme tableau vide si pas de testSlideGuid précédent ou s'il était invalide
-        }
-        // @ts-ignore
-        delete session.testSlideGuid; // Supprimer l'ancien champ
-
-        // NOUVELLE MIGRATION pour resolvedImportAnomalies
-        if (session.resolvedImportAnomalies === undefined) {
-          session.resolvedImportAnomalies = null; // Initialiser à null pour les sessions existantes
-        }
-      });
-      console.log("DB version 12 upgrade: Replaced testSlideGuid with ignoredSlideGuids and initialized resolvedImportAnomalies to null for existing sessions.");
-    });
-
-    // Version 13: Ajout des tables referentiels, themes, blocs et modification de la table questions
-    this.version(13).stores({
-      // Nouvelles tables
-      referentiels: '++id, &code', // code doit être unique
-      themes: '++id, &code_theme, referentiel_id', // code_theme doit être unique
-      blocs: '++id, &code_bloc, theme_id', // code_bloc doit être unique
-
-      // Table questions modifiée
-      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options', // suppression de referential, theme et ajout de blocId
-
-      // Reprise des autres tables pour que Dexie sache qu'elles existent toujours
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Garder referentiel pour l'instant, migration à la v14
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault',
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId', // blockId ici est l'ancien, devra peut-être être mis à jour si on veut le lier au nouveau systeme de blocId
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
-    }).upgrade(async tx => {
-      console.log("DB version 13 upgrade: Adding referentiels, themes, blocs tables and modifying questions table.");
-      // Logique de migration des données de l'ancienne structure (questions.referential, questions.theme)
-      // vers les nouvelles tables referentiels, themes, blocs et mise à jour de questions.blocId.
-
-      const oldQuestions = await tx.table('questions').toArray();
-      const referentielsMap = new Map<string, number>();
-      const themesMap = new Map<string, number>();
-      const blocsMap = new Map<string, number>();
-
-      for (const oldQuestion of oldQuestions) {
-        // @ts-ignore
-        const oldReferentialCode = oldQuestion.referential;
-        // @ts-ignore
-        const oldThemeName = oldQuestion.theme; // Supposons que c'est le nom/code du thème
-
-        if (!oldReferentialCode || !oldThemeName) {
-          console.warn(`Question ID ${oldQuestion.id} has missing referential or theme. Skipping migration for this question.`);
-          // @ts-ignore
-          oldQuestion.blocId = null; // ou une valeur par défaut si nécessaire
-          continue;
-        }
-
-        let referentielId = referentielsMap.get(oldReferentialCode);
-        if (!referentielId) {
-          try {
-            const newRefId = await tx.table('referentiels').add({
-              code: oldReferentialCode,
-              nom_complet: oldReferentialCode // Utiliser le code comme nom complet par défaut
-            });
-            referentielId = newRefId as number;
-            referentielsMap.set(oldReferentialCode, referentielId);
-          } catch (e) {
-            // Gérer le cas où le référentiel existe déjà (si plusieurs questions partagent le même)
-            const existingRef = await tx.table('referentiels').where('code').equals(oldReferentialCode).first();
-            if (existingRef) referentielId = existingRef.id;
-            else throw e; // Renvoyer l'erreur si ce n'est pas une contrainte d'unicité
-          }
-        }
-
-        const themeCodeForMap = `${referentielId}_${oldThemeName}`;
-        let themeId = themesMap.get(themeCodeForMap);
-        if (!themeId && referentielId) {
-          try {
-            const newThemeId = await tx.table('themes').add({
-              code_theme: oldThemeName, // Utiliser l'ancien nom du thème comme code
-              nom_complet: oldThemeName, // Utiliser l'ancien nom du thème comme nom complet
-              referentiel_id: referentielId
-            });
-            themeId = newThemeId as number;
-            themesMap.set(themeCodeForMap, themeId);
-          } catch (e) {
-            const existingTheme = await tx.table('themes').where('code_theme').equals(oldThemeName).and(t => t.referentiel_id === referentielId).first();
-            if (existingTheme) themeId = existingTheme.id;
-            else throw e;
-          }
-        }
-
-        // Création d'un bloc par défaut pour ce thème. Le code_bloc sera THEMECODE_DEFAULTBLOC
-        const blocCodeForMap = `${themeId}_DEFAULTBLOC`;
-        let blocId = blocsMap.get(blocCodeForMap);
-        if (!blocId && themeId) {
-          const defaultBlocCode = `${oldThemeName}_GEN`; // Exemple: R489PR_GEN
-          try {
-            const newBlocId = await tx.table('blocs').add({
-              code_bloc: defaultBlocCode,
-              theme_id: themeId
-            });
-            blocId = newBlocId as number;
-            blocsMap.set(blocCodeForMap, blocId);
-          } catch (e) {
-             const existingBloc = await tx.table('blocs').where('code_bloc').equals(defaultBlocCode).and(b => b.theme_id === themeId).first();
-             if (existingBloc) blocId = existingBloc.id;
-             else throw e;
-          }
-        }
-
-        // Mettre à jour la question avec le nouveau blocId
-        // @ts-ignore
-        oldQuestion.blocId = blocId;
-        // @ts-ignore
-        delete oldQuestion.referential;
-        // @ts-ignore
-        delete oldQuestion.theme;
-      }
-
-      // Mettre à jour toutes les questions en une seule fois
-      if (oldQuestions.length > 0) {
-        await tx.table('questions').bulkPut(oldQuestions);
-      }
-      console.log(`DB version 13 upgrade: Migrated ${oldQuestions.length} questions to new structure.`);
-    });
-
-    // Version 14: Mise à jour de la table sessions (referentiel -> referentielId, selectionBlocs -> selectedBlocIds)
-    this.version(14).stores({
-      sessions: '++id, nomSession, dateSession, referentielId, *selectedBlocIds, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // referentiel -> referentielId, selectionBlocs -> *selectedBlocIds
-
-      // Reprise des autres tables
-      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      referentiels: '++id, &code',
-      themes: '++id, &code_theme, referentiel_id',
-      blocs: '++id, &code_bloc, theme_id',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault',
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
-    }).upgrade(async tx => {
-      console.log("DB version 14 upgrade: Modifying sessions table (referentiel -> referentielId, selectionBlocs -> selectedBlocIds).");
-      await tx.table('sessions').toCollection().modify(async (session: any) => {
-        if (session.referentiel && typeof session.referentiel === 'string') {
-          const refCode = session.referentiel;
-          const referentielObj = await tx.table('referentiels').where('code').equals(refCode).first();
-          if (referentielObj) {
-            session.referentielId = referentielObj.id;
-          } else {
-            console.warn(`Migration v14: Référentiel avec code "${refCode}" non trouvé pour la session ID ${session.id}. referentielId ne sera pas défini.`);
-            session.referentielId = null;
-          }
-        } else if (session.referentiel && typeof session.referentiel === 'number') {
-            session.referentielId = session.referentiel;
-        }
-        delete session.referentiel;
-
-        if (session.selectionBlocs && Array.isArray(session.selectionBlocs)) {
-            console.warn(`Migration v14: Session ID ${session.id} avait 'selectionBlocs'. Il sera réinitialisé.`);
-            session.selectedBlocIds = [];
-        } else {
-            session.selectedBlocIds = session.selectedBlocIds || []; // Assurer que le champ existe
-        }
-        delete session.selectionBlocs;
-      });
-      console.log("DB version 14 upgrade: Sessions table modified.");
-    });
-
-    // Version 15: Ajout des tables pour les Kits de boîtiers et selectedKitId à sessions
-    this.version(15).stores({
-      // Reprise des tables existantes
-      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      referentiels: '++id, &code',
-      themes: '++id, &code_theme, referentiel_id',
-      blocs: '++id, &code_bloc, theme_id',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber', // Assurez-vous que VotingDevice a id, name, serialNumber
-      trainers: '++id, name, isDefault',
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber',
-
-      // Modification de la table sessions
-      sessions: '++id, nomSession, dateSession, referentielId, *selectedBlocIds, selectedKitId, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Ajout de selectedKitId
-
-      // Nouvelles tables pour les kits
-      deviceKits: '++id, name, isDefault', // Nom du kit, isDefault (pour requêtes faciles)
-      deviceKitAssignments: '++id, kitId, votingDeviceId, &[kitId+votingDeviceId]' // Liaison entre kits et boîtiers
-    }).upgrade(async tx => {
-      // Initialiser selectedKitId à null pour les sessions existantes
-      await tx.table('sessions').toCollection().modify(session => {
-        session.selectedKitId = null;
-      });
-      // Potentiellement créer un kit par défaut "Général" avec tous les boîtiers existants si aucun kit n'existe ?
-      // Pour l'instant, on laisse la création des kits manuelle.
-      console.log("DB version 15 upgrade: Added deviceKits, deviceKitAssignments tables and selectedKitId to sessions. Initialized selectedKitId to null for existing sessions.");
-    });
+// Helper pour gérer la réponse IPC standardisée
+async function handleIPCResponse<T>(promise: Promise<{ success: boolean; data?: T; message?: string; id?: number }>): Promise<T> {
+  const response = await promise;
+  if (response.success) {
+    // Si un ID est retourné (pour les opérations 'add'), on le priorise comme data si data n'est pas défini.
+    // Sinon, on retourne data. Si ni data ni id n'est pertinent, T pourrait être void.
+    return (response.data !== undefined ? response.data : response.id) as T;
+  } else {
+    logger.error(`Erreur IPC: ${response.message}`, { response });
+    throw new Error(response.message || "Erreur IPC inconnue.");
   }
 }
 
-export const db = new MySubClassedDexie();
+async function handleIPCResponseVoid(promise: Promise<{ success: boolean; message?: string }>): Promise<void> {
+  const response = await promise;
+  if (!response.success) {
+    logger.error(`Erreur IPC (void): ${response.message}`, { response });
+    throw new Error(response.message || "Erreur IPC inconnue (void).");
+  }
+}
+
 
 // Fonctions CRUD pour Questions
-export const addQuestion = async (question: QuestionWithId): Promise<number | undefined> => {
-  try {
-    const id = await db.questions.add(question);
-    return id;
-  } catch (error) {
-    console.error("Error adding question: ", error);
+export const addQuestion = async (question: Omit<QuestionWithId, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
+  // Le type QuestionWithId peut avoir des champs optionnels comme createdAt, etc.
+  // L'handler IPC 'add-question' attend un objet correspondant à QuestionData dans main.ts
+  // Assurez-vous que les types sont compatibles ou transformez l'objet 'question' ici si nécessaire.
+  // Par exemple, si QuestionWithId a 'image' comme File/Blob et que l'IPC attend un Buffer.
+  // Pour l'instant, on suppose une compatibilité directe ou une gestion de la conversion avant l'appel.
+
+  // Exemple de conversion si question.image est un Blob et que l'IPC attend un Buffer:
+  let imageBuffer: Buffer | undefined | null = undefined;
+  if (question.image instanceof Blob) {
+    imageBuffer = Buffer.from(await question.image.arrayBuffer());
+  } else if (question.image === null) {
+    imageBuffer = null;
   }
+
+  const questionDataForIPC = {
+    ...question,
+    image: imageBuffer, // Utiliser le buffer converti
+    // les champs comme createdAt/updatedAt ne sont pas envoyés car gérés par la DB/main process
+  };
+
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-question', questionDataForIPC));
 };
 
-// Specific function to get the globally stored PPTX template
 export const getGlobalPptxTemplate = async (): Promise<File | null> => {
+  // Cette fonction est spécifique à Dexie et à la manière dont les fichiers sont stockés.
+  // Pour SQLite, si le template est stocké comme un BLOB dans adminSettings :
   try {
-    const templateFile = await db.adminSettings.get('pptxTemplateFile');
-    if (templateFile && templateFile.value instanceof File) {
-      return templateFile.value;
-    } else if (templateFile && templateFile.value instanceof Blob) {
-      // If it's stored as a Blob, try to reconstruct a File object.
-      // This might happen depending on how Dexie handles File objects across sessions/versions.
-      // We'd ideally need the filename, but for now, a default name or just the blob is better than nothing.
-      // For robust File reconstruction, storing filename alongside was a good idea.
-      const fileName = (await db.adminSettings.get('pptxTemplateFileName'))?.value || 'template.pptx';
-      return new File([templateFile.value], fileName, { type: templateFile.value.type });
+    const response = await window.electronAPI.invoke('get-admin-setting', 'pptxTemplateFile');
+    if (response.success && response.data) {
+      // response.data serait un Buffer ou une représentation du BLOB.
+      // Il faut le convertir en File.
+      // Cela suppose que le nom du fichier est aussi stocké ou est standard.
+      const fileNameResponse = await window.electronAPI.invoke('get-admin-setting', 'pptxTemplateFileName');
+      const fileName = (fileNameResponse.success && fileNameResponse.data) ? fileNameResponse.data : 'template.pptx';
+
+      if (response.data instanceof Buffer || (response.data.type === 'Buffer' && Array.isArray(response.data.data))) {
+        const buffer = response.data instanceof Buffer ? response.data : Buffer.from(response.data.data);
+        // Le type MIME pourrait aussi être stocké, ou déduit.
+        return new File([buffer], fileName, { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+      }
+      logger.warn("Le modèle PPTX récupéré n'est pas un Buffer attendu.", {data: response.data});
+      return null;
     }
     return null;
   } catch (error) {
-    console.error("Error getting global PPTX template:", error);
+    logger.error("Erreur lors de la récupération du modèle PPTX global via IPC:", { error });
     return null;
   }
 };
 
 export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
-  try {
-    return await db.questions.toArray();
-  } catch (error) {
-    console.error("Error getting all questions: ", error);
-    return [];
-  }
-};
-
-// --- CRUD pour DeviceKits ---
-
-export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
-  try {
-    if (kit.isDefault === 1) {
-      // S'assurer qu'aucun autre kit n'est par défaut
-      await db.deviceKits.where('isDefault').equals(1).modify({ isDefault: 0 });
-    }
-    const id = await db.deviceKits.add(kit as DeviceKit);
-    return id;
-  } catch (error) {
-    console.error("Error adding device kit: ", error);
-    throw error;
-  }
-};
-
-export const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
-  try {
-    return await db.deviceKits.orderBy('name').toArray();
-  } catch (error) {
-    console.error("Error getting all device kits: ", error);
-    return [];
-  }
-};
-
-export const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
-  try {
-    return await db.deviceKits.get(id);
-  } catch (error) {
-    console.error(`Error getting device kit with id ${id}: `, error);
-  }
-};
-
-export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'>>): Promise<number | undefined> => {
-  try {
-    if (updates.isDefault === 1) {
-      // S'assurer qu'aucun autre kit n'est par défaut
-      await db.deviceKits.where('isDefault').equals(1).and(k => k.id !== id).modify({ isDefault: 0 });
-    }
-    await db.deviceKits.update(id, updates);
-    return id;
-  } catch (error) {
-    console.error(`Error updating device kit with id ${id}: `, error);
-    throw error;
-  }
-};
-
-export const deleteDeviceKit = async (id: number): Promise<void> => {
-  try {
-    // Supprimer d'abord les assignations liées à ce kit
-    await db.deviceKitAssignments.where('kitId').equals(id).delete();
-    // Ensuite supprimer le kit lui-même
-    await db.deviceKits.delete(id);
-    // Optionnel: vérifier si le kit supprimé était le défaut, et si oui, en désigner un autre ou aucun.
-    // Pour l'instant, on laisse cette logique à l'UI ou à une fonction séparée si besoin.
-  } catch (error) {
-    console.error(`Error deleting device kit with id ${id}: `, error);
-    throw error;
-  }
-};
-
-export const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
-  try {
-    return await db.deviceKits.where('isDefault').equals(1).first();
-  } catch (error) {
-    console.error("Error getting default device kit: ", error);
-  }
-};
-
-export const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
-  try {
-    await db.transaction('rw', db.deviceKits, async () => {
-      await db.deviceKits.where('isDefault').equals(1).modify({ isDefault: 0 });
-      await db.deviceKits.update(kitId, { isDefault: 1 });
-    });
-  } catch (error) {
-    console.error(`Error setting default device kit for id ${kitId}:`, error);
-    throw error;
-  }
-};
-
-// --- CRUD pour DeviceKitAssignments ---
-
-export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
-  console.log(`[DB_TRACE] Tentative d'assignation du boîtier ${votingDeviceId} au kit ${kitId}`);
-  try {
-    // Vérifier si l'assignation existe déjà pour éviter les doublons (bien que l'index unique devrait le gérer)
-    const existingAssignment = await db.deviceKitAssignments.where({ kitId, votingDeviceId }).first();
-    if (existingAssignment) {
-      console.log(`[DB_TRACE] Assignation déjà existante pour kit ${kitId} et boîtier ${votingDeviceId}. ID: ${existingAssignment.id}`);
-      return existingAssignment.id;
-    }
-    const id = await db.deviceKitAssignments.add({ kitId, votingDeviceId });
-    console.log(`[DB_TRACE] Boîtier ${votingDeviceId} assigné au kit ${kitId}. Nouvel ID d'assignation: ${id}`);
-    return id;
-  } catch (error) {
-    console.error(`[DB_ERROR] Erreur lors de l'assignation du boîtier ${votingDeviceId} au kit ${kitId}: `, error);
-    throw error;
-  }
-};
-
-export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promise<void> => {
-  try {
-    await db.deviceKitAssignments.where({ kitId, votingDeviceId }).delete();
-  } catch (error) {
-    console.error(`Error removing device ${votingDeviceId} from kit ${kitId}: `, error);
-    throw error;
-  }
-};
-
-export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
-  console.log(`[DB_TRACE] Récupération des boîtiers pour le kit ${kitId}`);
-  try {
-    const assignments = await db.deviceKitAssignments.where('kitId').equals(kitId).toArray();
-    console.log(`[DB_TRACE] Assignations trouvées pour kit ${kitId}:`, assignments.length);
-    const deviceIds = assignments.map(a => a.votingDeviceId);
-
-    if (deviceIds.length === 0) {
-      console.log(`[DB_TRACE] Aucun boîtier assigné au kit ${kitId}.`);
-      return [];
-    }
-
-    console.log(`[DB_TRACE] IDs des boîtiers à récupérer pour kit ${kitId}:`, deviceIds);
-    const devices = await db.votingDevices.bulkGet(deviceIds);
-    const validDevices = devices.filter((d): d is VotingDevice => d !== undefined);
-    console.log(`[DB_TRACE] Boîtiers valides récupérés pour kit ${kitId}:`, validDevices.length);
-
-    return validDevices.sort((a,b) => (a.name).localeCompare(b.name)); // Tri par nom pour affichage cohérent
-  } catch (error) {
-    console.error(`[DB_ERROR] Erreur lors de la récupération des boîtiers pour le kit ${kitId}: `, error);
-    return [];
-  }
-};
-
-export const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit[]> => {
-  try {
-    const assignments = await db.deviceKitAssignments.where('votingDeviceId').equals(votingDeviceId).toArray();
-    const kitIds = assignments.map(a => a.kitId);
-    if (kitIds.length === 0) return [];
-    const kits = await db.deviceKits.bulkGet(kitIds);
-    return kits.filter((k): k is DeviceKit => k !== undefined);
-  } catch (error) {
-    console.error(`Error getting kits for voting device ${votingDeviceId}: `, error);
-    return [];
-  }
-};
-
-export const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
-  try {
-    await db.deviceKitAssignments.where('kitId').equals(kitId).delete();
-  } catch (error) {
-    console.error(`Error removing assignments by kitId ${kitId}:`, error);
-    throw error;
-  }
-};
-
-export const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number): Promise<void> => {
-  try {
-    await db.deviceKitAssignments.where('votingDeviceId').equals(votingDeviceId).delete();
-  } catch (error) {
-    console.error(`Error removing assignments by votingDeviceId ${votingDeviceId}:`, error);
-    throw error;
-  }
-};
-
-// --- Fonctions de récupération spécifiques par ID (si non existantes) ---
-export const getReferentialById = async (id: number): Promise<Referential | undefined> => {
-  try {
-    return await db.referentiels.get(id);
-  } catch (error) {
-    console.error(`Error getting referential with id ${id}: `, error);
-  }
-};
-
-export const getThemeById = async (id: number): Promise<Theme | undefined> => {
-  try {
-    return await db.themes.get(id);
-  } catch (error) {
-    console.error(`Error getting theme with id ${id}: `, error);
-  }
-};
-
-export const getBlocById = async (id: number): Promise<Bloc | undefined> => {
-  try {
-    return await db.blocs.get(id);
-  } catch (error) {
-    console.error(`Error getting bloc with id ${id}: `, error);
-  }
-};
-
-export const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> => {
-  try {
-    return await db.questions.where('blocId').equals(blocId).toArray();
-  } catch (error) {
-    console.error(`Error getting questions for blocId ${blocId}: `, error);
-    return [];
-  }
-};
-
-export const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
-  try {
-    return await db.blocs.where({ code_bloc, theme_id }).first();
-  } catch (error) {
-    console.error(`Error getting bloc with code_bloc ${code_bloc} and theme_id ${theme_id}: `, error);
-  }
+  return handleIPCResponse<QuestionWithId[]>(window.electronAPI.invoke('get-all-questions'));
 };
 
 export const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> => {
-  try {
-    return await db.questions.get(id);
-  } catch (error) {
-    console.error(`Error getting question with id ${id}: `, error);
-  }
-};
-
-export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
-  try {
-    const questions = await db.questions.bulkGet(ids);
-    return questions.filter((q): q is QuestionWithId => q !== undefined);
-  } catch (error) {
-    console.error(`Error getting questions by ids: `, error);
-    return [];
-  }
-};
-
-// --- Fonctions de Reporting ---
-
-export interface BlockUsage {
-  referentiel: CACESReferential | string;
-  theme: string;
-  blockId: string;
-  usageCount: number;
-}
-
-/**
- * Calcule le nombre de fois où chaque bloc a été utilisé dans les sessions terminées,
- * avec un filtre optionnel sur la période.
- * @param startDate - Date de début optionnelle (string ISO ou objet Date).
- * @param endDate - Date de fin optionnelle (string ISO ou objet Date).
- */
-export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
-  const usageMap = new Map<string, BlockUsage>();
-
-  try {
-    // let query = db.sessions.where('status').equals('completed'); // Unused variable
-
-    const sessionsQuery = db.sessions.where('status').equals('completed'); // prefer-const
-
-    // Date filtering logic remains the same, but applied after fetching all completed sessions.
-    // For very large datasets, fetching all then filtering in JS can be inefficient.
-    // If performance becomes an issue, consider if Dexie's date range queries can be optimized
-    // (e.g., by ensuring dateSession is properly indexed and queried).
-
-    const completedSessions = await sessionsQuery.toArray();
-    let filteredSessions = completedSessions;
-
-    if (startDate) {
-      const start = startDate instanceof Date ? startDate : new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      filteredSessions = filteredSessions.filter(session => {
-        const sessionDate = new Date(session.dateSession);
-        return sessionDate >= start;
-      });
-    }
-
-    if (endDate) {
-      const end = endDate instanceof Date ? endDate : new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      filteredSessions = filteredSessions.filter(session => {
-        const sessionDate = new Date(session.dateSession);
-        return sessionDate <= end;
-      });
-    }
-
-    // Fetch all referentiels, themes, and blocs once to create lookup maps
-    // This avoids repeated DB queries inside the loop.
-    const allReferentiels = await db.referentiels.toArray();
-    const allThemes = await db.themes.toArray();
-    const allBlocs = await db.blocs.toArray();
-
-    const referentielsMap = new Map(allReferentiels.map(r => [r.id, r]));
-    const themesMap = new Map(allThemes.map(t => [t.id, t]));
-    const blocsMap = new Map(allBlocs.map(b => [b.id, b]));
-
-    for (const session of filteredSessions) {
-      // session.selectedBlocIds is an array of numbers (bloc IDs)
-      if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
-        // session.referentielId should exist if selectedBlocIds exist and point to valid data.
-        // However, the original BlockUsage interface expects a referential code/string.
-        // We need to reconstruct this information.
-
-        for (const blocId of session.selectedBlocIds) {
-          const bloc = blocsMap.get(blocId);
-          if (!bloc) {
-            console.warn(`Bloc with ID ${blocId} not found for session ${session.id}. Skipping.`);
-            continue;
-          }
-
-          const theme = themesMap.get(bloc.theme_id);
-          if (!theme) {
-            console.warn(`Theme with ID ${bloc.theme_id} not found for bloc ${blocId}. Skipping.`);
-            continue;
-          }
-
-          const referentiel = referentielsMap.get(theme.referentiel_id);
-          if (!referentiel) {
-            console.warn(`Referentiel with ID ${theme.referentiel_id} not found for theme ${theme.id}. Skipping.`);
-            continue;
-          }
-
-          // The key for usageMap should uniquely identify the block.
-          // Using referentiel.code, theme.code_theme, and bloc.code_bloc provides human-readable unique key.
-          const key = `${referentiel.code}-${theme.code_theme}-${bloc.code_bloc}`;
-
-          if (usageMap.has(key)) {
-            const currentUsage = usageMap.get(key)!;
-            currentUsage.usageCount++;
-          } else {
-            usageMap.set(key, {
-              referentiel: referentiel.code, // Use code as per original BlockUsage interface
-              theme: theme.code_theme,     // Use code_theme
-              blockId: bloc.code_bloc,     // Use code_bloc
-              usageCount: 1,
-            });
-          }
-        }
-      }
-    }
-    return Array.from(usageMap.values());
-  } catch (error) {
-    console.error("Erreur lors du calcul de l'utilisation des blocs:", error);
-    return [];
-  }
-};
-
-export const updateQuestion = async (id: number, updates: Partial<QuestionWithId>): Promise<number | undefined> => {
-  try {
-    await db.questions.update(id, updates);
-    return id;
-  } catch (error) {
-    console.error(`Error updating question with id ${id}: `, error);
-  }
-};
-
-export const deleteQuestion = async (id: number): Promise<void> => {
-  try {
-    await db.questions.delete(id);
-  } catch (error) {
-    console.error(`Error deleting question with id ${id}: `, error);
-  }
-};
-
-// --- Nouvelles fonctions CRUD pour Sessions ---
-export const addSession = async (session: Session): Promise<number | undefined> => {
-  try {
-    const id = await db.sessions.add(session);
-    if (id !== undefined) {
-      logger.info(`Session créée : "${session.nomSession}"`, {
-        eventType: 'SESSION_CREATED',
-        sessionId: id,
-        sessionName: session.nomSession,
-        referentialId: session.referentielId, // Changed from session.referentiel
-        participantsCount: session.participants?.length || 0
-      });
-    }
-    return id;
-  } catch (error) {
-    logger.error(`Erreur lors de la création de la session "${session.nomSession}"`, { error, sessionDetails: session });
-    console.error("Error adding session: ", error);
-  }
-};
-
-export const getAllSessions = async (): Promise<Session[]> => {
-  try {
-    return await db.sessions.toArray();
-  } catch (error) {
-    console.error("Error getting all sessions: ", error);
-    return [];
-  }
-};
-
-export const getSessionById = async (id: number): Promise<Session | undefined> => {
-  try {
-    return await db.sessions.get(id);
-  } catch (error) {
-    console.error(`Error getting session with id ${id}: `, error);
-  }
-};
-
-export const updateSession = async (id: number, updates: Partial<Session>): Promise<number | undefined> => {
-  try {
-    const numAffected = await db.sessions.update(id, updates);
-    if (numAffected > 0) {
-      // Pour obtenir le nom de la session, il faudrait soit le passer dans `updates` (s'il change),
-      // soit le récupérer. Pour l'instant, on logue avec l'ID.
-      // Si `updates.nomSession` existe, on peut l'utiliser.
-      const sessionName = updates.nomSession || (await db.sessions.get(id))?.nomSession || `ID ${id}`;
-      const logDetails: any = {
-        eventType: 'SESSION_UPDATED',
-        sessionId: id,
-        updatedFields: Object.keys(updates)
-      };
-      if (updates.participants) {
-        logDetails.participantsCount = updates.participants.length;
-      }
-      logger.info(`Session modifiée : "${sessionName}"`, logDetails);
-    }
-    return id; // update ne retourne pas l'id directement, mais on le passe en argument
-  } catch (error) {
-    logger.error(`Erreur lors de la modification de la session ID ${id}`, { error, updates });
-    console.error(`Error updating session with id ${id}: `, error);
-  }
-};
-
-export const deleteSession = async (id: number): Promise<void> => {
-  try {
-    await db.sessions.delete(id);
-    await db.sessionResults.where('sessionId').equals(id).delete();
-  } catch (error) {
-    console.error(`Error deleting session with id ${id}: `, error);
-  }
-};
-
-// --- Nouvelles fonctions CRUD pour SessionResults ---
-export const addSessionResult = async (result: SessionResult): Promise<number | undefined> => {
-  try {
-    const id = await db.sessionResults.add(result);
-    return id;
-  } catch (error) {
-    console.error("Error adding session result: ", error);
-  }
-};
-
-export const addBulkSessionResults = async (results: SessionResult[]): Promise<number[] | undefined> => {
-  try {
-    const ids = await db.sessionResults.bulkAdd(results, { allKeys: true });
-    return ids as number[];
-  } catch (error) {
-    console.error("Error adding bulk session results: ", error);
-  }
-}
-
-export const getAllResults = async (): Promise<SessionResult[]> => {
-  try {
-    return await db.sessionResults.toArray();
-  } catch (error) {
-    console.error("Error getting all session results: ", error);
-    return [];
-  }
-};
-
-export const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
-  try {
-    return await db.sessionResults.where('sessionId').equals(sessionId).toArray();
-  } catch (error) {
-    console.error(`Error getting results for session ${sessionId}: `, error);
-    return [];
-  }
-};
-
-export const getResultBySessionAndQuestion = async (sessionId: number, questionId: number, participantIdBoitier: string): Promise<SessionResult | undefined> => {
-  try {
-    return await db.sessionResults
-      .where({ sessionId, questionId, participantIdBoitier })
-      .first();
-  } catch (error) {
-    console.error(`Error getting specific result: `, error);
-  }
-};
-
-export const updateSessionResult = async (id: number, updates: Partial<SessionResult>): Promise<number | undefined> => {
-  try {
-    await db.sessionResults.update(id, updates);
-    return id;
-  } catch (error) {
-    console.error(`Error updating session result with id ${id}: `, error);
-  }
-};
-
-export const deleteResultsForSession = async (sessionId: number): Promise<void> => {
-  try {
-    await db.sessionResults.where('sessionId').equals(sessionId).delete();
-  } catch (error) {
-    console.error(`Error deleting results for session ${sessionId}: `, error);
-  }
-};
-
-export const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise<QuestionWithId[]> => {
-  if (!selectedBlocIds || selectedBlocIds.length === 0) {
-    return [];
-  }
-  try {
-    // Récupérer toutes les questions dont le blocId est dans la liste selectedBlocIds
-    // et qui ne sont pas undefined
-    const questions = await db.questions
-      .where('blocId')
-      .anyOf(selectedBlocIds.filter(id => typeof id === 'number')) // S'assurer que ce sont des nombres valides
-      .toArray();
-
-    // console.log(`Récupéré ${questions.length} questions pour les blocIDs: ${selectedBlocIds.join(', ')}.`); // Nettoyé
-    return questions;
-  } catch (error) {
-    console.error("Erreur lors de la récupération des questions pour les IDs de bloc de session:", error); // Garder ce log d'erreur
-    return [];
-  }
-};
-
-// Fonctions pour AdminSettings
-export const getAdminSetting = async (key: string): Promise<any> => {
-  try {
-    const setting = await db.adminSettings.get(key);
-    return setting?.value;
-  } catch (error) {
-    console.error(`Error getting setting ${key}:`, error);
+  const response = await window.electronAPI.invoke('get-question-by-id', id);
+  if (response.success) {
+    return response.data as QuestionWithId | undefined;
+  } else {
+    // Si non trouvé, le handler retourne success: false. On pourrait retourner undefined ici.
+    logger.warn(`Question ID ${id} non trouvée via IPC: ${response.message}`);
     return undefined;
   }
 };
 
+export const updateQuestion = async (id: number, updates: Partial<Omit<QuestionWithId, 'id' | 'createdAt' | 'updatedAt'>>): Promise<number | undefined> => {
+  // Gérer la conversion de l'image si elle est présente dans updates
+  let imageBuffer: Buffer | undefined | null = undefined;
+  let processedUpdates = { ...updates };
+
+  if (updates.image !== undefined) {
+    if (updates.image instanceof Blob) {
+      imageBuffer = Buffer.from(await updates.image.arrayBuffer());
+      processedUpdates = { ...processedUpdates, image: imageBuffer };
+    } else if (updates.image === null) {
+      processedUpdates = { ...processedUpdates, image: null };
+    } else if (updates.image instanceof Buffer) { // déjà un buffer
+        processedUpdates = { ...processedUpdates, image: updates.image };
+    } else {
+      // Si ce n'est ni Blob, ni null, ni Buffer, on pourrait choisir de ne pas l'envoyer
+      // ou de logger une erreur si on s'attendait à un de ces types.
+      logger.warn("Format d'image non géré dans updateQuestion, l'image ne sera pas mise à jour.", {imageField: updates.image});
+      delete processedUpdates.image; // Ne pas envoyer un type incorrect
+    }
+  }
+  await handleIPCResponseVoid(window.electronAPI.invoke('update-question', id, processedUpdates));
+  return id; // Dexie update retournait le nombre de clés affectées (1 si succès), ou l'id. Ici on simule avec l'id.
+};
+
+export const deleteQuestion = async (id: number): Promise<void> => {
+  return handleIPCResponseVoid(window.electronAPI.invoke('delete-question', id));
+};
+
+// --- CRUD pour DeviceKits ---
+export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-device-kit', kit));
+};
+
+export const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
+  return handleIPCResponse<DeviceKit[]>(window.electronAPI.invoke('get-all-device-kits'));
+};
+
+export const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
+   const response = await window.electronAPI.invoke('get-device-kit-by-id', id);
+   return response.success ? response.data as DeviceKit | undefined : undefined;
+};
+
+export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'>>): Promise<number | undefined> => {
+  await handleIPCResponseVoid(window.electronAPI.invoke('update-device-kit', id, updates));
+  return id;
+};
+
+export const deleteDeviceKit = async (id: number): Promise<void> => {
+  return handleIPCResponseVoid(window.electronAPI.invoke('delete-device-kit', id));
+};
+
+export const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
+  const response = await window.electronAPI.invoke('get-default-device-kit');
+  return response.success ? response.data as DeviceKit | undefined : undefined;
+};
+
+export const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
+  return handleIPCResponseVoid(window.electronAPI.invoke('set-default-device-kit', kitId));
+};
+
+// --- CRUD pour DeviceKitAssignments ---
+export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
+  return handleIPCResponse<number>(window.electronAPI.invoke('assign-device-to-kit', kitId, votingDeviceId));
+};
+
+export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promise<void> => {
+  return handleIPCResponseVoid(window.electronAPI.invoke('remove-device-from-kit', kitId, votingDeviceId));
+};
+
+export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
+  return handleIPCResponse<VotingDevice[]>(window.electronAPI.invoke('get-voting-devices-for-kit', kitId));
+};
+
+export const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit[]> => {
+  return handleIPCResponse<DeviceKit[]>(window.electronAPI.invoke('get-kits-for-voting-device', votingDeviceId));
+};
+
+// removeAssignmentsByKitId et removeAssignmentsByVotingDeviceId sont principalement utilisés côté DB/main.
+// Si le renderer a besoin de les appeler, il faudrait ajouter des handlers IPC.
+
+// --- Fonctions de récupération spécifiques par ID (si non existantes ou différentes) ---
+export const getReferentialById = async (id: number): Promise<Referential | undefined> => {
+  const response = await window.electronAPI.invoke('get-referentiel-by-id', id);
+  return response.success ? response.data as Referential | undefined : undefined;
+};
+
+export const getThemeById = async (id: number): Promise<Theme | undefined> => {
+  const response = await window.electronAPI.invoke('get-theme-by-id', id);
+  return response.success ? response.data as Theme | undefined : undefined;
+};
+
+export const getBlocById = async (id: number): Promise<Bloc | undefined> => {
+  const response = await window.electronAPI.invoke('get-bloc-by-id', id);
+  return response.success ? response.data as Bloc | undefined : undefined;
+};
+
+export const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> => {
+  return handleIPCResponse<QuestionWithId[]>(window.electronAPI.invoke('get-questions-by-bloc-id', blocId));
+};
+
+// getBlocByCodeAndThemeId - Ajouter un handler IPC si nécessaire. Pour l'instant, non porté.
+
+export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
+  // Dexie `bulkGet` est pratique. Pour SQLite, on pourrait faire un `WHERE id IN (...)`.
+  // Il faudrait un handler IPC spécifique pour cela: 'get-questions-by-ids'
+  // Pour l'instant, on peut simuler par des appels multiples, ou attendre d'implémenter le handler.
+  // Simulation (moins performante) :
+  // const questions = await Promise.all(ids.map(id => getQuestionById(id)));
+  // return questions.filter(q => q !== undefined) as QuestionWithId[];
+  // Ou, mieux, implémenter 'get-questions-by-ids' côté main.
+  // Supposons qu'il existe :
+  return handleIPCResponse<QuestionWithId[]>(window.electronAPI.invoke('get-questions-by-ids', ids));
+  // **Action requise**: Ajouter un handler `get-questions-by-ids` dans `main.ts` s'il est utilisé.
+};
+
+// --- Fonctions de Reporting ---
+// calculateBlockUsage - Cette fonction contient une logique métier complexe.
+// Elle pourrait être portée dans le processus principal si la performance est un problème,
+// ou si l'accès direct aux données est plus simple là-bas.
+// Pour l'instant, si elle doit rester côté renderer, elle doit appeler les IPC nécessaires
+// pour récupérer les sessions, référentiels, thèmes, blocs.
+// La version actuelle utilise directement db.sessions.toArray() etc. qui ne fonctionneront plus.
+// Cette fonction nécessite une refonte significative.
+// Exemple de refonte partielle (conceptuelle) :
+/*
+export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
+  const sessionsResponse = await window.electronAPI.invoke('get-all-sessions-with-participants'); // Ou une version filtrée par date
+  if (!sessionsResponse.success) throw new Error(sessionsResponse.message);
+  const allSessions: Session[] = sessionsResponse.data;
+
+  // Filtrer les sessions par date et statut ici, côté renderer
+  // ...
+
+  const referentielsResponse = await window.electronAPI.invoke('get-all-referentiels');
+  // ... et ainsi de suite pour themes, blocs
+  // ... puis appliquer la logique de comptage.
+  logger.warn("calculateBlockUsage n'est pas entièrement porté sur IPC et nécessite une refonte.");
+  return []; // Placeholder
+};
+*/
+// **Action requise**: Refondre `calculateBlockUsage` pour utiliser les appels IPC.
+
+// --- Nouvelles fonctions CRUD pour Sessions ---
+export const addSession = async (session: Omit<Session, 'id' | 'createdAt' | 'updatedAt'>): Promise<number | undefined> => {
+  // La structure de Session dans types.ts inclut participants: Participant[]
+  // L'handler 'add-session' s'attend à ce que ce champ soit présent.
+  // Si session.donneesOrs est un Blob, il faudra le convertir en Buffer.
+  let donneesOrsBuffer: Buffer | undefined | null = undefined;
+  if (session.donneesOrs instanceof Blob) {
+    donneesOrsBuffer = Buffer.from(await session.donneesOrs.arrayBuffer());
+  } else if (session.donneesOrs === null) {
+    donneesOrsBuffer = null;
+  }
+
+  const sessionDataForIPC = {
+      ...session,
+      donneesOrs: donneesOrsBuffer,
+  };
+  const response = await window.electronAPI.invoke('add-session', sessionDataForIPC);
+  if (response.success) {
+    // Logique de logger originale
+    logger.info(`Session créée : "${session.nomSession}" via IPC`, {
+      eventType: 'SESSION_CREATED_IPC', // Adapter eventType si besoin
+      sessionId: response.id,
+      sessionName: session.nomSession,
+      referentialId: session.referentielId,
+      participantsCount: session.participants?.length || 0
+    });
+    return response.id;
+  } else {
+    logger.error(`Erreur IPC lors de la création de la session "${session.nomSession}"`, { error: response.message, sessionDetails: session });
+    throw new Error(response.message || "Erreur inconnue lors de l'ajout de la session.");
+  }
+};
+
+export const getAllSessions = async (): Promise<Session[]> => {
+  // L'handler 'get-all-sessions-with-participants' inclut déjà les participants.
+  return handleIPCResponse<Session[]>(window.electronAPI.invoke('get-all-sessions-with-participants'));
+};
+
+export const getSessionById = async (id: number): Promise<Session | undefined> => {
+  const response = await window.electronAPI.invoke('get-session-by-id', id);
+  return response.success ? response.data as Session | undefined : undefined;
+};
+
+export const updateSession = async (id: number, updates: Partial<Omit<Session, 'id' | 'createdAt' | 'updatedAt'>>): Promise<number | undefined> => {
+  let processedUpdates = { ...updates };
+  if (updates.donneesOrs !== undefined) {
+    if (updates.donneesOrs instanceof Blob) {
+      processedUpdates = { ...processedUpdates, donneesOrs: Buffer.from(await updates.donneesOrs.arrayBuffer())};
+    } else if (updates.donneesOrs === null) {
+      processedUpdates = { ...processedUpdates, donneesOrs: null };
+    } else if (updates.donneesOrs instanceof Buffer) {
+        processedUpdates = { ...processedUpdates, donneesOrs: updates.donneesOrs };
+    } else {
+      logger.warn("Format de donneesOrs non géré dans updateSession.", {donneesOrs: updates.donneesOrs});
+      delete processedUpdates.donneesOrs;
+    }
+  }
+
+  const response = await window.electronAPI.invoke('update-session', id, processedUpdates);
+  if (response.success) {
+    logger.info(`Session modifiée ID : "${id}" via IPC`, { eventType: 'SESSION_UPDATED_IPC', sessionId: id, updatedFields: Object.keys(updates) });
+    return id;
+  } else {
+    logger.error(`Erreur IPC lors de la modification de la session ID ${id}`, { error: response.message, updates });
+    throw new Error(response.message || "Erreur inconnue lors de la mise à jour de la session.");
+  }
+};
+
+export const deleteSession = async (id: number): Promise<void> => {
+  return handleIPCResponseVoid(window.electronAPI.invoke('delete-session', id));
+};
+
+// --- Nouvelles fonctions CRUD pour SessionResults ---
+export const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promise<number | undefined> => {
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-session-result', result));
+};
+
+export const addBulkSessionResults = async (results: SessionResult[]): Promise<(number | undefined)[]> => {
+  // L'handler 'add-bulk-session-results' ne retourne pas les IDs.
+  // Si les IDs sont nécessaires, l'handler IPC doit être modifié.
+  // Pour l'instant, on simule le retour Dexie (qui pouvait retourner les clés).
+  await handleIPCResponseVoid(window.electronAPI.invoke('add-bulk-session-results', results));
+  // On ne peut pas facilement retourner les IDs ici sans changer l'IPC.
+  // Retourner un tableau de 'undefined' de la bonne longueur ou lever une exception si ce retour est critique.
+  logger.warn("addBulkSessionResults via IPC ne retourne pas les IDs individuels actuellement.");
+  return results.map(() => undefined); // Placeholder
+};
+
+export const getAllResults = async (): Promise<SessionResult[]> => {
+    // Il n'y a pas d'handler 'get-all-results'. Si nécessaire, il faut le créer.
+    // Cette fonction n'était pas dans la liste des opérations typiques.
+    logger.warn("getAllResults n'a pas d'handler IPC direct. Implémenter si nécessaire.");
+    return []; // Placeholder
+};
+
+export const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
+  return handleIPCResponse<SessionResult[]>(window.electronAPI.invoke('get-session-results-by-session-id', sessionId));
+};
+
+// getResultBySessionAndQuestion - Pas d'handler IPC direct. Combiner les appels ou créer un handler spécifique.
+// updateSessionResult - Pas d'handler IPC direct.
+// deleteResultsForSession - Pas d'handler IPC direct, mais 'delete-session-results-by-session-id' existe.
+
+// --- Fonctions pour AdminSettings ---
+export const getAdminSetting = async (key: string): Promise<any> => {
+  const response = await window.electronAPI.invoke('get-admin-setting', key);
+  // La fonction originale retournait `setting?.value`. L'IPC retourne `data`.
+  return response.success ? response.data : undefined;
+};
+
 export const setAdminSetting = async (key: string, value: any): Promise<void> => {
-  try {
-    await db.adminSettings.put({ key, value });
-  } catch (error) {
-    console.error(`Error setting ${key}:`, error);
+  // Si value est un File/Blob (ex: pptxTemplateFile), il faut le convertir en Buffer avant IPC.
+  let valueForIPC = value;
+  if (value instanceof File || value instanceof Blob) {
+    logger.info(`Conversion de ${key} (File/Blob) en Buffer pour IPC.`);
+    valueForIPC = Buffer.from(await (value as Blob).arrayBuffer());
+    // Il faudrait aussi stocker le nom du fichier et le type MIME séparément si on veut reconstruire un File.
+    // Par exemple, appeler setAdminSetting pour 'pptxTemplateFileName' et 'pptxTemplateFileType'.
+    if (value instanceof File) {
+        await window.electronAPI.invoke('set-admin-setting', `${key}Name`, value.name);
+        await window.electronAPI.invoke('set-admin-setting', `${key}Type`, value.type);
+    }
   }
+  return handleIPCResponseVoid(window.electronAPI.invoke('set-admin-setting', key, valueForIPC));
 };
 
-export const getAllAdminSettings = async (): Promise<{ key: string; value: any }[]> => {
-  try {
-    return await db.adminSettings.toArray();
-  } catch (error) {
-    console.error("Error getting all admin settings:", error);
-    return [];
-  }
+export const getAllAdminSettings = async (): Promise<Record<string, any>> => {
+  // La fonction originale retournait un tableau {key, value}[]. L'IPC retourne un objet Record<string, any>.
+  // Adapter si le format tableau est strictement nécessaire par les composants.
+  return handleIPCResponse<Record<string, any>>(window.electronAPI.invoke('get-all-admin-settings'));
 };
 
-// Fonctions CRUD pour VotingDevices
+// --- Fonctions CRUD pour VotingDevices ---
 export const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
-  try {
-    return await db.votingDevices.add(device as VotingDevice);
-  } catch (error) {
-    console.error("Error adding voting device:", error);
-  }
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-voting-device', device));
 };
 
 export const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
-  console.log(`[DB_TRACE] Récupération de tous les boîtiers votants.`);
-  try {
-    const allDevices = await db.votingDevices.orderBy('name').toArray(); // Tri par nom pour cohérence
-    console.log(`[DB_TRACE] Nombre total de boîtiers récupérés: ${allDevices.length}`);
-    return allDevices;
-  } catch (error) {
-    console.error("[DB_ERROR] Erreur lors de la récupération de tous les boîtiers votants:", error);
-    return [];
-  }
+  return handleIPCResponse<VotingDevice[]>(window.electronAPI.invoke('get-all-voting-devices'));
 };
 
 export const updateVotingDevice = async (id: number, updates: Partial<VotingDevice>): Promise<number> => {
-  try {
-    return await db.votingDevices.update(id, updates);
-  } catch (error) {
-    console.error(`Error updating voting device ${id}:`, error);
-    return 0;
-  }
+  // L'IPC ne retourne pas l'ID, mais la fonction Dexie le faisait (implicitement 1 si succès).
+  await handleIPCResponseVoid(window.electronAPI.invoke('update-voting-device', id, updates));
+  return 1; // Simule le retour de Dexie (nombre d'enregistrements affectés)
 };
 
 export const deleteVotingDevice = async (id: number): Promise<void> => {
-  try {
-    await db.votingDevices.delete(id);
-  } catch (error) {
-    console.error(`Error deleting voting device ${id}:`, error);
-  }
+  return handleIPCResponseVoid(window.electronAPI.invoke('delete-voting-device', id));
 };
 
 export const bulkAddVotingDevices = async (devices: VotingDevice[]): Promise<void> => {
-  try {
-    await db.votingDevices.bulkAdd(devices, { allKeys: false });
-  } catch (error) {
-    console.error("Error bulk adding voting devices:", error);
-  }
+  // La fonction Dexie ne retournait pas les clés, donc void est OK.
+  return handleIPCResponseVoid(window.electronAPI.invoke('bulk-add-voting-devices', devices.map(d => ({name: d.name, serialNumber: d.serialNumber}))));
 };
 
-// --- Fonctions CRUD pour Formateurs (Trainers) ---
-
+// --- Fonctions CRUD pour Trainers ---
 export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
-  // s'assurer que trainer.isDefault est 0 ou 1. Le type Omit<Trainer, 'id'> le garantit déjà.
-  try {
-    // S'assurer qu'aucun autre formateur n'est par défaut si celui-ci l'est (isDefault === 1)
-    if (trainer.isDefault === 1) {
-      await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
-    }
-    const id = await db.trainers.add(trainer as Trainer); // trainer contient déjà isDefault: 0 ou 1
-    return id;
-  } catch (error) {
-    console.error("Error adding trainer: ", error);
-  }
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-trainer', trainer));
 };
 
 export const getAllTrainers = async (): Promise<Trainer[]> => {
-  try {
-    return await db.trainers.toArray();
-  } catch (error) {
-    console.error("Error getting all trainers: ", error);
-    return [];
-  }
+  return handleIPCResponse<Trainer[]>(window.electronAPI.invoke('get-all-trainers'));
 };
 
 export const getTrainerById = async (id: number): Promise<Trainer | undefined> => {
-  try {
-    return await db.trainers.get(id);
-  } catch (error) {
-    console.error(`Error getting trainer with id ${id}: `, error);
-  }
+  const response = await window.electronAPI.invoke('get-trainer-by-id', id);
+  return response.success ? response.data as Trainer | undefined : undefined;
 };
 
 export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> => {
-  // updates.isDefault peut être 0, 1, ou undefined.
-  // Si undefined, on ne touche pas à isDefault.
-  // Si 0 ou 1, on met à jour.
-  try {
-    // Si on met à jour un formateur pour qu'il soit par défaut (isDefault === 1)
-    if (updates.isDefault === 1) {
-      await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
-    }
-    // Si updates.isDefault est undefined, il ne sera pas inclus dans l'objet d'update pour Dexie,
-    // donc la valeur existante de isDefault pour ce formateur ne sera pas modifiée.
-    // Si updates.isDefault est 0, il mettra isDefault à 0.
-    await db.trainers.update(id, updates);
-    return id;
-  } catch (error) {
-    console.error(`Error updating trainer with id ${id}: `, error);
-  }
+  await handleIPCResponseVoid(window.electronAPI.invoke('update-trainer', id, updates));
+  return id; // Similaire à Dexie qui pouvait retourner l'ID ou le nombre d'affectations.
 };
 
 export const deleteTrainer = async (id: number): Promise<void> => {
-  try {
-    // TODO: Que faire si on supprime le formateur par défaut ?
-    // Option 1: Le prochain formateur (par ordre alpha?) devient par défaut.
-    // Option 2: Aucun formateur n'est par défaut.
-    // Option 3: Interdire la suppression du formateur par défaut s'il en reste.
-    // Pour l'instant, suppression simple.
-    await db.trainers.delete(id);
-    // TODO: Mettre à jour les sessions qui utilisaient ce trainerId ? Mettre à undefined ?
-  } catch (error) {
-    console.error(`Error deleting trainer with id ${id}: `, error);
-  }
+  return handleIPCResponseVoid(window.electronAPI.invoke('delete-trainer', id));
 };
 
 export const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
-  try {
-    // D'abord, s'assurer qu'aucun autre formateur n'est par défaut (isDefault === 1)
-    await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
-    // Ensuite, définir le formateur spécifié comme par défaut (isDefault === 1)
-    await db.trainers.update(id, { isDefault: 1 });
-    return id;
-  } catch (error) {
-    console.error(`Error setting default trainer for id ${id}:`, error);
-  }
+  await handleIPCResponseVoid(window.electronAPI.invoke('set-default-trainer', id));
+  return id;
 };
 
 export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
-  try {
-    // Récupérer le formateur où isDefault est 1
-    return await db.trainers.where('isDefault').equals(1).first();
-  } catch (error) {
-    console.error("Error getting default trainer:", error);
-    // En cas d'erreur (par exemple, si l'index est toujours problématique),
-    // on pourrait retourner le premier formateur par ID comme fallback,
-    // mais il vaut mieux que l'erreur soit visible pour diagnostic.
-  }
+  const response = await window.electronAPI.invoke('get-default-trainer');
+  return response.success ? response.data as Trainer | undefined : undefined;
 };
 
-// --- CRUD pour SessionQuestion ---
-export const addSessionQuestion = async (sq: SessionQuestion): Promise<number | undefined> => {
-  try {
-    return await db.sessionQuestions.add(sq);
-  } catch (error) {
-    console.error("Error adding session question:", error);
-  }
+// --- CRUD pour SessionQuestion (Snapshots) ---
+export const addSessionQuestion = async (sq: Omit<SessionQuestion, 'id'>): Promise<number | undefined> => {
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-session-question', sq));
 };
 
-export const addBulkSessionQuestions = async (questions: SessionQuestion[]): Promise<number[] | undefined> => {
-  try {
-    const ids = await db.sessionQuestions.bulkAdd(questions, { allKeys: true });
-    return ids as number[];
-  } catch (error) {
-    console.error("Error bulk adding session questions:", error);
-  }
+export const addBulkSessionQuestions = async (questions: SessionQuestion[]): Promise<(number | undefined)[]> => {
+  // L'IPC attend (sessionId, questionsDataSansSessionId).
+  // Si les SessionQuestion[] ont déjà sessionId, il faut extraire.
+  // Supposons pour l'instant que le premier élément a le bon sessionId et que tous les autres aussi.
+  if (questions.length === 0) return [];
+  const sessionId = questions[0].sessionId;
+  const questionsData = questions.map(q => {
+      const {sessionId, ...rest} = q; // eslint-disable-line @typescript-eslint/no-unused-vars
+      return rest;
+  });
+  await handleIPCResponseVoid(window.electronAPI.invoke('add-bulk-session-questions', sessionId, questionsData));
+  logger.warn("addBulkSessionQuestions via IPC ne retourne pas les IDs individuels actuellement.");
+  return questions.map(() => undefined); // Placeholder
 };
 
 export const getSessionQuestionsBySessionId = async (sessionId: number): Promise<SessionQuestion[]> => {
-  try {
-    return await db.sessionQuestions.where({ sessionId }).toArray();
-  } catch (error) {
-    console.error(`Error getting session questions for session ${sessionId}:`, error);
-    return [];
-  }
+  return handleIPCResponse<SessionQuestion[]>(window.electronAPI.invoke('get-session-questions-by-session-id', sessionId));
 };
 
 export const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<void> => {
-  try {
-    await db.sessionQuestions.where({ sessionId }).delete();
-  } catch (error) {
-    console.error(`Error deleting session questions for session ${sessionId}:`, error);
-  }
+  return handleIPCResponseVoid(window.electronAPI.invoke('delete-session-questions-by-session-id', sessionId));
 };
 
-// --- CRUD pour SessionBoitier ---
-export const addSessionBoitier = async (sb: SessionBoitier): Promise<number | undefined> => {
-  try {
-    return await db.sessionBoitiers.add(sb);
-  } catch (error) {
-    console.error("Error adding session boitier:", error);
-  }
+// --- CRUD pour SessionBoitier (Snapshots) ---
+export const addSessionBoitier = async (sb: Omit<SessionBoitier, 'id'>): Promise<number | undefined> => {
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-session-boitier', sb));
 };
 
-export const addBulkSessionBoitiers = async (boitiers: SessionBoitier[]): Promise<number[] | undefined> => {
-  try {
-    const ids = await db.sessionBoitiers.bulkAdd(boitiers, { allKeys: true });
-    return ids as number[];
-  } catch (error) {
-    console.error("Error bulk adding session boitiers:", error);
-  }
+export const addBulkSessionBoitiers = async (boitiers: SessionBoitier[]): Promise<(number|undefined)[]> => {
+  if (boitiers.length === 0) return [];
+  const sessionId = boitiers[0].sessionId;
+  const boitiersData = boitiers.map(b => {
+      const {sessionId, ...rest} = b; // eslint-disable-line @typescript-eslint/no-unused-vars
+      return rest;
+  });
+  await handleIPCResponseVoid(window.electronAPI.invoke('add-bulk-session-boitiers', sessionId, boitiersData));
+  logger.warn("addBulkSessionBoitiers via IPC ne retourne pas les IDs individuels actuellement.");
+  return boitiers.map(() => undefined); // Placeholder
 };
 
 export const getSessionBoitiersBySessionId = async (sessionId: number): Promise<SessionBoitier[]> => {
-  try {
-    return await db.sessionBoitiers.where({ sessionId }).toArray();
-  } catch (error) {
-    console.error(`Error getting session boitiers for session ${sessionId}:`, error);
-    return [];
-  }
+  return handleIPCResponse<SessionBoitier[]>(window.electronAPI.invoke('get-session-boitiers-by-session-id', sessionId));
 };
 
 export const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void> => {
-  try {
-    await db.sessionBoitiers.where({ sessionId }).delete();
-  } catch (error) {
-    console.error(`Error deleting session boitiers for session ${sessionId}:`, error);
-  }
+  return handleIPCResponseVoid(window.electronAPI.invoke('delete-session-boitiers-by-session-id', sessionId));
 };
 
-// --- CRUD pour Referentiels ---
+// --- CRUD pour Referentiels (déjà définis dans votre code SQLite, ici on les mappe à IPC) ---
 export const addReferential = async (referential: Omit<Referential, 'id'>): Promise<number | undefined> => {
-  try {
-    const id = await db.referentiels.add(referential as Referential);
-    return id;
-  } catch (error) {
-    console.error("Error adding referential: ", error);
-    throw error; // Renvoyer l'erreur pour la gestion dans l'UI
-  }
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-referentiel', referential.code, referential.nom_complet));
 };
 
 export const getAllReferentiels = async (): Promise<Referential[]> => {
-  try {
-    return await db.referentiels.toArray();
-  } catch (error) {
-    console.error("Error getting all referentiels: ", error);
-    return [];
-  }
+  return handleIPCResponse<Referential[]>(window.electronAPI.invoke('get-all-referentiels'));
 };
 
 export const getReferentialByCode = async (code: string): Promise<Referential | undefined> => {
-  try {
-    return await db.referentiels.where('code').equals(code).first();
-  } catch (error) {
-    console.error(`Error getting referential with code ${code}: `, error);
-  }
+  // Il n'y a pas d'handler 'get-referential-by-code'. Il faudrait l'ajouter si nécessaire.
+  // Ou filtrer côté renderer à partir de getAllReferentiels, moins optimal.
+  logger.warn("getReferentialByCode n'a pas d'handler IPC direct. Implémenter si nécessaire.");
+  const all = await getAllReferentiels();
+  return all.find(r => r.code === code);
 };
 
-// --- CRUD pour Themes ---
+// --- CRUD pour Themes (déjà définis dans votre code SQLite, ici on les mappe à IPC) ---
 export const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> => {
-  try {
-    const id = await db.themes.add(theme as Theme);
-    // Création automatique d'un bloc par défaut pour ce thème
-    if (id) {
-      const defaultBlocCode = `${theme.code_theme}_GEN`; // Ex: R489PR_GEN
-      await addBloc({ code_bloc: defaultBlocCode, theme_id: id });
-    }
-    return id;
-  } catch (error) {
-    console.error("Error adding theme: ", error);
-    throw error;
-  }
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-theme', theme.code_theme, theme.nom_complet, theme.referentiel_id));
 };
 
 export const getAllThemes = async (): Promise<Theme[]> => {
-  try {
-    return await db.themes.toArray();
-  } catch (error) {
-    console.error("Error getting all themes: ", error);
-    return [];
-  }
+  return handleIPCResponse<Theme[]>(window.electronAPI.invoke('get-all-themes'));
 };
 
 export const getThemesByReferentialId = async (referentielId: number): Promise<Theme[]> => {
-  try {
-    return await db.themes.where('referentiel_id').equals(referentielId).toArray();
-  } catch (error) {
-    console.error(`Error getting themes for referential id ${referentielId}:`, error);
-    return [];
-  }
+  return handleIPCResponse<Theme[]>(window.electronAPI.invoke('get-themes-by-referentiel-id', referentielId));
 };
 
-export const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id: number): Promise<Theme | undefined> => {
-  try {
-    return await db.themes.where({ code_theme, referentiel_id }).first();
-  } catch (error) {
-    console.error(`Error getting theme with code_theme ${code_theme} and referentiel_id ${referentiel_id}: `, error);
-  }
-};
+// getThemeByCodeAndReferentialId - Pas d'handler IPC direct.
 
-
-// --- CRUD pour Blocs ---
+// --- CRUD pour Blocs (déjà définis dans votre code SQLite, ici on les mappe à IPC) ---
 export const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
-  try {
-    const id = await db.blocs.add(bloc as Bloc);
-    return id;
-  } catch (error) {
-    console.error("Error adding bloc: ", error);
-    throw error;
-  }
+  return handleIPCResponse<number>(window.electronAPI.invoke('add-bloc', bloc.code_bloc, bloc.theme_id));
 };
 
 export const getAllBlocs = async (): Promise<Bloc[]> => {
-  try {
-    return await db.blocs.toArray();
-  } catch (error) {
-    console.error("Error getting all blocs: ", error);
-    return [];
-  }
+  return handleIPCResponse<Bloc[]>(window.electronAPI.invoke('get-all-blocs'));
 };
 
 export const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
-  try {
-    return await db.blocs.where('theme_id').equals(themeId).toArray();
-  } catch (error) {
-    console.error(`Error getting blocs for theme id ${themeId}:`, error);
-    return [];
-  }
+  return handleIPCResponse<Bloc[]>(window.electronAPI.invoke('get-blocs-by-theme-id', themeId));
 };
+
+// --- Fonctions manquantes ou à adapter ---
+// getQuestionsForSessionBlocks: Cette fonction dépendait de la logique Dexie pour récupérer les questions.
+// Elle devra être réécrite pour utiliser les appels IPC, potentiellement en récupérant tous les blocs
+// puis toutes les questions pour ces blocs.
+export const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise<QuestionWithId[]> => {
+    if (!selectedBlocIds || selectedBlocIds.length === 0) {
+        return [];
+    }
+    // Pour chaque blocId, récupérer les questions.
+    // Cela peut entraîner plusieurs appels IPC.
+    // Une alternative serait un handler IPC qui prend une liste de blocIds.
+    let allQuestions: QuestionWithId[] = [];
+    for (const blocId of selectedBlocIds) {
+        const questionsForBloc = await getQuestionsByBlocId(blocId);
+        allQuestions = allQuestions.concat(questionsForBloc);
+    }
+    // Éliminer les doublons si une question pouvait appartenir à plusieurs blocs sélectionnés (peu probable ici)
+    const uniqueQuestions = Array.from(new Map(allQuestions.map(q => [q.id, q])).values());
+    return uniqueQuestions;
+};
+
+// calculateBlockUsage: Comme mentionné, nécessite une refonte majeure pour utiliser IPC.
+// Pour l'instant, je la commente ou la laisse comme placeholder.
+/*
+export interface BlockUsage {
+  referentiel: CACESReferential | string; // Adapter CACESReferential si besoin
+  theme: string;
+  blockId: string;
+  usageCount: number;
+}
+export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
+  logger.warn("calculateBlockUsage IPC version non implémentée.");
+  return [];
+};
+*/
+
+// La table 'participants' générale (celle avec juste nom et id)
+// Les fonctions addGeneralParticipant etc. sont déjà dans le fichier SQLite db.ts que j'ai généré.
+// Ici, on s'assure qu'elles sont exposées si elles étaient dans l'ancien db.ts avec Dexie.
+// Si votre ancien db.ts avait une fonction comme `addParticipant(nom: string)`, elle deviendrait:
+/*
+export const addParticipant = async (nom: string): Promise<number | undefined> => {
+    return handleIPCResponse<number>(window.electronAPI.invoke('insert-participant', nom));
+};
+*/
+// Les autres (getAll, getById, update, delete) pour cette table `participants` simple
+// suivraient le même modèle, en appelant les handlers IPC 'get-all-general-participants', etc.
+
+// NOTE: Ce fichier ne définit plus de classe Dexie ni n'exporte 'db'.
+// Il exporte uniquement les fonctions qui interagissent avec le backend via IPC.
+// Les importations initiales de Dexie et MySubClassedDexie sont donc supprimées.
+// L'instance 'db' n'est plus utilisée ici.
+// Les références à `db.table.operation` sont remplacées par `window.electronAPI.invoke`.
+// Les fonctions .upgrade de Dexie ne sont plus pertinentes ici. La structure de la DB SQLite
+// est gérée dans le src/db.ts du processus principal.
+
+// Assurez-vous que window.electronAPI est bien typé dans un fichier de déclaration (par exemple, preload.d.ts ou renderer.d.ts)
+// pour que TypeScript reconnaisse `invoke`.
+// Exemple dans renderer.d.ts:
+/*
+declare global {
+  interface Window {
+    electronAPI: {
+      invoke: (channel: string, ...args: any[]) => Promise<any>;
+      // Vous pouvez aussi typer les canaux spécifiques si vous le souhaitez pour plus de sécurité
+      // exemple: invoke(channel: 'get-all-questions'): Promise<{success: boolean, data: QuestionWithId[]}>;
+    };
+  }
+}
+*/
+console.log("Couche d'accès aux données (frontend via IPC) initialisée.");
