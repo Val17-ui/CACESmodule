@@ -99,6 +99,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
 
+  // useEffect for fetching global data
   useEffect(() => {
     const fetchGlobalData = async () => {
       setIsLoadingKits(true);
@@ -117,9 +118,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           .map(d => ({
             id: d.id,
             name: d.name,
-            serialNumber: d.serialNumber || `_SN_MANQUANT_${d.id}`, // Placeholder si null/undefined
+            serialNumber: d.serialNumber || `_SN_MANQUANT_${d.id}`,
           }))
-          // .filter(d => d.serialNumber !== undefined && d.serialNumber !== null) // Optionnel: filtrer si SN est critique
           .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
         setHardwareDevices(formattedHardwareDevices);
 
