@@ -241,130 +241,642 @@ async function asyncDbRun<T>(fn: () => T): Promise<T> {
 // --- CRUD Function Placeholders (to be implemented with SQLite logic) ---
 
 // Questions
+
+// Helper pour transformer une ligne de DB en QuestionWithId (gère JSON et booléens)
+const rowToQuestion = (row: any): QuestionWithId => {
+  if (!row) return undefined as any; // Should not happen if called correctly
+  return {
+    ...row,
+    options: row.options ? JSON.parse(row.options) : [],
+    isEliminatory: row.isEliminatory === 1,
+    // createdAt devrait déjà être un string ISO, pas de transformation nécessaire a priori
+  } as QuestionWithId;
+};
+
+const questionToRow = (question: Partial<Omit<QuestionWithId, 'id'> | QuestionWithId>) => {
+  const rowData: any = { ...question };
+  if (question.options !== undefined) {
+    rowData.options = JSON.stringify(question.options);
+  }
+  if (question.isEliminatory !== undefined) {
+    rowData.isEliminatory = question.isEliminatory ? 1 : 0;
+  }
+  // Supprimer 'id' si présent et qu'on ne veut pas l'utiliser dans un SET par exemple
+  if ('id' in rowData && !Object.prototype.hasOwnProperty.call(question, 'id')) {
+    delete rowData.id;
+  }
+  return rowData;
+};
+
+
 export const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number | undefined> => {
-  console.warn("[DB STUB] addQuestion called", question);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options } = question;
+      const stmt = db.prepare(`
+        INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options)
+        VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options)
+      `);
+      const rowData = questionToRow({
+        blocId, text, type, correctAnswer, timeLimit,
+        isEliminatory: isEliminatory, // Sera converti en 0/1 par questionToRow
+        createdAt,
+        usageCount: usageCount ?? 0,
+        correctResponseRate: correctResponseRate ?? 0,
+        slideGuid,
+        options // Sera stringifié par questionToRow
+      });
+      const result = stmt.run(rowData);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB Questions] Error adding question:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
-  console.warn("[DB STUB] getAllQuestions called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM questions");
+      const rows = stmt.all() as any[];
+      return rows.map(rowToQuestion);
+    } catch (error) {
+      console.error(`[DB Questions] Error getting all questions:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> => {
-  console.warn(`[DB STUB] getQuestionById(${id}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM questions WHERE id = ?");
+      const row = stmt.get(id) as any;
+      return row ? rowToQuestion(row) : undefined;
+    } catch (error) {
+      console.error(`[DB Questions] Error getting question by id ${id}:`, error);
+      throw error;
+    }
+  });
 }
+
 export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
-  console.warn(`[DB STUB] getQuestionsByIds called`, ids);
-  return asyncDbRun(() => []);
+  if (!ids || ids.length === 0) return Promise.resolve([]);
+  return asyncDbRun(() => {
+    try {
+      // SQLite ne supporte pas directement un array dans `IN (?)`. Il faut générer les placeholders.
+      const placeholders = ids.map(() => '?').join(',');
+      const stmt = db.prepare(`SELECT * FROM questions WHERE id IN (${placeholders})`);
+      const rows = stmt.all(...ids) as any[];
+      return rows.map(rowToQuestion);
+    } catch (error) {
+      console.error(`[DB Questions] Error getting questions by ids:`, error);
+      throw error;
+    }
+  });
 }
-export const updateQuestion = async (id: number, updates: Partial<QuestionWithId>): Promise<number | undefined> => {
-  console.warn(`[DB STUB] updateQuestion(${id}) called`, updates);
-  return asyncDbRun(() => undefined);
+
+export const updateQuestion = async (id: number, updates: Partial<Omit<QuestionWithId, 'id'>>): Promise<number | undefined> => {
+  return asyncDbRun(() => {
+    try {
+      const rowUpdates = questionToRow(updates);
+      const fields = Object.keys(rowUpdates).filter(key => key !== 'id');
+      if (fields.length === 0) return 0;
+
+      const setClause = fields.map(field => `${field} = @${field}`).join(', ');
+      const stmt = db.prepare(`UPDATE questions SET ${setClause} WHERE id = @id`);
+
+      const result = stmt.run({ ...rowUpdates, id });
+      return result.changes;
+    } catch (error) {
+      console.error(`[DB Questions] Error updating question ${id}:`, error);
+      throw error;
+    }
+  });
 }
+
 export const deleteQuestion = async (id: number): Promise<void> => {
-  console.warn(`[DB STUB] deleteQuestion(${id}) called`);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("DELETE FROM questions WHERE id = ?");
+      stmt.run(id);
+    } catch (error) {
+      console.error(`[DB Questions] Error deleting question ${id}:`, error);
+      throw error;
+    }
+  });
 }
+
 export const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> => {
-  console.warn(`[DB STUB] getQuestionsByBlocId(${blocId}) called`);
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM questions WHERE blocId = ?");
+      const rows = stmt.all(blocId) as any[];
+      return rows.map(rowToQuestion);
+    } catch (error) {
+      console.error(`[DB Questions] Error getting questions by blocId ${blocId}:`, error);
+      throw error;
+    }
+  });
 }
+
 export const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise<QuestionWithId[]> => {
-  console.warn("[DB STUB] getQuestionsForSessionBlocks called", selectedBlocIds);
-  return asyncDbRun(() => []);
+  if (!selectedBlocIds || selectedBlocIds.length === 0) {
+    // Si aucun blocId n'est sélectionné, doit-on retourner toutes les questions SANS blocId (orphelines)
+    // ou toutes les questions de l'application ? La logique Dexie d'origine serait à vérifier.
+    // Pour l'instant, si selectedBlocIds est vide ou non fourni, on retourne les questions sans blocId.
+    // Si une logique différente est attendue, il faudra ajuster.
+    return asyncDbRun(() => {
+      try {
+        const stmt = db.prepare("SELECT * FROM questions WHERE blocId IS NULL");
+        const rows = stmt.all() as any[];
+        return rows.map(rowToQuestion);
+      } catch (error) {
+        console.error(`[DB Questions] Error getting questions with no blocId:`, error);
+        throw error;
+      }
+    });
+  }
+
+  return asyncDbRun(() => {
+    try {
+      const placeholders = selectedBlocIds.map(() => '?').join(',');
+      const stmt = db.prepare(`SELECT * FROM questions WHERE blocId IN (${placeholders})`);
+      const rows = stmt.all(...selectedBlocIds) as any[];
+      return rows.map(rowToQuestion);
+    } catch (error) {
+      console.error(`[DB Questions] Error getting questions for session blocks:`, error);
+      throw error;
+    }
+  });
 }
 
 // AdminSettings
+
+// Helper pour parser la valeur d'un adminSetting
+const parseAdminSettingValue = (value: string | null): any => {
+  if (value === null || value === undefined) return undefined;
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    // Si ce n'est pas du JSON valide, retourner la chaîne brute
+    return value;
+  }
+};
+
 export const getAdminSetting = async (key: string): Promise<any> => {
-  console.warn(`[DB STUB] getAdminSetting(${key}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT value FROM adminSettings WHERE key = ?");
+      const row = stmt.get(key) as { value: string } | undefined;
+      return row ? parseAdminSettingValue(row.value) : undefined;
+    } catch (error) {
+      console.error(`[DB AdminSettings] Error getting setting ${key}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const setAdminSetting = async (key: string, value: any): Promise<void> => {
-  console.warn(`[DB STUB] setAdminSetting(${key}) called`, value);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO adminSettings (key, value)
+        VALUES (@key, @value)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `);
+      // Stringify la valeur, sauf si elle est déjà une chaîne (pour éviter les doubles guillemets)
+      // ou si elle est null/undefined. Les nombres et booléens seront correctement stringifiés.
+      const valueToStore = typeof value === 'string' ? value : (value === null || value === undefined ? null : JSON.stringify(value));
+      stmt.run({ key, value: valueToStore });
+    } catch (error) {
+      console.error(`[DB AdminSettings] Error setting setting ${key}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getAllAdminSettings = async (): Promise<{ key: string; value: any }[]> => {
-  console.warn("[DB STUB] getAllAdminSettings called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT key, value FROM adminSettings");
+      const rows = stmt.all() as { key: string; value: string }[];
+      return rows.map(row => ({
+        key: row.key,
+        value: parseAdminSettingValue(row.value),
+      }));
+    } catch (error) {
+      console.error(`[DB AdminSettings] Error getting all settings:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getGlobalPptxTemplate = async (): Promise<File | null> => {
-  console.warn("[DB STUB] getGlobalPptxTemplate called. Note: File objects are not directly storable in SQLite; typically path or BLOB is stored.");
-  return asyncDbRun(() => null);
+  console.warn("[DB AdminSettings] getGlobalPptxTemplate: Returning null. Logic to fetch/construct File object from path/blob is outside direct DB scope for now.");
+  // Potentiellement:
+  // const filePath = await getAdminSetting('globalPptxTemplatePath');
+  // if (filePath && typeof filePath === 'string') {
+  //   // Logique pour créer un objet File ou retourner le chemin
+  //   // Pour l'instant, on ne fait rien de plus.
+  // }
+  return Promise.resolve(null);
 };
 
 // Sessions
-export const addSession = async (session: Session): Promise<number | undefined> => {
-  console.warn("[DB STUB] addSession called", session);
-  return asyncDbRun(() => undefined);
+
+const JSON_SESSION_FIELDS = [
+  'selectedBlocIds', 'questionMappings', 'ignoredSlideGuids',
+  'resolvedImportAnomalies', 'participants'
+];
+
+const rowToSession = (row: any): Session => {
+  if (!row) return undefined as any;
+  const session: any = { ...row };
+  for (const field of JSON_SESSION_FIELDS) {
+    if (session[field] && typeof session[field] === 'string') {
+      try {
+        session[field] = JSON.parse(session[field]);
+      } catch (e) {
+        console.error(`[DB Sessions] Failed to parse JSON field ${field} for session id ${row.id}:`, e);
+        // Conserver la chaîne brute ou mettre à null/undefined selon la politique de gestion d'erreur
+        // Pour l'instant, on garde la chaîne brute si le parsing échoue, mais idéalement, ça ne devrait pas arriver.
+      }
+    } else if (session[field] === null && (field === 'selectedBlocIds' || field === 'ignoredSlideGuids' || field === 'participants')) {
+      // Pour les champs qui sont des tableaux, s'assurer qu'ils sont des tableaux vides si null en DB,
+      // plutôt que null, pour la cohérence du type.
+      // questionMappings et resolvedImportAnomalies peuvent être null/undefined s'ils ne sont pas définis.
+      session[field] = [];
+    }
+  }
+  // Les champs comme referentielId, selectedKitId, trainerId sont des FK et restent des nombres.
+  // dateSession et createdAt sont des TEXT ISO8601, pas de conversion nécessaire ici.
+  return session as Session;
 };
+
+const sessionToRow = (session: Partial<Omit<Session, 'id'> | Session>) => {
+  const rowData: any = { ...session };
+  for (const field of JSON_SESSION_FIELDS) {
+    if (rowData[field] !== undefined) {
+      rowData[field] = JSON.stringify(rowData[field]);
+    }
+  }
+  // Supprimer 'id' si présent et qu'on ne veut pas l'utiliser dans un SET par exemple
+  if ('id' in rowData && !Object.prototype.hasOwnProperty.call(session, 'id')) {
+    delete rowData.id;
+  }
+  return rowData;
+};
+
+export const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO sessions (
+          nomSession, dateSession, referentielId, selectedBlocIds, selectedKitId,
+          createdAt, location, status, questionMappings, notes, trainerId,
+          ignoredSlideGuids, resolvedImportAnomalies, participants
+        ) VALUES (
+          @nomSession, @dateSession, @referentielId, @selectedBlocIds, @selectedKitId,
+          @createdAt, @location, @status, @questionMappings, @notes, @trainerId,
+          @ignoredSlideGuids, @resolvedImportAnomalies, @participants
+        )
+      `);
+      const rowData = sessionToRow(session);
+      const result = stmt.run(rowData);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB Sessions] Error adding session:`, error);
+      throw error;
+    }
+  });
+};
+
 export const getAllSessions = async (): Promise<Session[]> => {
-  console.warn("[DB STUB] getAllSessions called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM sessions ORDER BY dateSession DESC, createdAt DESC");
+      const rows = stmt.all() as any[];
+      return rows.map(rowToSession);
+    } catch (error) {
+      console.error(`[DB Sessions] Error getting all sessions:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getSessionById = async (id: number): Promise<Session | undefined> => {
-  console.warn(`[DB STUB] getSessionById(${id}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
+      const row = stmt.get(id) as any;
+      return row ? rowToSession(row) : undefined;
+    } catch (error) {
+      console.error(`[DB Sessions] Error getting session by id ${id}:`, error);
+      throw error;
+    }
+  });
 };
-export const updateSession = async (id: number, updates: Partial<Session>): Promise<number | undefined> => {
-  console.warn(`[DB STUB] updateSession(${id}) called`, updates);
-  return asyncDbRun(() => undefined);
+
+export const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>): Promise<number | undefined> => {
+  return asyncDbRun(() => {
+    try {
+      const rowUpdates = sessionToRow(updates);
+      const fields = Object.keys(rowUpdates).filter(key => key !== 'id');
+      if (fields.length === 0) return 0;
+
+      const setClause = fields.map(field => `${field} = @${field}`).join(', ');
+      const stmt = db.prepare(`UPDATE sessions SET ${setClause} WHERE id = @id`);
+
+      const result = stmt.run({ ...rowUpdates, id });
+      return result.changes;
+    } catch (error) {
+      console.error(`[DB Sessions] Error updating session ${id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const deleteSession = async (id: number): Promise<void> => {
-  console.warn(`[DB STUB] deleteSession(${id}) called`);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      // Les tables sessionResults, sessionQuestions, sessionBoitiers devraient être nettoyées
+      // par ON DELETE CASCADE défini dans le schéma.
+      const stmt = db.prepare("DELETE FROM sessions WHERE id = ?");
+      stmt.run(id);
+    } catch (error) {
+      console.error(`[DB Sessions] Error deleting session ${id}:`, error);
+      throw error;
+    }
+  });
 };
 
 // SessionResults
-export const addSessionResult = async (result: SessionResult): Promise<number | undefined> => {
-  console.warn("[DB STUB] addSessionResult called", result);
-  return asyncDbRun(() => undefined);
+
+const rowToSessionResult = (row: any): SessionResult => {
+  if (!row) return undefined as any;
+  const result: any = { ...row };
+
+  if (result.answer && typeof result.answer === 'string') {
+    try {
+      result.answer = JSON.parse(result.answer);
+    } catch (e) {
+      // Si ce n'est pas du JSON, c'est probablement une réponse simple (chaîne)
+      // Laisser tel quel.
+    }
+  }
+  result.isCorrect = result.isCorrect === 1;
+  // timestamp est un INTEGER (Unix timestamp), pas de conversion nécessaire.
+  return result as SessionResult;
 };
-export const addBulkSessionResults = async (results: SessionResult[]): Promise<number[] | undefined> => {
-  console.warn("[DB STUB] addBulkSessionResults called", results);
-  return asyncDbRun(() => undefined);
-}
+
+const sessionResultToRow = (sessionResult: Partial<Omit<SessionResult, 'id'> | SessionResult>) => {
+  const rowData: any = { ...sessionResult };
+
+  if (rowData.answer !== undefined && typeof rowData.answer !== 'string') {
+    rowData.answer = JSON.stringify(rowData.answer);
+  }
+  if (rowData.isCorrect !== undefined) {
+    rowData.isCorrect = rowData.isCorrect ? 1 : 0;
+  }
+  if ('id' in rowData && !Object.prototype.hasOwnProperty.call(sessionResult, 'id')) {
+    delete rowData.id;
+  }
+  return rowData;
+};
+
+export const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promise<number | undefined> => {
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO sessionResults (sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
+        VALUES (@sessionId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
+      `);
+      const rowData = sessionResultToRow(result);
+      const res = stmt.run(rowData);
+      return res.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB SessionResults] Error adding session result:`, error);
+      throw error;
+    }
+  });
+};
+
+export const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
+  if (!results || results.length === 0) return Promise.resolve([]);
+
+  return asyncDbRun(() => {
+    const insertedIds: (number | undefined)[] = [];
+    const insertStmt = db.prepare(`
+      INSERT INTO sessionResults (sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
+      VALUES (@sessionId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
+    `);
+
+    const transaction = db.transaction((items: Omit<SessionResult, 'id'>[]) => {
+      for (const result of items) {
+        try {
+          const rowData = sessionResultToRow(result);
+          const res = insertStmt.run(rowData);
+          insertedIds.push(res.lastInsertRowid as number);
+        } catch (error) {
+          console.error(`[DB SessionResults] Error in bulk adding session result for item:`, result, error);
+          // En cas d'erreur sur un item, on peut choisir d'arrêter ou de continuer.
+          // Ici, la transaction sera annulée par défaut si une erreur est levée.
+          // Si on veut continuer et juste logger l'erreur, il faudrait un try/catch interne.
+          // Pour l'instant, on laisse la transaction échouer en cas d'erreur.
+          insertedIds.push(undefined); // Marquer l'échec pour cet item
+          throw error; // Important pour annuler la transaction
+        }
+      }
+    });
+
+    try {
+      transaction(results);
+      return insertedIds;
+    } catch (error) {
+      // L'erreur a déjà été loggée dans la transaction ou par asyncDbRun
+      // Retourner un tableau avec des undefined pour les échecs si la transaction a été partiellement tentée
+      // ou simplement undefined si la transaction entière a échoué tôt.
+      // Étant donné que la transaction s'annule, il est plus probable que rien ne soit réellement inséré.
+      // Dexie retournait `Promise<Key[] | undefined>`, donc `undefined` est une option.
+      // Pour être plus précis, on pourrait retourner un tableau de la même longueur que `results`
+      // avec `undefined` pour chaque item si la transaction échoue.
+      console.error(`[DB SessionResults] Bulk add transaction failed.`);
+      return undefined;
+    }
+  });
+};
+
 export const getAllResults = async (): Promise<SessionResult[]> => {
-  console.warn("[DB STUB] getAllResults called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM sessionResults");
+      const rows = stmt.all() as any[];
+      return rows.map(rowToSessionResult);
+    } catch (error) {
+      console.error(`[DB SessionResults] Error getting all results:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
-  console.warn(`[DB STUB] getResultsForSession(${sessionId}) called`);
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM sessionResults WHERE sessionId = ? ORDER BY timestamp ASC");
+      const rows = stmt.all(sessionId) as any[];
+      return rows.map(rowToSessionResult);
+    } catch (error) {
+      console.error(`[DB SessionResults] Error getting results for session ${sessionId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getResultBySessionAndQuestion = async (sessionId: number, questionId: number, participantIdBoitier: string): Promise<SessionResult | undefined> => {
-  console.warn(`[DB STUB] getResultBySessionAndQuestion called for session ${sessionId}, question ${questionId}, boitier ${participantIdBoitier}`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM sessionResults WHERE sessionId = ? AND questionId = ? AND participantIdBoitier = ?");
+      const row = stmt.get(sessionId, questionId, participantIdBoitier) as any;
+      return row ? rowToSessionResult(row) : undefined;
+    } catch (error) {
+      console.error(`[DB SessionResults] Error getting result for session ${sessionId}, question ${questionId}, boitier ${participantIdBoitier}:`, error);
+      throw error;
+    }
+  });
 };
-export const updateSessionResult = async (id: number, updates: Partial<SessionResult>): Promise<number | undefined> => {
-  console.warn(`[DB STUB] updateSessionResult(${id}) called`, updates);
-  return asyncDbRun(() => undefined);
+
+export const updateSessionResult = async (id: number, updates: Partial<Omit<SessionResult, 'id'>>): Promise<number | undefined> => {
+  return asyncDbRun(() => {
+    try {
+      const rowUpdates = sessionResultToRow(updates);
+      const fields = Object.keys(rowUpdates).filter(key => key !== 'id');
+      if (fields.length === 0) return 0;
+
+      const setClause = fields.map(field => `${field} = @${field}`).join(', ');
+      const stmt = db.prepare(`UPDATE sessionResults SET ${setClause} WHERE id = @id`);
+
+      const result = stmt.run({ ...rowUpdates, id });
+      return result.changes;
+    } catch (error) {
+      console.error(`[DB SessionResults] Error updating session result ${id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const deleteResultsForSession = async (sessionId: number): Promise<void> => {
-  console.warn(`[DB STUB] deleteResultsForSession(${sessionId}) called`);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("DELETE FROM sessionResults WHERE sessionId = ?");
+      stmt.run(sessionId);
+    } catch (error) {
+      console.error(`[DB SessionResults] Error deleting results for session ${sessionId}:`, error);
+      throw error;
+    }
+  });
 };
 
 // VotingDevices
 export const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
-  console.warn("[DB STUB] addVotingDevice called", device);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("INSERT INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
+      const result = stmt.run(device);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB VotingDevices] Error adding voting device:`, error);
+      if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw new Error(`Voting device with serial number ${device.serialNumber} already exists.`);
+      }
+      throw error;
+    }
+  });
 };
+
 export const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
-  console.warn("[DB STUB] getAllVotingDevices called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM votingDevices ORDER BY name ASC, serialNumber ASC");
+      return stmt.all() as VotingDevice[];
+    } catch (error) {
+      console.error(`[DB VotingDevices] Error getting all voting devices:`, error);
+      throw error;
+    }
+  });
 };
-export const updateVotingDevice = async (id: number, updates: Partial<VotingDevice>): Promise<number> => {
-  console.warn(`[DB STUB] updateVotingDevice(${id}) called`, updates);
-  return asyncDbRun(() => 0); // Dexie's update returned number of affected rows. SQLite update returns changes.
+
+export const updateVotingDevice = async (id: number, updates: Partial<Omit<VotingDevice, 'id'>>): Promise<number> => {
+  return asyncDbRun(() => {
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id' && (updates as any)[key] !== undefined);
+      if (fields.length === 0) return 0;
+
+      const setClause = fields.map(field => `${field} = @${field}`).join(', ');
+      const stmt = db.prepare(`UPDATE votingDevices SET ${setClause} WHERE id = @id`);
+
+      const params: any = { id };
+      for (const field of fields) {
+        params[field] = (updates as any)[field];
+      }
+
+      const result = stmt.run(params);
+      return result.changes;
+    } catch (error) {
+      console.error(`[DB VotingDevices] Error updating voting device ${id}:`, error);
+      if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && updates.serialNumber) {
+        throw new Error(`Voting device with serial number ${updates.serialNumber} already exists.`);
+      }
+      throw error;
+    }
+  });
 };
+
 export const deleteVotingDevice = async (id: number): Promise<void> => {
-  console.warn(`[DB STUB] deleteVotingDevice(${id}) called`);
-  // Foreign key ON DELETE CASCADE for deviceKitAssignments.votingDeviceId should handle related assignments.
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      // ON DELETE CASCADE sur deviceKitAssignments.votingDeviceId devrait gérer les affectations.
+      const stmt = db.prepare("DELETE FROM votingDevices WHERE id = ?");
+      stmt.run(id);
+    } catch (error) {
+      console.error(`[DB VotingDevices] Error deleting voting device ${id}:`, error);
+      throw error;
+    }
+  });
 };
-export const bulkAddVotingDevices = async (devices: VotingDevice[]): Promise<void> => {
-  console.warn("[DB STUB] bulkAddVotingDevices called", devices);
-  return asyncDbRun(() => {});
+
+export const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promise<void> => {
+  if (!devices || devices.length === 0) return Promise.resolve();
+
+  return asyncDbRun(() => {
+    const insertStmt = db.prepare("INSERT OR IGNORE INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
+    // Utilisation de "INSERT OR IGNORE" pour éviter les erreurs si un serialNumber existe déjà.
+    // Cela signifie que les doublons basés sur serialNumber seront ignorés silencieusement.
+    // Si un comportement différent est souhaité (ex: lever une erreur pour le lot), il faudrait ajuster.
+
+    const transaction = db.transaction((items: Omit<VotingDevice, 'id'>[]) => {
+      for (const device of items) {
+        try {
+          insertStmt.run(device);
+        } catch (error) {
+          // Normalement, INSERT OR IGNORE devrait prévenir les erreurs SQLITE_CONSTRAINT_UNIQUE.
+          // Mais on garde un catch pour d'autres erreurs potentielles.
+          console.error(`[DB VotingDevices] Error in bulk adding voting device for item:`, device, error);
+          throw error; // Annule la transaction si une erreur inattendue survient.
+        }
+      }
+    });
+
+    try {
+      transaction(devices);
+    } catch (error) {
+      // L'erreur a déjà été loggée.
+      console.error(`[DB VotingDevices] Bulk add transaction failed overall.`);
+      // On ne retourne rien (void) comme spécifié, mais on propage l'erreur pour que l'appelant soit notifié.
+      throw error;
+    }
+  });
 };
 
 // Trainers
@@ -501,39 +1013,154 @@ export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
 };
 
 // SessionQuestions
-export const addSessionQuestion = async (sq: SessionQuestion): Promise<number | undefined> => {
-  console.warn("[DB STUB] addSessionQuestion called", sq);
-  return asyncDbRun(() => undefined);
+export const addSessionQuestion = async (sq: Omit<SessionQuestion, 'id'>): Promise<number | undefined> => {
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO sessionQuestions (sessionId, dbQuestionId, slideGuid, blockId)
+        VALUES (@sessionId, @dbQuestionId, @slideGuid, @blockId)
+      `);
+      const result = stmt.run(sq);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB SessionQuestions] Error adding session question:`, error);
+      throw error;
+    }
+  });
 };
-export const addBulkSessionQuestions = async (questions: SessionQuestion[]): Promise<number[] | undefined> => {
-  console.warn("[DB STUB] addBulkSessionQuestions called", questions);
-  return asyncDbRun(() => undefined); // Dexie returned array of keys. SQLite bulk insert doesn't directly.
+
+export const addBulkSessionQuestions = async (questions: Omit<SessionQuestion, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
+  if (!questions || questions.length === 0) return Promise.resolve([]);
+
+  return asyncDbRun(() => {
+    const insertedIds: (number | undefined)[] = [];
+    const insertStmt = db.prepare(`
+      INSERT INTO sessionQuestions (sessionId, dbQuestionId, slideGuid, blockId)
+      VALUES (@sessionId, @dbQuestionId, @slideGuid, @blockId)
+    `);
+
+    const transaction = db.transaction((items: Omit<SessionQuestion, 'id'>[]) => {
+      for (const question of items) {
+        try {
+          const result = insertStmt.run(question);
+          insertedIds.push(result.lastInsertRowid as number);
+        } catch (error) {
+          console.error(`[DB SessionQuestions] Error in bulk adding session question for item:`, question, error);
+          insertedIds.push(undefined);
+          throw error; // Rollback transaction
+        }
+      }
+    });
+
+    try {
+      transaction(questions);
+      return insertedIds;
+    } catch (error) {
+      console.error(`[DB SessionQuestions] Bulk add transaction failed.`);
+      return undefined; // Ou retourner le tableau `insertedIds` partiellement rempli si on ne relance pas l'erreur dans la boucle
+    }
+  });
 };
+
 export const getSessionQuestionsBySessionId = async (sessionId: number): Promise<SessionQuestion[]> => {
-  console.warn(`[DB STUB] getSessionQuestionsBySessionId(${sessionId}) called`);
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM sessionQuestions WHERE sessionId = ?");
+      // Il pourrait être utile de trier, par exemple par ID ou un autre critère si l'ordre est important.
+      // Pour l'instant, pas de tri explicite.
+      return stmt.all(sessionId) as SessionQuestion[];
+    } catch (error) {
+      console.error(`[DB SessionQuestions] Error getting session questions for session ${sessionId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<void> => {
-  console.warn(`[DB STUB] deleteSessionQuestionsBySessionId(${sessionId}) called`);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("DELETE FROM sessionQuestions WHERE sessionId = ?");
+      stmt.run(sessionId);
+    } catch (error) {
+      console.error(`[DB SessionQuestions] Error deleting session questions for session ${sessionId}:`, error);
+      throw error;
+    }
+  });
 };
 
 // SessionBoitiers
-export const addSessionBoitier = async (sb: SessionBoitier): Promise<number | undefined> => {
-  console.warn("[DB STUB] addSessionBoitier called", sb);
-  return asyncDbRun(() => undefined);
+export const addSessionBoitier = async (sb: Omit<SessionBoitier, 'id'>): Promise<number | undefined> => {
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO sessionBoitiers (sessionId, participantId, visualId, serialNumber)
+        VALUES (@sessionId, @participantId, @visualId, @serialNumber)
+      `);
+      const result = stmt.run(sb);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB SessionBoitiers] Error adding session boitier:`, error);
+      // Potentielle contrainte UNIQUE à vérifier si on en ajoute une sur (sessionId, serialNumber) ou (sessionId, participantId)
+      throw error;
+    }
+  });
 };
-export const addBulkSessionBoitiers = async (boitiers: SessionBoitier[]): Promise<number[] | undefined> => {
-  console.warn("[DB STUB] addBulkSessionBoitiers called", boitiers);
-  return asyncDbRun(() => undefined);
+
+export const addBulkSessionBoitiers = async (boitiers: Omit<SessionBoitier, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
+  if (!boitiers || boitiers.length === 0) return Promise.resolve([]);
+
+  return asyncDbRun(() => {
+    const insertedIds: (number | undefined)[] = [];
+    const insertStmt = db.prepare(`
+      INSERT INTO sessionBoitiers (sessionId, participantId, visualId, serialNumber)
+      VALUES (@sessionId, @participantId, @visualId, @serialNumber)
+    `);
+
+    const transaction = db.transaction((items: Omit<SessionBoitier, 'id'>[]) => {
+      for (const boitier of items) {
+        try {
+          const result = insertStmt.run(boitier);
+          insertedIds.push(result.lastInsertRowid as number);
+        } catch (error) {
+          console.error(`[DB SessionBoitiers] Error in bulk adding session boitier for item:`, boitier, error);
+          insertedIds.push(undefined);
+          throw error; // Rollback transaction
+        }
+      }
+    });
+
+    try {
+      transaction(boitiers);
+      return insertedIds;
+    } catch (error) {
+      console.error(`[DB SessionBoitiers] Bulk add transaction failed.`);
+      return undefined;
+    }
+  });
 };
+
 export const getSessionBoitiersBySessionId = async (sessionId: number): Promise<SessionBoitier[]> => {
-  console.warn(`[DB STUB] getSessionBoitiersBySessionId(${sessionId}) called`);
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM sessionBoitiers WHERE sessionId = ? ORDER BY visualId ASC, participantId ASC");
+      return stmt.all(sessionId) as SessionBoitier[];
+    } catch (error) {
+      console.error(`[DB SessionBoitiers] Error getting session boitiers for session ${sessionId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void> => {
-  console.warn(`[DB STUB] deleteSessionBoitiersBySessionId(${sessionId}) called`);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("DELETE FROM sessionBoitiers WHERE sessionId = ?");
+      stmt.run(sessionId);
+    } catch (error) {
+      console.error(`[DB SessionBoitiers] Error deleting session boitiers for session ${sessionId}:`, error);
+      throw error;
+    }
+  });
 };
 
 // Referentiels
@@ -598,106 +1225,362 @@ export const getReferentialById = async (id: number): Promise<Referential | unde
 
 // Themes
 export const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> => {
-  console.warn("[DB STUB] addTheme called", theme);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO themes (code_theme, nom_complet, referentiel_id)
+        VALUES (@code_theme, @nom_complet, @referentiel_id)
+      `);
+      const result = stmt.run(theme);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB Themes] Error adding theme:`, error);
+      if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw new Error(`Theme with code ${theme.code_theme} already exists for referential ${theme.referentiel_id}.`);
+      }
+      throw error;
+    }
+  });
 };
+
 export const getAllThemes = async (): Promise<Theme[]> => {
-  console.warn("[DB STUB] getAllThemes called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM themes");
+      return stmt.all() as Theme[];
+    } catch (error) {
+      console.error(`[DB Themes] Error getting all themes:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getThemesByReferentialId = async (referentialId: number): Promise<Theme[]> => {
-  console.warn(`[DB STUB] getThemesByReferentialId(${referentialId}) called`);
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM themes WHERE referentiel_id = ?");
+      return stmt.all(referentialId) as Theme[];
+    } catch (error) {
+      console.error(`[DB Themes] Error getting themes by referentialId ${referentialId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id: number): Promise<Theme | undefined> => {
-  console.warn(`[DB STUB] getThemeByCodeAndReferentialId for code ${code_theme}, ref_id ${referentiel_id} called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM themes WHERE code_theme = ? AND referentiel_id = ?");
+      return stmt.get(code_theme, referentiel_id) as Theme | undefined;
+    } catch (error) {
+      console.error(`[DB Themes] Error getting theme by code ${code_theme} and referentialId ${referentiel_id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getThemeById = async (id: number): Promise<Theme | undefined> => {
-  console.warn(`[DB STUB] getThemeById(${id}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM themes WHERE id = ?");
+      return stmt.get(id) as Theme | undefined;
+    } catch (error) {
+      console.error(`[DB Themes] Error getting theme by id ${id}:`, error);
+      throw error;
+    }
+  });
 };
 
 // Blocs
 export const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
-  console.warn("[DB STUB] addBloc called", bloc);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO blocs (code_bloc, nom_complet, theme_id)
+        VALUES (@code_bloc, @nom_complet, @theme_id)
+      `);
+      const result = stmt.run(bloc);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB Blocs] Error adding bloc:`, error);
+      if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw new Error(`Bloc with code ${bloc.code_bloc} already exists for theme ${bloc.theme_id}.`);
+      }
+      throw error;
+    }
+  });
 };
+
 export const getAllBlocs = async (): Promise<Bloc[]> => {
-  console.warn("[DB STUB] getAllBlocs called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM blocs");
+      return stmt.all() as Bloc[];
+    } catch (error) {
+      console.error(`[DB Blocs] Error getting all blocs:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
-  console.warn(`[DB STUB] getBlocsByThemeId(${themeId}) called`);
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM blocs WHERE theme_id = ?");
+      return stmt.all(themeId) as Bloc[];
+    } catch (error) {
+      console.error(`[DB Blocs] Error getting blocs by themeId ${themeId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
-  console.warn(`[DB STUB] getBlocByCodeAndThemeId for code ${code_bloc}, theme_id ${theme_id} called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM blocs WHERE code_bloc = ? AND theme_id = ?");
+      return stmt.get(code_bloc, theme_id) as Bloc | undefined;
+    } catch (error) {
+      console.error(`[DB Blocs] Error getting bloc by code ${code_bloc} and themeId ${theme_id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getBlocById = async (id: number): Promise<Bloc | undefined> => {
-  console.warn(`[DB STUB] getBlocById(${id}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM blocs WHERE id = ?");
+      return stmt.get(id) as Bloc | undefined;
+    } catch (error) {
+      console.error(`[DB Blocs] Error getting bloc by id ${id}:`, error);
+      throw error;
+    }
+  });
 };
 
 // DeviceKits
+
+// Helper pour convertir la valeur de isDefault (0/1) en booléen pour la logique applicative
+const rowToDeviceKit = (row: any): DeviceKit => {
+  if (!row) return undefined as any;
+  return {
+    ...row,
+    isDefault: row.isDefault === 1,
+  } as DeviceKit;
+};
+
 export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
-  console.warn("[DB STUB] addDeviceKit called", kit);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("INSERT INTO deviceKits (name, isDefault) VALUES (@name, @isDefault)");
+      const isDefault = kit.isDefault === true || kit.isDefault === 1 ? 1 : 0;
+      const result = stmt.run({ ...kit, isDefault });
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB DeviceKits] Error adding device kit:`, error);
+      if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw new Error(`Device kit with name ${kit.name} already exists.`);
+      }
+      throw error;
+    }
+  });
 };
+
 export const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
-  console.warn("[DB STUB] getAllDeviceKits called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM deviceKits ORDER BY name ASC");
+      const rows = stmt.all() as any[];
+      return rows.map(rowToDeviceKit);
+    } catch (error) {
+      console.error(`[DB DeviceKits] Error getting all device kits:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
-  console.warn(`[DB STUB] getDeviceKitById(${id}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM deviceKits WHERE id = ?");
+      const row = stmt.get(id) as any;
+      return row ? rowToDeviceKit(row) : undefined;
+    } catch (error) {
+      console.error(`[DB DeviceKits] Error getting device kit by id ${id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'>>): Promise<number | undefined> => {
-  console.warn(`[DB STUB] updateDeviceKit(${id}) called`, updates);
-  return asyncDbRun(() => undefined); // Dexie update returned number of affected rows.
+  return asyncDbRun(() => {
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return 0;
+
+      const setClause = fields.map(field => `${field} = @${field}`).join(', ');
+      const stmt = db.prepare(`UPDATE deviceKits SET ${setClause} WHERE id = @id`);
+
+      const params: any = { ...updates, id };
+      if (updates.isDefault !== undefined) {
+        params.isDefault = updates.isDefault === true || updates.isDefault === 1 ? 1 : 0;
+      }
+
+      const result = stmt.run(params);
+      return result.changes;
+    } catch (error) {
+      console.error(`[DB DeviceKits] Error updating device kit ${id}:`, error);
+      if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && updates.name) {
+        throw new Error(`Device kit with name ${updates.name} already exists.`);
+      }
+      throw error;
+    }
+  });
 };
+
 export const deleteDeviceKit = async (id: number): Promise<void> => {
-  console.warn(`[DB STUB] deleteDeviceKit(${id}) called`);
-  // Foreign key ON DELETE CASCADE for deviceKitAssignments.kitId should handle assignments.
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      // ON DELETE CASCADE sur deviceKitAssignments.kitId devrait gérer les affectations.
+      const stmt = db.prepare("DELETE FROM deviceKits WHERE id = ?");
+      stmt.run(id);
+    } catch (error) {
+      console.error(`[DB DeviceKits] Error deleting device kit ${id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
-  console.warn("[DB STUB] getDefaultDeviceKit called");
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM deviceKits WHERE isDefault = 1 LIMIT 1");
+      const row = stmt.get() as any;
+      return row ? rowToDeviceKit(row) : undefined;
+    } catch (error) {
+      console.error(`[DB DeviceKits] Error getting default device kit:`, error);
+      throw error;
+    }
+  });
 };
+
 export const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
-  console.warn(`[DB STUB] setDefaultDeviceKit(${kitId}) called`);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    const transaction = db.transaction(() => {
+      try {
+        const resetStmt = db.prepare("UPDATE deviceKits SET isDefault = 0 WHERE isDefault = 1");
+        resetStmt.run();
+
+        const setStmt = db.prepare("UPDATE deviceKits SET isDefault = 1 WHERE id = ?");
+        const result = setStmt.run(kitId);
+
+        if (result.changes === 0) {
+          console.warn(`[DB DeviceKits] setDefaultDeviceKit: Kit with id ${kitId} not found or no change made.`);
+          // On pourrait vouloir lever une erreur ici si le kitId n'est pas trouvé,
+          // mais pour l'instant, on garde un comportement silencieux si pas de changement.
+        }
+        // La fonction originale retournait void, donc on ne retourne rien ici non plus.
+      } catch (error) {
+        console.error(`[DB DeviceKits] Error setting default device kit ${kitId}:`, error);
+        throw error; // Annule la transaction
+      }
+    });
+    transaction();
+  });
 };
 
 // DeviceKitAssignments
 export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
-  console.warn(`[DB STUB] assignDeviceToKit for kit ${kitId}, device ${votingDeviceId} called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("INSERT INTO deviceKitAssignments (kitId, votingDeviceId) VALUES (?, ?)");
+      const result = stmt.run(kitId, votingDeviceId);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB DeviceKitAssignments] Error assigning device ${votingDeviceId} to kit ${kitId}:`, error);
+      if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        // Cette erreur signifie que l'assignation existe déjà.
+        // On peut choisir de la retourner comme un succès silencieux ou de lever une erreur spécifique.
+        // Pour l'instant, on la laisse remonter pour que l'appelant soit conscient.
+        throw new Error(`Device ${votingDeviceId} is already assigned to kit ${kitId}.`);
+      }
+      throw error;
+    }
+  });
 };
+
 export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promise<void> => {
-  console.warn(`[DB STUB] removeDeviceFromKit for kit ${kitId}, device ${votingDeviceId} called`);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE kitId = ? AND votingDeviceId = ?");
+      stmt.run(kitId, votingDeviceId);
+    } catch (error) {
+      console.error(`[DB DeviceKitAssignments] Error removing device ${votingDeviceId} from kit ${kitId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
-  console.warn(`[DB STUB] getVotingDevicesForKit(${kitId}) called`);
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        SELECT vd.*
+        FROM votingDevices vd
+        JOIN deviceKitAssignments dka ON vd.id = dka.votingDeviceId
+        WHERE dka.kitId = ?
+        ORDER BY vd.name ASC, vd.serialNumber ASC
+      `);
+      return stmt.all(kitId) as VotingDevice[];
+    } catch (error) {
+      console.error(`[DB DeviceKitAssignments] Error getting voting devices for kit ${kitId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit[]> => {
-  console.warn(`[DB STUB] getKitsForVotingDevice(${votingDeviceId}) called`);
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        SELECT dk.*
+        FROM deviceKits dk
+        JOIN deviceKitAssignments dka ON dk.id = dka.kitId
+        WHERE dka.votingDeviceId = ?
+        ORDER BY dk.name ASC
+      `);
+      const rows = stmt.all(votingDeviceId) as any[];
+      return rows.map(rowToDeviceKit); // Utilise le helper existant pour convertir isDefault
+    } catch (error) {
+      console.error(`[DB DeviceKitAssignments] Error getting kits for voting device ${votingDeviceId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
-  console.warn(`[DB STUB] removeAssignmentsByKitId(${kitId}) called`);
-  // This function is likely redundant if ON DELETE CASCADE is used on deviceKits.
-  // If called, it would perform a targeted delete.
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE kitId = ?");
+      stmt.run(kitId);
+    } catch (error) {
+      console.error(`[DB DeviceKitAssignments] Error removing assignments by kitId ${kitId}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number): Promise<void> => {
-  console.warn(`[DB STUB] removeAssignmentsByVotingDeviceId(${votingDeviceId}) called`);
-  // Similarly, redundant if ON DELETE CASCADE is used on votingDevices.
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE votingDeviceId = ?");
+      stmt.run(votingDeviceId);
+    } catch (error) {
+      console.error(`[DB DeviceKitAssignments] Error removing assignments by votingDeviceId ${votingDeviceId}:`, error);
+      throw error;
+    }
+  });
 };
 
 // Reporting
@@ -708,8 +1591,84 @@ export interface BlockUsage {
   usageCount: number;
 }
 export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
-  console.warn("[DB STUB] calculateBlockUsage called", { startDate, endDate });
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    let query = "SELECT id, dateSession, referentielId, selectedBlocIds FROM sessions WHERE status = 'completed'";
+    const params: (string | number)[] = [];
+
+    if (startDate) {
+      query += " AND dateSession >= ?";
+      params.push(typeof startDate === 'string' ? startDate : startDate.toISOString());
+    }
+    if (endDate) {
+      query += " AND dateSession <= ?";
+      params.push(typeof endDate === 'string' ? endDate : endDate.toISOString());
+    }
+
+    const sessionsForBlockUsage = db.prepare(query).all(...params) as Pick<Session, 'id' | 'dateSession' | 'referentielId' | 'selectedBlocIds'>[];
+
+    const blockUsageMap = new Map<string, BlockUsage>();
+
+    for (const session of sessionsForBlockUsage) {
+      if (!session.selectedBlocIds || !session.referentielId) {
+        continue;
+      }
+
+      let blocIds: number[] = [];
+      try {
+        // selectedBlocIds est stocké comme JSON array de nombres (IDs de blocs)
+        const parsedBlocIds = JSON.parse(session.selectedBlocIds as any);
+        if (Array.isArray(parsedBlocIds) && parsedBlocIds.every(id => typeof id === 'number')) {
+          blocIds = parsedBlocIds;
+        } else {
+          console.warn(`[DB Reports] Session ${session.id} has malformed selectedBlocIds: ${session.selectedBlocIds}`);
+          continue;
+        }
+      } catch (e) {
+        console.warn(`[DB Reports] Session ${session.id} failed to parse selectedBlocIds: ${session.selectedBlocIds}`, e);
+        continue;
+      }
+
+      if (blocIds.length === 0) {
+        continue;
+      }
+
+      // Pour chaque blocId, trouver son code_bloc, puis le thème et le référentiel associés
+      for (const blocId of blocIds) {
+        try {
+          const blocInfoStmt = db.prepare(`
+            SELECT b.code_bloc, t.code_theme, r.code as referentiel_code
+            FROM blocs b
+            JOIN themes t ON b.theme_id = t.id
+            JOIN referentiels r ON t.referentiel_id = r.id
+            WHERE b.id = ? AND r.id = ?
+          `);
+          // On s'assure que le bloc appartient bien au référentiel de la session pour la cohérence
+          const blocDetails = blocInfoStmt.get(blocId, session.referentielId) as { code_bloc: string; code_theme: string; referentiel_code: string } | undefined;
+
+          if (blocDetails) {
+            const key = `${blocDetails.referentiel_code}-${blocDetails.code_theme}-${blocDetails.code_bloc}`;
+            if (blockUsageMap.has(key)) {
+              blockUsageMap.get(key)!.usageCount++;
+            } else {
+              blockUsageMap.set(key, {
+                referentiel: blocDetails.referentiel_code,
+                theme: blocDetails.code_theme,
+                blockId: blocDetails.code_bloc,
+                usageCount: 1,
+              });
+            }
+          } else {
+            // Ce cas peut arriver si un blocId dans selectedBlocIds n'existe plus
+            // ou n'appartient pas au référentiel de la session.
+            console.warn(`[DB Reports] Block details not found for blocId ${blocId} in referentielId ${session.referentielId} for session ${session.id}`);
+          }
+        } catch (e) {
+            console.error(`[DB Reports] Error processing blocId ${blocId} for session ${session.id}:`, e);
+        }
+      }
+    }
+    return Array.from(blockUsageMap.values());
+  });
 };
 
 console.log("[DB SETUP] SQLite database module loaded. Schema applied. CRUD functions are placeholders.");
