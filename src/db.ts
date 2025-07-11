@@ -932,4 +932,5 @@ export const closeDb = (): Promise<void> => {
     });
   });
 };
-[end of src/db.ts]
+
+// [end of src/db.ts]
