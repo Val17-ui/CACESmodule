@@ -649,9 +649,13 @@ ipcMain.handle('bulk-add-voting-devices', async (event, devicesData: Omit<dbFunc
 // --- Handlers IPC pour Sessions & SessionParticipants ---
 ipcMain.handle('add-session', async (event, sessionData: Omit<dbFunctions.SessionData, 'id' | 'createdAt' | 'updatedAt'>) => {
   try {
-    // Assurer la conversion des données JSON et BLOB si nécessaire avant d'appeler dbFunctions
-    // Pour l'instant, on suppose que sessionData est correctement formaté par le renderer
-    // (par exemple, les champs JSON sont des objets/tableaux, les BLOBs sont des Buffers)
+    // sessionData should be an object matching Omit<dbFunctions.SessionData, 'id' | 'createdAt' | 'updatedAt'>
+    // Type checking for properties like nomSession, dateSession, etc., is implicitly handled by TypeScript
+    // if the call from renderer is typed.
+    // JSON stringification for fields like selectedBlocIds, questionMappings, etc., should be handled by dbFunctions.addSession if it expects objects,
+    // or by the renderer if dbFunctions.addSession expects pre-stringified JSON.
+    // Based on db.ts, addSession expects values that are directly insertable or null.
+    // For example, data.selectedBlocIds should be a string or null.
     const newId = await dbFunctions.addSession(sessionData);
     return { success: true, id: newId };
   } catch (error: any) {
@@ -660,10 +664,11 @@ ipcMain.handle('add-session', async (event, sessionData: Omit<dbFunctions.Sessio
   }
 });
 
-ipcMain.handle('get-session-by-id', async (event, id) => {
+ipcMain.handle('get-session-by-id', async (event, id: number) => {
   try {
     const session = await dbFunctions.getSessionById(id);
     if (session) {
+      // session is dbFunctions.SessionData | null
       return { success: true, data: session };
     } else {
       return { success: false, message: 'Session non trouvée' };
@@ -676,6 +681,7 @@ ipcMain.handle('get-session-by-id', async (event, id) => {
 
 ipcMain.handle('get-all-sessions-with-participants', async () => {
     try {
+        // This function in db.ts already returns Array<SessionData & { participants: SessionParticipantData[] }>
         const sessions = await dbFunctions.getAllSessionsWithParticipants();
         return { success: true, data: sessions };
     } catch (error: any) {
@@ -684,8 +690,9 @@ ipcMain.handle('get-all-sessions-with-participants', async () => {
     }
 });
 
-ipcMain.handle('update-session', async (event, id, sessionData: Partial<Omit<dbFunctions.SessionData, 'id' | 'createdAt' | 'updatedAt'>>) => {
+ipcMain.handle('update-session', async (event, id: number, sessionData: Partial<Omit<dbFunctions.SessionData, 'id' | 'createdAt' | 'updatedAt'>>) => {
   try {
+    // Similar to add-session, ensure sessionData fields are in the format expected by dbFunctions.updateSession
     await dbFunctions.updateSession(id, sessionData);
     return { success: true };
   } catch (error: any) {
@@ -694,7 +701,7 @@ ipcMain.handle('update-session', async (event, id, sessionData: Partial<Omit<dbF
   }
 });
 
-ipcMain.handle('delete-session', async (event, id) => {
+ipcMain.handle('delete-session', async (event, id: number) => {
   try {
     await dbFunctions.deleteSession(id);
     return { success: true };
@@ -705,9 +712,13 @@ ipcMain.handle('delete-session', async (event, id) => {
 });
 
 // Handlers pour session_participants (si gestion individuelle nécessaire)
-ipcMain.handle('add-session-participant', async (event, sessionId, participantData: Omit<dbFunctions.SessionParticipantData, 'id' | 'sessionId'>) => {
+ipcMain.handle('add-session-participant', async (event, participantData: Omit<dbFunctions.SessionParticipantData, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
-        const newId = await dbFunctions.addSessionParticipant(sessionId, participantData);
+        // participantData must include session_id
+        if (typeof participantData.session_id !== 'number') {
+            throw new Error("session_id is required and must be a number for add-session-participant");
+        }
+        const newId = await dbFunctions.addSessionParticipant(participantData);
         return { success: true, id: newId };
     } catch (error: any) {
         console.error('IPC Error add-session-participant:', error);
@@ -715,9 +726,9 @@ ipcMain.handle('add-session-participant', async (event, sessionId, participantDa
     }
 });
 
-ipcMain.handle('get-session-participants-by-session-id', async (event, sessionId) => {
+ipcMain.handle('get-session-participants-by-session-id', async (event, sessionId: number) => {
     try {
-        const participants = await dbFunctions.getSessionParticipantsBySessionId(sessionId);
+        const participants = await dbFunctions.getSessionParticipants(sessionId);
         return { success: true, data: participants };
     } catch (error: any) {
         console.error('IPC Error get-session-participants-by-session-id:', error);
@@ -725,7 +736,7 @@ ipcMain.handle('get-session-participants-by-session-id', async (event, sessionId
     }
 });
 
-ipcMain.handle('update-session-participant', async (event, participantId, data: Partial<Omit<dbFunctions.SessionParticipantData, 'id' | 'sessionId'>>) => {
+ipcMain.handle('update-session-participant', async (event, participantId: number, data: Partial<Omit<dbFunctions.SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>>) => {
     try {
         await dbFunctions.updateSessionParticipant(participantId, data);
         return { success: true };
@@ -735,7 +746,7 @@ ipcMain.handle('update-session-participant', async (event, participantId, data: 
     }
 });
 
-ipcMain.handle('delete-session-participant', async (event, participantId) => {
+ipcMain.handle('delete-session-participant', async (event, participantId: number) => {
     try {
         await dbFunctions.deleteSessionParticipant(participantId);
         return { success: true };
@@ -746,8 +757,12 @@ ipcMain.handle('delete-session-participant', async (event, participantId) => {
 });
 
 // --- Handlers IPC pour SessionQuestions (Snapshots) ---
-ipcMain.handle('add-session-question', async (event, data: Omit<dbFunctions.SessionQuestionData, 'id'>) => {
+ipcMain.handle('add-session-question', async (event, data: Omit<dbFunctions.SessionQuestionData, 'id' | 'createdAt'>) => {
     try {
+        // data must include session_id
+        if (typeof data.session_id !== 'number') {
+            throw new Error("session_id is required and must be a number for add-session-question");
+        }
         const newId = await dbFunctions.addSessionQuestion(data);
         return { success: true, id: newId };
     } catch (error: any) {
@@ -756,8 +771,9 @@ ipcMain.handle('add-session-question', async (event, data: Omit<dbFunctions.Sess
     }
 });
 
-ipcMain.handle('add-bulk-session-questions', async (event, sessionId: number, questions: Omit<dbFunctions.SessionQuestionData, 'id' | 'sessionId'>[]) => {
+ipcMain.handle('add-bulk-session-questions', async (event, sessionId: number, questions: Array<Omit<dbFunctions.SessionQuestionData, 'id' | 'session_id' | 'createdAt'>>) => {
     try {
+        // The dbFunction addBulkSessionQuestions now handles adding sessionId to each question object.
         await dbFunctions.addBulkSessionQuestions(sessionId, questions);
         return { success: true };
     } catch (error: any) {
@@ -768,7 +784,7 @@ ipcMain.handle('add-bulk-session-questions', async (event, sessionId: number, qu
 
 ipcMain.handle('get-session-questions-by-session-id', async (event, sessionId: number) => {
     try {
-        const questions = await dbFunctions.getSessionQuestionsBySessionId(sessionId);
+        const questions = await dbFunctions.getSessionQuestions(sessionId); // Corrected function name
         return { success: true, data: questions };
     } catch (error: any) {
         console.error('IPC Error get-session-questions-by-session-id:', error);
@@ -778,7 +794,7 @@ ipcMain.handle('get-session-questions-by-session-id', async (event, sessionId: n
 
 ipcMain.handle('delete-session-questions-by-session-id', async (event, sessionId: number) => {
     try {
-        await dbFunctions.deleteSessionQuestionsBySessionId(sessionId);
+        await dbFunctions.deleteSessionQuestionsBySessionId(sessionId); // Corrected function name
         return { success: true };
     } catch (error: any) {
         console.error('IPC Error delete-session-questions-by-session-id:', error);
@@ -787,8 +803,12 @@ ipcMain.handle('delete-session-questions-by-session-id', async (event, sessionId
 });
 
 // --- Handlers IPC pour SessionBoitiers (Snapshots) ---
-ipcMain.handle('add-session-boitier', async (event, data: Omit<dbFunctions.SessionBoitierData, 'id'>) => {
+ipcMain.handle('add-session-boitier', async (event, data: Omit<dbFunctions.SessionBoitierData, 'id' | 'createdAt'>) => {
     try {
+        // data must include session_id
+        if (typeof data.session_id !== 'number') {
+            throw new Error("session_id is required and must be a number for add-session-boitier");
+        }
         const newId = await dbFunctions.addSessionBoitier(data);
         return { success: true, id: newId };
     } catch (error: any) {
@@ -797,8 +817,9 @@ ipcMain.handle('add-session-boitier', async (event, data: Omit<dbFunctions.Sessi
     }
 });
 
-ipcMain.handle('add-bulk-session-boitiers', async (event, sessionId: number, boitiers: Omit<dbFunctions.SessionBoitierData, 'id' | 'sessionId'>[]) => {
+ipcMain.handle('add-bulk-session-boitiers', async (event, sessionId: number, boitiers: Array<Omit<dbFunctions.SessionBoitierData, 'id' | 'session_id' | 'createdAt'>>) => {
     try {
+        // The dbFunction addBulkSessionBoitiers now handles adding sessionId to each boitier object.
         await dbFunctions.addBulkSessionBoitiers(sessionId, boitiers);
         return { success: true };
     } catch (error: any) {
@@ -809,7 +830,7 @@ ipcMain.handle('add-bulk-session-boitiers', async (event, sessionId: number, boi
 
 ipcMain.handle('get-session-boitiers-by-session-id', async (event, sessionId: number) => {
     try {
-        const boitiers = await dbFunctions.getSessionBoitiersBySessionId(sessionId);
+        const boitiers = await dbFunctions.getSessionBoitiers(sessionId); // Corrected function name
         return { success: true, data: boitiers };
     } catch (error: any) {
         console.error('IPC Error get-session-boitiers-by-session-id:', error);
@@ -819,7 +840,7 @@ ipcMain.handle('get-session-boitiers-by-session-id', async (event, sessionId: nu
 
 ipcMain.handle('delete-session-boitiers-by-session-id', async (event, sessionId: number) => {
     try {
-        await dbFunctions.deleteSessionBoitiersBySessionId(sessionId);
+        await dbFunctions.deleteSessionBoitiersBySessionId(sessionId); // Corrected function name
         return { success: true };
     } catch (error: any) {
         console.error('IPC Error delete-session-boitiers-by-session-id:', error);
@@ -828,8 +849,14 @@ ipcMain.handle('delete-session-boitiers-by-session-id', async (event, sessionId:
 });
 
 // --- Handlers IPC pour SessionResults ---
-ipcMain.handle('add-session-result', async (event, data: Omit<dbFunctions.SessionResultData, 'id'>) => {
+ipcMain.handle('add-session-result', async (event, data: Omit<dbFunctions.SessionResultData, 'id' | 'submitted_at'>) => {
     try {
+        // data must include session_id, session_question_id, and session_participant_id
+        if (typeof data.session_id !== 'number' ||
+            typeof data.session_question_id !== 'number' ||
+            typeof data.session_participant_id !== 'number') {
+            throw new Error("session_id, session_question_id, and session_participant_id are required and must be numbers for add-session-result");
+        }
         const newId = await dbFunctions.addSessionResult(data);
         return { success: true, id: newId };
     } catch (error: any) {
@@ -838,8 +865,9 @@ ipcMain.handle('add-session-result', async (event, data: Omit<dbFunctions.Sessio
     }
 });
 
-ipcMain.handle('add-bulk-session-results', async (event, results: Omit<dbFunctions.SessionResultData, 'id'>[]) => {
+ipcMain.handle('add-bulk-session-results', async (event, results: Array<Omit<dbFunctions.SessionResultData, 'id' | 'submitted_at'>>) => {
     try {
+        // dbFunctions.addBulkSessionResults includes checks for required IDs in each result object
         await dbFunctions.addBulkSessionResults(results);
         return { success: true };
     } catch (error: any) {
@@ -850,7 +878,7 @@ ipcMain.handle('add-bulk-session-results', async (event, results: Omit<dbFunctio
 
 ipcMain.handle('get-session-results-by-session-id', async (event, sessionId: number) => {
     try {
-        const results = await dbFunctions.getSessionResultsBySessionId(sessionId);
+        const results = await dbFunctions.getSessionResults(sessionId); // Corrected: uses the generic getSessionResults
         return { success: true, data: results };
     } catch (error: any) {
         console.error('IPC Error get-session-results-by-session-id:', error);
@@ -860,7 +888,12 @@ ipcMain.handle('get-session-results-by-session-id', async (event, sessionId: num
 
 ipcMain.handle('get-session-results-by-participant-boitier', async (event, sessionId: number, participantIdBoitier: string) => {
     try {
-        const results = await dbFunctions.getSessionResultsByParticipantBoitier(sessionId, participantIdBoitier);
+        // Assuming participantIdBoitier is the string representation of session_participant_id
+        const participantId = parseInt(participantIdBoitier, 10);
+        if (isNaN(participantId)) {
+            throw new Error("participantIdBoitier must be a numeric string.");
+        }
+        const results = await dbFunctions.getSessionResults(sessionId, participantId);
         return { success: true, data: results };
     } catch (error: any) {
         console.error('IPC Error get-session-results-by-participant-boitier:', error);
@@ -868,8 +901,10 @@ ipcMain.handle('get-session-results-by-participant-boitier', async (event, sessi
     }
 });
 
-ipcMain.handle('update-session-result', async (event, id: number, data: Partial<Omit<dbFunctions.SessionResultData, 'id' | 'sessionId' | 'questionId' | 'participantIdBoitier'>>) => {
+ipcMain.handle('update-session-result', async (event, id: number, data: Partial<Omit<dbFunctions.SessionResultData, 'id' | 'session_id' | 'session_question_id' | 'session_participant_id' | 'submitted_at'>>) => {
     try {
+        // The type for `data` now correctly reflects the fields that cannot be updated via this specific handler call,
+        // matching the db.ts function's Omit<> more closely for non-foreign key fields.
         await dbFunctions.updateSessionResult(id, data);
         return { success: true };
     } catch (error: any) {
@@ -880,7 +915,7 @@ ipcMain.handle('update-session-result', async (event, id: number, data: Partial<
 
 ipcMain.handle('delete-session-results-by-session-id', async (event, sessionId: number) => {
     try {
-        await dbFunctions.deleteSessionResultsBySessionId(sessionId);
+        await dbFunctions.deleteSessionResultsBySessionId(sessionId); // Corrected function name
         return { success: true };
     } catch (error: any) {
         console.error('IPC Error delete-session-results-by-session-id:', error);

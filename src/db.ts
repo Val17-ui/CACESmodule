@@ -282,6 +282,156 @@ export const deleteGeneralParticipant = (id: number): Promise<void> => {
     });
 };
 
+export const addBulkSessionResults = (results: Array<Omit<SessionResultData, 'id' | 'submitted_at'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (!results || results.length === 0) {
+            return resolve();
+        }
+        db.serialize(() => {
+            const stmt = db.prepare(`INSERT INTO session_results (
+                                       session_id, session_question_id, session_participant_id, reponse_choisie,
+                                       est_correct, points_obtenus, temps_reponse, submitted_at
+                                     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`);
+            let completed = 0;
+            let failed = 0;
+            results.forEach(r => {
+                // Ensure session_id, session_question_id, and session_participant_id are present in each result object
+                 if (typeof r.session_id !== 'number' || typeof r.session_question_id !== 'number' || typeof r.session_participant_id !== 'number') {
+                    console.error('Skipping result due to missing IDs:', r);
+                    failed++;
+                    completed++;
+                    if (completed === results.length) {
+                         stmt.finalize((finalizeErr) => {
+                            if (finalizeErr) return reject(finalizeErr);
+                            if (failed > 0) return reject(new Error(`${failed} résultats de session non ajoutés en raison d'ID manquants.`));
+                            resolve();
+                        });
+                    }
+                    return;
+                }
+                stmt.run(
+                    r.session_id, r.session_question_id, r.session_participant_id,
+                    r.reponse_choisie || null, r.est_correct || null, r.points_obtenus || null,
+                    r.temps_reponse || null,
+                    function(this: sqlite3.Statement, err) {
+                        if (err) {
+                            console.error(`Erreur ajout session_result (bulk):`, err.message);
+                            failed++;
+                        }
+                        completed++;
+                        if (completed === results.length) {
+                            stmt.finalize((finalizeErr) => {
+                                if (finalizeErr) return reject(finalizeErr);
+                                if (failed > 0) return reject(new Error(`${failed} résultats de session non ajoutés.`));
+                                resolve();
+                            });
+                        }
+                    }
+                );
+            });
+        });
+    });
+};
+
+export const deleteSessionResultsBySessionId = (sessionId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_results WHERE session_id = ?", [sessionId], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+export const addBulkSessionBoitiers = (sessionId: number, boitiers: Array<Omit<SessionBoitierData, 'id' | 'session_id' | 'createdAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (!boitiers || boitiers.length === 0) {
+            return resolve();
+        }
+        db.serialize(() => {
+            const stmt = db.prepare(`INSERT INTO session_boitiers (
+                                       session_id, original_voting_device_id, name, serial_number, created_at
+                                     ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`);
+            let completed = 0;
+            let failed = 0;
+            boitiers.forEach(b => {
+                const boitierFull: Omit<SessionBoitierData, 'id' | 'createdAt'> = { session_id: sessionId, ...b };
+                stmt.run(
+                    boitierFull.session_id, boitierFull.original_voting_device_id || null,
+                    boitierFull.name, boitierFull.serial_number || null,
+                    function(this: sqlite3.Statement, err) {
+                        if (err) {
+                            console.error(`Erreur ajout session_boitier (bulk) pour session ${sessionId}:`, err.message);
+                            failed++;
+                        }
+                        completed++;
+                        if (completed === boitiers.length) {
+                            stmt.finalize((finalizeErr) => {
+                                if (finalizeErr) return reject(finalizeErr);
+                                if (failed > 0) return reject(new Error(`${failed} boîtiers de session non ajoutés.`));
+                                resolve();
+                            });
+                        }
+                    }
+                );
+            });
+        });
+    });
+};
+
+export const deleteSessionBoitiersBySessionId = (sessionId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_boitiers WHERE session_id = ?", [sessionId], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+export const addBulkSessionQuestions = (sessionId: number, questions: Array<Omit<SessionQuestionData, 'id' | 'session_id' | 'createdAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (!questions || questions.length === 0) {
+            return resolve();
+        }
+        db.serialize(() => {
+            const stmt = db.prepare(`INSERT INTO session_questions (
+                                       session_id, original_question_id, texte_question, type_question, options,
+                                       image, image_name, points, feedback, bloc_id, ordre_apparition, created_at
+                                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`);
+            let completed = 0;
+            let failed = 0;
+            questions.forEach(q => {
+                const questionFull: Omit<SessionQuestionData, 'id' | 'createdAt'> = { session_id: sessionId, ...q };
+                stmt.run(
+                    questionFull.session_id, questionFull.original_question_id || null, questionFull.texte_question,
+                    questionFull.type_question, questionFull.options || null, questionFull.image || null,
+                    questionFull.image_name || null, questionFull.points || null, questionFull.feedback || null,
+                    questionFull.bloc_id || null, questionFull.ordre_apparition || null,
+                    function(this: sqlite3.Statement, err) {
+                        if (err) {
+                            console.error(`Erreur ajout session_question (bulk) pour session ${sessionId}:`, err.message);
+                            failed++;
+                        }
+                        completed++;
+                        if (completed === questions.length) {
+                            stmt.finalize((finalizeErr) => {
+                                if (finalizeErr) return reject(finalizeErr);
+                                if (failed > 0) return reject(new Error(`${failed} questions de session non ajoutées.`));
+                                resolve();
+                            });
+                        }
+                    }
+                );
+            });
+        });
+    });
+};
+
+export const deleteSessionQuestionsBySessionId = (sessionId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_questions WHERE session_id = ?", [sessionId], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
 // SessionParticipant helper and CRUD
 const mapRowToSessionParticipantData = (row: any): SessionParticipantData | null => {
     if (!row) return null;
