@@ -148,7 +148,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           // Utiliser rawTrainers (TrainerData[]) pour trouver le formateur par défaut
           if (rawTrainers.length > 0) {
             const defaultTrainerFromRaw = rawTrainers.find(t => t.isDefault === 1) || rawTrainers[0];
-            if (defaultTrainerFromRaw?.id) setSelectedTrainerId(defaultTrainerFromRaw.id);
+            if (defaultTrainerFromRaw?.id) { // Ajout d'accolades pour la clarté et la cohérence
+              setSelectedTrainerId(defaultTrainerFromRaw.id);
+            }
           }
           // defaultKitResult est DeviceKitData | null, son `id` est correct
           if (defaultKitResult?.id) {
@@ -156,22 +158,17 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           } else if (formattedDeviceKits.length > 0 && formattedDeviceKits[0].id !== undefined) {
             setSelectedKitIdState(formattedDeviceKits[0].id);
           }
-        }
-      } catch (error) {
-        console.error("Erreur lors du chargement des données globales:", error);
-          } else if (kits.length > 0 && kits[0].id !== undefined) {
-            setSelectedKitIdState(kits[0].id);
-          }
-        }
-      } catch (error) {
+        } // Fin du if (!sessionIdToLoad)
+      } catch (error) { // Ceci est le SEUL bloc catch pour le try principal
         console.error("Erreur lors du chargement des données globales:", error);
         setImportSummary("Erreur de chargement des données initiales.");
         setIsLoadingKits(false);
-      }
-    };
+      } // Fin du bloc catch
+    }; // Fin de la déclaration de fetchGlobalData
     fetchGlobalData();
-  }, [sessionIdToLoad]);
+  }, [sessionIdToLoad]); // Fin du premier useEffect
 
+  // useEffect pour fetchDevicesInKit (commence ici, inchangé)
   useEffect(() => {
     const fetchDevicesInKit = async () => {
       if (selectedKitIdState !== null) {
