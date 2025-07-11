@@ -1,44 +1,25 @@
 // src/services/StorageManager.ts
-import {
-  db,
-  QuestionWithId,
-  addReferential,
-  getAllReferentiels,
-  getReferentialByCode,
-  addTheme,
-  getAllThemes,
-  getThemesByReferentialId,
-  getThemeByCodeAndReferentialId,
-  addBloc,
-  getAllBlocs,
-  getBlocsByThemeId,
-  getBlocByCodeAndThemeId
-} from '../db';
-// CACESReferential might be unused now. Referential, Theme, Bloc types are likely still needed if StoredQuestion or other types here reference them.
-// For now, let's keep Referential, Theme, Bloc types from ../types if they are implicitly used by QuestionWithId or other function signatures.
-// import { CACESReferential, Referential, Theme, Bloc } from '../types';
-// CACESReferential removed from imports as it's not directly used by StorageManager methods anymore.
+import { QuestionWithId, Omit } from '../types'; // Importer Omit et les types nécessaires depuis ../types
 
-// Re-export QuestionWithId as StoredQuestion for clarity within this module and for consumers
-// StoredQuestion now reflects the new structure from db.ts (with blocId, without referential/theme)
+// Re-export QuestionWithId as StoredQuestion for clarity
 export type StoredQuestion = QuestionWithId;
-// StoredQuestionnaire type removed
+
+// Vérification que dbAPI est disponible (important pour le contexte de rendu)
+if (typeof window === 'undefined' || !window.dbAPI) {
+  // Si window ou window.dbAPI n'est pas défini, cela signifie que nous ne sommes pas dans un environnement de rendu Electron configuré correctement.
+  // Cela peut arriver lors de tests unitaires côté Node sans mock de l'API Electron, ou si le preload n'a pas fonctionné.
+  // Pour les tests unitaires purs de StorageManager, il faudrait mocker window.dbAPI.
+  // Pour l'exécution dans l'application, cela indiquerait un problème de configuration.
+  console.warn(
+    'window.dbAPI is not available. StorageManager DB calls will fail. ' +
+    'Ensure this code runs in an Electron renderer context with the preload script correctly configured.'
+  );
+}
+
 
 export const StorageManager = {
-  // Expose db functions for referentiels, themes, blocs directly by re-exporting them.
-  // This makes them available under the StorageManager namespace for components that already use it.
-  // Alternatively, components could import these directly from '../db.ts'.
-  addReferential,
-  getAllReferentiels,
-  getReferentialByCode,
-  addTheme,
-  getAllThemes,
-  getThemesByReferentialId,
-  getThemeByCodeAndReferentialId,
-  addBloc,
-  getAllBlocs,
-  getBlocsByThemeId,
-  getBlocByCodeAndThemeId,
+  // Les réexportations directes des fonctions de '../db.ts' sont supprimées.
+  // Toutes les interactions DB se feront via window.dbAPI.
 
   /**
    * Adds a new question to the database.
@@ -47,15 +28,13 @@ export const StorageManager = {
    * @returns The ID of the newly added question, or undefined if an error occurs.
    */
   async addQuestion(questionData: Omit<StoredQuestion, 'id'>): Promise<number | undefined> {
+    if (!window.dbAPI?.addQuestion) throw new Error("dbAPI.addQuestion is not available.");
     try {
-      // Dexie's add method expects the full object, but 'id' will be auto-filled.
-      // If StoredQuestion['id'] is optional (e.g., id?: number), this cast is fine.
-      // If 'id' is mandatory in StoredQuestion, this approach correctly uses Omit.
-      const id = await db.questions.add(questionData as StoredQuestion);
+      const id = await window.dbAPI.addQuestion(questionData);
       return id;
     } catch (error) {
-      console.error("StorageManager: Error adding question", error);
-      return undefined;
+      console.error("StorageManager: Error adding question via IPC", error);
+      throw error; // Re-throw to allow UI to handle it
     }
   },
 
@@ -64,12 +43,13 @@ export const StorageManager = {
    * @returns An array of StoredQuestion objects.
    */
   async getAllQuestions(): Promise<StoredQuestion[]> {
+    if (!window.dbAPI?.getAllQuestions) throw new Error("dbAPI.getAllQuestions is not available.");
     try {
-      const questions = await db.questions.toArray();
+      const questions = await window.dbAPI.getAllQuestions();
       return questions;
-    } catch (error) { // Added opening curly brace
-      console.error("StorageManager: Error getting all questions", error);
-      return []; // Return an empty array in case of error
+    } catch (error) {
+      console.error("StorageManager: Error getting all questions via IPC", error);
+      throw error;
     }
   },
 
@@ -79,12 +59,13 @@ export const StorageManager = {
    * @returns The StoredQuestion object if found, otherwise undefined.
    */
   async getQuestionById(id: number): Promise<StoredQuestion | undefined> {
+    if (!window.dbAPI?.getQuestionById) throw new Error("dbAPI.getQuestionById is not available.");
     try {
-      const question = await db.questions.get(id);
+      const question = await window.dbAPI.getQuestionById(id);
       return question;
     } catch (error) {
-      console.error(`StorageManager: Error getting question with id ${id}`, error);
-      return undefined;
+      console.error(`StorageManager: Error getting question with id ${id} via IPC`, error);
+      throw error;
     }
   },
 
@@ -94,15 +75,16 @@ export const StorageManager = {
    * @param updates - An object containing the fields to update.
    * @returns The number of updated records (0 or 1), or undefined if an error occurs.
    */
-  async updateQuestion(id: number, updates: Partial<StoredQuestion>): Promise<number | undefined> {
+  async updateQuestion(id: number, updates: Partial<Omit<StoredQuestion, 'id'>>): Promise<number | undefined> {
+    if (!window.dbAPI?.updateQuestion) throw new Error("dbAPI.updateQuestion is not available.");
     try {
-      // Ensure 'id' is not part of the updates object passed to Dexie's update method
-      const { id: _, ...restUpdates } = updates;
-      const numUpdated = await db.questions.update(id, restUpdates);
+      // Omit 'id' from updates object for the IPC call, as the main process handler expects this.
+      const { id: _, ...restUpdates } = updates as any; // Cast to any if 'id' might not be in updates
+      const numUpdated = await window.dbAPI.updateQuestion(id, restUpdates);
       return numUpdated;
     } catch (error) {
-      console.error(`StorageManager: Error updating question with id ${id}`, error);
-      return undefined;
+      console.error(`StorageManager: Error updating question with id ${id} via IPC`, error);
+      throw error;
     }
   },
 
@@ -112,12 +94,12 @@ export const StorageManager = {
    * @returns A promise that resolves when the deletion is complete, or rejects on error.
    */
   async deleteQuestion(id: number): Promise<void> {
+    if (!window.dbAPI?.deleteQuestion) throw new Error("dbAPI.deleteQuestion is not available.");
     try {
-      await db.questions.delete(id);
+      await window.dbAPI.deleteQuestion(id);
     } catch (error) {
-      console.error(`StorageManager: Error deleting question with id ${id}`, error);
-      // Optionally re-throw or handle more gracefully depending on application needs
-      // For now, just logging, as the return type is void.
+      console.error(`StorageManager: Error deleting question with id ${id} via IPC`, error);
+      throw error;
     }
   },
 
@@ -151,6 +133,8 @@ export const StorageManager = {
   //   const blocs = await StorageManager.db.getBlocsByThemeId(theme.id);
   //   // blocs will be an array of Bloc objects
   // }
+  // >>> The above comments are now obsolete as StorageManager.db (direct db access) is removed.
+  // >>> If these aggregate functions are needed, they should be rebuilt using window.dbAPI calls.
 
   /**
    * Retrieves all questions for a specific blocId.
@@ -158,12 +142,13 @@ export const StorageManager = {
    * @returns A promise that resolves to an array of StoredQuestion objects.
    */
   async getQuestionsForBloc(blocId: number): Promise<StoredQuestion[]> {
+    if (!window.dbAPI?.getQuestionsByBlocId) throw new Error("dbAPI.getQuestionsByBlocId is not available.");
     try {
-      const questions = await db.questions.where({ blocId }).toArray();
+      const questions = await window.dbAPI.getQuestionsByBlocId(blocId);
       return questions;
     } catch (error) {
-      console.error(`StorageManager: Error getting questions for blocId ${blocId}`, error);
-      return [];
+      console.error(`StorageManager: Error getting questions for blocId ${blocId} via IPC`, error);
+      throw error;
     }
   }
 };

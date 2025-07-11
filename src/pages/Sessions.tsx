@@ -4,7 +4,7 @@ import SessionsList from '../components/sessions/SessionsList';
 import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
 import { Plus } from 'lucide-react';
-import { getAllSessions, getSessionById } from '../db'; // Ajout de getSessionById
+// import { getAllSessions, getSessionById } from '../db'; // Supprimé
 import { Session as DBSession } from '../types';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
@@ -119,14 +119,23 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     if (sessionId !== undefined) {
       setManagingSessionId(sessionId);
       setIsCreating(false);
-      // Charger le nom de la session pour le titre
-      getSessionById(sessionId).then(session => {
-        if (session) {
-          setManagingSessionName(session.nomSession);
-        } else {
+      // Charger le nom de la session pour le titre via IPC
+      if (window.dbAPI && typeof window.dbAPI.getSessionById === 'function') {
+        window.dbAPI.getSessionById(sessionId).then(session => {
+          if (session) {
+            setManagingSessionName(session.nomSession);
+          } else {
+            setManagingSessionName(null);
+            console.warn(`[Sessions Page] Session with ID ${sessionId} not found via IPC.`);
+          }
+        }).catch(err => {
+          console.error(`[Sessions Page] Error fetching session ${sessionId} via IPC:`, err);
           setManagingSessionName(null);
-        }
-      });
+        });
+      } else {
+        console.error("[Sessions Page] dbAPI.getSessionById is not available on window object.");
+        setManagingSessionName(null);
+      }
     } else {
       setManagingSessionId(null);
       setManagingSessionName(null); // Réinitialiser le nom
@@ -137,10 +146,16 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   const fetchRawSessions = useCallback(async () => {
     setIsLoading(true);
     try {
-      const sessionsFromDb = await getAllSessions();
-      setRawSessions(sessionsFromDb);
+      if (window.dbAPI && typeof window.dbAPI.getAllSessions === 'function') {
+        const sessionsFromDb = await window.dbAPI.getAllSessions();
+        setRawSessions(sessionsFromDb);
+      } else {
+        console.error("[Sessions Page] dbAPI.getAllSessions is not available on window object.");
+        setRawSessions([]);
+        // Peut-être définir une erreur ici aussi si l'API n'est pas disponible
+      }
     } catch (error) {
-      console.error("Erreur lors de la récupération des sessions:", error);
+      console.error("Erreur lors de la récupération des sessions via IPC:", error);
       setRawSessions([]);
     } finally {
       setIsLoading(false);

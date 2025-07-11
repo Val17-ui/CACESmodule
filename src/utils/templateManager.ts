@@ -1,5 +1,5 @@
 // src/utils/templateManager.ts
-import { getAdminSetting } from '../db';
+// import { getAdminSetting } from '../db'; // Supprimé
 import { UserPptxTemplate } from '../components/settings/UserPreferences'; // Importer le type
 // Utilisation d'un chemin relatif car l'alias @ n'est pas configuré dans vite.config.ts
 // import defaultTemplateUrlPathOld from '../assets/templates/default.pptx?url'; // Ancienne méthode
@@ -27,7 +27,7 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
     isToolDefault = true;
   } else if (selectedTemplateId) {
     // Un modèle spécifique (personnalisé) a été demandé pour cette génération
-    const userTemplates: UserPptxTemplate[] = await getAdminSetting('userPptxTemplates') || [];
+    const userTemplates: UserPptxTemplate[] = await window.dbAPI.getAdminSetting('userPptxTemplates') || [];
     templateToUse = userTemplates.find(t => t.id === selectedTemplateId) || null;
     if (!templateToUse) {
       console.warn(`[templateManager] Modèle sélectionné avec ID "${selectedTemplateId}" non trouvé. Tentative avec le modèle par défaut utilisateur.`);
@@ -38,9 +38,9 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
 
   // Si aucun modèle spécifique n'a été sélectionné pour cette génération OU si le modèle sélectionné n'a pas été trouvé
   if (!isToolDefault && !templateToUse) {
-    const userDefaultId: string | null = await getAdminSetting('userDefaultPptxTemplateId');
+    const userDefaultId: string | null = await window.dbAPI.getAdminSetting('userDefaultPptxTemplateId');
     if (userDefaultId) {
-      const userTemplates: UserPptxTemplate[] = await getAdminSetting('userPptxTemplates') || [];
+      const userTemplates: UserPptxTemplate[] = await window.dbAPI.getAdminSetting('userPptxTemplates') || [];
       templateToUse = userTemplates.find(t => t.id === userDefaultId) || null;
       if (!templateToUse) {
         console.warn(`[templateManager] Modèle par défaut utilisateur (ID: "${userDefaultId}") non trouvé dans la liste des modèles. Utilisation du modèle par défaut de l'outil.`);

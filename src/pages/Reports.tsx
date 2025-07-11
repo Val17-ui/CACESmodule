@@ -11,7 +11,7 @@ import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
-import { getAllSessions, getSessionById, getAllTrainers, getAllReferentiels } from '../db'; // Ajout de getAllReferentiels
+// import { getAllSessions, getSessionById, getAllTrainers, getAllReferentiels } from '../db'; // Supprimé
 import { Session, Participant, Trainer, Referential } from '../types'; // Ajout de Referential, CACESReferential enlevé
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
@@ -51,15 +51,28 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      const [fetchedSessions, fetchedTrainers, fetchedReferentiels] = await Promise.all([
-        getAllSessions(),
-        getAllTrainers(),
-        getAllReferentiels()
-      ]);
+      if (!window.dbAPI ||
+          !window.dbAPI.getAllSessions ||
+          !window.dbAPI.getAllTrainers ||
+          !window.dbAPI.getAllReferentiels) {
+        console.error("[Reports Page] dbAPI or required functions are not available on window object.");
+        // Gérer l'erreur, par exemple en affichant un message à l'utilisateur ou en ne chargeant pas les données
+        return;
+      }
+      try {
+        const [fetchedSessions, fetchedTrainers, fetchedReferentiels] = await Promise.all([
+          window.dbAPI.getAllSessions(),
+          window.dbAPI.getAllTrainers(),
+          window.dbAPI.getAllReferentiels()
+        ]);
 
-      setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
-      setTrainersListForFilter(fetchedTrainers.sort((a,b) => a.name.localeCompare(b.name)));
-      setAllReferentielsDb(fetchedReferentiels.sort((a,b) => a.nom_complet.localeCompare(b.nom_complet)));
+        setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+        setTrainersListForFilter(fetchedTrainers.sort((a,b) => a.name.localeCompare(b.name)));
+        setAllReferentielsDb(fetchedReferentiels.sort((a,b) => a.nom_complet.localeCompare(b.nom_complet)));
+      } catch (error) {
+        console.error("[Reports Page] Error fetching initial data via IPC:", error);
+        // Gérer l'erreur pour l'utilisateur
+      }
     };
     fetchInitialData();
   }, []);
@@ -69,10 +82,23 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   };
 
   const handleViewSessionReport = async (sessionId: string) => {
-    const session = await getSessionById(Number(sessionId));
-    if (session) {
-      setSelectedSession(session);
-      setSessionParticipants(session.participants || []);
+    if (!window.dbAPI?.getSessionById) {
+      console.error("[Reports Page] dbAPI.getSessionById is not available on window object.");
+      // Gérer l'erreur pour l'utilisateur
+      return;
+    }
+    try {
+      const session = await window.dbAPI.getSessionById(Number(sessionId));
+      if (session) {
+        setSelectedSession(session);
+        setSessionParticipants(session.participants || []);
+      } else {
+        console.warn(`[Reports Page] Session with ID ${sessionId} not found via IPC.`);
+        // Gérer le cas où la session n'est pas trouvée
+      }
+    } catch (error) {
+      console.error(`[Reports Page] Error fetching session ${sessionId} via IPC:`, error);
+      // Gérer l'erreur pour l'utilisateur
     }
   };
 

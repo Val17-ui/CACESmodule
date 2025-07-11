@@ -7,7 +7,7 @@ import AlertsNotifications from '../components/dashboard/AlertsNotifications'; /
 import Button from '../components/ui/Button';
 import { Plus } from 'lucide-react';
 // import { mockSessions } from '../data/mockData'; // Plus besoin des mocks ici directement
-import { getAllSessions } from '../db';
+// import { getAllSessions } from '../db'; // Supprimé
 import { Session } from '../types';
 
 type DashboardProps = {
@@ -23,10 +23,15 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
     const fetchSessions = async () => {
       setLoading(true);
       try {
-        const allSessions = await getAllSessions();
-        setSessions(allSessions);
+        if (window.dbAPI && typeof window.dbAPI.getAllSessions === 'function') {
+          const allSessions = await window.dbAPI.getAllSessions();
+          setSessions(allSessions);
+        } else {
+          console.error("[Dashboard Page] dbAPI.getAllSessions is not available on window object.");
+          // Gérer l'erreur, par exemple afficher un message à l'utilisateur
+        }
       } catch (error) {
-        console.error("Erreur lors de la récupération des sessions:", error);
+        console.error("Erreur lors de la récupération des sessions via IPC:", error);
         // Gérer l'erreur, par exemple afficher un message à l'utilisateur
       }
       setLoading(false);
