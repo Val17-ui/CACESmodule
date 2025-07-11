@@ -220,7 +220,7 @@ const UserPreferences: React.FC = () => {
           <label className="font-medium text-gray-700">Durée du compte à rebours (secondes)</label>
           <Input
             type="number"
-            min="0"
+            min={0}
             value={preferences.pollTimeLimit}
             onChange={e => handleChange('pollTimeLimit', parseInt(e.target.value, 10) || 0)}
             placeholder="Ex: 30"

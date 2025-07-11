@@ -165,21 +165,24 @@ export enum QuestionType {
 export interface Question {
   id: string; // ID original de la question (non celui de la DB Dexie)
   text: string;
-  type: QuestionType;
-  options: string[];
-  correctAnswer: string;
+  type: QuestionType; // Uses the QuestionType enum ('multiple-choice', 'single-choice', 'true-false')
+  options: string[]; // Should be QuestionOption[] if structure is { text: string, estCorrecte: boolean }
+  correctAnswer: string; // Could be an index as string, or actual answer text for QROC
   timeLimit?: number;
   isEliminatory: boolean;
-  // referentiel: CACESReferential; // Remplacé par blocId
-  // theme: string; // Remplacé par blocId
-  blocId?: number; // Clé étrangère vers la table Blocs
-  image?: Blob;
+  blocId: number; // Clé étrangère vers la table Blocs - rendue obligatoire
+  referentiel_id?: number | null; // Ajouté pour aligner avec db.QuestionData
+  theme_id?: number | null; // Ajouté pour aligner avec db.QuestionData
+  image?: Blob | null; // Garder Blob pour la définition front-end, conversion en Buffer avant DB
+  imageName?: string | null; // Ajouté pour correspondre à db.QuestionData
+  points?: number; // Ajouté pour correspondre à db.QuestionData
+  feedback?: string | null; // Ajouté pour correspondre à db.QuestionData
   createdAt?: string;
   updatedAt?: string;
-  lastUsedAt?: string;
+  lastUsedAt?: string; // Ce champ n'est pas dans db.QuestionData
   usageCount?: number;
   correctResponseRate?: number;
-  slideGuid?: string; // Ajout du SlideGUID
+  slideGuid?: string;
 }
 
 // Nouvelles interfaces pour la structure dynamique
@@ -302,22 +305,25 @@ export interface ThemeScoreDetails {
 
 // Déplacé depuis db.ts
 export interface QuestionWithId {
-  id?: number;
+  id?: number; // ID de la base de données SQLite (auto-incrémenté)
   text: string;
-  // type: 'multiple-choice' | 'true-false'; // Remplacé par QuestionType enum
-  type: QuestionType;
-  options: string[];
-  correctAnswer: string;
-  timeLimit?: number;
+  type: QuestionType; // Utilise l'enum QuestionType
+  options: any; // Devrait être QuestionOption[] ou string (JSON) selon l'utilisation. Pour la DB, c'est string. Pour le front, QuestionOption[].
+  correctAnswer: any; // Similaire à options, string pour DB, type spécifique pour front.
   isEliminatory: boolean;
-  blocId: number; // Made mandatory
-  image?: Blob | null;
+  timeLimit?: number;
+  image?: Blob | null; // Le type front-end peut rester Blob, conversion en Buffer avant DB.
+  imageName?: string | null;
+  points?: number;
+  feedback?: string | null;
+  blocId: number; // Obligatoire
+  referentiel_id?: number | null; // Ajouté pour aligner avec db.QuestionData
+  theme_id?: number | null; // Ajouté pour aligner avec db.QuestionData
   createdAt?: string;
   updatedAt?: string;
   usageCount?: number;
   correctResponseRate?: number;
   slideGuid?: string;
-  imageName?: string;
 }
 
 // Déplacé depuis db.ts

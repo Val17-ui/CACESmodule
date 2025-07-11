@@ -54,7 +54,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
       case 'in-progress': return <Badge variant="warning">En cours</Badge>;
       case 'completed': return <Badge variant="success">Terminée</Badge>;
       case 'cancelled': return <Badge variant="danger">Annulée</Badge>;
-      case 'ready': return <Badge variant="info">Prête</Badge>; // Ajout pour "ready"
+      case 'ready': return <Badge variant="primary">Prête</Badge>; // Changed "info" to "primary"
       default: return <Badge variant="default">Non défini</Badge>;
     }
   };

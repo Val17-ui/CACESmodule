@@ -55,36 +55,42 @@ export const StorageManager = {
    * @param questionData - The question data without the 'id'.
    * @returns The ID of the newly added question, or undefined if an error occurs.
    */
-  async addQuestion(questionData: Omit<StoredQuestion, 'id'>): Promise<number | undefined> {
+  async addQuestion(questionData: Omit<StoredQuestion, 'id' | 'createdAt' | 'updatedAt' | 'lastUsedAt'>): Promise<number | undefined> {
     try {
-      let dbCompatibleQuestionData: Partial<Omit<DBQuestionData, 'id'>> = { ...questionData } as any;
-
-      if (questionData.image && questionData.image instanceof Blob) {
-        dbCompatibleQuestionData.image = Buffer.from(await questionData.image.arrayBuffer());
-      } else if (questionData.image === null) {
-        dbCompatibleQuestionData.image = null;
-      } else if (questionData.image !== undefined) {
-        // If it's already a Buffer or some other non-Blob format, this might indicate an issue or prior conversion.
-        // For safety, if it's not explicitly Blob or null, we might want to log or handle.
-        // However, StoredQuestion type says Blob | null, so this path shouldn't be common.
-        console.warn("StorageManager.addQuestion: questionData.image was neither Blob nor null. Type:", typeof questionData.image);
-        // Assuming it might be an ArrayBuffer from IPC, try to convert. If not, it might fail at dbAddQuestion.
-        if (questionData.image instanceof ArrayBuffer) {
-            dbCompatibleQuestionData.image = Buffer.from(questionData.image);
-        } else if (!Buffer.isBuffer(questionData.image)) {
-             // If it's not a buffer already, and not ArrayBuffer, set to null to avoid DB error for incompatible type.
-            dbCompatibleQuestionData.image = undefined; // Or null, depending on how dbAddQuestion handles undefined
+      const { image, ...restOfQuestionData } = questionData;
+      let imageBuffer: Buffer | null = null;
+      if (image instanceof Blob) {
+        imageBuffer = Buffer.from(await image.arrayBuffer());
+      } else if (Buffer.isBuffer(image)) {
+        imageBuffer = image;
+      } else if (image === null) {
+        imageBuffer = null;
+      } else if (image !== undefined) {
+        // Handle cases like ArrayBuffer if they can come from IPC
+        if (image instanceof ArrayBuffer) {
+          imageBuffer = Buffer.from(image);
+        } else {
+          console.warn("StorageManager.addQuestion: Unhandled image type. Image will be ignored. Type:", typeof image);
+          imageBuffer = null; // Or undefined, depending on dbAddQuestion strictness
         }
       }
 
-      // Ensure blocId is present as it's mandatory in DBQuestionData (and StoredQuestion)
-      if (typeof dbCompatibleQuestionData.blocId !== 'number') {
-        // Throw error or handle as per application logic for missing blocId
-        console.error("StorageManager.addQuestion: blocId is missing or not a number.", questionData);
-        throw new Error("blocId is required to add a question.");
+      const dataForDb: Partial<Omit<DBQuestionData, 'id'>> = {
+        ...restOfQuestionData,
+        image: imageBuffer,
+        // Ensure all properties of StoredQuestion are correctly mapped to DBQuestionData properties
+        // text, type, options, correctAnswer, isEliminatory, timeLimit, imageName, points, feedback,
+        // blocId, referentiel_id, theme_id, usageCount, correctResponseRate, slideGuid
+        // The 'type' from StoredQuestion (enum) will be handled by mapQuestionTypeStringToDbType in db.ts
+      };
+
+      if (typeof dataForDb.blocId !== 'number') {
+        console.error("StorageManager.addQuestion: blocId is missing or not a number.", dataForDb);
+        throw new Error("blocId is required and must be a number to add a question.");
       }
 
-      const newId = await dbAddQuestion(dbCompatibleQuestionData);
+
+      const newId = await dbAddQuestion(dataForDb);
       return newId;
     } catch (error) {
       console.error("StorageManager: Error adding question", error);
@@ -98,8 +104,18 @@ export const StorageManager = {
    */
   async getAllQuestions(): Promise<StoredQuestion[]> {
     try {
-      const questions = await dbGetAllQuestions(); // Utiliser l'alias
-      return questions as StoredQuestion[];
+      const questions = await dbGetAllQuestions(); // Returns DBQuestionData[]
+      // Map DBQuestionData to StoredQuestion (primarily for image: Buffer to Blob if needed, or keep as Buffer)
+      // For now, let's assume StoredQuestion can handle Buffer if image is Buffer | Blob | null
+      // Or, if StoredQuestion strictly expects Blob, conversion is needed here.
+      // Current StoredQuestion (QuestionWithId) has image?: Blob | null. So conversion is needed.
+      return questions.map(q => {
+        const { image, ...rest } = q;
+        return {
+          ...rest,
+          image: image ? new Blob([image]) : null, // Convert Buffer to Blob
+        } as StoredQuestion; // Cast needed as StoredQuestion expects specific QuestionType enum
+      });
     } catch (error) {
       console.error("StorageManager: Error getting all questions", error);
       return [];
@@ -113,8 +129,15 @@ export const StorageManager = {
    */
   async getQuestionById(id: number): Promise<StoredQuestion | undefined> {
     try {
-      const question = await dbGetQuestionById(id); // Utiliser l'alias
-      return question as StoredQuestion | undefined;
+      const question = await dbGetQuestionById(id); // Returns DBQuestionData | null
+      if (question) {
+        const { image, ...rest } = question;
+        return {
+          ...rest,
+          image: image ? new Blob([image]) : null, // Convert Buffer to Blob
+        } as StoredQuestion;
+      }
+      return undefined;
     } catch (error) {
       console.error(`StorageManager: Error getting question with id ${id}`, error);
       return undefined;
@@ -129,23 +152,32 @@ export const StorageManager = {
    */
   async updateQuestion(id: number, updates: Partial<StoredQuestion>): Promise<number | undefined> {
     try {
-      let dbCompatibleUpdates: Partial<DBQuestionData> = { ...updates } as any;
+      const { image, ...restOfUpdates } = updates;
+      let imageBuffer: Buffer | null | undefined = undefined; // undefined means don't update image
 
-      if (updates.image && updates.image instanceof Blob) {
-        dbCompatibleUpdates.image = Buffer.from(await updates.image.arrayBuffer());
-      } else if (updates.image === null) {
-        dbCompatibleUpdates.image = null;
-      } else if (updates.image !== undefined) {
-        console.warn("StorageManager.updateQuestion: updates.image was neither Blob nor null. Type:", typeof updates.image);
-        if (updates.image instanceof ArrayBuffer) {
-            dbCompatibleUpdates.image = Buffer.from(updates.image);
-        } else if (!Buffer.isBuffer(updates.image)) {
-            dbCompatibleUpdates.image = undefined;
+      if (updates.hasOwnProperty('image')) { // Check if image is explicitly being set (even to null)
+        if (image instanceof Blob) {
+          imageBuffer = Buffer.from(await image.arrayBuffer());
+        } else if (image === null) {
+          imageBuffer = null;
+        } else if (Buffer.isBuffer(image)) {
+          imageBuffer = image;
+        } else if (image instanceof ArrayBuffer) {
+            imageBuffer = Buffer.from(image);
+        } else if (image !== undefined) {
+          console.warn("StorageManager.updateQuestion: Unhandled image type in updates. Image update will be skipped. Type:", typeof image);
+          // Do not set imageBuffer, so it won't be part of dbCompatibleUpdates for image field
         }
       }
 
-      // If blocId is part of updates, ensure it's a number
-      if (updates.blocId !== undefined && typeof updates.blocId !== 'number') {
+      const dbCompatibleUpdates: Partial<DBQuestionData> = {
+        ...restOfUpdates,
+      };
+      if (imageBuffer !== undefined) { // Only add image to updates if it was processed
+        dbCompatibleUpdates.image = imageBuffer;
+      }
+
+      if (dbCompatibleUpdates.blocId !== undefined && typeof dbCompatibleUpdates.blocId !== 'number') {
         console.error("StorageManager.updateQuestion: updates.blocId is not a number.", updates);
         throw new Error("If blocId is being updated, it must be a number.");
       }

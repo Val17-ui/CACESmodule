@@ -676,10 +676,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (!upToDateSessionData) { setImportSummary("Erreur rechargement session après sauvegarde."); setIsGeneratingOrs(false); return; }
 
     // Use current 'participants' state (FormParticipant[]) for checks and for passing to generator
-    setEditingSessionData(upToDateSessionData); // upToDateSessionData is db.SessionData
+    // setEditingSessionData(upToDateSessionData); // This was problematic if DBSession expects participants. editingSessionData is now db.SessionData.
+                                                // We update it with specific fields later if generation is successful.
+
+    const currentParticipantsState: FormParticipant[] = participants; // Use the state directly
+
     const participantsWithoutValidDevice = [];
-    // The 'participants' state is Array<FormParticipant>
-    for (const p of participants) {
+    for (const p of currentParticipantsState) {
       if (p.assignedGlobalDeviceId === null || p.assignedGlobalDeviceId === undefined) {
         participantsWithoutValidDevice.push(`${p.firstName} ${p.lastName} (aucun boîtier physique assigné)`);
       } else {
@@ -698,7 +701,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     let allSelectedQuestionsForPptx: StoredQuestion[] = [];
     let selectedBlocIdsForSession: number[] = [];
     try {
-      const referentielObject = await StorageManager.getReferentielById(upToDateSessionData.referentiel_id!); // Use ID from upToDateSessionData
+      // Ensure referentiel_id is present on upToDateSessionData
+      if (typeof upToDateSessionData.referentiel_id !== 'number') {
+          setImportSummary("Erreur: ID du référentiel manquant dans les données de session.");
+          setIsGeneratingOrs(false); return;
+      }
+      const referentielObject = await StorageManager.getReferentielById(upToDateSessionData.referentiel_id);
       if (!referentielObject || !referentielObject.id) {
         setImportSummary(`Référentiel avec ID "${upToDateSessionData.referentiel_id}" non trouvé.`);
         setIsGeneratingOrs(false); return;
@@ -725,7 +733,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const chosenBloc = filteredBlocs[Math.floor(Math.random() * filteredBlocs.length)];
         if (chosenBloc && chosenBloc.id) {
           selectedBlocIdsForSession.push(chosenBloc.id);
-          // Assuming StorageManager.getQuestionsForBloc now correctly uses dbFunctions.getQuestionsByBlocId
           const questionsFromBloc = await StorageManager.getQuestionsForBloc(chosenBloc.id);
           allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBloc);
           logger.info(`Thème: ${theme.code_theme}, Bloc choisi: ${chosenBloc.code_bloc}, Questions: ${questionsFromBloc.length}`);
@@ -736,15 +743,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         setIsGeneratingOrs(false); return;
       }
 
-      // Data for updateSession call, must be Partial<db.SessionData>
-      const sessionUpdatePayload: Partial<db.SessionData> = {
-        selectedBlocIds: JSON.stringify(selectedBlocIdsForSession), // Ensure it's a string for db.SessionData
-        referentiel_id: referentielObject.id // referentielId for db.SessionData
+      const sessionUpdatePayloadForBlocs: Partial<db.SessionData> = {
+        selectedBlocIds: JSON.stringify(selectedBlocIdsForSession),
+        referentiel_id: referentielObject.id
       };
-      await updateSession(currentSavedId, sessionUpdatePayload);
+      await updateSession(currentSavedId, sessionUpdatePayloadForBlocs);
 
       // Update local editingSessionData state with these specific changes
-      setEditingSessionData(prev => prev ? ({ ...prev, ...sessionUpdatePayload }) : null);
+      setEditingSessionData(prev => prev ? ({ ...prev, ...sessionUpdatePayloadForBlocs }) : null);
 
       const sessionInfoForPptx = { name: upToDateSessionData.nomSession, date: upToDateSessionData.dateSession, referential: referentielObject.code as CACESReferential };
       const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
@@ -758,23 +764,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: prefPollCountdownStartMode,
         pollMultipleResponse: '1'
       };
-      // participantsForGenerator should use the 'participants' state (FormParticipant[])
-      const participantsForGenerator = participants.map((p_form: FormParticipant) => {
+
+      const participantsForGenerator = currentParticipantsState.map((p_form: FormParticipant) => { // Use currentParticipantsState
         const assignedDevice = hardwareDevices.find(hd => hd.id === p_form.assignedGlobalDeviceId);
         return {
-          // idBoitier is no longer the primary way; deviceIdentifierString is preferred for XML.
-          // The generatePresentation function in pptxOrchestrator expects Participant[] from types/index.ts
-          // which now includes deviceIdentifierString.
-          nom: p_form.lastName, // or p_form.nom if FormParticipant aligns with DBParticipantType
-          prenom: p_form.firstName, // or p_form.prenom
+          nom: p_form.lastName,
+          prenom: p_form.firstName,
           identificationCode: p_form.identificationCode,
           organization: p_form.organization,
-          deviceIdentifierString: assignedDevice ? assignedDevice.serialNumber : `TMP_ID_${p_form.id}`, // Crucial for ORS XML
-          // Ensure other fields expected by pptxOrchestrator's Participant type are included
-          assignedGlobalDeviceId: p_form.assignedGlobalDeviceId, // if needed by pptxOrchestrator's Participant type
-          statusInSession: p_form.statusInSession, // if needed
-          score: p_form.score, // if needed
-          reussite: p_form.reussite // if needed
+          deviceIdentifierString: assignedDevice ? assignedDevice.serialNumber : `TMP_ID_${p_form.id}`,
+          assignedGlobalDeviceId: p_form.assignedGlobalDeviceId,
+          statusInSession: p_form.statusInSession,
+          score: p_form.score,
+          reussite: p_form.reussite
         };
       });
 
@@ -786,41 +788,47 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
       const generationOutput = await generatePresentation(
         sessionInfoForPptx,
-        participantsForGenerator, // This is now Array of objects matching types/index.ts#Participant
+        participantsForGenerator,
         allSelectedQuestionsForPptx,
         undefined, // selectedTemplateId
         adminSettings
       );
 
-      // upToDateSessionData is db.SessionData (from getSessionById)
-      // sessionUpdatePayload was Partial<db.SessionData>
-      // editingSessionData is db.SessionData | null
-      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && editingSessionData) {
+      // At this point, editingSessionData is already up-to-date from the previous setEditingSessionData(prev => ({ ...prev, ...sessionUpdatePayloadForBlocs }))
+      // So, we can use editingSessionData if it's not null.
+      const currentEditingSession = await getSessionById(currentSavedId); // Re-fetch to be absolutely sure
+      if (!currentEditingSession) {
+        setImportSummary("Erreur: Session introuvable après mise à jour des blocs.");
+        setIsGeneratingOrs(false); return;
+      }
+
+      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings) {
         const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;
 
         const finalSessionUpdatePayload: Partial<db.SessionData> = {
-            donneesOrs: Buffer.from(await orsBlob.arrayBuffer()), // Convert Blob to Buffer
-            questionMappings: JSON.stringify(questionMappings), // Stringify
-            ignoredSlideGuids: newlyIgnoredSlideGuids ? JSON.stringify(newlyIgnoredSlideGuids) : JSON.stringify([]), // Stringify
+            donneesOrs: Buffer.from(await orsBlob.arrayBuffer()),
+            questionMappings: JSON.stringify(questionMappings),
+            ignoredSlideGuids: newlyIgnoredSlideGuids ? JSON.stringify(newlyIgnoredSlideGuids) : JSON.stringify([]),
             updatedAt: new Date().toISOString(),
             status: 'ready',
-            // selectedBlocIds and referentiel_id were already updated and are in editingSessionData
-            selectedBlocIds: editingSessionData.selectedBlocIds,
-            referentiel_id: editingSessionData.referentiel_id
+            // selectedBlocIds and referentiel_id are already set from sessionUpdatePayloadForBlocs
+            // and should be part of currentEditingSession if it was updated correctly
+            selectedBlocIds: currentEditingSession.selectedBlocIds,
+            referentiel_id: currentEditingSession.referentiel_id
         };
 
         try {
           await updateSession(currentSavedId, finalSessionUpdatePayload);
-          const freshlyUpdatedSessionData = await getSessionById(currentSavedId); // Returns db.SessionData
+          const freshlyUpdatedSessionData = await getSessionById(currentSavedId);
           if (!freshlyUpdatedSessionData) {
             throw new Error("Impossible de recharger la session après la mise à jour avec l'ORS.");
           }
-          setEditingSessionData(freshlyUpdatedSessionData); // Correctly typed
+          setEditingSessionData(freshlyUpdatedSessionData);
 
           await deleteSessionQuestionsBySessionId(currentSavedId);
           await deleteSessionBoitiersBySessionId(currentSavedId);
 
-          const sessionQuestionsToSave: SessionQuestion[] = []; // Type from ../../types
+          const sessionQuestionsToSave: Array<Omit<db.SessionQuestionData, 'id' | 'createdAt' | 'session_id'>> = [];
           for (const qMap of questionMappings) {
             if (qMap.slideGuid && qMap.dbQuestionId !== undefined) {
               const originalQuestion = allSelectedQuestionsForPptx.find(q => q.id === qMap.dbQuestionId);

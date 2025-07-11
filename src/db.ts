@@ -10,12 +10,12 @@ const verboseSqlite3 = sqlite3.verbose();
 const dbPath = path.join(app.getPath('userData'), 'easycertif.db');
 console.log(`Chemin de la base de données SQLite : ${dbPath}`);
 
-export const db = new verboseSqlite3.Database(dbPath, (err) => {
+export const db = new verboseSqlite3.Database(dbPath, (err: Error | null) => {
   if (err) {
     console.error('Erreur lors de la connexion à la base de données SQLite', err.message);
   } else {
     console.log('Connecté à la base de données SQLite.');
-    db.run("PRAGMA foreign_keys = ON;", (fkErr) => {
+    db.run("PRAGMA foreign_keys = ON;", (fkErr: Error | null) => {
       if (fkErr) {
         console.error("Erreur lors de l'activation des clés étrangères:", fkErr.message);
       } else {
@@ -240,28 +240,32 @@ export const addGeneralParticipant = (nom: string, prenom?: string, identificati
         const paramsCheck = [nom];
         if (prenom) paramsCheck.push(prenom);
         if (identification_code) paramsCheck.push(identification_code);
-        db.get(sqlCheck, paramsCheck, (err, existingRow: {id: number}) => {
+        db.get(sqlCheck, paramsCheck, (err: Error | null, existingRow: {id: number}) => {
             if (err) return reject(err);
             if (existingRow) return resolve(existingRow.id);
             const sqlInsert = `INSERT INTO participants (nom, prenom, identification_code, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
             const paramsInsert = [nom, prenom || null, identification_code || null];
-            db.run(sqlInsert, paramsInsert, function (this: sqlite3.Statement, insertErr) {
+            db.run(sqlInsert, paramsInsert, function (this: sqlite3.Statement, insertErr: Error | null) {
                 if (insertErr) return reject(insertErr);
-                resolve(this.lastID);
+                if (typeof this.lastID === 'number') {
+                    resolve(this.lastID);
+                } else {
+                    reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion."));
+                }
             });
         });
     });
 };
 export const getAllGeneralParticipants = (): Promise<GeneralParticipantData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM participants", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM participants", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToGeneralParticipantData).filter(p => p !== null) as GeneralParticipantData[]);
         });
     });
 };
 export const getGeneralParticipantById = (id: number): Promise<GeneralParticipantData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM participants WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM participants WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToGeneralParticipantData(row));
         });
     });
@@ -269,14 +273,14 @@ export const getGeneralParticipantById = (id: number): Promise<GeneralParticipan
 export const updateGeneralParticipant = (id: number, nom: string, prenom?: string, identification_code?: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         const sql = `UPDATE participants SET nom = ?, prenom = ?, identification_code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-        db.run(sql, [nom, prenom || null, identification_code || null, id], (err) => {
+        db.run(sql, [nom, prenom || null, identification_code || null, id], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
 };
 export const deleteGeneralParticipant = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM participants WHERE id = ?", [id], (err) => {
+        db.run("DELETE FROM participants WHERE id = ?", [id], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -289,7 +293,7 @@ export const getQuestionsByIds = (ids: number[]): Promise<QuestionData[]> => {
         }
         const placeholders = ids.map(() => '?').join(',');
         const sql = `SELECT * FROM questions WHERE id IN (${placeholders})`;
-        db.all(sql, ids, (err, rows: any[]) => {
+        db.all(sql, ids, (err: Error | null, rows: any[]) => {
             if (err) {
                 reject(err);
             } else {
@@ -301,13 +305,10 @@ export const getQuestionsByIds = (ids: number[]): Promise<QuestionData[]> => {
 
 export const getAllBaseThemesForReferentialCode = (referentielId: number): Promise<string[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT DISTINCT code_theme FROM themes WHERE referentiel_id = ?", [referentielId], (err, rows: any[]) => {
+        db.all("SELECT DISTINCT code_theme FROM themes WHERE referentiel_id = ?", [referentielId], (err: Error | null, rows: any[]) => {
             if (err) {
                 reject(err);
             } else {
-                // Assuming code_theme directly gives the "base theme" identifier needed by the test.
-                // The test expects strings like 'securite', 'technique'.
-                // If code_theme in DB is 'SEC', 'TECH', a mapping or further processing might be needed at test level.
                 resolve(rows.map(row => row.code_theme));
             }
         });
@@ -327,13 +328,12 @@ export const addBulkSessionResults = (results: Array<Omit<SessionResultData, 'id
             let completed = 0;
             let failed = 0;
             results.forEach(r => {
-                // Ensure session_id, session_question_id, and session_participant_id are present in each result object
                  if (typeof r.session_id !== 'number' || typeof r.session_question_id !== 'number' || typeof r.session_participant_id !== 'number') {
                     console.error('Skipping result due to missing IDs:', r);
                     failed++;
                     completed++;
                     if (completed === results.length) {
-                         stmt.finalize((finalizeErr) => {
+                         stmt.finalize((finalizeErr: Error | null) => {
                             if (finalizeErr) return reject(finalizeErr);
                             if (failed > 0) return reject(new Error(`${failed} résultats de session non ajoutés en raison d'ID manquants.`));
                             resolve();
@@ -345,14 +345,14 @@ export const addBulkSessionResults = (results: Array<Omit<SessionResultData, 'id
                     r.session_id, r.session_question_id, r.session_participant_id,
                     r.reponse_choisie || null, r.est_correct || null, r.points_obtenus || null,
                     r.temps_reponse || null,
-                    function(this: sqlite3.Statement, err) {
+                    function(this: sqlite3.Statement, err: Error | null) {
                         if (err) {
                             console.error(`Erreur ajout session_result (bulk):`, err.message);
                             failed++;
                         }
                         completed++;
                         if (completed === results.length) {
-                            stmt.finalize((finalizeErr) => {
+                            stmt.finalize((finalizeErr: Error | null) => {
                                 if (finalizeErr) return reject(finalizeErr);
                                 if (failed > 0) return reject(new Error(`${failed} résultats de session non ajoutés.`));
                                 resolve();
@@ -367,7 +367,7 @@ export const addBulkSessionResults = (results: Array<Omit<SessionResultData, 'id
 
 export const deleteSessionResultsBySessionId = (sessionId: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM session_results WHERE session_id = ?", [sessionId], (err) => {
+        db.run("DELETE FROM session_results WHERE session_id = ?", [sessionId], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -389,14 +389,14 @@ export const addBulkSessionBoitiers = (sessionId: number, boitiers: Array<Omit<S
                 stmt.run(
                     boitierFull.session_id, boitierFull.original_voting_device_id || null,
                     boitierFull.name, boitierFull.serial_number || null,
-                    function(this: sqlite3.Statement, err) {
+                    function(this: sqlite3.Statement, err: Error | null) {
                         if (err) {
                             console.error(`Erreur ajout session_boitier (bulk) pour session ${sessionId}:`, err.message);
                             failed++;
                         }
                         completed++;
                         if (completed === boitiers.length) {
-                            stmt.finalize((finalizeErr) => {
+                            stmt.finalize((finalizeErr: Error | null) => {
                                 if (finalizeErr) return reject(finalizeErr);
                                 if (failed > 0) return reject(new Error(`${failed} boîtiers de session non ajoutés.`));
                                 resolve();
@@ -411,7 +411,7 @@ export const addBulkSessionBoitiers = (sessionId: number, boitiers: Array<Omit<S
 
 export const deleteSessionBoitiersBySessionId = (sessionId: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM session_boitiers WHERE session_id = ?", [sessionId], (err) => {
+        db.run("DELETE FROM session_boitiers WHERE session_id = ?", [sessionId], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -436,14 +436,14 @@ export const addBulkSessionQuestions = (sessionId: number, questions: Array<Omit
                     questionFull.type_question, questionFull.options || null, questionFull.image || null,
                     questionFull.image_name || null, questionFull.points || null, questionFull.feedback || null,
                     questionFull.bloc_id || null, questionFull.ordre_apparition || null,
-                    function(this: sqlite3.Statement, err) {
+                    function(this: sqlite3.Statement, err: Error | null) {
                         if (err) {
                             console.error(`Erreur ajout session_question (bulk) pour session ${sessionId}:`, err.message);
                             failed++;
                         }
                         completed++;
                         if (completed === questions.length) {
-                            stmt.finalize((finalizeErr) => {
+                            stmt.finalize((finalizeErr: Error | null) => {
                                 if (finalizeErr) return reject(finalizeErr);
                                 if (failed > 0) return reject(new Error(`${failed} questions de session non ajoutées.`));
                                 resolve();
@@ -458,7 +458,7 @@ export const addBulkSessionQuestions = (sessionId: number, questions: Array<Omit
 
 export const deleteSessionQuestionsBySessionId = (sessionId: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM session_questions WHERE session_id = ?", [sessionId], (err) => {
+        db.run("DELETE FROM session_questions WHERE session_id = ?", [sessionId], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -495,15 +495,20 @@ export const addSessionParticipant = (data: Omit<SessionParticipantData, 'id' | 
             data.score || null, data.reussite || null, data.status_in_session || 'inscrit',
             data.assigned_voting_device_id || null, data.original_participant_id || null
         ];
-        db.run(sql, params, function(this: sqlite3.Statement, err) {
-            if (err) reject(err); else resolve(this.lastID);
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du participant de session."));
+            }
         });
     });
 };
 
 export const getSessionParticipants = (sessionId: number): Promise<SessionParticipantData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM session_participants WHERE session_id = ?", [sessionId], (err, rows: any[]) => {
+        db.all("SELECT * FROM session_participants WHERE session_id = ?", [sessionId], (err: Error | null, rows: any[]) => {
             if (err) reject(err);
             else resolve(rows.map(mapRowToSessionParticipantData).filter(sp => sp !== null) as SessionParticipantData[]);
         });
@@ -527,13 +532,13 @@ export const updateSessionParticipant = (id: number, data: Partial<Omit<SessionP
         fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
         params.push(id);
         const sql = `UPDATE session_participants SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
-        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
 export const deleteSessionParticipant = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM session_participants WHERE id = ?", [id], (err) => {
+        db.run("DELETE FROM session_participants WHERE id = ?", [id], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -553,8 +558,13 @@ export const getAllSessionsWithParticipants = async (): Promise<Array<SessionDat
 
 export const deleteSessionParticipantsBySessionId = (sessionId: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM session_participants WHERE session_id = ?", [sessionId], (err) => {
-            if (err) reject(err); else resolve();
+        db.run("DELETE FROM session_participants WHERE session_id = ?", [sessionId], (err: Error | null) => {
+            if (err) {
+                console.error(`Error deleting session participants for session ID ${sessionId}:`, err.message);
+                reject(err);
+            } else {
+                resolve();
+            }
         });
     });
 };
@@ -570,10 +580,11 @@ export const addBulkSessionParticipants = (sessionId: number, participants: Arra
                                        status_in_session, assigned_voting_device_id, original_participant_id,
                                        created_at, updated_at
                                      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
-            let completed = 0;
-            let failed = 0;
+
+            let completedOperations = 0;
+            let failedOperations = 0;
+
             participants.forEach(p => {
-                // Reconstruct the full participant data including session_id for insertion
                 const participantFull: Omit<SessionParticipantData, 'id' | 'createdAt' | 'updatedAt'> = {
                     session_id: sessionId,
                     nom: p.nom,
@@ -586,20 +597,32 @@ export const addBulkSessionParticipants = (sessionId: number, participants: Arra
                     original_participant_id: p.original_participant_id
                 };
                 stmt.run(
-                    participantFull.session_id, participantFull.nom, participantFull.prenom || null,
-                    participantFull.identification_code || null, participantFull.score || null,
-                    participantFull.reussite || null, participantFull.status_in_session || 'inscrit',
-                    participantFull.assigned_voting_device_id || null, participantFull.original_participant_id || null,
-                    function(this: sqlite3.Statement, err) {
+                    participantFull.session_id,
+                    participantFull.nom,
+                    participantFull.prenom || null,
+                    participantFull.identification_code || null,
+                    participantFull.score || null,
+                    participantFull.reussite || null,
+                    participantFull.status_in_session || 'inscrit',
+                    participantFull.assigned_voting_device_id || null,
+                    participantFull.original_participant_id || null,
+                    function(this: sqlite3.Statement, err: Error | null) {
+                        completedOperations++;
                         if (err) {
-                            console.error(`Erreur ajout session_participant (bulk) pour session ${sessionId}:`, err.message);
-                            failed++;
+                            console.error(`Erreur ajout session_participant (bulk) pour session ${sessionId}, participant ${p.nom}:`, err.message);
+                            failedOperations++;
                         }
-                        completed++;
-                        if (completed === participants.length) {
-                            stmt.finalize((finalizeErr) => {
-                                if (finalizeErr) return reject(finalizeErr);
-                                if (failed > 0) return reject(new Error(`${failed} participants de session non ajoutés.`));
+                        // this.lastID is not relevant for each individual run in a bulk insert like this for the Promise resolve value.
+                        // The promise resolves once all operations are done or a finalize error occurs.
+                        if (completedOperations === participants.length) {
+                            stmt.finalize((finalizeErr: Error | null) => {
+                                if (finalizeErr) {
+                                    console.error("Error finalizing statement for bulk add session participants:", finalizeErr.message);
+                                    return reject(finalizeErr);
+                                }
+                                if (failedOperations > 0) {
+                                    return reject(new Error(`${failedOperations} participants de session non ajoutés.`));
+                                }
                                 resolve();
                             });
                         }
@@ -642,15 +665,20 @@ export const addSessionQuestion = (data: Omit<SessionQuestionData, 'id' | 'creat
             data.options || null, data.image || null, data.image_name || null, data.points || null,
             data.feedback || null, data.bloc_id || null, data.ordre_apparition || null
         ];
-        db.run(sql, params, function(this: sqlite3.Statement, err) {
-            if (err) reject(err); else resolve(this.lastID);
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion de la question de session."));
+            }
         });
     });
 };
 
 export const getSessionQuestions = (sessionId: number): Promise<SessionQuestionData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM session_questions WHERE session_id = ? ORDER BY ordre_apparition ASC", [sessionId], (err, rows: any[]) => {
+        db.all("SELECT * FROM session_questions WHERE session_id = ? ORDER BY ordre_apparition ASC", [sessionId], (err: Error | null, rows: any[]) => {
             if (err) reject(err);
             else resolve(rows.map(mapRowToSessionQuestionData).filter(sq => sq !== null) as SessionQuestionData[]);
         });
@@ -670,16 +698,15 @@ export const updateSessionQuestion = (id: number, data: Partial<Omit<SessionQues
             if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
         });
         if (fieldsToUpdate.length === 0) return resolve();
-        // Note: session_questions table does not have an 'updated_at' column in the provided schema
         params.push(id);
         const sql = `UPDATE session_questions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
-        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
 export const deleteSessionQuestion = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM session_questions WHERE id = ?", [id], (err) => {
+        db.run("DELETE FROM session_questions WHERE id = ?", [id], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -706,15 +733,20 @@ export const addSessionBoitier = (data: Omit<SessionBoitierData, 'id' | 'created
         const params = [
             data.session_id, data.original_voting_device_id || null, data.name, data.serial_number || null
         ];
-        db.run(sql, params, function(this: sqlite3.Statement, err) {
-            if (err) reject(err); else resolve(this.lastID);
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du boîtier de session."));
+            }
         });
     });
 };
 
 export const getSessionBoitiers = (sessionId: number): Promise<SessionBoitierData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM session_boitiers WHERE session_id = ?", [sessionId], (err, rows: any[]) => {
+        db.all("SELECT * FROM session_boitiers WHERE session_id = ?", [sessionId], (err: Error | null, rows: any[]) => {
             if (err) reject(err);
             else resolve(rows.map(mapRowToSessionBoitierData).filter(sb => sb !== null) as SessionBoitierData[]);
         });
@@ -733,16 +765,15 @@ export const updateSessionBoitier = (id: number, data: Partial<Omit<SessionBoiti
             if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
         });
         if (fieldsToUpdate.length === 0) return resolve();
-        // Note: session_boitiers table does not have an 'updated_at' column
         params.push(id);
         const sql = `UPDATE session_boitiers SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
-        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
 export const deleteSessionBoitier = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM session_boitiers WHERE id = ?", [id], (err) => {
+        db.run("DELETE FROM session_boitiers WHERE id = ?", [id], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -775,8 +806,13 @@ export const addSessionResult = (data: Omit<SessionResultData, 'id' | 'submitted
             data.reponse_choisie || null, data.est_correct || null, data.points_obtenus || null,
             data.temps_reponse || null
         ];
-        db.run(sql, params, function(this: sqlite3.Statement, err) {
-            if (err) reject(err); else resolve(this.lastID);
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du résultat de session."));
+            }
         });
     });
 };
@@ -793,7 +829,7 @@ export const getSessionResults = (sessionId: number, participantId?: number, que
             sql += " AND session_question_id = ?";
             params.push(questionId);
         }
-        db.all(sql, params, (err, rows: any[]) => {
+        db.all(sql, params, (err: Error | null, rows: any[]) => {
             if (err) reject(err);
             else resolve(rows.map(mapRowToSessionResultData).filter(sr => sr !== null) as SessionResultData[]);
         });
@@ -812,17 +848,15 @@ export const updateSessionResult = (id: number, data: Partial<Omit<SessionResult
             if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
         });
         if (fieldsToUpdate.length === 0) return resolve();
-        // Note: submitted_at is usually not updated, but if needed, can be added.
-        // Table schema does not specify an 'updated_at' for session_results.
         params.push(id);
         const sql = `UPDATE session_results SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
-        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
 export const deleteSessionResult = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM session_results WHERE id = ?", [id], (err) => {
+        db.run("DELETE FROM session_results WHERE id = ?", [id], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -843,19 +877,26 @@ const mapRowToReferentialData = (row: any): ReferentialData | null => {
 export const addReferentiel = (code: string, nom_complet: string): Promise<number> => {
     return new Promise((resolve, reject) => {
         const sql = `INSERT INTO referentiels (code, nom_complet, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
-        db.run(sql, [code, nom_complet], function(this: sqlite3.Statement, err) { if (err) reject(err); else resolve(this.lastID); });
+        db.run(sql, [code, nom_complet], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du référentiel."))
+            }
+        });
     });
 };
 export const getAllReferentiels = (): Promise<ReferentialData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM referentiels", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM referentiels", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToReferentialData).filter(r => r !== null) as ReferentialData[]);
         });
     });
 };
 export const getReferentielById = (id: number): Promise<ReferentialData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM referentiels WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM referentiels WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToReferentialData(row));
         });
     });
@@ -863,12 +904,12 @@ export const getReferentielById = (id: number): Promise<ReferentialData | null> 
 export const updateReferentiel = (id: number, code: string, nom_complet: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         const sql = `UPDATE referentiels SET code = ?, nom_complet = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-        db.run(sql, [code, nom_complet, id], (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, [code, nom_complet, id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 export const deleteReferentiel = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM referentiels WHERE id = ?", [id], (err) => { if (err) reject(err); else resolve(); });
+        db.run("DELETE FROM referentiels WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
@@ -888,26 +929,33 @@ const mapRowToThemeData = (row: any): ThemeData | null => {
 export const addTheme = (code_theme: string, nom_complet: string, referentiel_id: number): Promise<number> => {
     return new Promise((resolve, reject) => {
         const sql = `INSERT INTO themes (code_theme, nom_complet, referentiel_id, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
-        db.run(sql, [code_theme, nom_complet, referentiel_id], function(this: sqlite3.Statement, err) { if (err) reject(err); else resolve(this.lastID); });
+        db.run(sql, [code_theme, nom_complet, referentiel_id], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du thème."))
+            }
+        });
     });
 };
 export const getAllThemes = (): Promise<ThemeData[]> => {
      return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM themes", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM themes", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToThemeData).filter(t => t !== null) as ThemeData[]);
         });
     });
 };
 export const getThemesByReferentielId = (referentiel_id: number): Promise<ThemeData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM themes WHERE referentiel_id = ?", [referentiel_id], (err, rows: any[]) => {
+        db.all("SELECT * FROM themes WHERE referentiel_id = ?", [referentiel_id], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToThemeData).filter(t => t !== null) as ThemeData[]);
         });
     });
 };
 export const getThemeById = (id: number): Promise<ThemeData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM themes WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM themes WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToThemeData(row));
         });
     });
@@ -915,12 +963,12 @@ export const getThemeById = (id: number): Promise<ThemeData | null> => {
 export const updateTheme = (id: number, code_theme: string, nom_complet: string, referentiel_id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
         const sql = `UPDATE themes SET code_theme = ?, nom_complet = ?, referentiel_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-        db.run(sql, [code_theme, nom_complet, referentiel_id, id], (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, [code_theme, nom_complet, referentiel_id, id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 export const deleteTheme = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM themes WHERE id = ?", [id], (err) => { if (err) reject(err); else resolve(); });
+        db.run("DELETE FROM themes WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
@@ -940,26 +988,33 @@ const mapRowToBlocData = (row: any): BlocData | null => {
 export const addBloc = (code_bloc: string, theme_id: number, nom_complet?: string): Promise<number> => {
     return new Promise((resolve, reject) => {
         const sql = `INSERT INTO blocs (code_bloc, nom_complet, theme_id, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
-        db.run(sql, [code_bloc, nom_complet || null, theme_id], function(this: sqlite3.Statement, err) { if (err) reject(err); else resolve(this.lastID); });
+        db.run(sql, [code_bloc, nom_complet || null, theme_id], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du bloc."))
+            }
+        });
     });
 };
 export const getAllBlocs = (): Promise<BlocData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM blocs", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM blocs", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToBlocData).filter(b => b !== null) as BlocData[]);
         });
     });
 };
 export const getBlocsByThemeId = (theme_id: number): Promise<BlocData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM blocs WHERE theme_id = ?", [theme_id], (err, rows: any[]) => {
+        db.all("SELECT * FROM blocs WHERE theme_id = ?", [theme_id], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToBlocData).filter(b => b !== null) as BlocData[]);
         });
     });
 };
 export const getBlocById = (id: number): Promise<BlocData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM blocs WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM blocs WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToBlocData(row));
         });
     });
@@ -967,12 +1022,12 @@ export const getBlocById = (id: number): Promise<BlocData | null> => {
 export const updateBloc = (id: number, code_bloc: string, theme_id: number, nom_complet?: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         const sql = `UPDATE blocs SET code_bloc = ?, nom_complet = ?, theme_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-        db.run(sql, [code_bloc, nom_complet || null, theme_id, id], (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, [code_bloc, nom_complet || null, theme_id, id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 export const deleteBloc = (id: number): Promise<void> => {
      return new Promise((resolve, reject) => {
-        db.run("DELETE FROM blocs WHERE id = ?", [id], (err) => { if (err) reject(err); else resolve(); });
+        db.run("DELETE FROM blocs WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
@@ -985,8 +1040,8 @@ export interface QuestionData {
     id?: number;
     text: string;
     type: string;
-    options?: any;
-    correctAnswer?: string;
+    options?: any; // Should be stringified JSON of QuestionOption[]
+    correctAnswer?: string; // Should be stringified JSON of correct option(s) or index
     isEliminatory?: boolean;
     timeLimit?: number;
     image?: Buffer | null;
@@ -1006,14 +1061,15 @@ const mapDbTypeToQuestionTypeString = (dbType: string): string => {
     switch (dbType) {
         case 'QCM': return 'multiple-choice';
         case 'QCS': return 'single-choice';
-        default: return dbType;
+        default: return dbType; // QROC, Oral, Pratique
     }
 };
 const mapQuestionTypeStringToDbType = (typeString: string): string => {
     switch (typeString) {
         case 'multiple-choice': return 'QCM';
         case 'single-choice': return 'QCS';
-        case 'true-false': return 'QCM';
+        case 'true-false': return 'QCM'; // Assuming true-false is a type of QCM/QCS for storage
+        // Keep other types as is if they directly map to DB types
         default: return typeString;
     }
 };
@@ -1023,11 +1079,11 @@ const mapRowToQuestionData = (row: any): QuestionData => {
         id: row.id,
         text: row.texte_question,
         type: mapDbTypeToQuestionTypeString(row.type_question),
-        options: row.options,
+        options: row.options, // Will be parsed by parseQuestionOptions
         correctAnswer: row.correct_answer,
-        isEliminatory: !!row.is_eliminatory,
+        isEliminatory: !!row.is_eliminatory, // Convert 0/1 to boolean
         timeLimit: row.time_limit,
-        image: row.image,
+        image: row.image, // Buffer directly from DB
         imageName: row.image_name,
         points: row.points,
         feedback: row.feedback,
@@ -1043,20 +1099,30 @@ const mapRowToQuestionData = (row: any): QuestionData => {
 };
 export const addQuestion = (data: Partial<Omit<QuestionData, 'id'>>): Promise<number> => {
     return new Promise((resolve, reject) => {
+        if (typeof data.blocId !== 'number') { // blocId is NOT NULL
+            return reject(new Error("blocId is required and must be a number."));
+        }
         const optionsJSON = typeof data.options === 'string' ? data.options : (data.options ? JSON.stringify(data.options) : null);
+        const correctAnswerJSON = typeof data.correctAnswer === 'string' ? data.correctAnswer : (data.correctAnswer ? JSON.stringify(data.correctAnswer) : null);
+
         const sql = `INSERT INTO questions (
                        texte_question, type_question, options, correct_answer, is_eliminatory, time_limit,
                        image, image_name, points, feedback, bloc_id, referentiel_id, theme_id,
                        usage_count, correct_response_rate, slide_guid, created_at, updated_at
                      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
         const params = [
-            data.text, mapQuestionTypeStringToDbType(data.type as string), optionsJSON, data.correctAnswer, data.isEliminatory ? 1 : 0, data.timeLimit,
+            data.text, mapQuestionTypeStringToDbType(data.type as string), optionsJSON, correctAnswerJSON, data.isEliminatory ? 1 : 0, data.timeLimit,
             data.image || null, data.imageName || null, data.points || 1, data.feedback || null,
             data.blocId, data.referentiel_id || null, data.theme_id || null,
             data.usageCount || 0, data.correctResponseRate || 0, data.slideGuid || null
         ];
-        db.run(sql, params, function(this: sqlite3.Statement, err) {
-            if (err) reject(err); else resolve(this.lastID);
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion de la question."));
+            }
         });
     });
 };
@@ -1064,30 +1130,42 @@ const parseQuestionOptions = (question: QuestionData): QuestionData => {
     if (question.options && typeof question.options === 'string') {
         try {
             question.options = JSON.parse(question.options);
-        } catch (e) {
-            console.error("Erreur de parsing JSON pour les options de la question:", e);
-            question.options = [];
+        } catch (e: any) {
+            console.error("Erreur de parsing JSON pour les options de la question:", e.message);
+            question.options = []; // Default to empty array on error
+        }
+    }
+    // correctAnswer might also be JSON
+    if (question.correctAnswer && typeof question.correctAnswer === 'string') {
+        try {
+            // Don't parse if it's not supposed to be JSON (e.g. for QROC)
+            if (question.type === 'multiple-choice' || question.type === 'single-choice') {
+                 question.correctAnswer = JSON.parse(question.correctAnswer);
+            }
+        } catch (e: any) {
+            console.error("Erreur de parsing JSON pour la réponse correcte:", e.message);
+            // Keep as string if parsing fails and it's not a type expected to be JSON
         }
     }
     return question;
 };
 export const getAllQuestions = (): Promise<QuestionData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM questions", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM questions", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToQuestionData).map(parseQuestionOptions));
         });
     });
 };
 export const getQuestionsByBlocId = (blocId: number): Promise<QuestionData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM questions WHERE bloc_id = ?", [blocId], (err, rows: any[]) => {
+        db.all("SELECT * FROM questions WHERE bloc_id = ?", [blocId], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToQuestionData).map(parseQuestionOptions));
         });
     });
 };
 export const getQuestionById = (id: number): Promise<QuestionData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM questions WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM questions WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(row ? parseQuestionOptions(mapRowToQuestionData(row)) : null);
         });
     });
@@ -1097,14 +1175,15 @@ export const updateQuestion = (id: number, data: Partial<QuestionData>): Promise
         const fieldsToUpdate: string[] = [];
         const params: any[] = [];
         const dbData: Record<string, any> = {};
+
         if (data.text !== undefined) dbData.texte_question = data.text;
         if (data.type !== undefined) dbData.type_question = mapQuestionTypeStringToDbType(data.type);
         if (data.options !== undefined) dbData.options = typeof data.options === 'string' ? data.options : JSON.stringify(data.options);
-        if (data.correctAnswer !== undefined) dbData.correct_answer = data.correctAnswer;
+        if (data.correctAnswer !== undefined) dbData.correct_answer = typeof data.correctAnswer === 'string' ? data.correctAnswer : JSON.stringify(data.correctAnswer);
         if (data.isEliminatory !== undefined) dbData.is_eliminatory = data.isEliminatory ? 1 : 0;
         if (data.timeLimit !== undefined) dbData.time_limit = data.timeLimit;
-        if (data.image !== undefined) dbData.image = data.image;
-        if (data.imageName !== undefined) dbData.image_name = data.imageName;
+        if (data.image !== undefined) dbData.image = data.image; // Should be Buffer or null
+        if (data.imageName !== undefined) db_data.image_name = data.imageName;
         if (data.points !== undefined) dbData.points = data.points;
         if (data.feedback !== undefined) dbData.feedback = data.feedback;
         if (data.blocId !== undefined) dbData.bloc_id = data.blocId;
@@ -1123,7 +1202,7 @@ export const updateQuestion = (id: number, data: Partial<QuestionData>): Promise
         fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
         params.push(id);
         const sql = `UPDATE questions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
-        db.run(sql, params, (err) => {
+        db.run(sql, params, (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -1131,12 +1210,12 @@ export const updateQuestion = (id: number, data: Partial<QuestionData>): Promise
 export const updateQuestionImage = (id: number, image: Buffer | null, imageName: string | null): Promise<void> => {
     return new Promise((resolve, reject) => {
         const sql = `UPDATE questions SET image = ?, image_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-        db.run(sql, [image, imageName, id], (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, [image, imageName, id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 export const deleteQuestion = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM questions WHERE id = ?", [id], (err) => { if (err) reject(err); else resolve(); });
+        db.run("DELETE FROM questions WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
@@ -1145,44 +1224,47 @@ export interface TrainerData {
     id?: number;
     nom: string;
     prenom: string;
-    signature?: Buffer | null;
-    isDefault?: number;
+    signature?: Buffer | null; // Should be Buffer for BLOB
+    is_default?: number; // Changed from isDefault to match DB
     createdAt?: string;
     updatedAt?: string;
 }
 const mapRowToTrainerData = (row: any): TrainerData | null => {
     if (!row) return null;
-    return { id: row.id, nom: row.nom, prenom: row.prenom, signature: row.signature, isDefault: row.is_default, createdAt: row.created_at, updatedAt: row.updated_at };
+    return { id: row.id, nom: row.nom, prenom: row.prenom, signature: row.signature, is_default: row.is_default, createdAt: row.created_at, updatedAt: row.updated_at };
 };
 export const addTrainer = (data: Omit<TrainerData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
     return new Promise((resolve, reject) => {
         const sql = `INSERT INTO trainers (nom, prenom, signature, is_default, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
-        db.run(sql, [data.nom, data.prenom, data.signature || null, data.isDefault || 0], function(this: sqlite3.Statement, err) {
-            if (err) reject(err);
-            else {
-                if (data.isDefault === 1) {
-                    const newId = this.lastID;
-                    db.run("UPDATE trainers SET is_default = 0 WHERE id != ?", [newId], (updateErr) => {
-                        if (updateErr) console.error("Erreur lors de la mise à jour des autres formateurs par défaut:", updateErr);
+        db.run(sql, [data.nom, data.prenom, data.signature || null, data.is_default || 0], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                const newId = this.lastID;
+                if (data.is_default === 1) {
+                    db.run("UPDATE trainers SET is_default = 0 WHERE id != ?", [newId], (updateErr: Error | null) => {
+                        if (updateErr) console.error("Erreur lors de la mise à jour des autres formateurs par défaut:", updateErr.message);
+                        // Continue to resolve with newId even if updating others fails, as the primary insert succeeded.
                         resolve(newId);
                     });
                 } else {
-                    resolve(this.lastID);
+                    resolve(newId);
                 }
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du formateur."));
             }
         });
     });
 };
 export const getAllTrainers = (): Promise<TrainerData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM trainers", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM trainers", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToTrainerData).filter(t => t !== null) as TrainerData[]);
         });
     });
 };
 export const getTrainerById = (id: number): Promise<TrainerData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM trainers WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM trainers WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToTrainerData(row));
         });
     });
@@ -1191,42 +1273,50 @@ export const updateTrainer = (id: number, data: Partial<Omit<TrainerData, 'id' |
     return new Promise((resolve, reject) => {
         const fieldsToUpdate: string[] = [];
         const params: any[] = [];
-        const dbData: Record<string, any> = {};
-        if (data.nom !== undefined) dbData.nom = data.nom;
-        if (data.prenom !== undefined) dbData.prenom = data.prenom;
-        if (data.signature !== undefined) dbData.signature = data.signature;
-        if (data.isDefault !== undefined) dbData.is_default = data.isDefault;
-        Object.entries(dbData).forEach(([key, value]) => {
-            fieldsToUpdate.push(`${key} = ?`);
-            params.push(value);
-        });
+        // Use a mapping to ensure correct column names
+        const columnMapping: { [K in keyof Partial<TrainerData>]?: string } = {
+            nom: 'nom',
+            prenom: 'prenom',
+            signature: 'signature',
+            is_default: 'is_default'
+        };
+
+        for (const key in data) {
+            if (Object.prototype.hasOwnProperty.call(data, key)) {
+                const typedKey = key as keyof Partial<TrainerData>;
+                const columnKey = columnMapping[typedKey];
+                if (columnKey) {
+                    fieldsToUpdate.push(`${columnKey} = ?`);
+                    params.push(data[typedKey]);
+                }
+            }
+        }
+
         if (fieldsToUpdate.length === 0) return resolve();
         fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
         params.push(id);
         const sql = `UPDATE trainers SET ${fieldsToUpdate.join(", ")} WHERE id = ?`;
-        db.run(sql, params, (err) => {
-            if (err) reject(err);
-            else {
-                if (data.isDefault === 1) { // Check against camelCase property
-                    db.run("UPDATE trainers SET is_default = 0 WHERE id != ?", [id], (updateErr) => {
-                        if (updateErr) console.error("Erreur lors de la mise à jour des autres formateurs par défaut (update):", updateErr);
-                        resolve();
-                    });
-                } else {
+        db.run(sql, params, (err: Error | null) => {
+            if (err) return reject(err);
+            if (data.is_default === 1) {
+                db.run("UPDATE trainers SET is_default = 0 WHERE id != ?", [id], (updateErr: Error | null) => {
+                    if (updateErr) console.error("Erreur lors de la mise à jour des autres formateurs par défaut (update):", updateErr.message);
                     resolve();
-                }
+                });
+            } else {
+                resolve();
             }
         });
     });
 };
 export const deleteTrainer = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM trainers WHERE id = ?", [id], (err) => { if (err) reject(err); else resolve(); });
+        db.run("DELETE FROM trainers WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 export const getDefaultTrainer = (): Promise<TrainerData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM trainers WHERE is_default = 1", [], (err, row: any) => {
+        db.get("SELECT * FROM trainers WHERE is_default = 1", [], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToTrainerData(row));
         });
     });
@@ -1234,9 +1324,9 @@ export const getDefaultTrainer = (): Promise<TrainerData | null> => {
 export const setDefaultTrainer = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
         db.serialize(() => {
-            db.run("UPDATE trainers SET is_default = 0", [], (errUpdate) => {
+            db.run("UPDATE trainers SET is_default = 0", [], (errUpdate: Error | null) => {
                 if (errUpdate) return reject(errUpdate);
-                db.run("UPDATE trainers SET is_default = 1 WHERE id = ?", [id], (errSet) => {
+                db.run("UPDATE trainers SET is_default = 1 WHERE id = ?", [id], (errSet: Error | null) => {
                     if (errSet) return reject(errSet);
                     resolve();
                 });
@@ -1249,7 +1339,7 @@ export const setDefaultTrainer = (id: number): Promise<void> => {
 export interface VotingDeviceData {
     id?: number;
     name: string;
-    serialNumber?: string | null;
+    serialNumber?: string | null; // Changed from serial_number
     status?: string;
     createdAt?: string;
     updatedAt?: string;
@@ -1261,8 +1351,13 @@ const mapRowToVotingDeviceData = (row: any): VotingDeviceData | null => {
 export const addVotingDevice = (data: Omit<VotingDeviceData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
     return new Promise((resolve, reject) => {
         const sql = `INSERT INTO voting_devices (name, serial_number, status, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
-        db.run(sql, [data.name, data.serialNumber || null, data.status || 'available'], function(this: sqlite3.Statement, err) {
-            if (err) reject(err); else resolve(this.lastID);
+        db.run(sql, [data.name, data.serialNumber || null, data.status || 'available'], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du boîtier de vote."));
+            }
         });
     });
 };
@@ -1273,11 +1368,11 @@ export const bulkAddVotingDevices = (devices: Omit<VotingDeviceData, 'id' | 'cre
             const stmt = db.prepare("INSERT INTO voting_devices (name, serial_number, status, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
             let completed = 0; let failed = 0;
             devices.forEach(device => {
-                stmt.run(device.name, device.serialNumber || null, device.status || 'available', function(this: sqlite3.Statement, err) {
+                stmt.run(device.name, device.serialNumber || null, device.status || 'available', function(this: sqlite3.Statement, err: Error | null) {
                     if (err) { console.error(`Erreur ajout boîtier ${device.name}:`, err.message); failed++; }
                     completed++;
                     if (completed === devices.length) {
-                        stmt.finalize((finalizeErr) => {
+                        stmt.finalize((finalizeErr: Error | null) => {
                             if (finalizeErr) return reject(finalizeErr);
                             if (failed > 0) return reject(new Error(`${failed} boîtiers non ajoutés.`));
                             resolve();
@@ -1290,21 +1385,21 @@ export const bulkAddVotingDevices = (devices: Omit<VotingDeviceData, 'id' | 'cre
 };
 export const getAllVotingDevices = (): Promise<VotingDeviceData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM voting_devices", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM voting_devices", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToVotingDeviceData).filter(d => d !== null) as VotingDeviceData[]);
         });
     });
 };
 export const getVotingDeviceById = (id: number): Promise<VotingDeviceData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM voting_devices WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM voting_devices WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToVotingDeviceData(row));
         });
     });
 };
 export const getVotingDeviceBySerialNumber = (serialNumber: string): Promise<VotingDeviceData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM voting_devices WHERE serial_number = ?", [serialNumber], (err, row: any) => {
+        db.get("SELECT * FROM voting_devices WHERE serial_number = ?", [serialNumber], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToVotingDeviceData(row));
         });
     });
@@ -1314,18 +1409,18 @@ export const updateVotingDevice = (id: number, data: Partial<Omit<VotingDeviceDa
         const fieldsToUpdate: string[] = []; const params: any[] = [];
         const dbData: Record<string, any> = {};
         if (data.name !== undefined) dbData.name = data.name;
-        if (data.serialNumber !== undefined) dbData.serial_number = data.serialNumber;
+        if (data.serialNumber !== undefined) dbData.serial_number = data.serialNumber; // Map to serial_number
         if (data.status !== undefined) dbData.status = data.status;
         Object.entries(dbData).forEach(([key, value]) => { fieldsToUpdate.push(`${key} = ?`); params.push(value); });
         if (fieldsToUpdate.length === 0) return resolve();
         fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP"); params.push(id);
         const sql = `UPDATE voting_devices SET ${fieldsToUpdate.join(", ")} WHERE id = ?`;
-        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 export const deleteVotingDevice = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM voting_devices WHERE id = ?", [id], (err) => { if (err) reject(err); else resolve(); });
+        db.run("DELETE FROM voting_devices WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 
@@ -1334,42 +1429,44 @@ export interface DeviceKitData {
     id?: number;
     name: string;
     description?: string | null;
-    isDefault?: number;
+    is_default?: number; // Changed from isDefault
     createdAt?: string;
     updatedAt?: string;
-    voting_devices?: VotingDeviceData[];
+    voting_devices?: VotingDeviceData[]; // This is for frontend convenience, not a DB column
 }
 const mapRowToDeviceKitData = (row: any): DeviceKitData | null => {
     if (!row) return null;
-    return { id: row.id, name: row.name, description: row.description, isDefault: row.is_default, createdAt: row.created_at, updatedAt: row.updated_at };
+    return { id: row.id, name: row.name, description: row.description, is_default: row.is_default, createdAt: row.created_at, updatedAt: row.updated_at };
 };
 export const addDeviceKit = (data: Omit<DeviceKitData, 'id' | 'createdAt' | 'updatedAt' | 'voting_devices'>): Promise<number> => {
     return new Promise((resolve, reject) => {
         const sql = `INSERT INTO device_kits (name, description, is_default, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
-        db.run(sql, [data.name, data.description || null, data.isDefault || 0], function(this: sqlite3.Statement, err) {
-            if (err) reject(err);
-            else {
-                if (data.isDefault === 1) {
-                    const newId = this.lastID;
-                    db.run("UPDATE device_kits SET is_default = 0 WHERE id != ?", [newId], (updateErr) => {
-                        if (updateErr) console.error("Erreur màj autres kits par défaut:", updateErr);
+        db.run(sql, [data.name, data.description || null, data.is_default || 0], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                const newId = this.lastID;
+                if (data.is_default === 1) {
+                    db.run("UPDATE device_kits SET is_default = 0 WHERE id != ?", [newId], (updateErr: Error | null) => {
+                        if (updateErr) console.error("Erreur màj autres kits par défaut:", updateErr.message);
                         resolve(newId);
                     });
-                } else { resolve(this.lastID); }
+                } else { resolve(newId); }
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du kit de boîtiers."));
             }
         });
     });
 };
 export const getAllDeviceKits = (): Promise<DeviceKitData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM device_kits", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM device_kits", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToDeviceKitData).filter(dk => dk !== null) as DeviceKitData[]);
         });
     });
 };
 export const getDeviceKitById = (id: number): Promise<DeviceKitData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM device_kits WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM device_kits WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToDeviceKitData(row));
         });
     });
@@ -1380,17 +1477,17 @@ export const updateDeviceKit = (id: number, data: Partial<Omit<DeviceKitData, 'i
         const dbData: Record<string, any> = {};
         if (data.name !== undefined) dbData.name = data.name;
         if (data.description !== undefined) dbData.description = data.description;
-        if (data.isDefault !== undefined) dbData.is_default = data.isDefault;
+        if (data.is_default !== undefined) dbData.is_default = data.is_default; // Use is_default
         Object.entries(dbData).forEach(([key, value]) => { fieldsToUpdate.push(`${key} = ?`); params.push(value); });
         if (fieldsToUpdate.length === 0) return resolve();
         fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP"); params.push(id);
         const sql = `UPDATE device_kits SET ${fieldsToUpdate.join(", ")} WHERE id = ?`;
-        db.run(sql, params, (err) => {
+        db.run(sql, params, (err: Error | null) => {
             if (err) reject(err);
             else {
-                 if (data.isDefault === 1) {
-                    db.run("UPDATE device_kits SET is_default = 0 WHERE id != ?", [id], (updateErr) => {
-                        if (updateErr) console.error("Erreur màj autres kits par défaut (update):", updateErr);
+                 if (data.is_default === 1) {
+                    db.run("UPDATE device_kits SET is_default = 0 WHERE id != ?", [id], (updateErr: Error | null) => {
+                        if (updateErr) console.error("Erreur màj autres kits par défaut (update):", updateErr.message);
                         resolve();
                     });
                 } else { resolve(); }
@@ -1400,12 +1497,12 @@ export const updateDeviceKit = (id: number, data: Partial<Omit<DeviceKitData, 'i
 };
 export const deleteDeviceKit = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM device_kits WHERE id = ?", [id], (err) => { if (err) reject(err); else resolve(); });
+        db.run("DELETE FROM device_kits WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
     });
 };
 export const getDefaultDeviceKit = (): Promise<DeviceKitData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM device_kits WHERE is_default = 1", [], (err, row: any) => {
+        db.get("SELECT * FROM device_kits WHERE is_default = 1", [], (err: Error | null, row: any) => {
             if (err) reject(err); else resolve(mapRowToDeviceKitData(row));
         });
     });
@@ -1413,9 +1510,9 @@ export const getDefaultDeviceKit = (): Promise<DeviceKitData | null> => {
 export const setDefaultDeviceKit = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
         db.serialize(() => {
-            db.run("UPDATE device_kits SET is_default = 0", [], (errUpdate) => {
+            db.run("UPDATE device_kits SET is_default = 0", [], (errUpdate: Error | null) => {
                 if (errUpdate) return reject(errUpdate);
-                db.run("UPDATE device_kits SET is_default = 1 WHERE id = ?", [id], (errSet) => {
+                db.run("UPDATE device_kits SET is_default = 1 WHERE id = ?", [id], (errSet: Error | null) => {
                     if (errSet) return reject(errSet);
                     resolve();
                 });
@@ -1427,8 +1524,8 @@ export const setDefaultDeviceKit = (id: number): Promise<void> => {
 // DeviceKitAssignment
 export interface DeviceKitAssignmentData {
     id?: number;
-    kitId: number;
-    votingDeviceId: number;
+    kitId: number; // Should be kit_id to match DB
+    votingDeviceId: number; // Should be voting_device_id
     assignedAt?: string;
 }
 const mapRowToDeviceKitAssignmentData = (row: any): DeviceKitAssignmentData | null => {
@@ -1438,14 +1535,19 @@ const mapRowToDeviceKitAssignmentData = (row: any): DeviceKitAssignmentData | nu
 export const assignDeviceToKit = (kitId: number, votingDeviceId: number): Promise<number> => {
     return new Promise((resolve, reject) => {
         const sql = `INSERT INTO device_kit_assignments (kit_id, voting_device_id, assigned_at) VALUES (?, ?, CURRENT_TIMESTAMP)`;
-        db.run(sql, [kitId, votingDeviceId], function(this: sqlite3.Statement, err) {
-            if (err) reject(err); else resolve(this.lastID);
+        db.run(sql, [kitId, votingDeviceId], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'assignation du boîtier au kit."));
+            }
         });
     });
 };
 export const removeDeviceFromKit = (kitId: number, votingDeviceId: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        db.run("DELETE FROM device_kit_assignments WHERE kit_id = ? AND voting_device_id = ?", [kitId, votingDeviceId], (err) => {
+        db.run("DELETE FROM device_kit_assignments WHERE kit_id = ? AND voting_device_id = ?", [kitId, votingDeviceId], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -1453,7 +1555,7 @@ export const removeDeviceFromKit = (kitId: number, votingDeviceId: number): Prom
 export const getVotingDevicesForKit = (kitId: number): Promise<VotingDeviceData[]> => {
     return new Promise((resolve, reject) => {
         const sql = `SELECT vd.* FROM voting_devices vd JOIN device_kit_assignments dka ON vd.id = dka.voting_device_id WHERE dka.kit_id = ?`;
-        db.all(sql, [kitId], (err, rows: any[]) => {
+        db.all(sql, [kitId], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToVotingDeviceData).filter(d => d !== null) as VotingDeviceData[]);
         });
     });
@@ -1461,7 +1563,7 @@ export const getVotingDevicesForKit = (kitId: number): Promise<VotingDeviceData[
 export const getKitsForVotingDevice = (votingDeviceId: number): Promise<DeviceKitData[]> => {
     return new Promise((resolve, reject) => {
         const sql = `SELECT dk.* FROM device_kits dk JOIN device_kit_assignments dka ON dk.id = dka.kit_id WHERE dka.voting_device_id = ?`;
-        db.all(sql, [votingDeviceId], (err, rows: any[]) => {
+        db.all(sql, [votingDeviceId], (err: Error | null, rows: any[]) => {
             if (err) reject(err); else resolve(rows.map(mapRowToDeviceKitData).filter(dk => dk !== null) as DeviceKitData[]);
         });
     });
@@ -1590,15 +1692,20 @@ export const addSession = (data: Partial<Omit<SessionData, 'id' | 'createdAt' | 
             data.questionMappings || null, data.ignoredSlideGuids || null, data.resolvedImportAnomalies || null,
             data.donneesOrs || null, data.nomFichierOrs || null, data.location || null, data.notes || null
         ];
-        db.run(sql, params, function(this: sqlite3.Statement, err) {
-            if (err) reject(err); else resolve(this.lastID);
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion de la session."));
+            }
         });
     });
 };
 
 export const getSessionById = (id: number): Promise<SessionData | null> => {
     return new Promise((resolve, reject) => {
-        db.get("SELECT * FROM sessions WHERE id = ?", [id], (err, row: any) => {
+        db.get("SELECT * FROM sessions WHERE id = ?", [id], (err: Error | null, row: any) => {
             if (err) reject(err);
             else resolve(mapRowToSessionData(row));
         });
@@ -1607,7 +1714,7 @@ export const getSessionById = (id: number): Promise<SessionData | null> => {
 
 export const getAllSessions = (): Promise<SessionData[]> => {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM sessions ORDER BY dateSession DESC", [], (err, rows: any[]) => {
+        db.all("SELECT * FROM sessions ORDER BY dateSession DESC", [], (err: Error | null, rows: any[]) => {
             if (err) reject(err);
             else resolve(rows.map(row => mapRowToSessionData(row)).filter(s => s !== null) as SessionData[]);
         });
@@ -1619,9 +1726,7 @@ export const updateSession = (id: number, data: Partial<Omit<SessionData, 'id' |
         const fieldsToUpdate: string[] = [];
         const params: any[] = [];
 
-        // Dynamically build query based on provided data
         Object.entries(data).forEach(([key, value]) => {
-            // Map SessionData keys to database column names
             const columnKey = key === 'nomSession' ? 'nomSession' :
                               key === 'dateSession' ? 'dateSession' :
                               key === 'typeSession' ? 'typeSession' :
@@ -1645,13 +1750,13 @@ export const updateSession = (id: number, data: Partial<Omit<SessionData, 'id' |
             }
         });
 
-        if (fieldsToUpdate.length === 0) return resolve(); // No fields to update
+        if (fieldsToUpdate.length === 0) return resolve();
 
         fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
         params.push(id);
 
         const sql = `UPDATE sessions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
-        db.run(sql, params, (err) => {
+        db.run(sql, params, (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
@@ -1659,20 +1764,1802 @@ export const updateSession = (id: number, data: Partial<Omit<SessionData, 'id' |
 
 export const deleteSession = (id: number): Promise<void> => {
     return new Promise((resolve, reject) => {
-        // Consider cascading deletes or manual cleanup of related session data
-        // (session_participants, session_questions, etc.) if not handled by FOREIGN KEY ON DELETE CASCADE
-        db.run("DELETE FROM sessions WHERE id = ?", [id], (err) => {
+        db.run("DELETE FROM sessions WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// SessionParticipant helper and CRUD
+const mapRowToSessionParticipantData = (row: any): SessionParticipantData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        nom: row.nom,
+        prenom: row.prenom,
+        identification_code: row.identification_code,
+        score: row.score,
+        reussite: row.reussite,
+        status_in_session: row.status_in_session,
+        assigned_voting_device_id: row.assigned_voting_device_id,
+        original_participant_id: row.original_participant_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+};
+
+export const addSessionParticipant = (data: Omit<SessionParticipantData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_participants (
+                       session_id, nom, prenom, identification_code, score, reussite,
+                       status_in_session, assigned_voting_device_id, original_participant_id,
+                       created_at, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.nom, data.prenom || null, data.identification_code || null,
+            data.score || null, data.reussite || null, data.status_in_session || 'inscrit',
+            data.assigned_voting_device_id || null, data.original_participant_id || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du participant de session."));
+            }
+        });
+    });
+};
+
+export const getSessionParticipants = (sessionId: number): Promise<SessionParticipantData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_participants WHERE session_id = ?", [sessionId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionParticipantData).filter(sp => sp !== null) as SessionParticipantData[]);
+        });
+    });
+};
+
+export const updateSessionParticipant = (id: number, data: Partial<Omit<SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                nom: 'nom', prenom: 'prenom', identification_code: 'identification_code', score: 'score',
+                reussite: 'reussite', status_in_session: 'status_in_session',
+                assigned_voting_device_id: 'assigned_voting_device_id',
+                original_participant_id: 'original_participant_id'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
+        params.push(id);
+        const sql = `UPDATE session_participants SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionParticipant = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_participants WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// Function to get all sessions with their participants
+export const getAllSessionsWithParticipants = async (): Promise<Array<SessionData & { participants: SessionParticipantData[] }>> => {
+    const sessions = await getAllSessions();
+    const sessionsWithParticipants = await Promise.all(
+        sessions.map(async (session) => {
+            const participants = await getSessionParticipants(session.id);
+            return { ...session, participants };
+        })
+    );
+    return sessionsWithParticipants;
+};
+
+export const deleteSessionParticipantsBySessionId = (sessionId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_participants WHERE session_id = ?", [sessionId], (err: Error | null) => {
+            if (err) {
+                console.error(`Error deleting session participants for session ID ${sessionId}:`, err.message);
+                reject(err);
+            } else {
+                resolve();
+            }
+        });
+    });
+};
+
+export const addBulkSessionParticipants = (sessionId: number, participants: Array<Omit<SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (!participants || participants.length === 0) {
+            return resolve();
+        }
+        db.serialize(() => {
+            const stmt = db.prepare(`INSERT INTO session_participants (
+                                       session_id, nom, prenom, identification_code, score, reussite,
+                                       status_in_session, assigned_voting_device_id, original_participant_id,
+                                       created_at, updated_at
+                                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+
+            let completedOperations = 0;
+            let failedOperations = 0;
+
+            participants.forEach(p => {
+                // Reconstruct the full participant data including session_id for insertion
+                const participantFull: Omit<SessionParticipantData, 'id' | 'createdAt' | 'updatedAt'> = {
+                    session_id: sessionId,
+                    nom: p.nom,
+                    prenom: p.prenom,
+                    identification_code: p.identification_code,
+                    score: p.score,
+                    reussite: p.reussite,
+                    status_in_session: p.status_in_session,
+                    assigned_voting_device_id: p.assigned_voting_device_id,
+                    original_participant_id: p.original_participant_id
+                };
+                stmt.run(
+                    participantFull.session_id,
+                    participantFull.nom,
+                    participantFull.prenom || null,
+                    participantFull.identification_code || null,
+                    participantFull.score || null,
+                    participantFull.reussite || null,
+                    participantFull.status_in_session || 'inscrit',
+                    participantFull.assigned_voting_device_id || null,
+                    participantFull.original_participant_id || null,
+                    function(this: sqlite3.Statement, err: Error | null) {
+                        completedOperations++;
+                        if (err) {
+                            console.error(`Erreur ajout session_participant (bulk) pour session ${sessionId}, participant ${p.nom}:`, err.message);
+                            failedOperations++;
+                        }
+                        // this.lastID is not relevant for each individual run in a bulk insert like this for the Promise resolve value.
+                        // The promise resolves once all operations are done or a finalize error occurs.
+                        if (completedOperations === participants.length) {
+                            stmt.finalize((finalizeErr: Error | null) => {
+                                if (finalizeErr) {
+                                    console.error("Error finalizing statement for bulk add session participants:", finalizeErr.message);
+                                    return reject(finalizeErr);
+                                }
+                                if (failedOperations > 0) {
+                                    return reject(new Error(`${failedOperations} participants de session non ajoutés.`));
+                                }
+                                resolve();
+                            });
+                        }
+                    }
+                );
+            });
+        });
+    });
+};
+
+
+// SessionQuestion helper and CRUD
+const mapRowToSessionQuestionData = (row: any): SessionQuestionData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        original_question_id: row.original_question_id,
+        texte_question: row.texte_question,
+        type_question: row.type_question,
+        options: row.options,
+        image: row.image,
+        image_name: row.image_name,
+        points: row.points,
+        feedback: row.feedback,
+        bloc_id: row.bloc_id,
+        ordre_apparition: row.ordre_apparition,
+        createdAt: row.created_at
+    };
+};
+
+export const addSessionQuestion = (data: Omit<SessionQuestionData, 'id' | 'createdAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_questions (
+                       session_id, original_question_id, texte_question, type_question, options,
+                       image, image_name, points, feedback, bloc_id, ordre_apparition, created_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.original_question_id || null, data.texte_question, data.type_question,
+            data.options || null, data.image || null, data.image_name || null, data.points || null,
+            data.feedback || null, data.bloc_id || null, data.ordre_apparition || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion de la question de session."));
+            }
+        });
+    });
+};
+
+export const getSessionQuestions = (sessionId: number): Promise<SessionQuestionData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_questions WHERE session_id = ? ORDER BY ordre_apparition ASC", [sessionId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionQuestionData).filter(sq => sq !== null) as SessionQuestionData[]);
+        });
+    });
+};
+
+export const updateSessionQuestion = (id: number, data: Partial<Omit<SessionQuestionData, 'id' | 'session_id' | 'createdAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                original_question_id: 'original_question_id', texte_question: 'texte_question',
+                type_question: 'type_question', options: 'options', image: 'image', image_name: 'image_name',
+                points: 'points', feedback: 'feedback', bloc_id: 'bloc_id', ordre_apparition: 'ordre_apparition'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        params.push(id);
+        const sql = `UPDATE session_questions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionQuestion = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_questions WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// SessionBoitier helper and CRUD
+const mapRowToSessionBoitierData = (row: any): SessionBoitierData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        original_voting_device_id: row.original_voting_device_id,
+        name: row.name,
+        serial_number: row.serial_number,
+        createdAt: row.created_at
+    };
+};
+
+export const addSessionBoitier = (data: Omit<SessionBoitierData, 'id' | 'createdAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_boitiers (
+                       session_id, original_voting_device_id, name, serial_number, created_at
+                     ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.original_voting_device_id || null, data.name, data.serial_number || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du boîtier de session."));
+            }
+        });
+    });
+};
+
+export const getSessionBoitiers = (sessionId: number): Promise<SessionBoitierData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_boitiers WHERE session_id = ?", [sessionId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionBoitierData).filter(sb => sb !== null) as SessionBoitierData[]);
+        });
+    });
+};
+
+export const updateSessionBoitier = (id: number, data: Partial<Omit<SessionBoitierData, 'id' | 'session_id' | 'createdAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                original_voting_device_id: 'original_voting_device_id',
+                name: 'name', serial_number: 'serial_number'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        params.push(id);
+        const sql = `UPDATE session_boitiers SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionBoitier = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_boitiers WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// SessionResult helper and CRUD
+const mapRowToSessionResultData = (row: any): SessionResultData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        session_question_id: row.session_question_id,
+        session_participant_id: row.session_participant_id,
+        reponse_choisie: row.reponse_choisie,
+        est_correct: row.est_correct,
+        points_obtenus: row.points_obtenus,
+        temps_reponse: row.temps_reponse,
+        submitted_at: row.submitted_at
+    };
+};
+
+export const addSessionResult = (data: Omit<SessionResultData, 'id' | 'submitted_at'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_results (
+                       session_id, session_question_id, session_participant_id, reponse_choisie,
+                       est_correct, points_obtenus, temps_reponse, submitted_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.session_question_id, data.session_participant_id,
+            data.reponse_choisie || null, data.est_correct || null, data.points_obtenus || null,
+            data.temps_reponse || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du résultat de session."));
+            }
+        });
+    });
+};
+
+export const getSessionResults = (sessionId: number, participantId?: number, questionId?: number): Promise<SessionResultData[]> => {
+    return new Promise((resolve, reject) => {
+        let sql = "SELECT * FROM session_results WHERE session_id = ?";
+        const params: any[] = [sessionId];
+        if (participantId !== undefined) {
+            sql += " AND session_participant_id = ?";
+            params.push(participantId);
+        }
+        if (questionId !== undefined) {
+            sql += " AND session_question_id = ?";
+            params.push(questionId);
+        }
+        db.all(sql, params, (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionResultData).filter(sr => sr !== null) as SessionResultData[]);
+        });
+    });
+};
+
+export const updateSessionResult = (id: number, data: Partial<Omit<SessionResultData, 'id' | 'session_id' | 'session_question_id' | 'session_participant_id' | 'submitted_at'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                reponse_choisie: 'reponse_choisie', est_correct: 'est_correct',
+                points_obtenus: 'points_obtenus', temps_reponse: 'temps_reponse'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        params.push(id);
+        const sql = `UPDATE session_results SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionResult = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_results WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// Referential
+export interface ReferentialData {
+    id: number;
+    code: string;
+    nom_complet: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+const mapRowToReferentialData = (row: any): ReferentialData | null => {
+    if (!row) return null;
+    return { id: row.id, code: row.code, nom_complet: row.nom_complet, createdAt: row.created_at, updatedAt: row.updated_at };
+};
+export const addReferentiel = (code: string, nom_complet: string): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO referentiels (code, nom_complet, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        db.run(sql, [code, nom_complet], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du référentiel."))
+            }
+        });
+    });
+};
+export const getAllReferentiels = (): Promise<ReferentialData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM referentiels", [], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToReferentialData).filter(r => r !== null) as ReferentialData[]);
+        });
+    });
+};
+export const getReferentielById = (id: number): Promise<ReferentialData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM referentiels WHERE id = ?", [id], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToReferentialData(row));
+        });
+    });
+};
+export const updateReferentiel = (id: number, code: string, nom_complet: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const sql = `UPDATE referentiels SET code = ?, nom_complet = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+        db.run(sql, [code, nom_complet, id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+export const deleteReferentiel = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM referentiels WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+// Theme
+export interface ThemeData {
+    id: number;
+    code_theme: string;
+    nom_complet: string;
+    referentiel_id: number;
+    createdAt?: string;
+    updatedAt?: string;
+}
+const mapRowToThemeData = (row: any): ThemeData | null => {
+    if (!row) return null;
+    return { id: row.id, code_theme: row.code_theme, nom_complet: row.nom_complet, referentiel_id: row.referentiel_id, createdAt: row.created_at, updatedAt: row.updated_at };
+};
+export const addTheme = (code_theme: string, nom_complet: string, referentiel_id: number): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO themes (code_theme, nom_complet, referentiel_id, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        db.run(sql, [code_theme, nom_complet, referentiel_id], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du thème."))
+            }
+        });
+    });
+};
+export const getAllThemes = (): Promise<ThemeData[]> => {
+     return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM themes", [], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToThemeData).filter(t => t !== null) as ThemeData[]);
+        });
+    });
+};
+export const getThemesByReferentielId = (referentiel_id: number): Promise<ThemeData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM themes WHERE referentiel_id = ?", [referentiel_id], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToThemeData).filter(t => t !== null) as ThemeData[]);
+        });
+    });
+};
+export const getThemeById = (id: number): Promise<ThemeData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM themes WHERE id = ?", [id], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToThemeData(row));
+        });
+    });
+};
+export const updateTheme = (id: number, code_theme: string, nom_complet: string, referentiel_id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const sql = `UPDATE themes SET code_theme = ?, nom_complet = ?, referentiel_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+        db.run(sql, [code_theme, nom_complet, referentiel_id, id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+export const deleteTheme = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM themes WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+// Bloc
+export interface BlocData {
+    id: number;
+    code_bloc: string;
+    nom_complet?: string | null;
+    theme_id: number;
+    createdAt?: string;
+    updatedAt?: string;
+}
+const mapRowToBlocData = (row: any): BlocData | null => {
+    if (!row) return null;
+    return { id: row.id, code_bloc: row.code_bloc, nom_complet: row.nom_complet, theme_id: row.theme_id, createdAt: row.created_at, updatedAt: row.updated_at };
+};
+export const addBloc = (code_bloc: string, theme_id: number, nom_complet?: string): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO blocs (code_bloc, nom_complet, theme_id, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        db.run(sql, [code_bloc, nom_complet || null, theme_id], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du bloc."))
+            }
+        });
+    });
+};
+export const getAllBlocs = (): Promise<BlocData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM blocs", [], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToBlocData).filter(b => b !== null) as BlocData[]);
+        });
+    });
+};
+export const getBlocsByThemeId = (theme_id: number): Promise<BlocData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM blocs WHERE theme_id = ?", [theme_id], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToBlocData).filter(b => b !== null) as BlocData[]);
+        });
+    });
+};
+export const getBlocById = (id: number): Promise<BlocData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM blocs WHERE id = ?", [id], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToBlocData(row));
+        });
+    });
+};
+export const updateBloc = (id: number, code_bloc: string, theme_id: number, nom_complet?: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const sql = `UPDATE blocs SET code_bloc = ?, nom_complet = ?, theme_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+        db.run(sql, [code_bloc, nom_complet || null, theme_id, id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+export const deleteBloc = (id: number): Promise<void> => {
+     return new Promise((resolve, reject) => {
+        db.run("DELETE FROM blocs WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+// Question
+export interface QuestionOption {
+    texte: string;
+    estCorrecte: boolean;
+}
+export interface QuestionData {
+    id?: number;
+    text: string;
+    type: string;
+    options?: any; // Should be stringified JSON of QuestionOption[]
+    correctAnswer?: string; // Should be stringified JSON of correct option(s) or index
+    isEliminatory?: boolean;
+    timeLimit?: number;
+    image?: Buffer | null;
+    imageName?: string | null;
+    points?: number;
+    feedback?: string | null;
+    blocId: number;
+    referentiel_id?: number | null;
+    theme_id?: number | null;
+    createdAt?: string;
+    updatedAt?: string;
+    usageCount?: number;
+    correctResponseRate?: number;
+    slideGuid?: string;
+}
+const mapDbTypeToQuestionTypeString = (dbType: string): string => {
+    switch (dbType) {
+        case 'QCM': return 'multiple-choice';
+        case 'QCS': return 'single-choice';
+        default: return dbType; // QROC, Oral, Pratique
+    }
+};
+const mapQuestionTypeStringToDbType = (typeString: string): string => {
+    switch (typeString) {
+        case 'multiple-choice': return 'QCM';
+        case 'single-choice': return 'QCS';
+        case 'true-false': return 'QCM'; // Assuming true-false is a type of QCM/QCS for storage
+        // Keep other types as is if they directly map to DB types
+        default: return typeString;
+    }
+};
+const mapRowToQuestionData = (row: any): QuestionData => {
+    if (!row) throw new Error("mapRowToQuestionData: row is null or undefined");
+    return {
+        id: row.id,
+        text: row.texte_question,
+        type: mapDbTypeToQuestionTypeString(row.type_question),
+        options: row.options, // Will be parsed by parseQuestionOptions
+        correctAnswer: row.correct_answer,
+        isEliminatory: !!row.is_eliminatory, // Convert 0/1 to boolean
+        timeLimit: row.time_limit,
+        image: row.image, // Buffer directly from DB
+        imageName: row.image_name,
+        points: row.points,
+        feedback: row.feedback,
+        blocId: row.bloc_id,
+        referentiel_id: row.referentiel_id,
+        theme_id: row.theme_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        usageCount: row.usage_count,
+        correctResponseRate: row.correct_response_rate,
+        slideGuid: row.slide_guid,
+    };
+};
+export const addQuestion = (data: Partial<Omit<QuestionData, 'id'>>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        if (typeof data.blocId !== 'number') { // blocId is NOT NULL
+            return reject(new Error("blocId is required and must be a number."));
+        }
+        const optionsJSON = typeof data.options === 'string' ? data.options : (data.options ? JSON.stringify(data.options) : null);
+        const correctAnswerJSON = typeof data.correctAnswer === 'string' ? data.correctAnswer : (data.correctAnswer ? JSON.stringify(data.correctAnswer) : null);
+
+        const sql = `INSERT INTO questions (
+                       texte_question, type_question, options, correct_answer, is_eliminatory, time_limit,
+                       image, image_name, points, feedback, bloc_id, referentiel_id, theme_id,
+                       usage_count, correct_response_rate, slide_guid, created_at, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.text, mapQuestionTypeStringToDbType(data.type as string), optionsJSON, correctAnswerJSON, data.isEliminatory ? 1 : 0, data.timeLimit,
+            data.image || null, data.imageName || null, data.points || 1, data.feedback || null,
+            data.blocId, data.referentiel_id || null, data.theme_id || null,
+            data.usageCount || 0, data.correctResponseRate || 0, data.slideGuid || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion de la question."));
+            }
+        });
+    });
+};
+const parseQuestionOptions = (question: QuestionData): QuestionData => {
+    if (question.options && typeof question.options === 'string') {
+        try {
+            question.options = JSON.parse(question.options);
+        } catch (e: any) {
+            console.error("Erreur de parsing JSON pour les options de la question:", e.message);
+            question.options = []; // Default to empty array on error
+        }
+    }
+    // correctAnswer might also be JSON
+    if (question.correctAnswer && typeof question.correctAnswer === 'string') {
+        try {
+            // Don't parse if it's not supposed to be JSON (e.g. for QROC)
+            if (question.type === 'multiple-choice' || question.type === 'single-choice') {
+                 question.correctAnswer = JSON.parse(question.correctAnswer);
+            }
+        } catch (e: any) {
+            console.error("Erreur de parsing JSON pour la réponse correcte:", e.message);
+            // Keep as string if parsing fails and it's not a type expected to be JSON
+        }
+    }
+    return question;
+};
+export const getAllQuestions = (): Promise<QuestionData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM questions", [], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToQuestionData).map(parseQuestionOptions));
+        });
+    });
+};
+export const getQuestionsByBlocId = (blocId: number): Promise<QuestionData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM questions WHERE bloc_id = ?", [blocId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToQuestionData).map(parseQuestionOptions));
+        });
+    });
+};
+export const getQuestionById = (id: number): Promise<QuestionData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM questions WHERE id = ?", [id], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(row ? parseQuestionOptions(mapRowToQuestionData(row)) : null);
+        });
+    });
+};
+export const updateQuestion = (id: number, data: Partial<QuestionData>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        const dbData: Record<string, any> = {};
+
+        if (data.text !== undefined) dbData.texte_question = data.text;
+        if (data.type !== undefined) dbData.type_question = mapQuestionTypeStringToDbType(data.type);
+        if (data.options !== undefined) dbData.options = typeof data.options === 'string' ? data.options : JSON.stringify(data.options);
+        if (data.correctAnswer !== undefined) dbData.correct_answer = typeof data.correctAnswer === 'string' ? data.correctAnswer : JSON.stringify(data.correctAnswer);
+        if (data.isEliminatory !== undefined) dbData.is_eliminatory = data.isEliminatory ? 1 : 0;
+        if (data.timeLimit !== undefined) dbData.time_limit = data.timeLimit;
+        if (data.image !== undefined) dbData.image = data.image; // Should be Buffer or null
+        if (data.imageName !== undefined) dbData.image_name = data.imageName; // Corrected typo db_data to dbData
+        if (data.points !== undefined) dbData.points = data.points;
+        if (data.feedback !== undefined) dbData.feedback = data.feedback;
+        if (data.blocId !== undefined) dbData.bloc_id = data.blocId;
+        if (data.referentiel_id !== undefined) dbData.referentiel_id = data.referentiel_id;
+        if (data.theme_id !== undefined) dbData.theme_id = data.theme_id;
+        if (data.usageCount !== undefined) dbData.usage_count = data.usageCount;
+        if (data.correctResponseRate !== undefined) dbData.correct_response_rate = data.correctResponseRate;
+        if (data.slideGuid !== undefined) dbData.slide_guid = data.slideGuid;
+
+        Object.entries(dbData).forEach(([key, value]) => {
+            fieldsToUpdate.push(`${key} = ?`);
+            params.push(value);
+        });
+
+        if (fieldsToUpdate.length === 0) return resolve();
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
+        params.push(id);
+        const sql = `UPDATE questions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+export const updateQuestionImage = (id: number, image: Buffer | null, imageName: string | null): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const sql = `UPDATE questions SET image = ?, image_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+        db.run(sql, [image, imageName, id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+export const deleteQuestion = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM questions WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+// Trainer
+export interface TrainerData {
+    id?: number;
+    nom: string;
+    prenom: string;
+    signature?: Buffer | null; // Should be Buffer for BLOB
+    is_default?: number; // Changed from isDefault to match DB
+    createdAt?: string;
+    updatedAt?: string;
+}
+const mapRowToTrainerData = (row: any): TrainerData | null => {
+    if (!row) return null;
+    return { id: row.id, nom: row.nom, prenom: row.prenom, signature: row.signature, is_default: row.is_default, createdAt: row.created_at, updatedAt: row.updated_at };
+};
+export const addTrainer = (data: Omit<TrainerData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO trainers (nom, prenom, signature, is_default, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        db.run(sql, [data.nom, data.prenom, data.signature || null, data.is_default || 0], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                const newId = this.lastID;
+                if (data.is_default === 1) {
+                    db.run("UPDATE trainers SET is_default = 0 WHERE id != ?", [newId], (updateErr: Error | null) => {
+                        if (updateErr) console.error("Erreur lors de la mise à jour des autres formateurs par défaut:", updateErr.message);
+                        // Continue to resolve with newId even if updating others fails, as the primary insert succeeded.
+                        resolve(newId);
+                    });
+                } else {
+                    resolve(newId);
+                }
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du formateur."));
+            }
+        });
+    });
+};
+export const getAllTrainers = (): Promise<TrainerData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM trainers", [], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToTrainerData).filter(t => t !== null) as TrainerData[]);
+        });
+    });
+};
+export const getTrainerById = (id: number): Promise<TrainerData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM trainers WHERE id = ?", [id], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToTrainerData(row));
+        });
+    });
+};
+export const updateTrainer = (id: number, data: Partial<Omit<TrainerData, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        // Use a mapping to ensure correct column names
+        const columnMapping: { [K in keyof Partial<TrainerData>]?: string } = {
+            nom: 'nom',
+            prenom: 'prenom',
+            signature: 'signature',
+            is_default: 'is_default'
+        };
+
+        for (const key in data) {
+            if (Object.prototype.hasOwnProperty.call(data, key)) {
+                const typedKey = key as keyof Partial<TrainerData>;
+                const columnKey = columnMapping[typedKey];
+                if (columnKey) {
+                    fieldsToUpdate.push(`${columnKey} = ?`);
+                    params.push(data[typedKey]);
+                }
+            }
+        }
+
+        if (fieldsToUpdate.length === 0) return resolve();
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
+        params.push(id);
+        const sql = `UPDATE trainers SET ${fieldsToUpdate.join(", ")} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => {
+            if (err) return reject(err);
+            if (data.is_default === 1) {
+                db.run("UPDATE trainers SET is_default = 0 WHERE id != ?", [id], (updateErr: Error | null) => {
+                    if (updateErr) console.error("Erreur lors de la mise à jour des autres formateurs par défaut (update):", updateErr.message);
+                    resolve();
+                });
+            } else {
+                resolve();
+            }
+        });
+    });
+};
+export const deleteTrainer = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM trainers WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+export const getDefaultTrainer = (): Promise<TrainerData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM trainers WHERE is_default = 1", [], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToTrainerData(row));
+        });
+    });
+};
+export const setDefaultTrainer = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.serialize(() => {
+            db.run("UPDATE trainers SET is_default = 0", [], (errUpdate: Error | null) => {
+                if (errUpdate) return reject(errUpdate);
+                db.run("UPDATE trainers SET is_default = 1 WHERE id = ?", [id], (errSet: Error | null) => {
+                    if (errSet) return reject(errSet);
+                    resolve();
+                });
+            });
+        });
+    });
+};
+
+// VotingDevice
+export interface VotingDeviceData {
+    id?: number;
+    name: string;
+    serialNumber?: string | null; // Changed from serial_number
+    status?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+const mapRowToVotingDeviceData = (row: any): VotingDeviceData | null => {
+    if (!row) return null;
+    return { id: row.id, name: row.name, serialNumber: row.serial_number, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at };
+};
+export const addVotingDevice = (data: Omit<VotingDeviceData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO voting_devices (name, serial_number, status, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        db.run(sql, [data.name, data.serialNumber || null, data.status || 'available'], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du boîtier de vote."));
+            }
+        });
+    });
+};
+export const bulkAddVotingDevices = (devices: Omit<VotingDeviceData, 'id' | 'createdAt' | 'updatedAt'>[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (devices.length === 0) return resolve();
+        db.serialize(() => {
+            const stmt = db.prepare("INSERT INTO voting_devices (name, serial_number, status, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+            let completed = 0; let failed = 0;
+            devices.forEach(device => {
+                stmt.run(device.name, device.serialNumber || null, device.status || 'available', function(this: sqlite3.Statement, err: Error | null) {
+                    if (err) { console.error(`Erreur ajout boîtier ${device.name}:`, err.message); failed++; }
+                    completed++;
+                    if (completed === devices.length) {
+                        stmt.finalize((finalizeErr: Error | null) => {
+                            if (finalizeErr) return reject(finalizeErr);
+                            if (failed > 0) return reject(new Error(`${failed} boîtiers non ajoutés.`));
+                            resolve();
+                        });
+                    }
+                });
+            });
+        });
+    });
+};
+export const getAllVotingDevices = (): Promise<VotingDeviceData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM voting_devices", [], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToVotingDeviceData).filter(d => d !== null) as VotingDeviceData[]);
+        });
+    });
+};
+export const getVotingDeviceById = (id: number): Promise<VotingDeviceData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM voting_devices WHERE id = ?", [id], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToVotingDeviceData(row));
+        });
+    });
+};
+export const getVotingDeviceBySerialNumber = (serialNumber: string): Promise<VotingDeviceData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM voting_devices WHERE serial_number = ?", [serialNumber], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToVotingDeviceData(row));
+        });
+    });
+};
+export const updateVotingDevice = (id: number, data: Partial<Omit<VotingDeviceData, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = []; const params: any[] = [];
+        const dbData: Record<string, any> = {};
+        if (data.name !== undefined) dbData.name = data.name;
+        if (data.serialNumber !== undefined) dbData.serial_number = data.serialNumber; // Map to serial_number
+        if (data.status !== undefined) dbData.status = data.status;
+        Object.entries(dbData).forEach(([key, value]) => { fieldsToUpdate.push(`${key} = ?`); params.push(value); });
+        if (fieldsToUpdate.length === 0) return resolve();
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP"); params.push(id);
+        const sql = `UPDATE voting_devices SET ${fieldsToUpdate.join(", ")} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+export const deleteVotingDevice = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM voting_devices WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+// DeviceKit
+export interface DeviceKitData {
+    id?: number;
+    name: string;
+    description?: string | null;
+    is_default?: number; // Changed from isDefault
+    createdAt?: string;
+    updatedAt?: string;
+    voting_devices?: VotingDeviceData[]; // This is for frontend convenience, not a DB column
+}
+const mapRowToDeviceKitData = (row: any): DeviceKitData | null => {
+    if (!row) return null;
+    return { id: row.id, name: row.name, description: row.description, is_default: row.is_default, createdAt: row.created_at, updatedAt: row.updated_at };
+};
+export const addDeviceKit = (data: Omit<DeviceKitData, 'id' | 'createdAt' | 'updatedAt' | 'voting_devices'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO device_kits (name, description, is_default, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        db.run(sql, [data.name, data.description || null, data.is_default || 0], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                const newId = this.lastID;
+                if (data.is_default === 1) {
+                    db.run("UPDATE device_kits SET is_default = 0 WHERE id != ?", [newId], (updateErr: Error | null) => {
+                        if (updateErr) console.error("Erreur màj autres kits par défaut:", updateErr.message);
+                        resolve(newId);
+                    });
+                } else { resolve(newId); }
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du kit de boîtiers."));
+            }
+        });
+    });
+};
+export const getAllDeviceKits = (): Promise<DeviceKitData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM device_kits", [], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToDeviceKitData).filter(dk => dk !== null) as DeviceKitData[]);
+        });
+    });
+};
+export const getDeviceKitById = (id: number): Promise<DeviceKitData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM device_kits WHERE id = ?", [id], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToDeviceKitData(row));
+        });
+    });
+};
+export const updateDeviceKit = (id: number, data: Partial<Omit<DeviceKitData, 'id' | 'createdAt' | 'updatedAt' | 'voting_devices'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = []; const params: any[] = [];
+        const dbData: Record<string, any> = {};
+        if (data.name !== undefined) dbData.name = data.name;
+        if (data.description !== undefined) dbData.description = data.description;
+        if (data.is_default !== undefined) dbData.is_default = data.is_default; // Use is_default
+        Object.entries(dbData).forEach(([key, value]) => { fieldsToUpdate.push(`${key} = ?`); params.push(value); });
+        if (fieldsToUpdate.length === 0) return resolve();
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP"); params.push(id);
+        const sql = `UPDATE device_kits SET ${fieldsToUpdate.join(", ")} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => {
+            if (err) reject(err);
+            else {
+                 if (data.is_default === 1) {
+                    db.run("UPDATE device_kits SET is_default = 0 WHERE id != ?", [id], (updateErr: Error | null) => {
+                        if (updateErr) console.error("Erreur màj autres kits par défaut (update):", updateErr.message);
+                        resolve();
+                    });
+                } else { resolve(); }
+            }
+        });
+    });
+};
+export const deleteDeviceKit = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM device_kits WHERE id = ?", [id], (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+export const getDefaultDeviceKit = (): Promise<DeviceKitData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM device_kits WHERE is_default = 1", [], (err: Error | null, row: any) => {
+            if (err) reject(err); else resolve(mapRowToDeviceKitData(row));
+        });
+    });
+};
+export const setDefaultDeviceKit = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.serialize(() => {
+            db.run("UPDATE device_kits SET is_default = 0", [], (errUpdate: Error | null) => {
+                if (errUpdate) return reject(errUpdate);
+                db.run("UPDATE device_kits SET is_default = 1 WHERE id = ?", [id], (errSet: Error | null) => {
+                    if (errSet) return reject(errSet);
+                    resolve();
+                });
+            });
+        });
+    });
+};
+
+// DeviceKitAssignment
+export interface DeviceKitAssignmentData {
+    id?: number;
+    kitId: number; // Should be kit_id to match DB
+    votingDeviceId: number; // Should be voting_device_id
+    assignedAt?: string;
+}
+const mapRowToDeviceKitAssignmentData = (row: any): DeviceKitAssignmentData | null => {
+    if (!row) return null;
+    return { id: row.id, kitId: row.kit_id, votingDeviceId: row.voting_device_id, assignedAt: row.assigned_at };
+};
+export const assignDeviceToKit = (kitId: number, votingDeviceId: number): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO device_kit_assignments (kit_id, voting_device_id, assigned_at) VALUES (?, ?, CURRENT_TIMESTAMP)`;
+        db.run(sql, [kitId, votingDeviceId], function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'assignation du boîtier au kit."));
+            }
+        });
+    });
+};
+export const removeDeviceFromKit = (kitId: number, votingDeviceId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM device_kit_assignments WHERE kit_id = ? AND voting_device_id = ?", [kitId, votingDeviceId], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+export const getVotingDevicesForKit = (kitId: number): Promise<VotingDeviceData[]> => {
+    return new Promise((resolve, reject) => {
+        const sql = `SELECT vd.* FROM voting_devices vd JOIN device_kit_assignments dka ON vd.id = dka.voting_device_id WHERE dka.kit_id = ?`;
+        db.all(sql, [kitId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToVotingDeviceData).filter(d => d !== null) as VotingDeviceData[]);
+        });
+    });
+};
+export const getKitsForVotingDevice = (votingDeviceId: number): Promise<DeviceKitData[]> => {
+    return new Promise((resolve, reject) => {
+        const sql = `SELECT dk.* FROM device_kits dk JOIN device_kit_assignments dka ON dk.id = dka.kit_id WHERE dka.voting_device_id = ?`;
+        db.all(sql, [votingDeviceId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err); else resolve(rows.map(mapRowToDeviceKitData).filter(dk => dk !== null) as DeviceKitData[]);
+        });
+    });
+};
+
+// Session, SessionParticipant, SessionQuestion, SessionBoitier, SessionResult (déjà harmonisés plus haut)
+
+// Session
+export interface SessionData {
+    id: number;
+    nomSession: string;
+    dateSession: string;
+    typeSession?: string | null;
+    status?: string; // planned, in-progress, completed, cancelled, ready
+    referentiel_id?: number | null;
+    theme_id?: number | null;
+    trainer_id?: number | null;
+    default_voting_device_kit_id?: number | null;
+    selectedBlocIds?: string | null; // JSON array of bloc IDs
+    questionMappings?: string | null; // JSON array of {dbQuestionId, slideGuid, orderInPptx}
+    ignoredSlideGuids?: string | null; // JSON array of strings
+    resolvedImportAnomalies?: string | null; // JSON object for audit
+    donneesOrs?: Buffer | null;
+    nomFichierOrs?: string | null;
+    location?: string | null;
+    notes?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+// SessionParticipant
+export interface SessionParticipantData {
+    id: number;
+    session_id: number;
+    nom: string;
+    prenom?: string | null;
+    identification_code?: string | null;
+    score?: number | null;
+    reussite?: number | null; // Typically 0 or 1 for boolean
+    status_in_session?: string; // e.g., 'inscrit', 'present', 'absent'
+    assigned_voting_device_id?: number | null;
+    original_participant_id?: number | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+// SessionQuestion
+export interface SessionQuestionData {
+    id: number;
+    session_id: number;
+    original_question_id?: number | null;
+    texte_question: string;
+    type_question: string;
+    options?: string | null; // JSON string for options
+    image?: Buffer | null;
+    image_name?: string | null;
+    points?: number | null;
+    feedback?: string | null;
+    bloc_id?: number | null;
+    ordre_apparition?: number | null;
+    createdAt?: string;
+}
+
+// SessionBoitier (Voting Device specific to a session instance)
+export interface SessionBoitierData {
+    id: number;
+    session_id: number;
+    original_voting_device_id?: number | null;
+    name: string; // Snapshot of the device name at the time of session
+    serial_number?: string | null; // Snapshot of the serial number
+    createdAt?: string;
+}
+
+// SessionResult
+export interface SessionResultData {
+    id: number;
+    session_id: number;
+    session_question_id: number;
+    session_participant_id: number;
+    reponse_choisie?: string | null; // JSON string or simple value
+    est_correct?: number | null; // Typically 0 or 1
+    points_obtenus?: number | null;
+    temps_reponse?: number | null; // in seconds or milliseconds
+    submitted_at?: string;
+}
+
+// Helper function to map row to SessionData
+const mapRowToSessionData = (row: any): SessionData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        nomSession: row.nomSession,
+        dateSession: row.dateSession,
+        typeSession: row.typeSession,
+        status: row.status,
+        referentiel_id: row.referentiel_id,
+        theme_id: row.theme_id,
+        trainer_id: row.trainer_id,
+        default_voting_device_kit_id: row.default_voting_device_kit_id,
+        selectedBlocIds: row.selectedBlocIds,
+        questionMappings: row.questionMappings,
+        ignoredSlideGuids: row.ignoredSlideGuids,
+        resolvedImportAnomalies: row.resolvedImportAnomalies,
+        donneesOrs: row.donneesOrs,
+        nomFichierOrs: row.nomFichierOrs,
+        location: row.location,
+        notes: row.notes,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+};
+
+// Session CRUD functions
+export const addSession = (data: Partial<Omit<SessionData, 'id' | 'createdAt' | 'updatedAt'>>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO sessions (
+                       nomSession, dateSession, typeSession, status, referentiel_id, theme_id, trainer_id,
+                       default_voting_device_kit_id, selectedBlocIds, questionMappings, ignoredSlideGuids,
+                       resolvedImportAnomalies, donneesOrs, nomFichierOrs, location, notes,
+                       created_at, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.nomSession, data.dateSession, data.typeSession || null, data.status || 'planifiée',
+            data.referentiel_id || null, data.theme_id || null, data.trainer_id || null,
+            data.default_voting_device_kit_id || null, data.selectedBlocIds || null,
+            data.questionMappings || null, data.ignoredSlideGuids || null, data.resolvedImportAnomalies || null,
+            data.donneesOrs || null, data.nomFichierOrs || null, data.location || null, data.notes || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion de la session."));
+            }
+        });
+    });
+};
+
+export const getSessionById = (id: number): Promise<SessionData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM sessions WHERE id = ?", [id], (err: Error | null, row: any) => {
+            if (err) reject(err);
+            else resolve(mapRowToSessionData(row));
+        });
+    });
+};
+
+export const getAllSessions = (): Promise<SessionData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM sessions ORDER BY dateSession DESC", [], (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(row => mapRowToSessionData(row)).filter(s => s !== null) as SessionData[]);
+        });
+    });
+};
+
+export const updateSession = (id: number, data: Partial<Omit<SessionData, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = key === 'nomSession' ? 'nomSession' :
+                              key === 'dateSession' ? 'dateSession' :
+                              key === 'typeSession' ? 'typeSession' :
+                              key === 'status' ? 'status' :
+                              key === 'referentiel_id' ? 'referentiel_id' :
+                              key === 'theme_id' ? 'theme_id' :
+                              key === 'trainer_id' ? 'trainer_id' :
+                              key === 'default_voting_device_kit_id' ? 'default_voting_device_kit_id' :
+                              key === 'selectedBlocIds' ? 'selectedBlocIds' :
+                              key === 'questionMappings' ? 'questionMappings' :
+                              key === 'ignoredSlideGuids' ? 'ignoredSlideGuids' :
+                              key === 'resolvedImportAnomalies' ? 'resolvedImportAnomalies' :
+                              key === 'donneesOrs' ? 'donneesOrs' :
+                              key === 'nomFichierOrs' ? 'nomFichierOrs' :
+                              key === 'location' ? 'location' :
+                              key === 'notes' ? 'notes' : null;
+
+            if (columnKey) {
+                fieldsToUpdate.push(`${columnKey} = ?`);
+                params.push(value);
+            }
+        });
+
+        if (fieldsToUpdate.length === 0) return resolve();
+
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
+        params.push(id);
+
+        const sql = `UPDATE sessions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+export const deleteSession = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM sessions WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// SessionParticipant helper and CRUD
+const mapRowToSessionParticipantData = (row: any): SessionParticipantData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        nom: row.nom,
+        prenom: row.prenom,
+        identification_code: row.identification_code,
+        score: row.score,
+        reussite: row.reussite,
+        status_in_session: row.status_in_session,
+        assigned_voting_device_id: row.assigned_voting_device_id,
+        original_participant_id: row.original_participant_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+};
+
+export const addSessionParticipant = (data: Omit<SessionParticipantData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_participants (
+                       session_id, nom, prenom, identification_code, score, reussite,
+                       status_in_session, assigned_voting_device_id, original_participant_id,
+                       created_at, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.nom, data.prenom || null, data.identification_code || null,
+            data.score || null, data.reussite || null, data.status_in_session || 'inscrit',
+            data.assigned_voting_device_id || null, data.original_participant_id || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du participant de session."));
+            }
+        });
+    });
+};
+
+export const getSessionParticipants = (sessionId: number): Promise<SessionParticipantData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_participants WHERE session_id = ?", [sessionId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionParticipantData).filter(sp => sp !== null) as SessionParticipantData[]);
+        });
+    });
+};
+
+export const updateSessionParticipant = (id: number, data: Partial<Omit<SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                nom: 'nom', prenom: 'prenom', identification_code: 'identification_code', score: 'score',
+                reussite: 'reussite', status_in_session: 'status_in_session',
+                assigned_voting_device_id: 'assigned_voting_device_id',
+                original_participant_id: 'original_participant_id'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
+        params.push(id);
+        const sql = `UPDATE session_participants SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionParticipant = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_participants WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// Function to get all sessions with their participants
+export const getAllSessionsWithParticipants = async (): Promise<Array<SessionData & { participants: SessionParticipantData[] }>> => {
+    const sessions = await getAllSessions();
+    const sessionsWithParticipants = await Promise.all(
+        sessions.map(async (session) => {
+            const participants = await getSessionParticipants(session.id);
+            return { ...session, participants };
+        })
+    );
+    return sessionsWithParticipants;
+};
+
+export const deleteSessionParticipantsBySessionId = (sessionId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_participants WHERE session_id = ?", [sessionId], (err: Error | null) => {
+            if (err) {
+                console.error(`Error deleting session participants for session ID ${sessionId}:`, err.message);
+                reject(err);
+            } else {
+                resolve();
+            }
+        });
+    });
+};
+
+export const addBulkSessionParticipants = (sessionId: number, participants: Array<Omit<SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (!participants || participants.length === 0) {
+            return resolve();
+        }
+        db.serialize(() => {
+            const stmt = db.prepare(`INSERT INTO session_participants (
+                                       session_id, nom, prenom, identification_code, score, reussite,
+                                       status_in_session, assigned_voting_device_id, original_participant_id,
+                                       created_at, updated_at
+                                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+
+            let completedOperations = 0;
+            let failedOperations = 0;
+
+            participants.forEach(p => {
+                // Reconstruct the full participant data including session_id for insertion
+                const participantFull: Omit<SessionParticipantData, 'id' | 'createdAt' | 'updatedAt'> = {
+                    session_id: sessionId,
+                    nom: p.nom,
+                    prenom: p.prenom,
+                    identification_code: p.identification_code,
+                    score: p.score,
+                    reussite: p.reussite,
+                    status_in_session: p.status_in_session,
+                    assigned_voting_device_id: p.assigned_voting_device_id,
+                    original_participant_id: p.original_participant_id
+                };
+                stmt.run(
+                    participantFull.session_id,
+                    participantFull.nom,
+                    participantFull.prenom || null,
+                    participantFull.identification_code || null,
+                    participantFull.score || null,
+                    participantFull.reussite || null,
+                    participantFull.status_in_session || 'inscrit',
+                    participantFull.assigned_voting_device_id || null,
+                    participantFull.original_participant_id || null,
+                    function(this: sqlite3.Statement, err: Error | null) {
+                        completedOperations++;
+                        if (err) {
+                            console.error(`Erreur ajout session_participant (bulk) pour session ${sessionId}, participant ${p.nom}:`, err.message);
+                            failedOperations++;
+                        }
+                        // this.lastID is not relevant for each individual run in a bulk insert like this for the Promise resolve value.
+                        // The promise resolves once all operations are done or a finalize error occurs.
+                        if (completedOperations === participants.length) {
+                            stmt.finalize((finalizeErr: Error | null) => {
+                                if (finalizeErr) {
+                                    console.error("Error finalizing statement for bulk add session participants:", finalizeErr.message);
+                                    return reject(finalizeErr);
+                                }
+                                if (failedOperations > 0) {
+                                    return reject(new Error(`${failedOperations} participants de session non ajoutés.`));
+                                }
+                                resolve();
+                            });
+                        }
+                    }
+                );
+            });
+        });
+    });
+};
+
+
+// SessionQuestion helper and CRUD
+const mapRowToSessionQuestionData = (row: any): SessionQuestionData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        original_question_id: row.original_question_id,
+        texte_question: row.texte_question,
+        type_question: row.type_question,
+        options: row.options,
+        image: row.image,
+        image_name: row.image_name,
+        points: row.points,
+        feedback: row.feedback,
+        bloc_id: row.bloc_id,
+        ordre_apparition: row.ordre_apparition,
+        createdAt: row.created_at
+    };
+};
+
+export const addSessionQuestion = (data: Omit<SessionQuestionData, 'id' | 'createdAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_questions (
+                       session_id, original_question_id, texte_question, type_question, options,
+                       image, image_name, points, feedback, bloc_id, ordre_apparition, created_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.original_question_id || null, data.texte_question, data.type_question,
+            data.options || null, data.image || null, data.image_name || null, data.points || null,
+            data.feedback || null, data.bloc_id || null, data.ordre_apparition || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion de la question de session."));
+            }
+        });
+    });
+};
+
+export const getSessionQuestions = (sessionId: number): Promise<SessionQuestionData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_questions WHERE session_id = ? ORDER BY ordre_apparition ASC", [sessionId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionQuestionData).filter(sq => sq !== null) as SessionQuestionData[]);
+        });
+    });
+};
+
+export const updateSessionQuestion = (id: number, data: Partial<Omit<SessionQuestionData, 'id' | 'session_id' | 'createdAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                original_question_id: 'original_question_id', texte_question: 'texte_question',
+                type_question: 'type_question', options: 'options', image: 'image', image_name: 'image_name',
+                points: 'points', feedback: 'feedback', bloc_id: 'bloc_id', ordre_apparition: 'ordre_apparition'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        params.push(id);
+        const sql = `UPDATE session_questions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionQuestion = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_questions WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// SessionBoitier helper and CRUD
+const mapRowToSessionBoitierData = (row: any): SessionBoitierData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        original_voting_device_id: row.original_voting_device_id,
+        name: row.name,
+        serial_number: row.serial_number,
+        createdAt: row.created_at
+    };
+};
+
+export const addSessionBoitier = (data: Omit<SessionBoitierData, 'id' | 'createdAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_boitiers (
+                       session_id, original_voting_device_id, name, serial_number, created_at
+                     ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.original_voting_device_id || null, data.name, data.serial_number || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du boîtier de session."));
+            }
+        });
+    });
+};
+
+export const getSessionBoitiers = (sessionId: number): Promise<SessionBoitierData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_boitiers WHERE session_id = ?", [sessionId], (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionBoitierData).filter(sb => sb !== null) as SessionBoitierData[]);
+        });
+    });
+};
+
+export const updateSessionBoitier = (id: number, data: Partial<Omit<SessionBoitierData, 'id' | 'session_id' | 'createdAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                original_voting_device_id: 'original_voting_device_id',
+                name: 'name', serial_number: 'serial_number'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        params.push(id);
+        const sql = `UPDATE session_boitiers SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionBoitier = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_boitiers WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// SessionResult helper and CRUD
+const mapRowToSessionResultData = (row: any): SessionResultData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        session_question_id: row.session_question_id,
+        session_participant_id: row.session_participant_id,
+        reponse_choisie: row.reponse_choisie,
+        est_correct: row.est_correct,
+        points_obtenus: row.points_obtenus,
+        temps_reponse: row.temps_reponse,
+        submitted_at: row.submitted_at
+    };
+};
+
+export const addSessionResult = (data: Omit<SessionResultData, 'id' | 'submitted_at'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_results (
+                       session_id, session_question_id, session_participant_id, reponse_choisie,
+                       est_correct, points_obtenus, temps_reponse, submitted_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.session_question_id, data.session_participant_id,
+            data.reponse_choisie || null, data.est_correct || null, data.points_obtenus || null,
+            data.temps_reponse || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err: Error | null) {
+            if (err) return reject(err);
+            if (typeof this.lastID === 'number') {
+                resolve(this.lastID);
+            } else {
+                reject(new Error("Erreur: lastID n'est pas un nombre après l'insertion du résultat de session."));
+            }
+        });
+    });
+};
+
+export const getSessionResults = (sessionId: number, participantId?: number, questionId?: number): Promise<SessionResultData[]> => {
+    return new Promise((resolve, reject) => {
+        let sql = "SELECT * FROM session_results WHERE session_id = ?";
+        const params: any[] = [sessionId];
+        if (participantId !== undefined) {
+            sql += " AND session_participant_id = ?";
+            params.push(participantId);
+        }
+        if (questionId !== undefined) {
+            sql += " AND session_question_id = ?";
+            params.push(questionId);
+        }
+        db.all(sql, params, (err: Error | null, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionResultData).filter(sr => sr !== null) as SessionResultData[]);
+        });
+    });
+};
+
+export const updateSessionResult = (id: number, data: Partial<Omit<SessionResultData, 'id' | 'session_id' | 'session_question_id' | 'session_participant_id' | 'submitted_at'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                reponse_choisie: 'reponse_choisie', est_correct: 'est_correct',
+                points_obtenus: 'points_obtenus', temps_reponse: 'temps_reponse'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        params.push(id);
+        const sql = `UPDATE session_results SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err: Error | null) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionResult = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_results WHERE id = ?", [id], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// AdminSettings (déjà en camelCase ou géré)
+export interface AdminSettingData {
+    key: string;
+    value: any;
+    description?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+const mapRowToAdminSettingData = (row: any): AdminSettingData | null => {
+    if (!row) return null;
+    return {
+        key: row.key,
+        value: row.value,
+        description: row.description,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+    };
+};
+
+export const getAdminSetting = (key: string): Promise<any | undefined> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT value FROM admin_settings WHERE key = ?", [key], (err: Error | null, row: { value: any }) => {
+            if (err) {
+                reject(err);
+            } else {
+                try {
+                    resolve(row ? JSON.parse(row.value) : undefined);
+                } catch (e) {
+                    // If it's not JSON, return as is (e.g., simple string or number)
+                    resolve(row ? row.value : undefined);
+                }
+            }
+        });
+    });
+};
+
+export const setAdminSetting = (key: string, value: any, description?: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const valueString = JSON.stringify(value);
+        const sql = `
+            INSERT INTO admin_settings (key, value, description, created_at, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                description = excluded.description,
+                updated_at = CURRENT_TIMESTAMP
+        `;
+        db.run(sql, [key, valueString, description || null], (err: Error | null) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+export const getAllAdminSettings = (): Promise<AdminSettingData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM admin_settings", [], (err: Error | null, rows: any[]) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(rows.map(row => {
+                    try {
+                        return { ...mapRowToAdminSettingData(row), value: JSON.parse(row.value) };
+                    } catch (e) {
+                        return { ...mapRowToAdminSettingData(row), value: row.value }; // Keep as is if not JSON
+                    }
+                }).filter(s => s !== null) as AdminSettingData[]);
+            }
+        });
+    });
+};
+
+export const deleteAdminSetting = (key: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM admin_settings WHERE key = ?", [key], (err: Error | null) => {
             if (err) reject(err); else resolve();
         });
     });
 };
 
 
-// AdminSettings (déjà en camelCase ou géré)
-
 export const closeDb = (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    db.close((err) => {
+    db.close((err: Error | null) => {
       if (err) { console.error('Erreur fermeture DB (db.ts):', err.message); reject(err); }
       else { console.log('DB fermée (db.ts).'); resolve(); }
     });
