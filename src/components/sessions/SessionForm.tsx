@@ -1,14 +1,15 @@
+// src/components/SessionForm.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import Card from '../ui/Card';
-import Input from '../ui/Input';
-import Select from '../ui/Select';
-import Button from '../ui/Button';
-import Badge from '../ui/Badge';
+import Card from './ui/Card'; // Adjusted path
+import Input from './ui/Input';
+import Select from './ui/Select';
+import Button from './ui/Button';
+import Badge from './ui/Badge';
 import { Save, FileUp, UserPlus, Trash2, PackagePlus, AlertTriangle } from 'lucide-react';
 import {
   CACESReferential,
-  Session as DBSession,
-  Participant as DBParticipantType,
+  DBSession,
+  DBParticipantType,
   SessionResult,
   Trainer,
   SessionQuestion,
@@ -16,11 +17,11 @@ import {
   Referential,
   Theme,
   Bloc,
-  QuestionWithId as StoredQuestion,
+  StoredQuestion,
   VotingDevice,
   DeviceKit
-} from '../../types';
-import { StorageManager } from '../../services/StorageManager';
+} from './types'; // Adjusted path
+import { StorageManager } from './services/StorageManager'; // Adjusted path
 import {
   addSession,
   updateSession,
@@ -40,15 +41,15 @@ import {
   getAllDeviceKits,
   getDefaultDeviceKit,
   getVotingDevicesForKit
-} from '../../db';
-import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
-import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
-import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
-import { logger } from '../../utils/logger';
+} from './db'; // Adjusted path
+import { generatePresentation, AdminPPTXSettings } from './utils/pptxOrchestrator'; // Adjusted path
+import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from './utils/resultsParser';
+import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from './utils/reportCalculators';
+import { logger } from './utils/logger';
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
-import AnomalyResolutionModal, { DetectedAnomalies } from './AnomalyResolutionModal';
-import { ExpectedIssueResolution, UnknownDeviceResolution } from '../../types';
+import AnomalyResolutionModal, { DetectedAnomalies } from './AnomalyResolutionModal'; // Adjusted path
+import { ExpectedIssueResolution, UnknownDeviceResolution } from './types';
 
 interface FormParticipant extends DBParticipantType {
   id: string;

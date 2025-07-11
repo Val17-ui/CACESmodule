@@ -1,468 +1,250 @@
-import Dexie, { Table } from 'dexie';
+// src/db.ts
+import sqlite3 from 'sqlite3';
+import { Database, open } from 'sqlite';
+import { app } from 'electron';
+import path from 'path';
 import {
-  CACESReferential, Session, SessionResult, Trainer, // Participant removed
-  SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-  QuestionWithId, VotingDevice, // Types maintenant importés
-  DeviceKit, DeviceKitAssignment // Nouveaux types pour les kits
+  CACESReferential,
+  Session,
+  SessionResult,
+  Trainer,
+  SessionQuestion,
+  SessionBoitier,
+  Referential,
+  Theme,
+  Bloc,
+  QuestionWithId,
+  VotingDevice,
+  DeviceKit,
+  DeviceKitAssignment,
+  BlockUsage
 } from './types';
-import { logger } from './utils/logger'; // Importer le logger
+import { logger } from './utils/logger';
 
-// Les interfaces QuestionWithId et VotingDevice sont maintenant dans ../types
-// Les interfaces DeviceKit et DeviceKitAssignment sont maintenant dans ../types
+// Initialize SQLite3 database
+let db: Database | null = null;
 
-export class MySubClassedDexie extends Dexie {
-  questions!: Table<QuestionWithId, number>;
-  sessions!: Table<Session, number>;
-  sessionResults!: Table<SessionResult, number>;
-  adminSettings!: Table<{ key: string; value: any }, string>;
-  votingDevices!: Table<VotingDevice, number>;
-  trainers!: Table<Trainer, number>;
-  sessionQuestions!: Table<SessionQuestion, number>;
-  sessionBoitiers!: Table<SessionBoitier, number>;
+async function initializeDb() {
+  if (db) return db;
 
-  // Nouvelles tables
-  referentiels!: Table<Referential, number>;
-  themes!: Table<Theme, number>;
-  blocs!: Table<Bloc, number>;
-  deviceKits!: Table<DeviceKit, number>; // Nouvelle table pour les kits
-  deviceKitAssignments!: Table<DeviceKitAssignment, number>; // Nouvelle table pour les assignations kit-boîtier
+  // Set database path to userData directory
+  const dbPath = path.join(app.getPath('userData'), 'database.sqlite');
 
-  constructor() {
-    super('myDatabase');
-    this.version(1).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, *options'
-    });
-    this.version(2).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referentiel, theme, createdAt, usageCount, correctResponseRate, *options', // 'referentiel' au lieu de 'referential'
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
-    });
-    this.version(3).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
-    });
-    this.version(4).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, timestamp'
-    });
-    this.version(5).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp'
-    });
-    this.version(6).stores({
-      adminSettings: '&key'
-    });
-    this.version(7).stores({
-      votingDevices: '++id, &physicalId'
-    });
-    // Nouvelle version pour ajouter la table trainers et le champ trainerId à sessions
-    this.version(8).stores({
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId', // Ajout de trainerId
-      trainers: '++id, name, isDefault' // Suppression de l'index unique sur isDefault
-    });
+  db = await open({
+    filename: dbPath,
+    driver: sqlite3.Database
+  });
 
-    // Version 9: Mise à jour de votingDevices (name, serialNumber) et sessions (participants.assignedGlobalDeviceId)
-    // IMPORTANT: Le changement de l'index de la table trainers doit être fait dans une NOUVELLE version de la base de données.
-    // Si la version 9 est la dernière déployée et que des utilisateurs l'ont déjà,
-    // nous devons passer à la version 10 pour modifier la table trainers.
-    // Si la version 9 n'a jamais été en production ou si la base de données peut être réinitialisée pour le développement,
-    // on pourrait modifier la v9. Cependant, la bonne pratique est d'incrémenter la version.
+  // Create tables based on Dexie version 15 schema
+  await db.exec(`
+    -- Table for questions
+    CREATE TABLE IF NOT EXISTS questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blocId INTEGER,
+      text TEXT NOT NULL,
+      type TEXT,
+      correctAnswer TEXT,
+      timeLimit INTEGER,
+      isEliminatory INTEGER,
+      createdAt TEXT,
+      usageCount INTEGER DEFAULT 0,
+      correctResponseRate REAL,
+      slideGuid TEXT,
+      options TEXT, -- JSON stringified array
+      FOREIGN KEY (blocId) REFERENCES blocs(id)
+    );
 
-    // Supposons que nous devons créer une nouvelle version (v10) pour ce changement.
-    // Si la v9 est déjà utilisée, la modification de 'trainers' dans la v9 ci-dessous serait incorrecte.
-    // Pour cet exercice, je vais modifier la définition dans la v9 et ajouter une v10 pour illustrer la migration si nécessaire.
-    // Mais pour le problème spécifique de l'index, il suffit de le changer là où il est défini.
-    // La question est de savoir si la DB a déjà été ouverte avec v9 par des utilisateurs.
-    // Pour l'instant, je corrige la définition dans la v9. Si cela cause des problèmes de migration, il faudra une nouvelle version.
+    -- Table for referentiels
+    CREATE TABLE IF NOT EXISTS referentiels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      nom_complet TEXT
+    );
 
-    this.version(9).stores({
-      votingDevices: '++id, name, &serialNumber', // physicalId -> serialNumber, ajout de name
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId',
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      trainers: '++id, name, isDefault' // Corrigé ici aussi pour la v9
-    }).upgrade(async tx => {
-      // 1. Migration pour votingDevices
-      await tx.table('votingDevices').toCollection().modify(device => {
-        // Renommer physicalId en serialNumber et ajouter un nom par défaut
-        // @ts-ignore
-        device.serialNumber = device.physicalId;
-        // @ts-ignore
-        delete device.physicalId;
-        device.name = `Boîtier SN: ${device.serialNumber}`; // Nom par défaut
-      });
+    -- Table for themes
+    CREATE TABLE IF NOT EXISTS themes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code_theme TEXT NOT NULL,
+      nom_complet TEXT,
+      referentiel_id INTEGER,
+      UNIQUE (code_theme, referentiel_id),
+      FOREIGN KEY (referentiel_id) REFERENCES referentiels(id)
+    );
 
-      // 2. Migration pour sessions (participants)
-      // On a besoin de la liste des votingDevices migrés pour trouver les IDs
-      const allMigratedVotingDevices = await tx.table('votingDevices').toArray();
-      const deviceMapBySerial = new Map(allMigratedVotingDevices.map(d => [d.serialNumber, d.id]));
+    -- Table for blocs
+    CREATE TABLE IF NOT EXISTS blocs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code_bloc TEXT NOT NULL,
+      theme_id INTEGER,
+      UNIQUE (code_bloc, theme_id),
+      FOREIGN KEY (theme_id) REFERENCES themes(id)
+    );
 
-      await tx.table('sessions').toCollection().modify(session => {
-        if (session.participants && Array.isArray(session.participants)) {
-          session.participants.forEach((participant: any) => {
-            const oldIdBoitier = participant.idBoitier; // Ancien serialNumber
-            delete participant.idBoitier; // Supprimer l'ancien champ
+    -- Table for sessions
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nomSession TEXT NOT NULL,
+      dateSession TEXT NOT NULL,
+      referentielId INTEGER,
+      selectedBlocIds TEXT, -- JSON stringified array
+      selectedKitId INTEGER,
+      createdAt TEXT,
+      location TEXT,
+      status TEXT CHECK(status IN ('planned', 'ready', 'completed')),
+      questionMappings TEXT, -- JSON stringified array
+      notes TEXT,
+      trainerId INTEGER,
+      ignoredSlideGuids TEXT, -- JSON stringified array
+      resolvedImportAnomalies TEXT, -- JSON stringified object
+      FOREIGN KEY (referentielId) REFERENCES referentiels(id),
+      FOREIGN KEY (trainerId) REFERENCES trainers(id),
+      FOREIGN KEY (selectedKitId) REFERENCES deviceKits(id)
+    );
 
-            if (oldIdBoitier) {
-              const globalDeviceId = deviceMapBySerial.get(oldIdBoitier);
-              if (globalDeviceId !== undefined) {
-                participant.assignedGlobalDeviceId = globalDeviceId;
-              } else {
-                participant.assignedGlobalDeviceId = null; // ou logguer une erreur si un idBoitier ne correspond plus
-                console.warn(`Impossible de trouver le GlobalDevice pour l'ancien idBoitier: ${oldIdBoitier} dans la session ${session.id}`);
-              }
-            } else {
-              participant.assignedGlobalDeviceId = null;
-            }
-          });
-        }
-      });
-    });
+    -- Table for sessionResults
+    CREATE TABLE IF NOT EXISTS sessionResults (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sessionId INTEGER,
+      questionId INTEGER,
+      participantIdBoitier TEXT,
+      answer TEXT,
+      isCorrect INTEGER,
+      pointsObtained INTEGER,
+      timestamp TEXT,
+      FOREIGN KEY (sessionId) REFERENCES sessions(id),
+      FOREIGN KEY (questionId) REFERENCES questions(id)
+    );
 
-    // Version 10: S'assurer que l'index sur trainers.isDefault n'est pas unique.
-    // Cette version est ajoutée pour forcer une mise à jour du schéma si les modifications
-    // précédentes dans v8 et v9 n'ont pas été correctement appliquées à cause du caching du schéma par Dexie.
-    this.version(10).stores({
-      // On reprend toutes les tables de la v9
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault' // Assurer que isDefault n'est pas unique ('&')
-    }).upgrade(async tx => {
-      // Cette migration était pour la v10, si elle doit être rejouée ou si de nouvelles données pour trainers sont problématiques
-      // il faudra peut-être la revoir. Pour l'instant, on la laisse telle quelle.
-      console.log("Executing DB version 10 upgrade logic (trainers table)...");
-      const trainersTable = tx.table('trainers');
-      const allTrainersFromOldSchema = await trainersTable.toArray(); // prefer-const // Lire les données AVANT de potentiellement modifier la table.
+    -- Table for adminSettings
+    CREATE TABLE IF NOT EXISTS adminSettings (
+      key TEXT PRIMARY KEY,
+      value BLOB
+    );
 
-      // Étape 1: Nettoyer les données en mémoire et s'assurer de l'unicité de isDefault
-      // et que isDefault est toujours un booléen.
-      let defaultTrainerId: number | undefined = undefined; // Utiliser undefined pour être clair qu'aucun ID n'a été trouvé
+    -- Table for votingDevices
+    CREATE TABLE IF NOT EXISTS votingDevices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      serialNumber TEXT UNIQUE NOT NULL
+    );
 
-      // Première passe pour convertir isDefault en 0 ou 1 et trouver un candidat par défaut
-      let cleanedTrainers = allTrainersFromOldSchema.map(trainer => {
-        let numericIsDefault: 0 | 1 = 0;
-        if (trainer.isDefault === true || trainer.isDefault === 1) {
-          numericIsDefault = 1;
-        }
-        // Conserver le premier ID de formateur marqué comme défaut (booléen ou numérique)
-        if (numericIsDefault === 1 && defaultTrainerId === undefined) {
-          defaultTrainerId = trainer.id;
-        }
-        return { ...trainer, name: trainer.name || "Nom Inconnu", isDefault: numericIsDefault };
-      });
+    -- Table for trainers
+    CREATE TABLE IF NOT EXISTS trainers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      isDefault INTEGER DEFAULT 0
+    );
 
-      // Deuxième passe pour forcer un seul par défaut, en utilisant la valeur numérique 1
-      let foundActiveDefault = false;
-      cleanedTrainers = cleanedTrainers.map(trainer => {
-        if (trainer.id === defaultTrainerId && trainer.id !== undefined) { // S'assurer que defaultTrainerId a été trouvé et est valide
-          foundActiveDefault = true;
-          return { ...trainer, isDefault: 1 as const };
-        }
-        return { ...trainer, isDefault: 0 as const };
-      });
+    -- Table for sessionQuestions
+    CREATE TABLE IF NOT EXISTS sessionQuestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sessionId INTEGER,
+      dbQuestionId INTEGER,
+      slideGuid TEXT,
+      blockId INTEGER,
+      FOREIGN KEY (sessionId) REFERENCES sessions(id),
+      FOREIGN KEY (dbQuestionId) REFERENCES questions(id),
+      FOREIGN KEY (blockId) REFERENCES blocs(id)
+    );
 
-      // S'il n'y avait aucun formateur par défaut valablement identifié,
-      // et que la liste n'est pas vide, définir le premier (trié par ID) comme par défaut.
-      if (!foundActiveDefault && cleanedTrainers.length > 0) {
-        const sortedTrainers = cleanedTrainers.sort((a, b) => (a.id || 0) - (b.id || 0));
-        if (sortedTrainers.length > 0 && sortedTrainers[0].id !== undefined) {
-            sortedTrainers[0].isDefault = 1; // Définir comme 1
-             console.log(`No default trainer was clearly identified or valid. Setting trainer ID ${sortedTrainers[0].id} as default (1) during v10 migration.`);
-        }
-      }
+    -- Table for sessionBoitiers
+    CREATE TABLE IF NOT EXISTS sessionBoitiers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sessionId INTEGER,
+      participantId TEXT,
+      visualId INTEGER,
+      serialNumber TEXT,
+      FOREIGN KEY (sessionId) REFERENCES sessions(id)
+    );
 
-      // Filtrer les trainers sans ID valide avant bulkAdd, car `id` est la clé primaire.
-      const validTrainersForBulkAdd = cleanedTrainers.filter(trainer => trainer.id !== undefined);
+    -- Table for deviceKits
+    CREATE TABLE IF NOT EXISTS deviceKits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      isDefault INTEGER DEFAULT 0
+    );
 
-      // Étape 2: Vider la table et la repeupler
-      // Note: La table est déjà en cours de transaction (tx), donc les opérations sont atomiques pour cette version.
-      await trainersTable.clear();
-      console.log("'trainers' table cleared during v10 migration.");
+    -- Table for deviceKitAssignments
+    CREATE TABLE IF NOT EXISTS deviceKitAssignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kitId INTEGER,
+      votingDeviceId INTEGER,
+      UNIQUE (kitId, votingDeviceId),
+      FOREIGN KEY (kitId) REFERENCES deviceKits(id),
+      FOREIGN KEY (votingDeviceId) REFERENCES votingDevices(id)
+    );
+  `);
 
-      if (validTrainersForBulkAdd.length > 0) {
-        await trainersTable.bulkAdd(validTrainersForBulkAdd);
-        console.log(`'trainers' table repopulated with ${validTrainersForBulkAdd.length} entries after v10 cleaning.`);
-      } else {
-        console.log("'trainers' table is empty after v10 cleaning or all entries had invalid IDs.");
-      }
+  // Ensure only one trainer is default
+  await db.run(`
+    UPDATE trainers
+    SET isDefault = 0
+    WHERE id NOT IN (
+      SELECT id FROM trainers WHERE isDefault = 1 LIMIT 1
+    )
+  `);
 
-      // return tx.done; // Dexie handles promise completion for async upgrade functions implicitly.
-      return;
-    });
+  return db;
+}
 
-    // Version 11: Ajout des tables sessionQuestions, sessionBoitiers et du champ testSlideGuid à sessions
-    this.version(11).stores({
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, testSlideGuid', // Ajout de testSlideGuid
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault',
-      // Nouvelles tables
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId', // Index pour recherche par sessionId
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber' // Index pour recherche par sessionId
-    }).upgrade(async tx => {
-      // Logique de migration pour la v11 si nécessaire (par exemple, initialiser testSlideGuid à null pour les sessions existantes)
-      // Pour l'instant, Dexie gérera l'ajout de nouvelles tables et champs avec des valeurs undefined par défaut.
-      // Si testSlideGuid doit être explicitement null pour les anciennes sessions:
-      await tx.table('sessions').toCollection().modify(session => {
-        if (session.testSlideGuid === undefined) { // Champ de la v10 et avant
-          session.testSlideGuid = null;
-        }
-      });
-      console.log("DB version 11 upgrade: Added sessionQuestions, sessionBoitiers tables and testSlideGuid to sessions. Ensured testSlideGuid is null for existing sessions if it was undefined.");
-    });
-
-    // Version 12: Remplacement de testSlideGuid par ignoredSlideGuids[] dans la table sessions
-    this.version(12).stores({
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Ajout de resolvedImportAnomalies
-      // Reprise des autres tables pour que Dexie sache qu'elles existent toujours
-      questions: '++id, text, type, correctAnswer, timeLimit, isEliminatory, referential, theme, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault',
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
-    }).upgrade(async tx => {
-      await tx.table('sessions').toCollection().modify(session => {
-        // @ts-ignore (pour accéder à l'ancien champ testSlideGuid qui n'est plus dans le type Session)
-        const oldTestSlideGuid = session.testSlideGuid;
-
-        if (typeof oldTestSlideGuid === 'string' && oldTestSlideGuid.trim() !== '') {
-          session.ignoredSlideGuids = [oldTestSlideGuid];
-        } else {
-          session.ignoredSlideGuids = []; // Initialiser comme tableau vide si pas de testSlideGuid précédent ou s'il était invalide
-        }
-        // @ts-ignore
-        delete session.testSlideGuid; // Supprimer l'ancien champ
-
-        // NOUVELLE MIGRATION pour resolvedImportAnomalies
-        if (session.resolvedImportAnomalies === undefined) {
-          session.resolvedImportAnomalies = null; // Initialiser à null pour les sessions existantes
-        }
-      });
-      console.log("DB version 12 upgrade: Replaced testSlideGuid with ignoredSlideGuids and initialized resolvedImportAnomalies to null for existing sessions.");
-    });
-
-    // Version 13: Ajout des tables referentiels, themes, blocs et modification de la table questions
-    this.version(13).stores({
-      // Nouvelles tables
-      referentiels: '++id, &code', // code doit être unique
-      themes: '++id, &code_theme, referentiel_id', // code_theme doit être unique
-      blocs: '++id, &code_bloc, theme_id', // code_bloc doit être unique
-
-      // Table questions modifiée
-      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options', // suppression de referential, theme et ajout de blocId
-
-      // Reprise des autres tables pour que Dexie sache qu'elles existent toujours
-      sessions: '++id, nomSession, dateSession, referentiel, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Garder referentiel pour l'instant, migration à la v14
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault',
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId', // blockId ici est l'ancien, devra peut-être être mis à jour si on veut le lier au nouveau systeme de blocId
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
-    }).upgrade(async tx => {
-      console.log("DB version 13 upgrade: Adding referentiels, themes, blocs tables and modifying questions table.");
-      // Logique de migration des données de l'ancienne structure (questions.referential, questions.theme)
-      // vers les nouvelles tables referentiels, themes, blocs et mise à jour de questions.blocId.
-
-      const oldQuestions = await tx.table('questions').toArray();
-      const referentielsMap = new Map<string, number>();
-      const themesMap = new Map<string, number>();
-      const blocsMap = new Map<string, number>();
-
-      for (const oldQuestion of oldQuestions) {
-        // @ts-ignore
-        const oldReferentialCode = oldQuestion.referential;
-        // @ts-ignore
-        const oldThemeName = oldQuestion.theme; // Supposons que c'est le nom/code du thème
-
-        if (!oldReferentialCode || !oldThemeName) {
-          console.warn(`Question ID ${oldQuestion.id} has missing referential or theme. Skipping migration for this question.`);
-          // @ts-ignore
-          oldQuestion.blocId = null; // ou une valeur par défaut si nécessaire
-          continue;
-        }
-
-        let referentielId = referentielsMap.get(oldReferentialCode);
-        if (!referentielId) {
-          try {
-            const newRefId = await tx.table('referentiels').add({
-              code: oldReferentialCode,
-              nom_complet: oldReferentialCode // Utiliser le code comme nom complet par défaut
-            });
-            referentielId = newRefId as number;
-            referentielsMap.set(oldReferentialCode, referentielId);
-          } catch (e) {
-            // Gérer le cas où le référentiel existe déjà (si plusieurs questions partagent le même)
-            const existingRef = await tx.table('referentiels').where('code').equals(oldReferentialCode).first();
-            if (existingRef) referentielId = existingRef.id;
-            else throw e; // Renvoyer l'erreur si ce n'est pas une contrainte d'unicité
-          }
-        }
-
-        const themeCodeForMap = `${referentielId}_${oldThemeName}`;
-        let themeId = themesMap.get(themeCodeForMap);
-        if (!themeId && referentielId) {
-          try {
-            const newThemeId = await tx.table('themes').add({
-              code_theme: oldThemeName, // Utiliser l'ancien nom du thème comme code
-              nom_complet: oldThemeName, // Utiliser l'ancien nom du thème comme nom complet
-              referentiel_id: referentielId
-            });
-            themeId = newThemeId as number;
-            themesMap.set(themeCodeForMap, themeId);
-          } catch (e) {
-            const existingTheme = await tx.table('themes').where('code_theme').equals(oldThemeName).and(t => t.referentiel_id === referentielId).first();
-            if (existingTheme) themeId = existingTheme.id;
-            else throw e;
-          }
-        }
-
-        // Création d'un bloc par défaut pour ce thème. Le code_bloc sera THEMECODE_DEFAULTBLOC
-        const blocCodeForMap = `${themeId}_DEFAULTBLOC`;
-        let blocId = blocsMap.get(blocCodeForMap);
-        if (!blocId && themeId) {
-          const defaultBlocCode = `${oldThemeName}_GEN`; // Exemple: R489PR_GEN
-          try {
-            const newBlocId = await tx.table('blocs').add({
-              code_bloc: defaultBlocCode,
-              theme_id: themeId
-            });
-            blocId = newBlocId as number;
-            blocsMap.set(blocCodeForMap, blocId);
-          } catch (e) {
-             const existingBloc = await tx.table('blocs').where('code_bloc').equals(defaultBlocCode).and(b => b.theme_id === themeId).first();
-             if (existingBloc) blocId = existingBloc.id;
-             else throw e;
-          }
-        }
-
-        // Mettre à jour la question avec le nouveau blocId
-        // @ts-ignore
-        oldQuestion.blocId = blocId;
-        // @ts-ignore
-        delete oldQuestion.referential;
-        // @ts-ignore
-        delete oldQuestion.theme;
-      }
-
-      // Mettre à jour toutes les questions en une seule fois
-      if (oldQuestions.length > 0) {
-        await tx.table('questions').bulkPut(oldQuestions);
-      }
-      console.log(`DB version 13 upgrade: Migrated ${oldQuestions.length} questions to new structure.`);
-    });
-
-    // Version 14: Mise à jour de la table sessions (referentiel -> referentielId, selectionBlocs -> selectedBlocIds)
-    this.version(14).stores({
-      sessions: '++id, nomSession, dateSession, referentielId, *selectedBlocIds, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // referentiel -> referentielId, selectionBlocs -> *selectedBlocIds
-
-      // Reprise des autres tables
-      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      referentiels: '++id, &code',
-      themes: '++id, &code_theme, referentiel_id',
-      blocs: '++id, &code_bloc, theme_id',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber',
-      trainers: '++id, name, isDefault',
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber'
-    }).upgrade(async tx => {
-      console.log("DB version 14 upgrade: Modifying sessions table (referentiel -> referentielId, selectionBlocs -> selectedBlocIds).");
-      await tx.table('sessions').toCollection().modify(async (session: any) => {
-        if (session.referentiel && typeof session.referentiel === 'string') {
-          const refCode = session.referentiel;
-          const referentielObj = await tx.table('referentiels').where('code').equals(refCode).first();
-          if (referentielObj) {
-            session.referentielId = referentielObj.id;
-          } else {
-            console.warn(`Migration v14: Référentiel avec code "${refCode}" non trouvé pour la session ID ${session.id}. referentielId ne sera pas défini.`);
-            session.referentielId = null;
-          }
-        } else if (session.referentiel && typeof session.referentiel === 'number') {
-            session.referentielId = session.referentiel;
-        }
-        delete session.referentiel;
-
-        if (session.selectionBlocs && Array.isArray(session.selectionBlocs)) {
-            console.warn(`Migration v14: Session ID ${session.id} avait 'selectionBlocs'. Il sera réinitialisé.`);
-            session.selectedBlocIds = [];
-        } else {
-            session.selectedBlocIds = session.selectedBlocIds || []; // Assurer que le champ existe
-        }
-        delete session.selectionBlocs;
-      });
-      console.log("DB version 14 upgrade: Sessions table modified.");
-    });
-
-    // Version 15: Ajout des tables pour les Kits de boîtiers et selectedKitId à sessions
-    this.version(15).stores({
-      // Reprise des tables existantes
-      questions: '++id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, *options',
-      referentiels: '++id, &code',
-      themes: '++id, &code_theme, referentiel_id',
-      blocs: '++id, &code_bloc, theme_id',
-      sessionResults: '++id, sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp',
-      adminSettings: '&key',
-      votingDevices: '++id, name, &serialNumber', // Assurez-vous que VotingDevice a id, name, serialNumber
-      trainers: '++id, name, isDefault',
-      sessionQuestions: '++id, sessionId, dbQuestionId, slideGuid, blockId',
-      sessionBoitiers: '++id, sessionId, participantId, visualId, serialNumber',
-
-      // Modification de la table sessions
-      sessions: '++id, nomSession, dateSession, referentielId, *selectedBlocIds, selectedKitId, createdAt, location, status, questionMappings, notes, trainerId, *ignoredSlideGuids, resolvedImportAnomalies', // Ajout de selectedKitId
-
-      // Nouvelles tables pour les kits
-      deviceKits: '++id, name, isDefault', // Nom du kit, isDefault (pour requêtes faciles)
-      deviceKitAssignments: '++id, kitId, votingDeviceId, &[kitId+votingDeviceId]' // Liaison entre kits et boîtiers
-    }).upgrade(async tx => {
-      // Initialiser selectedKitId à null pour les sessions existantes
-      await tx.table('sessions').toCollection().modify(session => {
-        session.selectedKitId = null;
-      });
-      // Potentiellement créer un kit par défaut "Général" avec tous les boîtiers existants si aucun kit n'existe ?
-      // Pour l'instant, on laisse la création des kits manuelle.
-      console.log("DB version 15 upgrade: Added deviceKits, deviceKitAssignments tables and selectedKitId to sessions. Initialized selectedKitId to null for existing sessions.");
-    });
+// Helper function to parse JSON fields
+function parseJsonField<T>(value: string | undefined | null): T | undefined {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.error(`Error parsing JSON field:`, error);
+    return undefined;
   }
 }
 
-export const db = new MySubClassedDexie();
-
-// Fonctions CRUD pour Questions
-export const addQuestion = async (question: QuestionWithId): Promise<number | undefined> => {
+// Helper function to serialize JSON fields
+function serializeJsonField(value: any): string | null {
+  if (value === undefined || value === null) return null;
   try {
-    const id = await db.questions.add(question);
-    return id;
+    return JSON.stringify(value);
+  } catch (error) {
+    console.error(`Error serializing JSON field:`, error);
+    return null;
+  }
+}
+
+// CRUD for Questions
+export const addQuestion = async (question: QuestionWithId): Promise<number | undefined> => {
+  const db = await initializeDb();
+  try {
+    const { id, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options } = question;
+    const result = await db.run(
+      `INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        blocId,
+        text,
+        type,
+        correctAnswer,
+        timeLimit,
+        isEliminatory ? 1 : 0,
+        createdAt || new Date().toISOString(),
+        usageCount || 0,
+        correctResponseRate || 0,
+        slideGuid,
+        serializeJsonField(options)
+      ]
+    );
+    return result.lastID;
   } catch (error) {
     console.error("Error adding question: ", error);
+    return undefined;
   }
 };
 
-// Specific function to get the globally stored PPTX template
 export const getGlobalPptxTemplate = async (): Promise<File | null> => {
+  const db = await initializeDb();
   try {
-    const templateFile = await db.adminSettings.get('pptxTemplateFile');
-    if (templateFile && templateFile.value instanceof File) {
-      return templateFile.value;
-    } else if (templateFile && templateFile.value instanceof Blob) {
-      // If it's stored as a Blob, try to reconstruct a File object.
-      // This might happen depending on how Dexie handles File objects across sessions/versions.
-      // We'd ideally need the filename, but for now, a default name or just the blob is better than nothing.
-      // For robust File reconstruction, storing filename alongside was a good idea.
-      const fileName = (await db.adminSettings.get('pptxTemplateFileName'))?.value || 'template.pptx';
-      return new File([templateFile.value], fileName, { type: templateFile.value.type });
+    const template = await db.get<{ value: Buffer }>('SELECT value FROM adminSettings WHERE key = ?', ['pptxTemplateFile']);
+    const fileName = (await db.get<{ value: string }>('SELECT value FROM adminSettings WHERE key = ?', ['pptxTemplateFileName']))?.value || 'template.pptx';
+    if (template?.value) {
+      return new File([template.value], fileName, { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
     }
     return null;
   } catch (error) {
@@ -472,24 +254,34 @@ export const getGlobalPptxTemplate = async (): Promise<File | null> => {
 };
 
 export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
+  const db = await initializeDb();
   try {
-    return await db.questions.toArray();
+    const questions = await db.all<QuestionWithId[]>(
+      `SELECT * FROM questions`
+    );
+    return questions.map(q => ({
+      ...q,
+      isEliminatory: q.isEliminatory === 1,
+      options: parseJsonField(q.options)
+    }));
   } catch (error) {
     console.error("Error getting all questions: ", error);
     return [];
   }
 };
 
-// --- CRUD pour DeviceKits ---
-
+// CRUD for DeviceKits
 export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
     if (kit.isDefault === 1) {
-      // S'assurer qu'aucun autre kit n'est par défaut
-      await db.deviceKits.where('isDefault').equals(1).modify({ isDefault: 0 });
+      await db.run(`UPDATE deviceKits SET isDefault = 0 WHERE isDefault = 1`);
     }
-    const id = await db.deviceKits.add(kit as DeviceKit);
-    return id;
+    const result = await db.run(
+      `INSERT INTO deviceKits (name, isDefault) VALUES (?, ?)`,
+      [kit.name, kit.isDefault || 0]
+    );
+    return result.lastID;
   } catch (error) {
     console.error("Error adding device kit: ", error);
     throw error;
@@ -497,8 +289,9 @@ export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number |
 };
 
 export const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
+  const db = await initializeDb();
   try {
-    return await db.deviceKits.orderBy('name').toArray();
+    return await db.all<DeviceKit[]>(`SELECT * FROM deviceKits ORDER BY name`);
   } catch (error) {
     console.error("Error getting all device kits: ", error);
     return [];
@@ -506,20 +299,27 @@ export const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
 };
 
 export const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.deviceKits.get(id);
+    return await db.get<DeviceKit>(`SELECT * FROM deviceKits WHERE id = ?`, [id]);
   } catch (error) {
     console.error(`Error getting device kit with id ${id}: `, error);
+    return undefined;
   }
 };
 
 export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'>>): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
     if (updates.isDefault === 1) {
-      // S'assurer qu'aucun autre kit n'est par défaut
-      await db.deviceKits.where('isDefault').equals(1).and(k => k.id !== id).modify({ isDefault: 0 });
+      await db.run(`UPDATE deviceKits SET isDefault = 0 WHERE isDefault = 1 AND id != ?`, [id]);
     }
-    await db.deviceKits.update(id, updates);
+    const fields = Object.entries(updates).filter(([key]) => key !== 'id');
+    if (fields.length === 0) return id;
+    const setClause = fields.map(([key]) => `${key} = ?`).join(', ');
+    const values = fields.map(([_, value]) => value);
+    values.push(id);
+    await db.run(`UPDATE deviceKits SET ${setClause} WHERE id = ?`, values);
     return id;
   } catch (error) {
     console.error(`Error updating device kit with id ${id}: `, error);
@@ -528,13 +328,10 @@ export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKi
 };
 
 export const deleteDeviceKit = async (id: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    // Supprimer d'abord les assignations liées à ce kit
-    await db.deviceKitAssignments.where('kitId').equals(id).delete();
-    // Ensuite supprimer le kit lui-même
-    await db.deviceKits.delete(id);
-    // Optionnel: vérifier si le kit supprimé était le défaut, et si oui, en désigner un autre ou aucun.
-    // Pour l'instant, on laisse cette logique à l'UI ou à une fonction séparée si besoin.
+    await db.run(`DELETE FROM deviceKitAssignments WHERE kitId = ?`, [id]);
+    await db.run(`DELETE FROM deviceKits WHERE id = ?`, [id]);
   } catch (error) {
     console.error(`Error deleting device kit with id ${id}: `, error);
     throw error;
@@ -542,39 +339,42 @@ export const deleteDeviceKit = async (id: number): Promise<void> => {
 };
 
 export const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.deviceKits.where('isDefault').equals(1).first();
+    return await db.get<DeviceKit>(`SELECT * FROM deviceKits WHERE isDefault = 1 LIMIT 1`);
   } catch (error) {
     console.error("Error getting default device kit: ", error);
+    return undefined;
   }
 };
 
 export const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.transaction('rw', db.deviceKits, async () => {
-      await db.deviceKits.where('isDefault').equals(1).modify({ isDefault: 0 });
-      await db.deviceKits.update(kitId, { isDefault: 1 });
-    });
+    await db.run(`UPDATE deviceKits SET isDefault = 0 WHERE isDefault = 1`);
+    await db.run(`UPDATE deviceKits SET isDefault = 1 WHERE id = ?`, [kitId]);
   } catch (error) {
     console.error(`Error setting default device kit for id ${kitId}:`, error);
     throw error;
   }
 };
 
-// --- CRUD pour DeviceKitAssignments ---
-
+// CRUD for DeviceKitAssignments
 export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
+  const db = await initializeDb();
   console.log(`[DB_TRACE] Tentative d'assignation du boîtier ${votingDeviceId} au kit ${kitId}`);
   try {
-    // Vérifier si l'assignation existe déjà pour éviter les doublons (bien que l'index unique devrait le gérer)
-    const existingAssignment = await db.deviceKitAssignments.where({ kitId, votingDeviceId }).first();
-    if (existingAssignment) {
-      console.log(`[DB_TRACE] Assignation déjà existante pour kit ${kitId} et boîtier ${votingDeviceId}. ID: ${existingAssignment.id}`);
-      return existingAssignment.id;
+    const existing = await db.get(`SELECT id FROM deviceKitAssignments WHERE kitId = ? AND votingDeviceId = ?`, [kitId, votingDeviceId]);
+    if (existing) {
+      console.log(`[DB_TRACE] Assignation déjà existante pour kit ${kitId} et boîtier ${votingDeviceId}. ID: ${existing.id}`);
+      return existing.id;
     }
-    const id = await db.deviceKitAssignments.add({ kitId, votingDeviceId });
-    console.log(`[DB_TRACE] Boîtier ${votingDeviceId} assigné au kit ${kitId}. Nouvel ID d'assignation: ${id}`);
-    return id;
+    const result = await db.run(
+      `INSERT INTO deviceKitAssignments (kitId, votingDeviceId) VALUES (?, ?)`,
+      [kitId, votingDeviceId]
+    );
+    console.log(`[DB_TRACE] Boîtier ${votingDeviceId} assigné au kit ${kitId}. Nouvel ID d'assignation: ${result.lastID}`);
+    return result.lastID;
   } catch (error) {
     console.error(`[DB_ERROR] Erreur lors de l'assignation du boîtier ${votingDeviceId} au kit ${kitId}: `, error);
     throw error;
@@ -582,8 +382,9 @@ export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): 
 };
 
 export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.deviceKitAssignments.where({ kitId, votingDeviceId }).delete();
+    await db.run(`DELETE FROM deviceKitAssignments WHERE kitId = ? AND votingDeviceId = ?`, [kitId, votingDeviceId]);
   } catch (error) {
     console.error(`Error removing device ${votingDeviceId} from kit ${kitId}: `, error);
     throw error;
@@ -591,23 +392,25 @@ export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number)
 };
 
 export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
+  const db = await initializeDb();
   console.log(`[DB_TRACE] Récupération des boîtiers pour le kit ${kitId}`);
   try {
-    const assignments = await db.deviceKitAssignments.where('kitId').equals(kitId).toArray();
+    const assignments = await db.all<{ votingDeviceId: number }[]>(
+      `SELECT votingDeviceId FROM deviceKitAssignments WHERE kitId = ?`,
+      [kitId]
+    );
     console.log(`[DB_TRACE] Assignations trouvées pour kit ${kitId}:`, assignments.length);
-    const deviceIds = assignments.map(a => a.votingDeviceId);
-
-    if (deviceIds.length === 0) {
+    if (assignments.length === 0) {
       console.log(`[DB_TRACE] Aucun boîtier assigné au kit ${kitId}.`);
       return [];
     }
-
-    console.log(`[DB_TRACE] IDs des boîtiers à récupérer pour kit ${kitId}:`, deviceIds);
-    const devices = await db.votingDevices.bulkGet(deviceIds);
-    const validDevices = devices.filter((d): d is VotingDevice => d !== undefined);
-    console.log(`[DB_TRACE] Boîtiers valides récupérés pour kit ${kitId}:`, validDevices.length);
-
-    return validDevices.sort((a,b) => (a.name).localeCompare(b.name)); // Tri par nom pour affichage cohérent
+    const deviceIds = assignments.map(a => a.votingDeviceId);
+    const devices = await db.all<VotingDevice[]>(
+      `SELECT * FROM votingDevices WHERE id IN (${deviceIds.map(() => '?').join(',')}) ORDER BY name`,
+      deviceIds
+    );
+    console.log(`[DB_TRACE] Boîtiers valides récupérés pour kit ${kitId}:`, devices.length);
+    return devices;
   } catch (error) {
     console.error(`[DB_ERROR] Erreur lors de la récupération des boîtiers pour le kit ${kitId}: `, error);
     return [];
@@ -615,12 +418,19 @@ export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevic
 };
 
 export const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit[]> => {
+  const db = await initializeDb();
   try {
-    const assignments = await db.deviceKitAssignments.where('votingDeviceId').equals(votingDeviceId).toArray();
+    const assignments = await db.all<{ kitId: number }[]>(
+      `SELECT kitId FROM deviceKitAssignments WHERE votingDeviceId = ?`,
+      [votingDeviceId]
+    );
+    if (assignments.length === 0) return [];
     const kitIds = assignments.map(a => a.kitId);
-    if (kitIds.length === 0) return [];
-    const kits = await db.deviceKits.bulkGet(kitIds);
-    return kits.filter((k): k is DeviceKit => k !== undefined);
+    const kits = await db.all<DeviceKit[]>(
+      `SELECT * FROM deviceKits WHERE id IN (${kitIds.map(() => '?').join(',')})`,
+      kitIds
+    );
+    return kits;
   } catch (error) {
     console.error(`Error getting kits for voting device ${votingDeviceId}: `, error);
     return [];
@@ -628,8 +438,9 @@ export const getKitsForVotingDevice = async (votingDeviceId: number): Promise<De
 };
 
 export const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.deviceKitAssignments.where('kitId').equals(kitId).delete();
+    await db.run(`DELETE FROM deviceKitAssignments WHERE kitId = ?`, [kitId]);
   } catch (error) {
     console.error(`Error removing assignments by kitId ${kitId}:`, error);
     throw error;
@@ -637,211 +448,282 @@ export const removeAssignmentsByKitId = async (kitId: number): Promise<void> => 
 };
 
 export const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.deviceKitAssignments.where('votingDeviceId').equals(votingDeviceId).delete();
+    await db.run(`DELETE FROM deviceKitAssignments WHERE votingDeviceId = ?`, [votingDeviceId]);
   } catch (error) {
     console.error(`Error removing assignments by votingDeviceId ${votingDeviceId}:`, error);
     throw error;
   }
 };
 
-// --- Fonctions de récupération spécifiques par ID (si non existantes) ---
-export const getReferentialById = async (id: number): Promise<Referential | undefined> => {
+// CRUD for Referentiels, Themes, Blocs
+export const addReferential = async (referential: Omit<Referential, 'id'>): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.referentiels.get(id);
+    const result = await db.run(
+      `INSERT INTO referentiels (code, nom_complet) VALUES (?, ?)`,
+      [referential.code, referential.nom_complet]
+    );
+    return result.lastID;
   } catch (error) {
-    console.error(`Error getting referential with id ${id}: `, error);
+    console.error("Error adding referential: ", error);
+    throw error;
   }
 };
 
-export const getThemeById = async (id: number): Promise<Theme | undefined> => {
+export const getAllReferentiels = async (): Promise<Referential[]> => {
+  const db = await initializeDb();
   try {
-    return await db.themes.get(id);
+    return await db.all<Referential[]>(`SELECT * FROM referentiels`);
   } catch (error) {
-    console.error(`Error getting theme with id ${id}: `, error);
+    console.error("Error getting all referentiels: ", error);
+    return [];
+  }
+};
+
+export const getReferentialById = async (id: number): Promise<Referential | undefined> => {
+  const db = await initializeDb();
+  try {
+    return await db.get<Referential>(`SELECT * FROM referentiels WHERE id = ?`, [id]);
+  } catch (error) {
+    console.error(`Error getting referential with id ${id}: `, error);
+    return undefined;
+  }
+};
+
+export const getReferentialByCode = async (code: string): Promise<Referential | undefined> => {
+  const db = await initializeDb();
+  try {
+    return await db.get<Referential>(`SELECT * FROM referentiels WHERE code = ?`, [code]);
+  } catch (error) {
+    console.error(`Error getting referential with code ${code}: `, error);
+    return undefined;
+  }
+};
+
+export const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> => {
+  const db = await initializeDb();
+  try {
+    const result = await db.run(
+      `INSERT INTO themes (code_theme, nom_complet, referentiel_id) VALUES (?, ?, ?)`,
+      [theme.code_theme, theme.nom_complet, theme.referentiel_id]
+    );
+    const themeId = result.lastID;
+    if (themeId) {
+      const defaultBlocCode = `${theme.code_theme}_GEN`;
+      await addBloc({ code_bloc: defaultBlocCode, theme_id: themeId });
+    }
+    return themeId;
+  } catch (error) {
+    console.error("Error adding theme: ", error);
+    throw error;
+  }
+};
+
+export const getAllThemes = async (): Promise<Theme[]> => {
+  const db = await initializeDb();
+  try {
+    return await db.all<Theme[]>(`SELECT * FROM themes`);
+  } catch (error) {
+    console.error("Error getting all themes: ", error);
+    return [];
+  }
+};
+
+export const getThemesByReferentialId = async (referentielId: number): Promise<Theme[]> => {
+  const db = await initializeDb();
+  try {
+    return await db.all<Theme[]>(`SELECT * FROM themes WHERE referentiel_id = ?`, [referentielId]);
+  } catch (error) {
+    console.error(`Error getting themes for referential id ${referentielId}:`, error);
+    return [];
+  }
+};
+
+export const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id: number): Promise<Theme | undefined> => {
+  const db = await initializeDb();
+  try {
+    return await db.get<Theme>(
+      `SELECT * FROM themes WHERE code_theme = ? AND referentiel_id = ?`,
+      [code_theme, referentiel_id]
+    );
+  } catch (error) {
+    console.error(`Error getting theme with code_theme ${code_theme} and referentiel_id ${referentiel_id}: `, error);
+    return undefined;
+  }
+};
+
+export const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
+  const db = await initializeDb();
+  try {
+    const result = await db.run(
+      `INSERT INTO blocs (code_bloc, theme_id) VALUES (?, ?)`,
+      [bloc.code_bloc, bloc.theme_id]
+    );
+    return result.lastID;
+  } catch (error) {
+    console.error("Error adding bloc: ", error);
+    throw error;
+  }
+};
+
+export const getAllBlocs = async (): Promise<Bloc[]> => {
+  const db = await initializeDb();
+  try {
+    return await db.all<Bloc[]>(`SELECT * FROM blocs`);
+  } catch (error) {
+    console.error("Error getting all blocs: ", error);
+    return [];
+  }
+};
+
+export const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
+  const db = await initializeDb();
+  try {
+    return await db.all<Bloc[]>(`SELECT * FROM blocs WHERE theme_id = ?`, [themeId]);
+  } catch (error) {
+    console.error(`Error getting blocs for theme id ${themeId}:`, error);
+    return [];
   }
 };
 
 export const getBlocById = async (id: number): Promise<Bloc | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.blocs.get(id);
+    return await db.get<Bloc>(`SELECT * FROM blocs WHERE id = ?`, [id]);
   } catch (error) {
     console.error(`Error getting bloc with id ${id}: `, error);
+    return undefined;
+  }
+};
+
+export const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
+  const db = await initializeDb();
+  try {
+    return await db.get<Bloc>(
+      `SELECT * FROM blocs WHERE code_bloc = ? AND theme_id = ?`,
+      [code_bloc, theme_id]
+    );
+  } catch (error) {
+    console.error(`Error getting bloc with code_bloc ${code_bloc} and theme_id ${theme_id}: `, error);
+    return undefined;
   }
 };
 
 export const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> => {
+  const db = await initializeDb();
   try {
-    return await db.questions.where('blocId').equals(blocId).toArray();
+    const questions = await db.all<QuestionWithId[]>(
+      `SELECT * FROM questions WHERE blocId = ?`,
+      [blocId]
+    );
+    return questions.map(q => ({
+      ...q,
+      isEliminatory: q.isEliminatory === 1,
+      options: parseJsonField(q.options)
+    }));
   } catch (error) {
     console.error(`Error getting questions for blocId ${blocId}: `, error);
     return [];
   }
 };
 
-export const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
-  try {
-    return await db.blocs.where({ code_bloc, theme_id }).first();
-  } catch (error) {
-    console.error(`Error getting bloc with code_bloc ${code_bloc} and theme_id ${theme_id}: `, error);
-  }
-};
-
 export const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.questions.get(id);
+    const question = await db.get<QuestionWithId>(`SELECT * FROM questions WHERE id = ?`, [id]);
+    if (question) {
+      question.isEliminatory = question.isEliminatory === 1;
+      question.options = parseJsonField(question.options);
+    }
+    return question;
   } catch (error) {
     console.error(`Error getting question with id ${id}: `, error);
+    return undefined;
   }
 };
 
 export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
+  const db = await initializeDb();
   try {
-    const questions = await db.questions.bulkGet(ids);
-    return questions.filter((q): q is QuestionWithId => q !== undefined);
+    if (ids.length === 0) return [];
+    const questions = await db.all<QuestionWithId[]>(
+      `SELECT * FROM questions WHERE id IN (${ids.map(() => '?').join(',')})`,
+      ids
+    );
+    return questions.map(q => ({
+      ...q,
+      isEliminatory: q.isEliminatory === 1,
+      options: parseJsonField(q.options)
+    }));
   } catch (error) {
     console.error(`Error getting questions by ids: `, error);
     return [];
   }
 };
 
-// --- Fonctions de Reporting ---
-
-export interface BlockUsage {
-  referentiel: CACESReferential | string;
-  theme: string;
-  blockId: string;
-  usageCount: number;
-}
-
-/**
- * Calcule le nombre de fois où chaque bloc a été utilisé dans les sessions terminées,
- * avec un filtre optionnel sur la période.
- * @param startDate - Date de début optionnelle (string ISO ou objet Date).
- * @param endDate - Date de fin optionnelle (string ISO ou objet Date).
- */
-export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
-  const usageMap = new Map<string, BlockUsage>();
-
-  try {
-    // let query = db.sessions.where('status').equals('completed'); // Unused variable
-
-    const sessionsQuery = db.sessions.where('status').equals('completed'); // prefer-const
-
-    // Date filtering logic remains the same, but applied after fetching all completed sessions.
-    // For very large datasets, fetching all then filtering in JS can be inefficient.
-    // If performance becomes an issue, consider if Dexie's date range queries can be optimized
-    // (e.g., by ensuring dateSession is properly indexed and queried).
-
-    const completedSessions = await sessionsQuery.toArray();
-    let filteredSessions = completedSessions;
-
-    if (startDate) {
-      const start = startDate instanceof Date ? startDate : new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      filteredSessions = filteredSessions.filter(session => {
-        const sessionDate = new Date(session.dateSession);
-        return sessionDate >= start;
-      });
-    }
-
-    if (endDate) {
-      const end = endDate instanceof Date ? endDate : new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      filteredSessions = filteredSessions.filter(session => {
-        const sessionDate = new Date(session.dateSession);
-        return sessionDate <= end;
-      });
-    }
-
-    // Fetch all referentiels, themes, and blocs once to create lookup maps
-    // This avoids repeated DB queries inside the loop.
-    const allReferentiels = await db.referentiels.toArray();
-    const allThemes = await db.themes.toArray();
-    const allBlocs = await db.blocs.toArray();
-
-    const referentielsMap = new Map(allReferentiels.map(r => [r.id, r]));
-    const themesMap = new Map(allThemes.map(t => [t.id, t]));
-    const blocsMap = new Map(allBlocs.map(b => [b.id, b]));
-
-    for (const session of filteredSessions) {
-      // session.selectedBlocIds is an array of numbers (bloc IDs)
-      if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
-        // session.referentielId should exist if selectedBlocIds exist and point to valid data.
-        // However, the original BlockUsage interface expects a referential code/string.
-        // We need to reconstruct this information.
-
-        for (const blocId of session.selectedBlocIds) {
-          const bloc = blocsMap.get(blocId);
-          if (!bloc) {
-            console.warn(`Bloc with ID ${blocId} not found for session ${session.id}. Skipping.`);
-            continue;
-          }
-
-          const theme = themesMap.get(bloc.theme_id);
-          if (!theme) {
-            console.warn(`Theme with ID ${bloc.theme_id} not found for bloc ${blocId}. Skipping.`);
-            continue;
-          }
-
-          const referentiel = referentielsMap.get(theme.referentiel_id);
-          if (!referentiel) {
-            console.warn(`Referentiel with ID ${theme.referentiel_id} not found for theme ${theme.id}. Skipping.`);
-            continue;
-          }
-
-          // The key for usageMap should uniquely identify the block.
-          // Using referentiel.code, theme.code_theme, and bloc.code_bloc provides human-readable unique key.
-          const key = `${referentiel.code}-${theme.code_theme}-${bloc.code_bloc}`;
-
-          if (usageMap.has(key)) {
-            const currentUsage = usageMap.get(key)!;
-            currentUsage.usageCount++;
-          } else {
-            usageMap.set(key, {
-              referentiel: referentiel.code, // Use code as per original BlockUsage interface
-              theme: theme.code_theme,     // Use code_theme
-              blockId: bloc.code_bloc,     // Use code_bloc
-              usageCount: 1,
-            });
-          }
-        }
-      }
-    }
-    return Array.from(usageMap.values());
-  } catch (error) {
-    console.error("Erreur lors du calcul de l'utilisation des blocs:", error);
-    return [];
-  }
-};
-
 export const updateQuestion = async (id: number, updates: Partial<QuestionWithId>): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    await db.questions.update(id, updates);
+    const fields = Object.entries(updates).filter(([key]) => key !== 'id');
+    if (fields.length === 0) return id;
+    const setClause = fields.map(([key]) => `${key} = ?`).join(', ');
+    const values = fields.map(([_, value]) =>
+      key === 'options' ? serializeJsonField(value) : key === 'isEliminatory' ? (value ? 1 : 0) : value
+    );
+    values.push(id);
+    await db.run(`UPDATE questions SET ${setClause} WHERE id = ?`, values);
     return id;
   } catch (error) {
     console.error(`Error updating question with id ${id}: `, error);
+    return undefined;
   }
 };
 
 export const deleteQuestion = async (id: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.questions.delete(id);
+    await db.run(`DELETE FROM questions WHERE id = ?`, [id]);
   } catch (error) {
     console.error(`Error deleting question with id ${id}: `, error);
   }
 };
 
-// --- Nouvelles fonctions CRUD pour Sessions ---
+// CRUD for Sessions
 export const addSession = async (session: Session): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    const id = await db.sessions.add(session);
+    const { nomSession, dateSession, referentielId, selectedBlocIds, selectedKitId, createdAt, location, status, questionMappings, notes, trainerId, ignoredSlideGuids, resolvedImportAnomalies } = session;
+    const result = await db.run(
+      `INSERT INTO sessions (
+        nomSession, dateSession, referentielId, selectedBlocIds, selectedKitId,
+        createdAt, location, status, questionMappings, notes, trainerId,
+        ignoredSlideGuids, resolvedImportAnomalies
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nomSession,
+        dateSession,
+        referentielId,
+        serializeJsonField(selectedBlocIds),
+        selectedKitId,
+        createdAt || new Date().toISOString(),
+        location,
+        status,
+        serializeJsonField(questionMappings),
+        notes,
+        trainerId,
+        serializeJsonField(ignoredSlideGuids),
+        serializeJsonField(resolvedImportAnomalies)
+      ]
+    );
+    const id = result.lastID;
     if (id !== undefined) {
-      logger.info(`Session créée : "${session.nomSession}"`, {
+      logger.info(`Session créée : "${nomSession}"`, {
         eventType: 'SESSION_CREATED',
         sessionId: id,
-        sessionName: session.nomSession,
-        referentialId: session.referentielId, // Changed from session.referentiel
+        sessionName: nomSession,
+        referentialId: referentielId,
         participantsCount: session.participants?.length || 0
       });
     }
@@ -849,12 +731,21 @@ export const addSession = async (session: Session): Promise<number | undefined> 
   } catch (error) {
     logger.error(`Erreur lors de la création de la session "${session.nomSession}"`, { error, sessionDetails: session });
     console.error("Error adding session: ", error);
+    return undefined;
   }
 };
 
 export const getAllSessions = async (): Promise<Session[]> => {
+  const db = await initializeDb();
   try {
-    return await db.sessions.toArray();
+    const sessions = await db.all<Session[]>(`SELECT * FROM sessions`);
+    return sessions.map(s => ({
+      ...s,
+      selectedBlocIds: parseJsonField(s.selectedBlocIds) || [],
+      questionMappings: parseJsonField(s.questionMappings) || [],
+      ignoredSlideGuids: parseJsonField(s.ignoredSlideGuids) || [],
+      resolvedImportAnomalies: parseJsonField(s.resolvedImportAnomalies)
+    }));
   } catch (error) {
     console.error("Error getting all sessions: ", error);
     return [];
@@ -862,21 +753,37 @@ export const getAllSessions = async (): Promise<Session[]> => {
 };
 
 export const getSessionById = async (id: number): Promise<Session | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.sessions.get(id);
+    const session = await db.get<Session>(`SELECT * FROM sessions WHERE id = ?`, [id]);
+    if (session) {
+      session.selectedBlocIds = parseJsonField(session.selectedBlocIds) || [];
+      session.questionMappings = parseJsonField(session.questionMappings) || [];
+      session.ignoredSlideGuids = parseJsonField(session.ignoredSlideGuids) || [];
+      session.resolvedImportAnomalies = parseJsonField(session.resolvedImportAnomalies);
+    }
+    return session;
   } catch (error) {
     console.error(`Error getting session with id ${id}: `, error);
+    return undefined;
   }
 };
 
 export const updateSession = async (id: number, updates: Partial<Session>): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    const numAffected = await db.sessions.update(id, updates);
+    const fields = Object.entries(updates).filter(([key]) => key !== 'id');
+    if (fields.length === 0) return id;
+    const setClause = fields.map(([key]) => `${key} = ?`).join(', ');
+    const values = fields.map(([_, value]) =>
+      ['selectedBlocIds', 'questionMappings', 'ignoredSlideGuids', 'resolvedImportAnomalies'].includes(key)
+        ? serializeJsonField(value)
+        : value
+    );
+    values.push(id);
+    const numAffected = await db.run(`UPDATE sessions SET ${setClause} WHERE id = ?`, values);
     if (numAffected > 0) {
-      // Pour obtenir le nom de la session, il faudrait soit le passer dans `updates` (s'il change),
-      // soit le récupérer. Pour l'instant, on logue avec l'ID.
-      // Si `updates.nomSession` existe, on peut l'utiliser.
-      const sessionName = updates.nomSession || (await db.sessions.get(id))?.nomSession || `ID ${id}`;
+      const sessionName = updates.nomSession || (await db.get<{ nomSession: string }>(`SELECT nomSession FROM sessions WHERE id = ?`, [id]))?.nomSession || `ID ${id}`;
       const logDetails: any = {
         eventType: 'SESSION_UPDATED',
         sessionId: id,
@@ -887,44 +794,69 @@ export const updateSession = async (id: number, updates: Partial<Session>): Prom
       }
       logger.info(`Session modifiée : "${sessionName}"`, logDetails);
     }
-    return id; // update ne retourne pas l'id directement, mais on le passe en argument
+    return id;
   } catch (error) {
     logger.error(`Erreur lors de la modification de la session ID ${id}`, { error, updates });
     console.error(`Error updating session with id ${id}: `, error);
+    return undefined;
   }
 };
 
 export const deleteSession = async (id: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.sessions.delete(id);
-    await db.sessionResults.where('sessionId').equals(id).delete();
+    await db.run(`DELETE FROM sessionResults WHERE sessionId = ?`, [id]);
+    await db.run(`DELETE FROM sessions WHERE id = ?`, [id]);
   } catch (error) {
     console.error(`Error deleting session with id ${id}: `, error);
   }
 };
 
-// --- Nouvelles fonctions CRUD pour SessionResults ---
+// CRUD for SessionResults
 export const addSessionResult = async (result: SessionResult): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    const id = await db.sessionResults.add(result);
-    return id;
+    const { sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp } = result;
+    const resultDb = await db.run(
+      `INSERT INTO sessionResults (sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [sessionId, questionId, participantIdBoitier, answer, isCorrect ? 1 : 0, pointsObtained, timestamp]
+    );
+    return resultDb.lastID;
   } catch (error) {
     console.error("Error adding session result: ", error);
+    return undefined;
   }
 };
 
 export const addBulkSessionResults = async (results: SessionResult[]): Promise<number[] | undefined> => {
+  const db = await initializeDb();
   try {
-    const ids = await db.sessionResults.bulkAdd(results, { allKeys: true });
-    return ids as number[];
+    const ids: number[] = [];
+    for (const result of results) {
+      const { sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp } = result;
+      const resultDb = await db.run(
+        `INSERT INTO sessionResults (sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [sessionId, questionId, participantIdBoitier, answer, isCorrect ? 1 : 0, pointsObtained, timestamp]
+      );
+      if (resultDb.lastID) ids.push(resultDb.lastID);
+    }
+    return ids;
   } catch (error) {
     console.error("Error adding bulk session results: ", error);
+    return undefined;
   }
-}
+};
 
 export const getAllResults = async (): Promise<SessionResult[]> => {
+  const db = await initializeDb();
   try {
-    return await db.sessionResults.toArray();
+    const results = await db.all<SessionResult[]>(`SELECT * FROM sessionResults`);
+    return results.map(r => ({
+      ...r,
+      isCorrect: r.isCorrect === 1
+    }));
   } catch (error) {
     console.error("Error getting all session results: ", error);
     return [];
@@ -932,8 +864,16 @@ export const getAllResults = async (): Promise<SessionResult[]> => {
 };
 
 export const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
+  const db = await initializeDb();
   try {
-    return await db.sessionResults.where('sessionId').equals(sessionId).toArray();
+    const results = await db.all<SessionResult[]>(
+      `SELECT * FROM sessionResults WHERE sessionId = ?`,
+      [sessionId]
+    );
+    return results.map(r => ({
+      ...r,
+      isCorrect: r.isCorrect === 1
+    }));
   } catch (error) {
     console.error(`Error getting results for session ${sessionId}: `, error);
     return [];
@@ -941,56 +881,73 @@ export const getResultsForSession = async (sessionId: number): Promise<SessionRe
 };
 
 export const getResultBySessionAndQuestion = async (sessionId: number, questionId: number, participantIdBoitier: string): Promise<SessionResult | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.sessionResults
-      .where({ sessionId, questionId, participantIdBoitier })
-      .first();
+    const result = await db.get<SessionResult>(
+      `SELECT * FROM sessionResults WHERE sessionId = ? AND questionId = ? AND participantIdBoitier = ?`,
+      [sessionId, questionId, participantIdBoitier]
+    );
+    if (result) {
+      result.isCorrect = result.isCorrect === 1;
+    }
+    return result;
   } catch (error) {
     console.error(`Error getting specific result: `, error);
+    return undefined;
   }
 };
 
 export const updateSessionResult = async (id: number, updates: Partial<SessionResult>): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    await db.sessionResults.update(id, updates);
+    const fields = Object.entries(updates).filter(([key]) => key !== 'id');
+    if (fields.length === 0) return id;
+    const setClause = fields.map(([key]) => `${key} = ?`).join(', ');
+    const values = fields.map(([_, value]) => key === 'isCorrect' ? (value ? 1 : 0) : value);
+    values.push(id);
+    await db.run(`UPDATE sessionResults SET ${setClause} WHERE id = ?`, values);
     return id;
   } catch (error) {
     console.error(`Error updating session result with id ${id}: `, error);
+    return undefined;
   }
 };
 
 export const deleteResultsForSession = async (sessionId: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.sessionResults.where('sessionId').equals(sessionId).delete();
+    await db.run(`DELETE FROM sessionResults WHERE sessionId = ?`, [sessionId]);
   } catch (error) {
     console.error(`Error deleting results for session ${sessionId}: `, error);
   }
 };
 
 export const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise<QuestionWithId[]> => {
+  const db = await initializeDb();
   if (!selectedBlocIds || selectedBlocIds.length === 0) {
     return [];
   }
   try {
-    // Récupérer toutes les questions dont le blocId est dans la liste selectedBlocIds
-    // et qui ne sont pas undefined
-    const questions = await db.questions
-      .where('blocId')
-      .anyOf(selectedBlocIds.filter(id => typeof id === 'number')) // S'assurer que ce sont des nombres valides
-      .toArray();
-
-    // console.log(`Récupéré ${questions.length} questions pour les blocIDs: ${selectedBlocIds.join(', ')}.`); // Nettoyé
-    return questions;
+    const questions = await db.all<QuestionWithId[]>(
+      `SELECT * FROM questions WHERE blocId IN (${selectedBlocIds.map(() => '?').join(',')})`,
+      selectedBlocIds.filter(id => typeof id === 'number')
+    );
+    return questions.map(q => ({
+      ...q,
+      isEliminatory: q.isEliminatory === 1,
+      options: parseJsonField(q.options)
+    }));
   } catch (error) {
-    console.error("Erreur lors de la récupération des questions pour les IDs de bloc de session:", error); // Garder ce log d'erreur
+    console.error("Erreur lors de la récupération des questions pour les IDs de bloc de session:", error);
     return [];
   }
 };
 
-// Fonctions pour AdminSettings
+// AdminSettings
 export const getAdminSetting = async (key: string): Promise<any> => {
+  const db = await initializeDb();
   try {
-    const setting = await db.adminSettings.get(key);
+    const setting = await db.get<{ value: any }>(`SELECT value FROM adminSettings WHERE key = ?`, [key]);
     return setting?.value;
   } catch (error) {
     console.error(`Error getting setting ${key}:`, error);
@@ -999,37 +956,49 @@ export const getAdminSetting = async (key: string): Promise<any> => {
 };
 
 export const setAdminSetting = async (key: string, value: any): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.adminSettings.put({ key, value });
+    await db.run(
+      `INSERT OR REPLACE INTO adminSettings (key, value) VALUES (?, ?)`,
+      [key, value]
+    );
   } catch (error) {
     console.error(`Error setting ${key}:`, error);
   }
 };
 
 export const getAllAdminSettings = async (): Promise<{ key: string; value: any }[]> => {
+  const db = await initializeDb();
   try {
-    return await db.adminSettings.toArray();
+    return await db.all<{ key: string; value: any }[]>(`SELECT * FROM adminSettings`);
   } catch (error) {
     console.error("Error getting all admin settings:", error);
     return [];
   }
 };
 
-// Fonctions CRUD pour VotingDevices
+// CRUD for VotingDevices
 export const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.votingDevices.add(device as VotingDevice);
+    const result = await db.run(
+      `INSERT INTO votingDevices (name, serialNumber) VALUES (?, ?)`,
+      [device.name, device.serialNumber]
+    );
+    return result.lastID;
   } catch (error) {
     console.error("Error adding voting device:", error);
+    return undefined;
   }
 };
 
 export const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
+  const db = await initializeDb();
   console.log(`[DB_TRACE] Récupération de tous les boîtiers votants.`);
   try {
-    const allDevices = await db.votingDevices.orderBy('name').toArray(); // Tri par nom pour cohérence
-    console.log(`[DB_TRACE] Nombre total de boîtiers récupérés: ${allDevices.length}`);
-    return allDevices;
+    const devices = await db.all<VotingDevice[]>(`SELECT * FROM votingDevices ORDER BY name`);
+    console.log(`[DB_TRACE] Nombre total de boîtiers récupérés: ${devices.length}`);
+    return devices;
   } catch (error) {
     console.error("[DB_ERROR] Erreur lors de la récupération de tous les boîtiers votants:", error);
     return [];
@@ -1037,8 +1006,15 @@ export const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
 };
 
 export const updateVotingDevice = async (id: number, updates: Partial<VotingDevice>): Promise<number> => {
+  const db = await initializeDb();
   try {
-    return await db.votingDevices.update(id, updates);
+    const fields = Object.entries(updates).filter(([key]) => key !== 'id');
+    if (fields.length === 0) return 1;
+    const setClause = fields.map(([key]) => `${key} = ?`).join(', ');
+    const values = fields.map(([_, value]) => value);
+    values.push(id);
+    const result = await db.run(`UPDATE votingDevices SET ${setClause} WHERE id = ?`, values);
+    return result.changes || 0;
   } catch (error) {
     console.error(`Error updating voting device ${id}:`, error);
     return 0;
@@ -1046,40 +1022,50 @@ export const updateVotingDevice = async (id: number, updates: Partial<VotingDevi
 };
 
 export const deleteVotingDevice = async (id: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.votingDevices.delete(id);
+    await db.run(`DELETE FROM votingDevices WHERE id = ?`, [id]);
   } catch (error) {
     console.error(`Error deleting voting device ${id}:`, error);
   }
 };
 
 export const bulkAddVotingDevices = async (devices: VotingDevice[]): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.votingDevices.bulkAdd(devices, { allKeys: false });
+    for (const device of devices) {
+      await db.run(
+        `INSERT INTO votingDevices (name, serialNumber) VALUES (?, ?)`,
+        [device.name, device.serialNumber]
+      );
+    }
   } catch (error) {
     console.error("Error bulk adding voting devices:", error);
   }
 };
 
-// --- Fonctions CRUD pour Formateurs (Trainers) ---
-
+// CRUD for Trainers
 export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
-  // s'assurer que trainer.isDefault est 0 ou 1. Le type Omit<Trainer, 'id'> le garantit déjà.
+  const db = await initializeDb();
   try {
-    // S'assurer qu'aucun autre formateur n'est par défaut si celui-ci l'est (isDefault === 1)
     if (trainer.isDefault === 1) {
-      await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
+      await db.run(`UPDATE trainers SET isDefault = 0 WHERE isDefault = 1`);
     }
-    const id = await db.trainers.add(trainer as Trainer); // trainer contient déjà isDefault: 0 ou 1
-    return id;
+    const result = await db.run(
+      `INSERT INTO trainers (name, isDefault) VALUES (?, ?)`,
+      [trainer.name, trainer.isDefault || 0]
+    );
+    return result.lastID;
   } catch (error) {
     console.error("Error adding trainer: ", error);
+    return undefined;
   }
 };
 
 export const getAllTrainers = async (): Promise<Trainer[]> => {
+  const db = await initializeDb();
   try {
-    return await db.trainers.toArray();
+    return await db.all<Trainer[]>(`SELECT * FROM trainers`);
   } catch (error) {
     console.error("Error getting all trainers: ", error);
     return [];
@@ -1087,91 +1073,104 @@ export const getAllTrainers = async (): Promise<Trainer[]> => {
 };
 
 export const getTrainerById = async (id: number): Promise<Trainer | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.trainers.get(id);
+    return await db.get<Trainer>(`SELECT * FROM trainers WHERE id = ?`, [id]);
   } catch (error) {
     console.error(`Error getting trainer with id ${id}: `, error);
+    return undefined;
   }
 };
 
 export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> => {
-  // updates.isDefault peut être 0, 1, ou undefined.
-  // Si undefined, on ne touche pas à isDefault.
-  // Si 0 ou 1, on met à jour.
+  const db = await initializeDb();
   try {
-    // Si on met à jour un formateur pour qu'il soit par défaut (isDefault === 1)
     if (updates.isDefault === 1) {
-      await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
+      await db.run(`UPDATE trainers SET isDefault = 0 WHERE isDefault = 1 AND id != ?`, [id]);
     }
-    // Si updates.isDefault est undefined, il ne sera pas inclus dans l'objet d'update pour Dexie,
-    // donc la valeur existante de isDefault pour ce formateur ne sera pas modifiée.
-    // Si updates.isDefault est 0, il mettra isDefault à 0.
-    await db.trainers.update(id, updates);
+    const fields = Object.entries(updates).filter(([key]) => key !== 'id');
+    if (fields.length === 0) return id;
+    const setClause = fields.map(([key]) => `${key} = ?`).join(', ');
+    const values = fields.map(([_, value]) => value);
+    values.push(id);
+    await db.run(`UPDATE trainers SET ${setClause} WHERE id = ?`, values);
     return id;
   } catch (error) {
     console.error(`Error updating trainer with id ${id}: `, error);
+    return undefined;
   }
 };
 
 export const deleteTrainer = async (id: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    // TODO: Que faire si on supprime le formateur par défaut ?
-    // Option 1: Le prochain formateur (par ordre alpha?) devient par défaut.
-    // Option 2: Aucun formateur n'est par défaut.
-    // Option 3: Interdire la suppression du formateur par défaut s'il en reste.
-    // Pour l'instant, suppression simple.
-    await db.trainers.delete(id);
-    // TODO: Mettre à jour les sessions qui utilisaient ce trainerId ? Mettre à undefined ?
+    await db.run(`DELETE FROM trainers WHERE id = ?`, [id]);
   } catch (error) {
     console.error(`Error deleting trainer with id ${id}: `, error);
   }
 };
 
 export const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    // D'abord, s'assurer qu'aucun autre formateur n'est par défaut (isDefault === 1)
-    await db.trainers.where('isDefault').equals(1).modify({ isDefault: 0 });
-    // Ensuite, définir le formateur spécifié comme par défaut (isDefault === 1)
-    await db.trainers.update(id, { isDefault: 1 });
+    await db.run(`UPDATE trainers SET isDefault = 0 WHERE isDefault = 1`);
+    await db.run(`UPDATE trainers SET isDefault = 1 WHERE id = ?`, [id]);
     return id;
   } catch (error) {
     console.error(`Error setting default trainer for id ${id}:`, error);
+    return undefined;
   }
 };
 
 export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
+  const db = await initializeDb();
   try {
-    // Récupérer le formateur où isDefault est 1
-    return await db.trainers.where('isDefault').equals(1).first();
+    return await db.get<Trainer>(`SELECT * FROM trainers WHERE isDefault = 1 LIMIT 1`);
   } catch (error) {
     console.error("Error getting default trainer:", error);
-    // En cas d'erreur (par exemple, si l'index est toujours problématique),
-    // on pourrait retourner le premier formateur par ID comme fallback,
-    // mais il vaut mieux que l'erreur soit visible pour diagnostic.
+    return undefined;
   }
 };
 
-// --- CRUD pour SessionQuestion ---
+// CRUD for SessionQuestion
 export const addSessionQuestion = async (sq: SessionQuestion): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.sessionQuestions.add(sq);
+    const { sessionId, dbQuestionId, slideGuid, blockId } = sq;
+    const result = await db.run(
+      `INSERT INTO sessionQuestions (sessionId, dbQuestionId, slideGuid, blockId) VALUES (?, ?, ?, ?)`,
+      [sessionId, dbQuestionId, slideGuid, blockId]
+    );
+    return result.lastID;
   } catch (error) {
     console.error("Error adding session question:", error);
+    return undefined;
   }
 };
 
 export const addBulkSessionQuestions = async (questions: SessionQuestion[]): Promise<number[] | undefined> => {
+  const db = await initializeDb();
   try {
-    const ids = await db.sessionQuestions.bulkAdd(questions, { allKeys: true });
-    return ids as number[];
+    const ids: number[] = [];
+    for (const q of questions) {
+      const { sessionId, dbQuestionId, slideGuid, blockId } = q;
+      const result = await db.run(
+        `INSERT INTO sessionQuestions (sessionId, dbQuestionId, slideGuid, blockId) VALUES (?, ?, ?, ?)`,
+        [sessionId, dbQuestionId, slideGuid, blockId]
+      );
+      if (result.lastID) ids.push(result.lastID);
+    }
+    return ids;
   } catch (error) {
     console.error("Error bulk adding session questions:", error);
+    return undefined;
   }
 };
 
 export const getSessionQuestionsBySessionId = async (sessionId: number): Promise<SessionQuestion[]> => {
+  const db = await initializeDb();
   try {
-    return await db.sessionQuestions.where({ sessionId }).toArray();
+    return await db.all<SessionQuestion[]>(`SELECT * FROM sessionQuestions WHERE sessionId = ?`, [sessionId]);
   } catch (error) {
     console.error(`Error getting session questions for session ${sessionId}:`, error);
     return [];
@@ -1179,34 +1178,53 @@ export const getSessionQuestionsBySessionId = async (sessionId: number): Promise
 };
 
 export const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.sessionQuestions.where({ sessionId }).delete();
+    await db.run(`DELETE FROM sessionQuestions WHERE sessionId = ?`, [sessionId]);
   } catch (error) {
     console.error(`Error deleting session questions for session ${sessionId}:`, error);
   }
 };
 
-// --- CRUD pour SessionBoitier ---
+// CRUD for SessionBoitier
 export const addSessionBoitier = async (sb: SessionBoitier): Promise<number | undefined> => {
+  const db = await initializeDb();
   try {
-    return await db.sessionBoitiers.add(sb);
+    const { sessionId, participantId, visualId, serialNumber } = sb;
+    const result = await db.run(
+      `INSERT INTO sessionBoitiers (sessionId, participantId, visualId, serialNumber) VALUES (?, ?, ?, ?)`,
+      [sessionId, participantId, visualId, serialNumber]
+    );
+    return result.lastID;
   } catch (error) {
     console.error("Error adding session boitier:", error);
+    return undefined;
   }
 };
 
 export const addBulkSessionBoitiers = async (boitiers: SessionBoitier[]): Promise<number[] | undefined> => {
+  const db = await initializeDb();
   try {
-    const ids = await db.sessionBoitiers.bulkAdd(boitiers, { allKeys: true });
-    return ids as number[];
+    const ids: number[] = [];
+    for (const b of boitiers) {
+      const { sessionId, participantId, visualId, serialNumber } = b;
+      const result = await db.run(
+        `INSERT INTO sessionBoitiers (sessionId, participantId, visualId, serialNumber) VALUES (?, ?, ?, ?)`,
+        [sessionId, participantId, visualId, serialNumber]
+      );
+      if (result.lastID) ids.push(result.lastID);
+    }
+    return ids;
   } catch (error) {
     console.error("Error bulk adding session boitiers:", error);
+    return undefined;
   }
 };
 
 export const getSessionBoitiersBySessionId = async (sessionId: number): Promise<SessionBoitier[]> => {
+  const db = await initializeDb();
   try {
-    return await db.sessionBoitiers.where({ sessionId }).toArray();
+    return await db.all<SessionBoitier[]>(`SELECT * FROM sessionBoitiers WHERE sessionId = ?`, [sessionId]);
   } catch (error) {
     console.error(`Error getting session boitiers for session ${sessionId}:`, error);
     return [];
@@ -1214,109 +1232,81 @@ export const getSessionBoitiersBySessionId = async (sessionId: number): Promise<
 };
 
 export const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void> => {
+  const db = await initializeDb();
   try {
-    await db.sessionBoitiers.where({ sessionId }).delete();
+    await db.run(`DELETE FROM sessionBoitiers WHERE sessionId = ?`, [sessionId]);
   } catch (error) {
     console.error(`Error deleting session boitiers for session ${sessionId}:`, error);
   }
 };
 
-// --- CRUD pour Referentiels ---
-export const addReferential = async (referential: Omit<Referential, 'id'>): Promise<number | undefined> => {
+// Block Usage Reporting
+export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
+  const db = await initializeDb();
+  const usageMap = new Map<string, BlockUsage>();
   try {
-    const id = await db.referentiels.add(referential as Referential);
-    return id;
-  } catch (error) {
-    console.error("Error adding referential: ", error);
-    throw error; // Renvoyer l'erreur pour la gestion dans l'UI
-  }
-};
-
-export const getAllReferentiels = async (): Promise<Referential[]> => {
-  try {
-    return await db.referentiels.toArray();
-  } catch (error) {
-    console.error("Error getting all referentiels: ", error);
-    return [];
-  }
-};
-
-export const getReferentialByCode = async (code: string): Promise<Referential | undefined> => {
-  try {
-    return await db.referentiels.where('code').equals(code).first();
-  } catch (error) {
-    console.error(`Error getting referential with code ${code}: `, error);
-  }
-};
-
-// --- CRUD pour Themes ---
-export const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> => {
-  try {
-    const id = await db.themes.add(theme as Theme);
-    // Création automatique d'un bloc par défaut pour ce thème
-    if (id) {
-      const defaultBlocCode = `${theme.code_theme}_GEN`; // Ex: R489PR_GEN
-      await addBloc({ code_bloc: defaultBlocCode, theme_id: id });
+    let query = `SELECT * FROM sessions WHERE status = 'completed'`;
+    const params: (string | number)[] = [];
+    if (startDate) {
+      const start = startDate instanceof Date ? startDate.toISOString().split('T')[0] : new Date(startDate).toISOString().split('T')[0];
+      query += ` AND dateSession >= ?`;
+      params.push(start);
     }
-    return id;
-  } catch (error) {
-    console.error("Error adding theme: ", error);
-    throw error;
-  }
-};
+    if (endDate) {
+      const end = endDate instanceof Date ? endDate.toISOString().split('T')[0] : new Date(endDate).toISOString().split('T')[0];
+      query += ` AND dateSession <= ?`;
+      params.push(end);
+    }
+    const sessions = await db.all<Session[]>(query, params);
+    const filteredSessions = sessions.map(s => ({
+      ...s,
+      selectedBlocIds: parseJsonField(s.selectedBlocIds) || []
+    }));
 
-export const getAllThemes = async (): Promise<Theme[]> => {
-  try {
-    return await db.themes.toArray();
-  } catch (error) {
-    console.error("Error getting all themes: ", error);
-    return [];
-  }
-};
+    const allReferentiels = await db.all<Referential[]>(`SELECT * FROM referentiels`);
+    const allThemes = await db.all<Theme[]>(`SELECT * FROM themes`);
+    const allBlocs = await db.all<Bloc[]>(`SELECT * FROM blocs`);
 
-export const getThemesByReferentialId = async (referentielId: number): Promise<Theme[]> => {
-  try {
-    return await db.themes.where('referentiel_id').equals(referentielId).toArray();
-  } catch (error) {
-    console.error(`Error getting themes for referential id ${referentielId}:`, error);
-    return [];
-  }
-};
+    const referentielsMap = new Map(allReferentiels.map(r => [r.id, r]));
+    const themesMap = new Map(allThemes.map(t => [t.id, t]));
+    const blocsMap = new Map(allBlocs.map(b => [b.id, b]));
 
-export const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id: number): Promise<Theme | undefined> => {
-  try {
-    return await db.themes.where({ code_theme, referentiel_id }).first();
+    for (const session of filteredSessions) {
+      if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
+        for (const blocId of session.selectedBlocIds) {
+          const bloc = blocsMap.get(blocId);
+          if (!bloc) {
+            console.warn(`Bloc with ID ${blocId} not found for session ${session.id}. Skipping.`);
+            continue;
+          }
+          const theme = themesMap.get(bloc.theme_id);
+          if (!theme) {
+            console.warn(`Theme with ID ${bloc.theme_id} not found for bloc ${blocId}. Skipping.`);
+            continue;
+          }
+          const referentiel = referentielsMap.get(theme.referentiel_id);
+          if (!referentiel) {
+            console.warn(`Referentiel with ID ${theme.referentiel_id} not found for theme ${theme.id}. Skipping.`);
+            continue;
+          }
+          const key = `${referentiel.code}-${theme.code_theme}-${bloc.code_bloc}`;
+          if (usageMap.has(key)) {
+            const currentUsage = usageMap.get(key)!;
+            currentUsage.usageCount++;
+          } else {
+            usageMap.set(key, {
+              referentiel: referentiel.code,
+              theme: theme.code_theme,
+              blockId: bloc.code_bloc,
+              usageCount: 1
+            });
+          }
+        }
+      }
+    }
+    return Array.from(usageMap.values());
   } catch (error) {
-    console.error(`Error getting theme with code_theme ${code_theme} and referentiel_id ${referentiel_id}: `, error);
-  }
-};
-
-
-// --- CRUD pour Blocs ---
-export const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
-  try {
-    const id = await db.blocs.add(bloc as Bloc);
-    return id;
-  } catch (error) {
-    console.error("Error adding bloc: ", error);
-    throw error;
-  }
-};
-
-export const getAllBlocs = async (): Promise<Bloc[]> => {
-  try {
-    return await db.blocs.toArray();
-  } catch (error) {
-    console.error("Error getting all blocs: ", error);
-    return [];
-  }
-};
-
-export const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
-  try {
-    return await db.blocs.where('theme_id').equals(themeId).toArray();
-  } catch (error) {
-    console.error(`Error getting blocs for theme id ${themeId}:`, error);
+    console.error("Erreur lors du calcul de l'utilisation des blocs:", error);
     return [];
   }
 };

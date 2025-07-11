@@ -1,227 +1,225 @@
 // src/types/index.ts
 
+// Interface pour les utilisateurs (non modifiée, aucune table correspondante dans db.ts)
 export interface User {
   id: string;
   name: string;
   role: 'admin' | 'instructor' | 'viewer';
 }
 
-// Nouvelle interface Session pour le stockage Dexie
+// Interface pour les sessions (table sessions dans SQLite3)
 export interface Session {
-  id?: number; // Auto-incremented primary key par Dexie
-  nomSession: string;
-  dateSession: string; // ISO string date
-  referentielId?: number; // FK vers Referential.id - Remplacer l'ancien champ 'referentiel'
-  participants: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
-  // selectionBlocs: SelectedBlock[]; // Remplacé par selectedBlocIds
-  selectedBlocIds?: number[]; // Liste des IDs des blocs sélectionnés pour cette session
-  donneesOrs?: Blob | null; // Stockage du fichier .ors généré
-  status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
-  location?: string; // Lieu de la session
-  questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>;
-  notes?: string; // Notes pour la session
-  createdAt?: string;
-  updatedAt?: string;
-  trainerId?: number; // ID du formateur assigné à la session (number pour correspondre à Trainer.id)
-  ignoredSlideGuids?: string[] | null; // GUIDs des slides pré-existantes dans le modèle à ignorer
-  resolvedImportAnomalies?: {
+  id?: number; // Clé primaire auto-incrémentée
+  nomSession: string; // Nom de la session
+  dateSession: string; // Date ISO (ex: '2025-07-11')
+  referentielId: number; // Clé étrangère vers referentiels.id
+  selectedBlocIds: number[]; // Tableau d'IDs de blocs (stocké en JSON dans SQLite3)
+  selectedKitId: number | null; // Clé étrangère vers deviceKits.id
+  createdAt: string; // Date ISO de création
+  location: string; // Lieu de la session
+  status: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut
+  questionMappings: Array<{ dbQuestionId: number; slideGuid: string | null; orderInPptx: number }>; // Stocké en JSON
+  notes: string; // Notes optionnelles
+  trainerId: number; // Clé étrangère vers trainers.id
+  ignoredSlideGuids: string[]; // Tableau de GUIDs (stocké en JSON)
+  resolvedImportAnomalies: {
     expectedIssues: ExpectedIssueResolution[];
     unknownDevices: UnknownDeviceResolution[];
     resolvedAt: string;
-  } | null;
-  selectedKitId?: number | null; // ID du kit de boîtiers sélectionné pour la session
+  } | null; // Stocké en JSON
+  participants: Participant[]; // Tableau de participants (non stocké directement, géré via sessionBoitiers)
 }
 
-// --- Nouveaux types pour la gestion des Kits de Boîtiers ---
+// Interface pour les kits de boîtiers (table deviceKits)
 export interface DeviceKit {
-  id?: number; // Auto-incremented primary key
-  name: string; // Nom du kit, ex: "Salle A"
-  isDefault?: 0 | 1; // 0 pour false, 1 pour true (un seul kit par défaut)
+  id?: number; // Clé primaire auto-incrémentée
+  name: string; // Nom du kit (ex: "Salle A")
+  isDefault: 0 | 1; // 0 = false, 1 = true
 }
 
+// Interface pour les assignations de boîtiers à un kit (table deviceKitAssignments)
 export interface DeviceKitAssignment {
-  id?: number; // Auto-incremented primary key
-  kitId: number; // FK vers DeviceKit.id
-  votingDeviceId: number; // FK vers VotingDevice.id
+  id?: number; // Clé primaire auto-incrémentée
+  kitId: number; // Clé étrangère vers deviceKits.id
+  votingDeviceId: number; // Clé étrangère vers votingDevices.id
 }
 
-// --- Types pour la résolution des anomalies d'import (partagés) ---
+// Types pour la résolution des anomalies d'import
+export type ExpectedIssueAction = 'pending' | 'mark_absent' | 'aggregate_with_unknown' | 'ignore_device';
+export type UnknownDeviceAction = 'pending' | 'ignore_responses' | 'add_as_new_participant';
 
-// Actions pour un boîtier ATTENDU AYANT DES PROBLÈMES (muet total/partiel)
-export type ExpectedIssueAction =
-  | 'pending'
-  | 'mark_absent'
-  | 'aggregate_with_unknown'
-  | 'ignore_device';
-
-// Actions pour un boîtier INCONNU
-export type UnknownDeviceAction =
-  | 'pending'
-  | 'ignore_responses'
-  | 'add_as_new_participant';
-
-// Résolution pour un boîtier attendu ayant des problèmes
 export interface ExpectedIssueResolution {
-  serialNumber: string; // Du boîtier attendu
+  serialNumber: string; // Numéro de série du boîtier attendu
   action: ExpectedIssueAction;
-  // Si action est 'aggregate_with_unknown', ceci est le S/N de l'inconnu à utiliser
-  sourceUnknownSerialNumber?: string;
+  sourceUnknownSerialNumber?: string; // Numéro de série du boîtier inconnu pour aggregation
 }
 
-// Résolution pour un boîtier inconnu
 export interface UnknownDeviceResolution {
-  serialNumber: string; // Du boîtier inconnu
+  serialNumber: string; // Numéro de série du boîtier inconnu
   action: UnknownDeviceAction;
-  // Si action est 'add_as_new_participant', nom du nouveau participant
-  newParticipantName?: string;
+  newParticipantName?: string; // Nom du participant si ajouté
 }
 
-
-// Interface pour stocker les métadonnées des questions d'une session
+// Interface pour les questions de session (table sessionQuestions)
 export interface SessionQuestion {
-  id?: number; // Auto-incremented primary key par Dexie
-  sessionId: number; // Clé étrangère vers Session.id
-  dbQuestionId: number; // Clé étrangère vers QuestionWithId.id (l'ID original de la question)
-  slideGuid: string; // GUID de la slide dans le PPTX généré
-  text: string; // Texte de la question (snapshot)
-  options: string[]; // Options de réponse (snapshot)
-  correctAnswer: string; // Réponse correcte (snapshot)
-  blockId: string; // Identifiant du bloc dont la question provient (snapshot)
+  id?: number; // Clé primaire auto-incrémentée
+  sessionId: number; // Clé étrangère vers sessions.id
+  dbQuestionId: number; // Clé étrangère vers questions.id
+  slideGuid: string; // GUID de la slide PPTX
+  blockId: number; // Clé étrangère vers blocs.id
 }
 
-// Interface pour stocker les métadonnées des boîtiers assignés à une session
+// Interface pour les boîtiers de session (table sessionBoitiers)
 export interface SessionBoitier {
-  id?: number; // Auto-incremented primary key par Dexie
-  sessionId: number; // Clé étrangère vers Session.id
-  participantId: string; // Identifiant unique du participant au sein de la session (par exemple, un UUID ou index)
-  visualId: number; // Numéro visuel du boîtier dans l'interface (1, 2, 3...)
-  serialNumber: string; // Numéro de série physique du boîtier (OMBEA ID)
-  participantName: string; // Nom complet du participant pour référence
+  id?: number; // Clé primaire auto-incrémentée
+  sessionId: number; // Clé étrangère vers sessions.id
+  participantId: string; // Identifiant unique du participant
+  visualId: number; // Numéro visuel du boîtier
+  serialNumber: string; // Numéro de série du boîtier
+  participantName: string; // Nom complet du participant
 }
 
-// Nouveau type pour les formateurs
+// Interface pour les formateurs (table trainers)
 export interface Trainer {
-  id?: number; // Sera auto-incrémenté par Dexie
-  name: string;
-  isDefault?: 0 | 1; // 0 pour false, 1 pour true
+  id?: number; // Clé primaire auto-incrémentée
+  name: string; // Nom du formateur
+  isDefault: 0 | 1; // 0 = false, 1 = true
 }
 
-// Interface pour le mappage Question DB <-> Slide PPTX (par session)
-// Doit correspondre à celle dans val17PptxGenerator.ts
+// Interface pour le mappage des questions dans une session
 export interface QuestionMapping {
-  dbQuestionId: number;
-  slideGuid: string | null;
-  orderInPptx: number;
-  theme: string;   // AJOUTÉ - thème de base de la question (ex: "securite")
-  blockId: string; // AJOUTÉ - ID du bloc de la question (ex: "A")
+  dbQuestionId: number; // ID de la question dans la table questions
+  slideGuid: string | null; // GUID de la slide PPTX
+  orderInPptx: number; // Ordre dans le PPTX
+  blockId: number; // Clé étrangère vers blocs.id
 }
 
-// Nouvelle interface Participant pour les listes dans une Session
+// Interface pour les participants d'une session
 export interface Participant {
-  // idBoitier: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
   nom: string;
   prenom: string;
   identificationCode?: string; // Code d'identification optionnel
-  score?: number; // Score total du participant pour cette session
-  reussite?: boolean; // Statut de réussite du participant pour cette session
-  assignedGlobalDeviceId?: number | null; // Référence à GlobalDevice.id (VotingDevice.id)
-  statusInSession?: 'present' | 'absent'; // Statut du participant pour cette session spécifique
+  score?: number; // Score total
+  reussite?: boolean; // Statut de réussite
+  assignedGlobalDeviceId: number | null; // Clé étrangère vers votingDevices.id
+  statusInSession?: 'present' | 'absent'; // Statut dans la session
 }
 
-// L'interface SelectedBlock n'est plus nécessaire car nous stockons selectedBlocIds directement.
-// // Nouvelle interface pour décrire un bloc thématique sélectionné
-// export interface SelectedBlock {
-//   themeId: number;
-//   blocId: number;
-// }
-
-// Nouvelle interface pour stocker les résultats d'une session
+// Interface pour les résultats de session (table sessionResults)
 export interface SessionResult {
-  id?: number; // Auto-incremented primary key par Dexie
-  sessionId: number; // Clé étrangère vers Session.id
-  // Doit correspondre à l'ID de la question DANS LA DB (QuestionWithId.id)
-  questionId: number;
-  participantIdBoitier: string; // Identifiant du boîtier du participant
-  answer: string; // Réponse donnée (ID de l'option de réponse pour QCM/QCU)
-  isCorrect: boolean; // Si la réponse était correcte
-  pointsObtained: number; // Points obtenus pour cette réponse spécifique
-  timestamp: string; // ISO string date de la réponse
+  id?: number; // Clé primaire auto-incrémentée
+  sessionId: number; // Clé étrangère vers sessions.id
+  questionId: number; // Clé étrangère vers questions.id
+  participantIdBoitier: string; // Identifiant du boîtier/participant
+  answer: string; // Réponse donnée
+  isCorrect: boolean; // Si la réponse est correcte
+  pointsObtained: number; // Points obtenus
+  timestamp: string; // Date ISO de la réponse
 }
 
+// Enum pour les types de questions
 export enum QuestionType {
   QCM = 'multiple-choice',
   QCU = 'single-choice',
   TrueFalse = 'true-false'
 }
 
-// Interface pour les questions telles qu'elles pourraient être définies initialement
-// L'objet stocké dans Dexie (`QuestionWithId` dans `db.ts`) aura un `id: number`
-export interface Question {
-  id: string; // ID original de la question (non celui de la DB Dexie)
-  text: string;
-  type: QuestionType;
-  options: string[];
-  correctAnswer: string;
-  timeLimit?: number;
-  isEliminatory: boolean;
-  // referentiel: CACESReferential; // Remplacé par blocId
-  // theme: string; // Remplacé par blocId
-  blocId?: number; // Clé étrangère vers la table Blocs
-  image?: Blob;
-  createdAt?: string;
-  updatedAt?: string;
-  lastUsedAt?: string;
-  usageCount?: number;
-  correctResponseRate?: number;
-  slideGuid?: string; // Ajout du SlideGUID
+// Interface pour les questions (table questions)
+export interface QuestionWithId {
+  id?: number; // Clé primaire auto-incrémentée
+  blocId: number; // Clé étrangère vers blocs.id
+  text: string; // Texte de la question
+  type: QuestionType; // Type de question
+  options: string[]; // Options (stocké en JSON dans SQLite3)
+  correctAnswer: string; // Réponse correcte
+  timeLimit: number; // Limite de temps
+  isEliminatory: boolean; // Question éliminatoire
+  createdAt: string; // Date ISO de création
+  usageCount: number; // Nombre d'utilisations
+  correctResponseRate: number; // Taux de réponses correctes
+  slideGuid: string; // GUID de la slide PPTX
 }
 
-// Nouvelles interfaces pour la structure dynamique
+// Interface pour les référentiels (table referentiels)
 export interface Referential {
-  id?: number;
-  code: string; // Ex: R489
-  nom_complet: string; // Ex: Chariots de manutention automoteurs
+  id?: number; // Clé primaire auto-incrémentée
+  code: string; // Code unique (ex: R489)
+  nom_complet: string; // Nom complet (ex: Chariots élévateurs)
 }
 
+// Interface pour les thèmes (table themes)
 export interface Theme {
-  id?: number;
-  code_theme: string; // Ex: R489PR
-  nom_complet: string; // Ex: Prévention des risques
-  referentiel_id: number; // FK vers Referential.id
+  id?: number; // Clé primaire auto-incrémentée
+  code_theme: string; // Code unique (ex: R489PR)
+  referentiel_id: number; // Clé étrangère vers referentiels.id
+  nom_complet: string; // Nom complet (ex: Prévention des risques)
 }
 
+// Interface pour les blocs (table blocs)
 export interface Bloc {
-  id?: number;
-  code_bloc: string; // Ex: R489PR_A
-  // nom_complet: string; // Pas spécifié dans le plan initial, mais pourrait être utile
-  theme_id: number; // FK vers Theme.id
+  id?: number; // Clé primaire auto-incrémentée
+  code_bloc: string; // Code unique (ex: R489PR_A)
+  theme_id: number; // Clé étrangère vers themes.id
 }
 
-
-export interface QuestionStatistics {
-  questionId: string;
-  usageCount: number;
-  correctResponses: number;
-  totalResponses: number;
-  correctResponseRate: number;
-  lastUsed?: string;
+// Interface pour les boîtiers de vote (table votingDevices)
+export interface VotingDevice {
+  id?: number; // Clé primaire auto-incrémentée
+  name: string; // Nom du boîtier
+  serialNumber: string; // Numéro de série unique
 }
 
-export interface DeviceMapping {
-  deviceId: number;
-  hardwareId: string;
-  isActive: boolean;
+// Interface pour les paramètres administratifs (table adminSettings)
+export interface AdminSetting {
+  key: string; // Clé primaire
+  value: any; // Valeur (stockée en JSON dans SQLite3)
 }
 
+// Interface pour les statistiques de bloc
+export interface CalculatedBlockOverallStats {
+  blocId: number; // ID du bloc
+  referentielCode: string; // Code du référentiel
+  themeCode: string; // Code du thème
+  blocCode: string; // Code du bloc
+  usageCount: number; // Nombre d'utilisations
+  averageSuccessRate: number; // Taux de réussite moyen
+  averageScore: number; // Score moyen
+}
+
+// Interface pour les statistiques de thème
+export interface OverallThemeStats {
+  themeId: number; // ID du thème
+  themeCode: string; // Code du thème
+  themeName: string; // Nom du thème
+  totalQuestionsAnswered: number; // Total des questions répondues
+  totalCorrectAnswers: number; // Total des réponses correctes
+  successRate: number; // Taux de réussite
+}
+
+// Interface pour les détails de score par thème
+export interface ThemeScoreDetails {
+  score: number; // Pourcentage
+  correct: number; // Nombre de réponses correctes
+  total: number; // Nombre total de questions
+}
+
+// Interface pour les paramètres globaux
 export interface GeneralSettings {
   deviceMappings: DeviceMapping[];
-  maxDevices: number;
-  defaultSuccessThreshold?: number; // Seuil de réussite global par défaut (ex: 70 pour 70%)
-  defaultThemeThreshold?: number; // Seuil de réussite par thème par défaut (ex: 50 pour 50%)
-  reportLogoBase64?: string; // Logo pour les rapports PDF, encodé en Base64
-  // Potentiellement d'autres paramètres globaux pour les rapports ici
+  maxDevices: number; // Nombre maximum de boîtiers
+  defaultSuccessThreshold?: number; // Seuil de réussite global (ex: 70%)
+  defaultThemeThreshold?: number; // Seuil de réussite par thème (ex: 50%)
+  reportLogoBase64?: string; // Logo pour les rapports PDF (base64)
 }
 
+// Interface pour le mappage des appareils
+export interface DeviceMapping {
+  deviceId: number; // ID du boîtier
+  hardwareId: string; // Identifiant matériel
+  isActive: boolean; // Statut actif
+}
+
+// Enum pour les référentiels CACES
 export enum CACESReferential {
   R482 = 'R482',
   R484 = 'R484',
@@ -231,51 +229,57 @@ export enum CACESReferential {
   R490 = 'R490'
 }
 
+// Types pour les référentiels
 export type ReferentialType = 'R482' | 'R484' | 'R485' | 'R486' | 'R489' | 'R490';
 
+// Constantes pour les référentiels
 export const referentials: Record<ReferentialType, string> = {
-  'R482': 'Engins de chantier',
-  'R484': 'Ponts roulants',
-  'R485': 'Chariots de manutention',
-  'R486': 'Plates-formes élévatrices',
-  'R489': 'Chariots élévateurs',
-  'R490': 'Grues de chargement'
+  R482: 'Engins de chantier',
+  R484: 'Ponts roulants',
+  R485: 'Chariots de manutention',
+  R486: 'Plates-formes élévatrices',
+  R489: 'Chariots élévateurs',
+  R490: 'Grues de chargement'
 };
 
+// Limites pour les référentiels
 export const referentialLimits: Record<ReferentialType, { min: number; max: number }> = {
-  'R482': { min: 20, max: 45 },
-  'R484': { min: 25, max: 50 },
-  'R485': { min: 20, max: 40 },
-  'R486': { min: 25, max: 50 },
-  'R489': { min: 20, max: 50 },
-  'R490': { min: 30, max: 55 }
+  R482: { min: 20, max: 45 },
+  R484: { min: 25, max: 50 },
+  R485: { min: 20, max: 40 },
+  R486: { min: 25, max: 50 },
+  R489: { min: 20, max: 50 },
+  R490: { min: 30, max: 55 }
 };
 
-export type QuestionTheme =
-  | 'reglementation'
-  | 'securite'
-  | 'technique';
+// Enum pour les thèmes des questions
+export type QuestionTheme = 'reglementation' | 'securite' | 'technique';
 
+// Constantes pour les thèmes
 export const questionThemes: Record<QuestionTheme, string> = {
   reglementation: 'Réglementation',
   securite: 'Sécurité',
   technique: 'Technique'
 };
 
+// Constantes pour les types de questions
 export const questionTypes: Record<QuestionType, string> = {
   [QuestionType.QCM]: 'Questionnaire à choix multiples',
   [QuestionType.QCU]: 'Questionnaire à choix unique',
   [QuestionType.TrueFalse]: 'Vrai/Faux'
 };
 
+// Catégories de questions
 export type QuestionCategory = 'theory' | 'practice' | 'eliminatory';
 
+// Constantes pour les catégories
 export const questionCategories: Record<QuestionCategory, string> = {
   theory: 'Théorie',
   practice: 'Pratique',
   eliminatory: 'Éliminatoire'
 };
 
+// Interface pour les questions PPTX
 export interface PPTXQuestion {
   question: string;
   correctAnswer: boolean;
@@ -283,61 +287,7 @@ export interface PPTXQuestion {
   imagePath?: string;
 }
 
+// Options pour la génération PPTX
 export interface PPTXGenerationOptions {
   fileName?: string;
-}
-
-// Ajouté depuis reportCalculators.ts pour une portée globale
-export interface ThemeScoreDetails {
-  score: number; // en pourcentage
-  correct: number;
-  total: number;
-}
-
-// Déplacé depuis db.ts
-export interface QuestionWithId {
-  id?: number;
-  text: string;
-  // type: 'multiple-choice' | 'true-false'; // Remplacé par QuestionType enum
-  type: QuestionType;
-  options: string[];
-  correctAnswer: string;
-  timeLimit?: number;
-  isEliminatory: boolean;
-  blocId: number; // Made mandatory
-  image?: Blob | null;
-  createdAt?: string;
-  updatedAt?: string;
-  usageCount?: number;
-  correctResponseRate?: number;
-  slideGuid?: string;
-  imageName?: string;
-}
-
-// Déplacé depuis db.ts
-export interface VotingDevice {
-  id?: number;
-  name: string;
-  serialNumber: string;
-}
-
-// Déplacé depuis reportCalculators.ts
-export interface CalculatedBlockOverallStats {
-  blocId: number;
-  referentielCode: string;
-  themeCode: string;
-  blocCode: string;
-  usageCount: number;
-  averageSuccessRate: number;
-  averageScore: number;
-}
-
-// Déplacé depuis reportCalculators.ts
-export interface OverallThemeStats {
-  themeId: number;
-  themeCode: string;
-  themeName: string;
-  totalQuestionsAnswered: number;
-  totalCorrectAnswers: number;
-  successRate: number;
 }
