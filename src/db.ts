@@ -369,32 +369,135 @@ export const bulkAddVotingDevices = async (devices: VotingDevice[]): Promise<voi
 
 // Trainers
 export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
-  console.warn("[DB STUB] addTrainer called", trainer);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO trainers (name, isDefault)
+        VALUES (@name, @isDefault)
+      `);
+      // Assurer que isDefault est bien 0 ou 1 si non fourni explicitement
+      const isDefault = trainer.isDefault === 1 || trainer.isDefault === true ? 1 : 0;
+      const result = stmt.run({ ...trainer, isDefault });
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB Trainers] Error adding trainer:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getAllTrainers = async (): Promise<Trainer[]> => {
-  console.warn("[DB STUB] getAllTrainers called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM trainers");
+      const trainers = stmt.all() as Trainer[];
+      // Convertir isDefault en booléen pour la logique applicative si nécessaire (ici on garde 0/1 comme dans le schéma)
+      return trainers.map(t => ({ ...t, isDefault: t.isDefault === 1 }));
+    } catch (error) {
+      console.error(`[DB Trainers] Error getting all trainers:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getTrainerById = async (id: number): Promise<Trainer | undefined> => {
-  console.warn(`[DB STUB] getTrainerById(${id}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM trainers WHERE id = ?");
+      const trainer = stmt.get(id) as Trainer | undefined;
+      if (trainer) {
+        return { ...trainer, isDefault: trainer.isDefault === 1 };
+      }
+      return undefined;
+    } catch (error) {
+      console.error(`[DB Trainers] Error getting trainer by id ${id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> => {
-  console.warn(`[DB STUB] updateTrainer(${id}) called`, updates);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id'); // Exclure 'id' des champs à mettre à jour
+      if (fields.length === 0) return 0; // Pas de champs à mettre à jour
+
+      const setClause = fields.map(field => `${field} = @${field}`).join(', ');
+      const stmt = db.prepare(`UPDATE trainers SET ${setClause} WHERE id = @id`);
+
+      // Assurer que isDefault est 0 ou 1 si présent dans updates
+      const params: any = { ...updates, id };
+      if (updates.isDefault !== undefined) {
+        params.isDefault = updates.isDefault === true || updates.isDefault === 1 ? 1 : 0;
+      }
+
+      const result = stmt.run(params);
+      return result.changes; // Nombre de lignes modifiées
+    } catch (error) {
+      console.error(`[DB Trainers] Error updating trainer ${id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const deleteTrainer = async (id: number): Promise<void> => {
-  console.warn(`[DB STUB] deleteTrainer(${id}) called`);
-  return asyncDbRun(() => {});
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("DELETE FROM trainers WHERE id = ?");
+      stmt.run(id);
+    } catch (error) {
+      console.error(`[DB Trainers] Error deleting trainer ${id}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
-  console.warn(`[DB STUB] setDefaultTrainer(${id}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    const transaction = db.transaction(() => {
+      try {
+        const resetStmt = db.prepare("UPDATE trainers SET isDefault = 0 WHERE isDefault = 1");
+        resetStmt.run();
+
+        const setStmt = db.prepare("UPDATE trainers SET isDefault = 1 WHERE id = ?");
+        const result = setStmt.run(id);
+
+        if (result.changes === 0) {
+          // Aucun formateur trouvé avec cet ID, ou il était déjà le défaut (et seul défaut)
+          // On peut choisir de lever une erreur ou de simplement retourner 0.
+          // Pour être cohérent avec Dexie qui retournait le nombre de lignes modifiées, on retourne `result.changes`
+          // Mais ici, on s'attend à ce que `result.changes` soit 1 si le formateur existe.
+          // Si l'ID n'existe pas, result.changes sera 0.
+          // Dexie aurait pu retourner 1 (pour le set) ou 2 (si un autre était reset).
+          // SQLite `changes` pour `setStmt` sera 1 si l'update a eu lieu.
+          // Le nombre total de changements dans la transaction est plus complexe à suivre directement.
+          // On se concentre sur le succès du set.
+          console.warn(`[DB Trainers] setDefaultTrainer: Trainer with id ${id} not found or no change made.`);
+        }
+        return result.changes; // Nombre de lignes affectées par la DERNIÈRE opération (le set)
+      } catch (error) {
+        console.error(`[DB Trainers] Error setting default trainer ${id}:`, error);
+        throw error; // Annule la transaction
+      }
+    });
+    return transaction();
+  });
 };
+
 export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
-  console.warn("[DB STUB] getDefaultTrainer called");
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM trainers WHERE isDefault = 1 LIMIT 1");
+      const trainer = stmt.get() as Trainer | undefined;
+      if (trainer) {
+        return { ...trainer, isDefault: true }; // Assure que isDefault est un booléen
+      }
+      return undefined;
+    } catch (error) {
+      console.error(`[DB Trainers] Error getting default trainer:`, error);
+      throw error;
+    }
+  });
 };
 
 // SessionQuestions
@@ -435,20 +538,62 @@ export const deleteSessionBoitiersBySessionId = async (sessionId: number): Promi
 
 // Referentiels
 export const addReferential = async (referential: Omit<Referential, 'id'>): Promise<number | undefined> => {
-  console.warn("[DB STUB] addReferential called", referential);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO referentiels (code, nom_complet)
+        VALUES (@code, @nom_complet)
+      `);
+      const result = stmt.run(referential);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      console.error(`[DB Referentiels] Error adding referential:`, error);
+      if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        // Optionnel: gérer spécifiquement les erreurs d'unicité ou les laisser remonter
+        throw new Error(`Referential with code ${referential.code} already exists.`);
+      }
+      throw error; // Renvoyer l'erreur pour que asyncDbRun la capture
+    }
+  });
 };
+
 export const getAllReferentiels = async (): Promise<Referential[]> => {
-  console.warn("[DB STUB] getAllReferentiels called");
-  return asyncDbRun(() => []);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM referentiels");
+      const referentiels = stmt.all() as Referential[];
+      return referentiels;
+    } catch (error) {
+      console.error(`[DB Referentiels] Error getting all referentiels:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getReferentialByCode = async (code: string): Promise<Referential | undefined> => {
-  console.warn(`[DB STUB] getReferentialByCode(${code}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM referentiels WHERE code = ?");
+      const referential = stmt.get(code) as Referential | undefined;
+      return referential;
+    } catch (error) {
+      console.error(`[DB Referentiels] Error getting referential by code ${code}:`, error);
+      throw error;
+    }
+  });
 };
+
 export const getReferentialById = async (id: number): Promise<Referential | undefined> => {
-  console.warn(`[DB STUB] getReferentialById(${id}) called`);
-  return asyncDbRun(() => undefined);
+  return asyncDbRun(() => {
+    try {
+      const stmt = db.prepare("SELECT * FROM referentiels WHERE id = ?");
+      const referential = stmt.get(id) as Referential | undefined;
+      return referential;
+    } catch (error) {
+      console.error(`[DB Referentiels] Error getting referential by id ${id}:`, error);
+      throw error;
+    }
+  });
 };
 
 // Themes
