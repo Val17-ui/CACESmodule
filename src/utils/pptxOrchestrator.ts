@@ -2,7 +2,7 @@
 // import PptxGenJS from 'pptxgenjs'; // Not directly used now
 import JSZip from 'jszip';
 // import { saveAs } from 'file-saver'; // saveAs n'est plus utilisé ici directement
-import { QuestionWithId as StoredQuestion } from '../db';
+import { QuestionWithId as StoredQuestion } from '../types'; // Modifié pour importer depuis ../types
 import { Participant } from '../types'; // Session removed, Assuming these are the correct local types
 // Importer QuestionMapping et ajuster les autres imports si FinalQuestionData a été supprimé
 import {

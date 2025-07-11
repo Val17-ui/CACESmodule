@@ -82,31 +82,34 @@ const BackupRestore: React.FC = () => {
           }
 
           // Effacer toutes les données existantes (ATTENTION: opération destructive)
-          // Corrected the list of tables for the transaction.
-          // Assuming 'sessions' and 'sessionResults' tables are defined in db.ts for Dexie.
-          // If not, these would also cause runtime errors if data for them is in the backup.
-          await db.transaction('rw', [db.questions, db.sessions, db.sessionResults, db.adminSettings, db.votingDevices], async () => {
-            await Promise.all([
-              db.questions.clear(),
-              db.sessions.clear(), // This will fail if db.sessions is not a valid table object
-              db.sessionResults.clear(), // This will fail if db.sessionResults is not a valid table object
-              db.adminSettings.clear(),
-              db.votingDevices.clear(),
-            ]);
+          // La logique ci-dessous est spécifique à Dexie et doit être adaptée pour sqlite3 via les fonctions CRUD de db.ts
+          console.warn("La logique d'importation détaillée pour SQLite (clear + bulkAdd) doit être implémentée.");
+          setImportStatus('error');
+          alert("Fonctionnalité d'importation en cours de refonte pour SQLite. Opération annulée.");
 
-            // Importer les nouvelles données
-            await Promise.all([
-              db.questions.bulkAdd(data.questions),
-              db.sessions.bulkAdd(data.sessions), // This will fail if db.sessions is not a valid table object
-              db.sessionResults.bulkAdd(data.sessionResults), // This will fail if db.sessionResults is not a valid table object
-              db.adminSettings.bulkAdd(data.adminSettings),
-              db.votingDevices.bulkAdd(data.votingDevices),
-            ]);
-          });
+          // COMMENTED OUT - Dexie specific logic:
+          // await db.transaction('rw', [db.questions, db.sessions, db.sessionResults, db.adminSettings, db.votingDevices], async () => {
+          //   await Promise.all([
+          //     db.questions.clear(),
+          //     db.sessions.clear(),
+          //     db.sessionResults.clear(),
+          //     db.adminSettings.clear(),
+          //     db.votingDevices.clear(),
+          //   ]);
 
-          setImportStatus('success');
-          alert('Données restaurées avec succès ! L\'application va se recharger.');
-          window.location.reload(); // Recharger l'application pour refléter les changements
+          //   // Importer les nouvelles données
+          //   await Promise.all([
+          //     db.questions.bulkAdd(data.questions),
+          //     db.sessions.bulkAdd(data.sessions),
+          //     db.sessionResults.bulkAdd(data.sessionResults),
+          //     db.adminSettings.bulkAdd(data.adminSettings),
+          //     db.votingDevices.bulkAdd(data.votingDevices),
+          //   ]);
+          // });
+
+          // setImportStatus('success');
+          // alert('Données restaurées avec succès ! L\'application va se recharger.');
+          // window.location.reload();
 
         } catch (parseError) {
           console.error('Error parsing backup file:', parseError);

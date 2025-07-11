@@ -75,7 +75,7 @@ const SessionRow: React.FC<{session: Session, onPageChange: (page: string, sessi
               </span>
               <span className="text-gris-moyen hidden sm:inline">•</span>
               <span className="text-sm text-texte-principal/80 block sm:inline mt-1 sm:mt-0">
-                {session.referentiel}
+                {session.referentielId}
               </span>
               <span className="text-gris-moyen hidden sm:inline">•</span>
               <span className="text-sm text-texte-principal/80 block sm:inline mt-1 sm:mt-0">

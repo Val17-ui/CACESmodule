@@ -11,7 +11,7 @@ import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
-import { getAllSessions, getSessionById, getAllTrainers, getAllReferentiels } from '../db'; // Ajout de getAllReferentiels
+import { getAllSessionsWithParticipants, getSessionById, getAllTrainers, getAllReferentiels } from '../db'; // getAllSessions -> getAllSessionsWithParticipants
 import { Session, Participant, Trainer, Referential } from '../types'; // Ajout de Referential, CACESReferential enlevé
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
@@ -52,7 +52,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   useEffect(() => {
     const fetchInitialData = async () => {
       const [fetchedSessions, fetchedTrainers, fetchedReferentiels] = await Promise.all([
-        getAllSessions(),
+        getAllSessionsWithParticipants(), // Renamed
         getAllTrainers(),
         getAllReferentiels()
       ]);

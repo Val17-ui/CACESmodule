@@ -9,10 +9,10 @@ import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import {
-  getResultsForSession,
-  getQuestionsByIds,
+  getSessionResultsBySessionId,
+  getQuestionsByIds, // Corrigé pour utiliser la nouvelle fonction
   getTrainerById,
-  getReferentialById,
+  getReferentielById,
   getThemeById,
   getBlocById,
   getAllVotingDevices,
@@ -100,7 +100,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           setThemeNames(fetchedThemeNames.sort());
         }
 
-        const results = await getResultsForSession(session.id);
+        const results = await getSessionResultsBySessionId(session.id); // Call updated
         setSessionResults(results);
 
         if (session.questionMappings && session.questionMappings.length > 0) {
@@ -109,7 +109,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
             .filter((id): id is number => id !== null && id !== undefined);
 
           if (questionIds.length > 0) {
-            const baseQuestions = await getQuestionsByIds(questionIds);
+            const baseQuestions = await getQuestionsByIds(questionIds); // Utilisation de la nouvelle fonction
             const enrichedQuestions = await Promise.all(
               baseQuestions.map(async (question) => {
                 let resolvedThemeName = 'Thème non spécifié';

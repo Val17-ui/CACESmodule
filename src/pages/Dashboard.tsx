@@ -7,7 +7,7 @@ import AlertsNotifications from '../components/dashboard/AlertsNotifications'; /
 import Button from '../components/ui/Button';
 import { Plus } from 'lucide-react';
 // import { mockSessions } from '../data/mockData'; // Plus besoin des mocks ici directement
-import { getAllSessions } from '../db';
+import { getAllSessionsWithParticipants } from '../db'; // Renamed
 import { Session } from '../types';
 
 type DashboardProps = {
@@ -23,7 +23,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
     const fetchSessions = async () => {
       setLoading(true);
       try {
-        const allSessions = await getAllSessions();
+        const allSessions = await getAllSessionsWithParticipants(); // Renamed
         setSessions(allSessions);
       } catch (error) {
         console.error("Erreur lors de la récupération des sessions:", error);

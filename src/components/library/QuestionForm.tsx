@@ -4,7 +4,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import { QuestionType, CACESReferential, Referential, Theme, Bloc, StoredQuestion } from '../../types';
+import { QuestionType, CACESReferential, Referential, Theme, Bloc, QuestionWithId as StoredQuestion } from '../../types'; // Remplacer StoredQuestion par QuestionWithId
 import { StorageManager } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 

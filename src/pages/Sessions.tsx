@@ -4,7 +4,7 @@ import SessionsList from '../components/sessions/SessionsList';
 import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
 import { Plus } from 'lucide-react';
-import { getAllSessions, getSessionById } from '../db'; // Ajout de getSessionById
+import { getAllSessionsWithParticipants, getSessionById } from '../db'; // getAllSessions -> getAllSessionsWithParticipants
 import { Session as DBSession } from '../types';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
@@ -137,7 +137,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   const fetchRawSessions = useCallback(async () => {
     setIsLoading(true);
     try {
-      const sessionsFromDb = await getAllSessions();
+      const sessionsFromDb = await getAllSessionsWithParticipants(); // Renamed
       setRawSessions(sessionsFromDb);
     } catch (error) {
       console.error("Erreur lors de la récupération des sessions:", error);

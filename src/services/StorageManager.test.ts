@@ -1,6 +1,6 @@
 import { StorageManager } from './StorageManager';
-import { db, addQuestion, QuestionWithId } from '../db'; // For test data setup
-import { CACESReferential, QuestionTheme } from '../types';
+import { db, addQuestion } from '../db'; // For test data setup
+import { CACESReferential, QuestionTheme, QuestionWithId } from '../types'; // QuestionWithId importé d'ici
 
 // Helper to run console logs (similar to db.test.ts)
 const log = (message: string, ...args: any[]) => {
@@ -80,22 +80,22 @@ const runStorageManagerTests = async () => {
     log(`FAILURE: getAllBlockIdentifiersForTheme for R489/technique. Expected ['A'], Got [${r489TechBlocks.join(', ')}]`);
   }
 
-  // Test 3: getQuestionsForBlock
-  log("\nTest 3: getQuestionsForBlock");
-  const r489SecuAQuestions = await StorageManager.getQuestionsForBlock(CACESReferential.R489, 'securite', 'A');
+  // Test 3: getQuestionsForBloc
+  log("\nTest 3: getQuestionsForBloc");
+  const r489SecuAQuestions = await StorageManager.getQuestionsForBloc(CACESReferential.R489, 'securite', 'A'); // getQuestionsForBlock -> getQuestionsForBloc
   log(`Questions for R489/securite/A: ${r489SecuAQuestions.length}`);
   if (r489SecuAQuestions.length === 2) {
-    log("SUCCESS: getQuestionsForBlock for R489/securite/A returned correct number of questions.");
+    log("SUCCESS: getQuestionsForBloc for R489/securite/A returned correct number of questions.");
   } else {
-    log(`FAILURE: getQuestionsForBlock for R489/securite/A. Expected 2, Got ${r489SecuAQuestions.length}`);
+    log(`FAILURE: getQuestionsForBloc for R489/securite/A. Expected 2, Got ${r489SecuAQuestions.length}`);
   }
 
-  const r489TechAQuestions = await StorageManager.getQuestionsForBlock(CACESReferential.R489, 'technique', 'A');
+  const r489TechAQuestions = await StorageManager.getQuestionsForBloc(CACESReferential.R489, 'technique', 'A'); // getQuestionsForBlock -> getQuestionsForBloc
   log(`Questions for R489/technique/A: ${r489TechAQuestions.length}`);
   if (r489TechAQuestions.length === 1) {
-    log("SUCCESS: getQuestionsForBlock for R489/technique/A returned correct number of questions.");
+    log("SUCCESS: getQuestionsForBloc for R489/technique/A returned correct number of questions.");
   } else {
-    log(`FAILURE: getQuestionsForBlock for R489/technique/A. Expected 1, Got ${r489TechAQuestions.length}`);
+    log(`FAILURE: getQuestionsForBloc for R489/technique/A. Expected 1, Got ${r489TechAQuestions.length}`);
   }
 
   log("\n--- Finished StorageManager Tests ---");

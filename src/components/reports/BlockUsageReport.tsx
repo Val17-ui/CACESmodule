@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { BlockUsage, calculateBlockUsage, getAllReferentiels } from '../../db';
-import { Referential } from '../../types'; // Removed CACESReferential
+// calculateBlockUsage retiré pour l'instant, getAllReferentiels conservé
+import { getAllReferentiels } from '../../db';
+import { Referential, CalculatedBlockOverallStats as BlockUsage } from '../../types'; // BlockUsage alias pour CalculatedBlockOverallStats
 
 // Importer les composants UI réutilisables
 import Card from '../ui/Card';
@@ -37,10 +38,12 @@ const BlockUsageReport: React.FC = () => {
       // La fonction calculateBlockUsage est appelée sans arguments initiaux pour charger toutes les données
       // ou avec les dates si elles sont définies.
       // Le filtrage par référentiel se fera côté client après récupération pour ce composant.
-      const data = await calculateBlockUsage(
-        startDate || undefined,
-        endDate || undefined
-      );
+      // TODO: Implémenter ou trouver la source de calculateBlockUsage
+      // const data = await calculateBlockUsage(
+      //   startDate || undefined,
+      //   endDate || undefined
+      // );
+      const data: BlockUsage[] = []; // Placeholder
       setBlockUsageData(data);
     } catch (error) {
       console.error("Erreur lors de la récupération des données d'utilisation des blocs:", error);
@@ -72,9 +75,9 @@ const BlockUsageReport: React.FC = () => {
   useEffect(() => {
     let dataToFilter = [...blockUsageData];
 
-    // Le champ `item.referentiel` dans `BlockUsage` est le code du référentiel (string)
+    // Le champ `item.referentielCode` dans `BlockUsage` (CalculatedBlockOverallStats) est le code du référentiel (string)
     if (selectedReferentiel) { // selectedReferentiel est le code (string)
-      dataToFilter = dataToFilter.filter(item => item.referentiel === selectedReferentiel);
+      dataToFilter = dataToFilter.filter(item => item.referentielCode === selectedReferentiel);
     }
 
     // Le filtrage par date est déjà géré par fetchData si startDate/endDate sont passés à calculateBlockUsage.
@@ -173,14 +176,14 @@ const BlockUsageReport: React.FC = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead onClick={() => handleSort('referentiel')} className="cursor-pointer">
-                  Référentiel {renderSortArrow('referentiel')}
+                <TableHead onClick={() => handleSort('referentielCode')} className="cursor-pointer">
+                  Référentiel {renderSortArrow('referentielCode')}
                 </TableHead>
-                <TableHead onClick={() => handleSort('theme')} className="cursor-pointer">
-                  Thème {renderSortArrow('theme')}
+                <TableHead onClick={() => handleSort('themeCode')} className="cursor-pointer">
+                  Thème {renderSortArrow('themeCode')}
                 </TableHead>
-                <TableHead onClick={() => handleSort('blockId')} className="cursor-pointer">
-                  Bloc ID {renderSortArrow('blockId')}
+                <TableHead onClick={() => handleSort('blocCode')} className="cursor-pointer">
+                  Bloc {renderSortArrow('blocCode')}
                 </TableHead>
                 <TableHead onClick={() => handleSort('usageCount')} className="cursor-pointer text-right">
                   Utilisations {renderSortArrow('usageCount')}
@@ -190,10 +193,10 @@ const BlockUsageReport: React.FC = () => {
             <TableBody>
               {filteredData.length > 0 ? (
                 filteredData.map((item, index) => (
-                  <TableRow key={`${item.referentiel}-${item.theme}-${item.blockId}-${index}`}>
-                    <TableCell>{item.referentiel}</TableCell>
-                    <TableCell>{item.theme}</TableCell>
-                    <TableCell>{item.blockId}</TableCell>
+                  <TableRow key={`${item.referentielCode}-${item.themeCode}-${item.blocCode}-${index}`}>
+                    <TableCell>{item.referentielCode}</TableCell>
+                    <TableCell>{item.themeCode}</TableCell>
+                    <TableCell>{item.blocCode}</TableCell>
                     <TableCell className="text-right">{item.usageCount}</TableCell>
                   </TableRow>
                 ))

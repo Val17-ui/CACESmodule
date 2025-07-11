@@ -3,7 +3,7 @@ import Card from '../ui/Card';
 import { Users, CheckCircle, BarChart2, PieChart } from 'lucide-react';
 import { Session } from '../../types';
 import { calculateSessionStats } from '../../utils/reportCalculators';
-import { getResultsForSession, getQuestionsForSessionBlocks } from '../../db';
+import { getSessionResultsBySessionId, getSessionQuestionsBySessionId } from '../../db'; // Renamed imports
 
 type GlobalStatsProps = {
   sessions: Session[];
@@ -21,8 +21,11 @@ const GlobalStats: React.FC<GlobalStatsProps> = ({ sessions }) => {
 
       for (const session of completedSessions) {
         if (session.id && session.selectedBlocIds) { // Vérifier aussi selectedBlocIds pour pertinence
-          const results = await getResultsForSession(session.id);
-          const questions = await getQuestionsForSessionBlocks(session.selectedBlocIds); // Pas besoin de || [] si on vérifie avant
+          const results = await getSessionResultsBySessionId(session.id); // Renamed function call
+          // TODO: getQuestionsForSessionBlocks logic might differ. Using getSessionQuestionsBySessionId for now.
+          // This assumes all questions for the session are relevant, not just specific blocks.
+          // If block-specific questions are needed, this part needs more specific logic or a new db function.
+          const questions = await getSessionQuestionsBySessionId(session.id);
           if (questions.length > 0) { // S'assurer qu'il y a des questions pour calculer les stats
             const stats = calculateSessionStats(session, results, questions);
             totalSuccessRates += stats.successRate;

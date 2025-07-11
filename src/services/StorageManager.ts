@@ -1,19 +1,28 @@
 // src/services/StorageManager.ts
 import {
   db,
-  QuestionWithId,
-  addReferential,
+  // QuestionWithId, // Retiré d'ici
+  addReferentiel, // addReferential -> addReferentiel
   getAllReferentiels,
-  getReferentialByCode,
+  getReferentielById, // getReferentialByCode -> getReferentielById (ou créer getReferentialByCode)
   addTheme,
   getAllThemes,
-  getThemesByReferentialId,
-  getThemeByCodeAndReferentialId,
+  getThemesByReferentielId,
+  getThemeByCodeAndReferentialId, // Décommenté et importé
   addBloc,
   getAllBlocs,
   getBlocsByThemeId,
-  getBlocByCodeAndThemeId
+  getBlocByCodeAndThemeId, // Décommenté et importé
+  // Imports spécifiques pour les méthodes de StorageManager ci-dessous
+  addQuestion as dbAddQuestion,
+  getAllQuestions as dbGetAllQuestions,
+  getQuestionById as dbGetQuestionById,
+  updateQuestion as dbUpdateQuestion,
+  deleteQuestion as dbDeleteQuestion,
+  getQuestionsByBlocId as dbGetQuestionsByBlocId,
+  QuestionData as DBQuestionData // Type pour le cast
 } from '../db';
+import { QuestionWithId } from '../types'; // QuestionWithId importé d'ici
 // CACESReferential might be unused now. Referential, Theme, Bloc types are likely still needed if StoredQuestion or other types here reference them.
 // For now, let's keep Referential, Theme, Bloc types from ../types if they are implicitly used by QuestionWithId or other function signatures.
 // import { CACESReferential, Referential, Theme, Bloc } from '../types';
@@ -28,17 +37,17 @@ export const StorageManager = {
   // Expose db functions for referentiels, themes, blocs directly by re-exporting them.
   // This makes them available under the StorageManager namespace for components that already use it.
   // Alternatively, components could import these directly from '../db.ts'.
-  addReferential,
+  addReferentiel, // Corrigé
   getAllReferentiels,
-  getReferentialByCode,
+  getReferentielById, // Corrigé
   addTheme,
   getAllThemes,
-  getThemesByReferentialId,
-  getThemeByCodeAndReferentialId,
+  getThemesByReferentielId, // Corrigé
+  getThemeByCodeAndReferentialId, // Assuré qu'il est bien là
   addBloc,
   getAllBlocs,
-  getBlocsByThemeId,
-  getBlocByCodeAndThemeId,
+  getBlocsByThemeId, // Assuré qu'il est bien là
+  getBlocByCodeAndThemeId, // Assuré qu'il est bien là
 
   /**
    * Adds a new question to the database.
@@ -48,11 +57,8 @@ export const StorageManager = {
    */
   async addQuestion(questionData: Omit<StoredQuestion, 'id'>): Promise<number | undefined> {
     try {
-      // Dexie's add method expects the full object, but 'id' will be auto-filled.
-      // If StoredQuestion['id'] is optional (e.g., id?: number), this cast is fine.
-      // If 'id' is mandatory in StoredQuestion, this approach correctly uses Omit.
-      const id = await db.questions.add(questionData as StoredQuestion);
-      return id;
+      const newId = await dbAddQuestion(questionData as Partial<Omit<DBQuestionData, 'id'>>); // Utiliser l'alias et le type DB
+      return newId;
     } catch (error) {
       console.error("StorageManager: Error adding question", error);
       return undefined;
@@ -65,11 +71,11 @@ export const StorageManager = {
    */
   async getAllQuestions(): Promise<StoredQuestion[]> {
     try {
-      const questions = await db.questions.toArray();
-      return questions;
-    } catch (error) { // Added opening curly brace
+      const questions = await dbGetAllQuestions(); // Utiliser l'alias
+      return questions as StoredQuestion[];
+    } catch (error) {
       console.error("StorageManager: Error getting all questions", error);
-      return []; // Return an empty array in case of error
+      return [];
     }
   },
 
@@ -80,8 +86,8 @@ export const StorageManager = {
    */
   async getQuestionById(id: number): Promise<StoredQuestion | undefined> {
     try {
-      const question = await db.questions.get(id);
-      return question;
+      const question = await dbGetQuestionById(id); // Utiliser l'alias
+      return question as StoredQuestion | undefined;
     } catch (error) {
       console.error(`StorageManager: Error getting question with id ${id}`, error);
       return undefined;
@@ -96,10 +102,8 @@ export const StorageManager = {
    */
   async updateQuestion(id: number, updates: Partial<StoredQuestion>): Promise<number | undefined> {
     try {
-      // Ensure 'id' is not part of the updates object passed to Dexie's update method
-      const { id: _, ...restUpdates } = updates;
-      const numUpdated = await db.questions.update(id, restUpdates);
-      return numUpdated;
+      await dbUpdateQuestion(id, updates as Partial<DBQuestionData>); // Utiliser l'alias et le type DB
+      return 1;
     } catch (error) {
       console.error(`StorageManager: Error updating question with id ${id}`, error);
       return undefined;
@@ -113,11 +117,9 @@ export const StorageManager = {
    */
   async deleteQuestion(id: number): Promise<void> {
     try {
-      await db.questions.delete(id);
+      await dbDeleteQuestion(id); // Utiliser l'alias
     } catch (error) {
       console.error(`StorageManager: Error deleting question with id ${id}`, error);
-      // Optionally re-throw or handle more gracefully depending on application needs
-      // For now, just logging, as the return type is void.
     }
   },
 
@@ -159,8 +161,8 @@ export const StorageManager = {
    */
   async getQuestionsForBloc(blocId: number): Promise<StoredQuestion[]> {
     try {
-      const questions = await db.questions.where({ blocId }).toArray();
-      return questions;
+      const questions = await dbGetQuestionsByBlocId(blocId); // Utiliser l'alias
+      return questions as StoredQuestion[];
     } catch (error) {
       console.error(`StorageManager: Error getting questions for blocId ${blocId}`, error);
       return [];

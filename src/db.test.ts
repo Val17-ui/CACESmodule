@@ -1,6 +1,6 @@
-import { addQuestion, getAllQuestions, getQuestionById, updateQuestion, deleteQuestion, QuestionWithId } from './db.js';
+import { addQuestion, getAllQuestions, getQuestionById, updateQuestion, deleteQuestion } from './db.js'; // QuestionWithId retirée d'ici
 // Types are used for casting and defining sample data structure, not for runtime enum values here.
-import { QuestionTheme, ReferentialType } from './types/index.js';
+import { QuestionTheme, ReferentialType, QuestionWithId } from './types/index.js'; // QuestionWithId ajoutée ici
 
 // Define a QuestionType enum locally for test data, mirroring what might be in types.ts or the actual string literals
 enum QuestionTypeForTest {

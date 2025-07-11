@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import {
-  getAllSessions,
-  getResultsForSession,
-  getQuestionsForSessionBlocks,
+  getAllSessionsWithParticipants, // Renamed
+  getSessionResultsBySessionId, // Renamed
+  getSessionQuestionsBySessionId, // Renamed
   getAllReferentiels,
   getAllVotingDevices,
   getAllThemes,
@@ -87,7 +87,7 @@ const ParticipantReport = () => {
         fetchedThemes,
         fetchedBlocs
       ] = await Promise.all([
-        getAllSessions(),
+        getAllSessionsWithParticipants(), // Renamed
         getAllReferentiels(),
         getAllVotingDevices(),
         getAllThemes(),
@@ -163,8 +163,9 @@ const ParticipantReport = () => {
     }
 
     try {
-      const sessionResults = await getResultsForSession(targetSession.id!);
-      const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
+      const sessionResults = await getSessionResultsBySessionId(targetSession.id!); // Renamed
+      // TODO: Logic for getQuestionsForSessionBlocks might need adjustment
+      const baseSessionQuestions = await getSessionQuestionsBySessionId(targetSession.id!); // Renamed, and using sessionId
 
       const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
         baseSessionQuestions.map(async (question, index) => {

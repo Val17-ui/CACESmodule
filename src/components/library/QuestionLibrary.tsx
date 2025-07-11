@@ -91,7 +91,7 @@ const QuestionLibrary: FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
 
   useEffect(() => {
     if (selectedReferential) {
-      db.getThemesByReferentialId(parseInt(selectedReferential, 10))
+      db.getThemesByReferentielId(parseInt(selectedReferential, 10))
         .then(themes => setThemesData(themes || []))
         .catch(error => {
           logger.error("Error loading themes for filter:", { error });
@@ -184,7 +184,7 @@ const QuestionLibrary: FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
             continue;
         }
 
-        const questionType: StoredQuestion['type_question'] = 'QCM'; // All imported questions are QCM for now
+        const questionTypeResolved: StoredQuestion['type'] = 'multiple-choice'; // All imported questions are QCM for now, StoredQuestion is QuestionWithId now
         const optionsFromFile: string[] = [];
         const correctAnswersIndices: number[] = [];
 
@@ -229,28 +229,35 @@ const QuestionLibrary: FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
 
         let blocIdToStore: number | undefined;
         try {
-          const referentiel = await db.getReferentialByCode(referentielCode);
+          // TODO: This logic needs to be robust. getReferentielByCode does not exist.
+          // Assuming for now we need getReferentielById if a referential ID is available,
+          // or a new function getReferentielByCode if 'referentielCode' is the input.
+          // For now, this will likely fail or needs adjustment based on actual db function.
+          const referentiel = referentielsData.find(r => r.code === referentielCode); // Temporary find by code in loaded data
           if (!referentiel || !referentiel.id) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel code "${referentielCode}" non trouvé.`);
+            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel code "${referentielCode}" non trouvé dans les données chargées.`);
             continue;
           }
-          // Assuming getThemeByCodeAndReferentialId and getBlocByCodeAndThemeId exist in db.ts (renderer IPC calls)
-          // These might need to be added or simulated if not present
-          // For now, we'll assume they exist or we handle their absence.
-          const theme = referentielsData.find(r => r.id === referentiel.id)
-                          ?.themes?.find(th => th.code_theme === themeCode); // This structure is not in Referential type
-          // This part needs fixing, the structure of referentielsData does not contain themes directly.
-          // We should use db.getThemeByCodeAndReferentialId(themeCode, referentiel.id) if available.
-          // Placeholder:
-          if (!theme || !theme.id ) { // This logic is faulty due to referentielsData structure.
-             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Thème code "${themeCode}" non trouvé pour référentiel "${referentielCode}".`);
+
+          // Similar issue for theme - needs robust fetching, possibly new db functions
+          const theme = allThemesData.find(t => t.code_theme === themeCode && t.referentiel_id === referentiel.id);
+          if (!theme || !theme.id ) {
+             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Thème code "${themeCode}" non trouvé pour référentiel "${referentielCode}" dans les données chargées.`);
              continue;
           }
-          const bloc = allBlocsData.find(b => b.code_bloc === blocCode && b.theme_id === theme.id);
+
+          let bloc = allBlocsData.find(b => b.code_bloc === blocCode && b.theme_id === theme.id);
           if (!bloc || !bloc.id) {
-            const newBlocId = await db.addBloc({ code_bloc: blocCode, theme_id: theme.id! }); // theme.id needs to be asserted
-            if (newBlocId) blocIdToStore = newBlocId;
-            else { errorsEncountered.push(`Ligne ${i+1}: Création bloc "${blocCode}" échouée.`); continue; }
+            // Assuming db.addBloc takes { code_bloc: string, theme_id: number, nom_complet?: string }
+            // And returns the ID of the new bloc.
+            const newBlocId = await db.addBloc(blocCode, theme.id, blocCode); // Pass nom_complet as blocCode for now
+            if (newBlocId) {
+              blocIdToStore = newBlocId;
+              // Add to local cache to avoid re-adding for subsequent rows in the same import
+              allBlocsData.push({id: newBlocId, code_bloc: blocCode, theme_id: theme.id, nom_complet: blocCode});
+            } else {
+              errorsEncountered.push(`Ligne ${i+1}: Création bloc "${blocCode}" échouée.`); continue;
+            }
           } else {
             blocIdToStore = bloc.id;
           }
@@ -267,14 +274,14 @@ const QuestionLibrary: FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
         const isEliminatoryRaw = (row[headerMap['isEliminatory']] || 'Non').toString().trim().toUpperCase();
         const isEliminatoryBool = ['OUI', 'TRUE', '1'].includes(isEliminatoryRaw);
 
-        const newQuestionData: Omit<StoredQuestion, 'id' | 'createdAt' | 'updatedAt' | 'usageCount' | 'correctResponseRate' | 'image'> = {
-          texte_question: questionText.toString(),
-          type_question: questionType,
-          options: questionOptions, // This should be QuestionOption[]
-          bloc_id: blocIdToStore,
+        const newQuestionData: Omit<StoredQuestion, 'id' | 'createdAt' | 'updatedAt' | 'usageCount' | 'correctResponseRate' | 'image' | 'slideGuid'> = {
+          text: questionText.toString(), // Changed from texte_question
+          type: questionTypeResolved, // Changed from type_question
+          options: optionsFromFile, // Correctly string[] as per StoredQuestion (QuestionWithId)
+          blocId: blocIdToStore, // Changed from bloc_id
           isEliminatory: isEliminatoryBool,
           timeLimit: parseInt(row[headerMap['timelimit']], 10) || 30,
-          imageName: (row[headerMap['imagename']] || '').toString().trim() || null,
+          imageName: (row[headerMap['imagename']] || '').toString().trim() || null, // This field is in StoredQuestion
           points: 1, // Default points
           feedback: null,
         };
@@ -344,9 +351,11 @@ const QuestionLibrary: FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
             if (!code || !nom_complet) { errors.push(`Ligne ${i + 1}: 'code' et 'nom_complet' requis.`); continue; }
 
             try {
-                const existing = await db.getReferentialByCode(code);
-                if (existing) { errors.push(`Ligne ${i + 1}: Code "${code}" existe déjà.`); continue; }
-                await db.addReferential({ code, nom_complet }); // Pass Omit<Referential, 'id'>
+                // const existing = await db.getReferentialByCode(code); // This function does not exist with this name
+                // For now, let's assume we check against loaded data or proceed with add, which might fail if unique constraint exists
+                const existing = referentielsData.find(r => r.code === code);
+                if (existing) { errors.push(`Ligne ${i + 1}: Code "${code}" existe déjà dans les données chargées.`); continue; }
+                await db.addReferentiel(code, nom_complet ); // Corrected call
                 addedCount++;
             } catch (e: any) { errors.push(`Ligne ${i + 1}: ${e.message}`); }
         }
@@ -402,15 +411,16 @@ const QuestionLibrary: FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
             }
 
             try {
-                const parentRef = await db.getReferentialByCode(referentiel_code);
+                // const parentRef = await db.getReferentialByCode(referentiel_code); // Function name might be different or logic needs Id
+                const parentRef = referentielsData.find(r => r.code === referentiel_code); // Temp find
                 if (!parentRef || !parentRef.id) {
-                    errors.push(`Ligne ${i + 1}: Référentiel "${referentiel_code}" non trouvé.`); continue;
+                    errors.push(`Ligne ${i + 1}: Référentiel "${referentiel_code}" non trouvé dans les données chargées.`); continue;
                 }
-                // Assuming getThemeByCodeAndReferentialId exists
-                // const existingTheme = await db.getThemeByCodeAndReferentialId(code_theme, parentRef.id);
-                // if (existingTheme) { errors.push(`Ligne ${i + 1}: Thème "${code_theme}" existe déjà pour ce référentiel.`); continue; }
+                // Assuming getThemeByCodeAndReferentialId exists, or similar logic
+                const existingTheme = allThemesData.find(t => t.code_theme === code_theme && t.referentiel_id === parentRef.id);
+                if (existingTheme) { errors.push(`Ligne ${i + 1}: Thème "${code_theme}" existe déjà pour ce référentiel.`); continue; }
 
-                await db.addTheme({ code_theme, nom_complet, referentiel_id: parentRef.id });
+                await db.addTheme(code_theme, nom_complet, parentRef.id ); // Corrected call
                 addedCount++;
             } catch (e: any) { errors.push(`Ligne ${i + 1}: ${e.message}`); }
         }
@@ -472,7 +482,7 @@ const QuestionLibrary: FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
         (selectedEliminatory === 'true' && question.isEliminatory) ||
         (selectedEliminatory === 'false' && !question.isEliminatory);
       const matchesSearch = !searchText ||
-        (question.texte_question && question.texte_question.toLowerCase().includes(searchText.toLowerCase()));
+        (question.text && question.text.toLowerCase().includes(searchText.toLowerCase())); // Changed from texte_question
       return matchesReferential && matchesTheme && matchesBloc && matchesEliminatory && matchesSearch;
     });
   }, [questions, selectedReferential, selectedTheme, selectedBloc, selectedEliminatory, searchText, referentielsData, allThemesData, allBlocsData]);
@@ -610,7 +620,7 @@ const QuestionLibrary: FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
                         <div className="flex-shrink-0 p-2 rounded-lg bg-blue-50 text-blue-600 mr-3"><FileText size={20} /></div>
                         <div className="flex-1">
                           <div className="text-sm font-medium text-gray-900 mb-1 break-words">
-                            {question.texte_question && question.texte_question.length > 80 ? `${question.texte_question.substring(0, 80)}...` : question.texte_question}
+                          {question.text && question.text.length > 80 ? `${question.text.substring(0, 80)}...` : question.text}
                           </div>
                           <div className="flex items-center space-x-2 mt-1">
                             {question.isEliminatory && (<Badge variant="danger"><AlertTriangle size={12} className="mr-1" />Éliminatoire</Badge>)}

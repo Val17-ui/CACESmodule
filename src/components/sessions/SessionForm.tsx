@@ -26,8 +26,8 @@ import {
   updateSession,
   getSessionById,
   addBulkSessionResults,
-  getResultsForSession,
-  getQuestionsByIds,
+  getSessionResultsBySessionId,
+  getQuestionsByIds, // Corrigé pour utiliser la nouvelle fonction
   getAllVotingDevices,
   getAdminSetting,
   getAllTrainers,
@@ -120,7 +120,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
         if (!sessionIdToLoad) {
           if (trainers.length > 0) {
-            const defaultTrainer = trainers.find(t => t.isDefault === 1) || trainers[0];
+            const defaultTrainer = trainers.find(t => t.is_default === 1) || trainers[0]; // isDefault -> is_default
             if (defaultTrainer?.id) setSelectedTrainerId(defaultTrainer.id);
           }
           if (defaultKitResult?.id) {
@@ -182,26 +182,26 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setCurrentSessionDbId(sessionData.id ?? null);
             setSessionName(sessionData.nomSession);
             setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
-            if (sessionData.referentielId) {
-              const refObj = referentielsData.find(r => r.id === sessionData.referentielId);
+            if (sessionData.referentiel_id) { // referentielId -> referentiel_id
+              const refObj = referentielsData.find(r => r.id === sessionData.referentiel_id);
               if (refObj) {
                 setSelectedReferential(refObj.code as CACESReferential);
                 setSelectedReferentialId(refObj.id!);
               } else {
-                console.warn(`Référentiel avec ID ${sessionData.referentielId} non trouvé dans referentielsData.`);
+                console.warn(`Référentiel avec ID ${sessionData.referentiel_id} non trouvé dans referentielsData.`);
                 setSelectedReferential('');
                 setSelectedReferentialId(null);
               }
             } else {
-              const oldRefCode = (sessionData as any).referentiel as CACESReferential | '';
+              const oldRefCode = (sessionData as any).referentiel as CACESReferential | ''; // Garder au cas où, mais preferer referentiel_id
               setSelectedReferential(oldRefCode);
               const refObj = referentielsData.find(r => r.code === oldRefCode);
               setSelectedReferentialId(refObj?.id || null);
             }
-            setLocation(sessionData.location || '');
-            setNotes(sessionData.notes || '');
-            setSelectedTrainerId(sessionData.trainerId || null);
-            setSelectedKitIdState(sessionData.selectedKitId || null);
+            setLocation((sessionData as any).location || ''); // location n'est pas sur SessionData, vérifier si Session l'a
+            setNotes((sessionData as any).notes || ''); // notes n'est pas sur SessionData
+            setSelectedTrainerId(sessionData.trainer_id || null); // trainerId -> trainer_id
+            setSelectedKitIdState((sessionData as any).selectedKitId || null); // selectedKitId n'est pas sur SessionData
             setModifiedAfterOrsGeneration(false);
             const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
               ...p_db,
@@ -461,25 +461,25 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setImportSummary(`Erreur: Référentiel ${selectedReferential} non valide.`);
             return null;
         }
-    } else if (editingSessionData?.referentielId) {
-        currentReferentielId = editingSessionData.referentielId;
+    } else if (editingSessionData?.referentiel_id) { // referentielId -> referentiel_id
+        currentReferentielId = editingSessionData.referentiel_id;
     }
     const sessionToSave: DBSession = {
       id: currentSessionDbId || undefined,
       nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
       dateSession: sessionDate || new Date().toISOString().split('T')[0],
-      referentielId: currentReferentielId,
+      referentiel_id: currentReferentielId, // referentielId -> referentiel_id
       participants: dbParticipants,
       selectedBlocIds: editingSessionData?.selectedBlocIds || [],
-      selectedKitId: selectedKitIdState,
+      selectedKitId: selectedKitIdState, // Doit être selected_kit_id si la DB l'attend
       donneesOrs: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.donneesOrs,
       status: editingSessionData?.status || 'planned',
       location: location,
       questionMappings: editingSessionData?.questionMappings,
       notes: notes,
-      trainerId: selectedTrainerId ?? undefined,
-      createdAt: editingSessionData?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      trainer_id: selectedTrainerId ?? undefined, // trainerId -> trainer_id
+      created_at: editingSessionData?.created_at || new Date().toISOString(), // createdAt -> created_at
+      updated_at: new Date().toISOString(), // updatedAt -> updated_at
       ignoredSlideGuids: editingSessionData?.ignoredSlideGuids,
       resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
     };
@@ -703,18 +703,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           if (sessionQuestionsToSave.length > 0) {
             await addBulkSessionQuestions(sessionQuestionsToSave);
           }
-          const sessionBoitiersToSave: SessionBoitier[] = [];
+              const sessionBoitiersToSave: Omit<SessionBoitierData, 'id' | 'created_at'>[] = []; // Utiliser SessionBoitierData de db.ts
           freshlyUpdatedSessionData.participants.forEach((p_db: DBParticipantType, p_idx: number) => {
             const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
             if (assignedDevice) {
-              const formP = participants.find(fp => fp.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId);
-              const visualId = formP?.deviceId ?? (p_idx + 1);
+                  // const formP = participants.find(fp => fp.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId);
+                  // const visualId = formP?.deviceId ?? (p_idx + 1); // visualId n'est pas dans SessionBoitierData
               sessionBoitiersToSave.push({
-                sessionId: currentSavedId,
-                participantId: `P${p_idx + 1}`,
-                visualId: visualId,
-                serialNumber: assignedDevice.serialNumber,
-                participantName: `${p_db.prenom} ${p_db.nom}`,
+                    session_id: currentSavedId, // sessionId -> session_id
+                    original_voting_device_id: assignedDevice.id, // Lier au boîtier physique
+                    name: assignedDevice.name, // Utiliser le nom du boîtier physique
+                    serial_number: assignedDevice.serialNumber, // Utiliser le S/N du boîtier physique
+                    // participantName: `${p_db.prenom} ${p_db.nom}`, // participantName n'est pas dans SessionBoitierData
               });
             }
           });
@@ -837,9 +837,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         unknownThatResponded: [],
       };
       const responsesFromExpectedDevices: ExtractedResultFromXml[] = [];
-      for (const boitierAttendu of (sessionBoitiers || [])) {
+      for (const boitierAttendu of (sessionBoitiers || [])) { // boitierAttendu est de type SessionBoitierData from db.ts
         const responsesForThisExpectedDevice = finalExtractedResults.filter(
-          (r: ExtractedResultFromXml) => r.participantDeviceID === boitierAttendu.serialNumber
+          (r: ExtractedResultFromXml) => r.participantDeviceID === boitierAttendu.serial_number // serialNumber -> serial_number
         );
         const respondedGuidsForThisExpected = new Set(responsesForThisExpectedDevice.map((r: ExtractedResultFromXml) => r.questionSlideGuid));
         const missedGuidsForThisExpected: string[] = [];
@@ -853,9 +853,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         if (missedGuidsForThisExpected.length > 0 && totalRelevantQuestionsCount > 0) {
           if (!detectedAnomaliesData.expectedHavingIssues) detectedAnomaliesData.expectedHavingIssues = [];
           detectedAnomaliesData.expectedHavingIssues.push({
-            serialNumber: boitierAttendu.serialNumber,
-            visualId: boitierAttendu.visualId,
-            participantName: boitierAttendu.participantName,
+            serialNumber: boitierAttendu.serial_number, // serialNumber -> serial_number
+            visualId: (boitierAttendu as any).visualId, // visualId n'est pas sur SessionBoitierData (db.ts)
+            participantName: (boitierAttendu as any).participantName, // participantName n'est pas sur SessionBoitierData (db.ts)
             responseInfo: {
               respondedToQuestionsGuids: Array.from(respondedGuidsForThisExpected),
               responsesProvidedByExpected: responsesForThisExpectedDevice,
@@ -918,11 +918,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               if (currentSessionDbId) {
                 await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
                 message += "\nStatut session: 'Terminée'.";
-                const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId);
+                const sessionResultsForScore: SessionResult[] = await getSessionResultsBySessionId(currentSessionDbId); // Renamed
                 let sessionDataForScores = await getSessionById(currentSessionDbId);
                 if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
-                  const sessionQuestionsDb = await getQuestionsByIds(questionIds);
+                  const sessionQuestionsDb = await getQuestionsByIds(questionIds); // Utilisation de la nouvelle fonction
                   if (sessionQuestionsDb.length > 0) {
                     const updatedParticipants = sessionDataForScores.participants.map((p_db: DBParticipantType) => {
                       const matchingGlobalDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
@@ -1169,8 +1169,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const finalSessionDataForScores = await getSessionById(currentSessionDbId);
         if (finalSessionDataForScores && finalSessionDataForScores.questionMappings) {
             const questionDbIds = finalSessionDataForScores.questionMappings.map(qm => qm.dbQuestionId).filter(id => id != null) as number[];
-            const questionsForScoreCalc = await getQuestionsByIds(questionDbIds);
-            const allResultsForScoreCalc = await getResultsForSession(currentSessionDbId);
+            const questionsForScoreCalc = await getQuestionsByIds(questionDbIds); // Utilisation de la nouvelle fonction
+            const allResultsForScoreCalc = await getSessionResultsBySessionId(currentSessionDbId);
             if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
                 const participantsWithScores = finalSessionDataForScores.participants.map((p: DBParticipantType) => {
                     const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
