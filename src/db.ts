@@ -282,6 +282,311 @@ export const deleteGeneralParticipant = (id: number): Promise<void> => {
     });
 };
 
+// SessionParticipant helper and CRUD
+const mapRowToSessionParticipantData = (row: any): SessionParticipantData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        nom: row.nom,
+        prenom: row.prenom,
+        identification_code: row.identification_code,
+        score: row.score,
+        reussite: row.reussite,
+        status_in_session: row.status_in_session,
+        assigned_voting_device_id: row.assigned_voting_device_id,
+        original_participant_id: row.original_participant_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+};
+
+export const addSessionParticipant = (data: Omit<SessionParticipantData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_participants (
+                       session_id, nom, prenom, identification_code, score, reussite,
+                       status_in_session, assigned_voting_device_id, original_participant_id,
+                       created_at, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.nom, data.prenom || null, data.identification_code || null,
+            data.score || null, data.reussite || null, data.status_in_session || 'inscrit',
+            data.assigned_voting_device_id || null, data.original_participant_id || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err) {
+            if (err) reject(err); else resolve(this.lastID);
+        });
+    });
+};
+
+export const getSessionParticipants = (sessionId: number): Promise<SessionParticipantData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_participants WHERE session_id = ?", [sessionId], (err, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionParticipantData).filter(sp => sp !== null) as SessionParticipantData[]);
+        });
+    });
+};
+
+export const updateSessionParticipant = (id: number, data: Partial<Omit<SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                nom: 'nom', prenom: 'prenom', identification_code: 'identification_code', score: 'score',
+                reussite: 'reussite', status_in_session: 'status_in_session',
+                assigned_voting_device_id: 'assigned_voting_device_id',
+                original_participant_id: 'original_participant_id'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
+        params.push(id);
+        const sql = `UPDATE session_participants SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionParticipant = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_participants WHERE id = ?", [id], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// Function to get all sessions with their participants
+export const getAllSessionsWithParticipants = async (): Promise<Array<SessionData & { participants: SessionParticipantData[] }>> => {
+    const sessions = await getAllSessions();
+    const sessionsWithParticipants = await Promise.all(
+        sessions.map(async (session) => {
+            const participants = await getSessionParticipants(session.id);
+            return { ...session, participants };
+        })
+    );
+    return sessionsWithParticipants;
+};
+
+
+// SessionQuestion helper and CRUD
+const mapRowToSessionQuestionData = (row: any): SessionQuestionData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        original_question_id: row.original_question_id,
+        texte_question: row.texte_question,
+        type_question: row.type_question,
+        options: row.options,
+        image: row.image,
+        image_name: row.image_name,
+        points: row.points,
+        feedback: row.feedback,
+        bloc_id: row.bloc_id,
+        ordre_apparition: row.ordre_apparition,
+        createdAt: row.created_at
+    };
+};
+
+export const addSessionQuestion = (data: Omit<SessionQuestionData, 'id' | 'createdAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_questions (
+                       session_id, original_question_id, texte_question, type_question, options,
+                       image, image_name, points, feedback, bloc_id, ordre_apparition, created_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.original_question_id || null, data.texte_question, data.type_question,
+            data.options || null, data.image || null, data.image_name || null, data.points || null,
+            data.feedback || null, data.bloc_id || null, data.ordre_apparition || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err) {
+            if (err) reject(err); else resolve(this.lastID);
+        });
+    });
+};
+
+export const getSessionQuestions = (sessionId: number): Promise<SessionQuestionData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_questions WHERE session_id = ? ORDER BY ordre_apparition ASC", [sessionId], (err, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionQuestionData).filter(sq => sq !== null) as SessionQuestionData[]);
+        });
+    });
+};
+
+export const updateSessionQuestion = (id: number, data: Partial<Omit<SessionQuestionData, 'id' | 'session_id' | 'createdAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                original_question_id: 'original_question_id', texte_question: 'texte_question',
+                type_question: 'type_question', options: 'options', image: 'image', image_name: 'image_name',
+                points: 'points', feedback: 'feedback', bloc_id: 'bloc_id', ordre_apparition: 'ordre_apparition'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        // Note: session_questions table does not have an 'updated_at' column in the provided schema
+        params.push(id);
+        const sql = `UPDATE session_questions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionQuestion = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_questions WHERE id = ?", [id], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// SessionBoitier helper and CRUD
+const mapRowToSessionBoitierData = (row: any): SessionBoitierData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        original_voting_device_id: row.original_voting_device_id,
+        name: row.name,
+        serial_number: row.serial_number,
+        createdAt: row.created_at
+    };
+};
+
+export const addSessionBoitier = (data: Omit<SessionBoitierData, 'id' | 'createdAt'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_boitiers (
+                       session_id, original_voting_device_id, name, serial_number, created_at
+                     ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.original_voting_device_id || null, data.name, data.serial_number || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err) {
+            if (err) reject(err); else resolve(this.lastID);
+        });
+    });
+};
+
+export const getSessionBoitiers = (sessionId: number): Promise<SessionBoitierData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM session_boitiers WHERE session_id = ?", [sessionId], (err, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionBoitierData).filter(sb => sb !== null) as SessionBoitierData[]);
+        });
+    });
+};
+
+export const updateSessionBoitier = (id: number, data: Partial<Omit<SessionBoitierData, 'id' | 'session_id' | 'createdAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                original_voting_device_id: 'original_voting_device_id',
+                name: 'name', serial_number: 'serial_number'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        // Note: session_boitiers table does not have an 'updated_at' column
+        params.push(id);
+        const sql = `UPDATE session_boitiers SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionBoitier = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_boitiers WHERE id = ?", [id], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+// SessionResult helper and CRUD
+const mapRowToSessionResultData = (row: any): SessionResultData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        session_id: row.session_id,
+        session_question_id: row.session_question_id,
+        session_participant_id: row.session_participant_id,
+        reponse_choisie: row.reponse_choisie,
+        est_correct: row.est_correct,
+        points_obtenus: row.points_obtenus,
+        temps_reponse: row.temps_reponse,
+        submitted_at: row.submitted_at
+    };
+};
+
+export const addSessionResult = (data: Omit<SessionResultData, 'id' | 'submitted_at'>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO session_results (
+                       session_id, session_question_id, session_participant_id, reponse_choisie,
+                       est_correct, points_obtenus, temps_reponse, submitted_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.session_id, data.session_question_id, data.session_participant_id,
+            data.reponse_choisie || null, data.est_correct || null, data.points_obtenus || null,
+            data.temps_reponse || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err) {
+            if (err) reject(err); else resolve(this.lastID);
+        });
+    });
+};
+
+export const getSessionResults = (sessionId: number, participantId?: number, questionId?: number): Promise<SessionResultData[]> => {
+    return new Promise((resolve, reject) => {
+        let sql = "SELECT * FROM session_results WHERE session_id = ?";
+        const params: any[] = [sessionId];
+        if (participantId !== undefined) {
+            sql += " AND session_participant_id = ?";
+            params.push(participantId);
+        }
+        if (questionId !== undefined) {
+            sql += " AND session_question_id = ?";
+            params.push(questionId);
+        }
+        db.all(sql, params, (err, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(mapRowToSessionResultData).filter(sr => sr !== null) as SessionResultData[]);
+        });
+    });
+};
+
+export const updateSessionResult = (id: number, data: Partial<Omit<SessionResultData, 'id' | 'session_id' | 'session_question_id' | 'session_participant_id' | 'submitted_at'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+        Object.entries(data).forEach(([key, value]) => {
+            const columnKey = {
+                reponse_choisie: 'reponse_choisie', est_correct: 'est_correct',
+                points_obtenus: 'points_obtenus', temps_reponse: 'temps_reponse'
+            }[key];
+            if (columnKey) { fieldsToUpdate.push(`${columnKey} = ?`); params.push(value); }
+        });
+        if (fieldsToUpdate.length === 0) return resolve();
+        // Note: submitted_at is usually not updated, but if needed, can be added.
+        // Table schema does not specify an 'updated_at' for session_results.
+        params.push(id);
+        const sql = `UPDATE session_results SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err) => { if (err) reject(err); else resolve(); });
+    });
+};
+
+export const deleteSessionResult = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_results WHERE id = ?", [id], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
 // Referential
 export interface ReferentialData {
     id: number;
@@ -922,6 +1227,206 @@ export const getKitsForVotingDevice = (votingDeviceId: number): Promise<DeviceKi
 };
 
 // Session, SessionParticipant, SessionQuestion, SessionBoitier, SessionResult (déjà harmonisés plus haut)
+
+// Session
+export interface SessionData {
+    id: number;
+    nomSession: string;
+    dateSession: string;
+    typeSession?: string | null;
+    status?: string; // planned, in-progress, completed, cancelled, ready
+    referentiel_id?: number | null;
+    theme_id?: number | null;
+    trainer_id?: number | null;
+    default_voting_device_kit_id?: number | null;
+    selectedBlocIds?: string | null; // JSON array of bloc IDs
+    questionMappings?: string | null; // JSON array of {dbQuestionId, slideGuid, orderInPptx}
+    ignoredSlideGuids?: string | null; // JSON array of strings
+    resolvedImportAnomalies?: string | null; // JSON object for audit
+    donneesOrs?: Buffer | null;
+    nomFichierOrs?: string | null;
+    location?: string | null;
+    notes?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+// SessionParticipant
+export interface SessionParticipantData {
+    id: number;
+    session_id: number;
+    nom: string;
+    prenom?: string | null;
+    identification_code?: string | null;
+    score?: number | null;
+    reussite?: number | null; // Typically 0 or 1 for boolean
+    status_in_session?: string; // e.g., 'inscrit', 'present', 'absent'
+    assigned_voting_device_id?: number | null;
+    original_participant_id?: number | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+// SessionQuestion
+export interface SessionQuestionData {
+    id: number;
+    session_id: number;
+    original_question_id?: number | null;
+    texte_question: string;
+    type_question: string;
+    options?: string | null; // JSON string for options
+    image?: Buffer | null;
+    image_name?: string | null;
+    points?: number | null;
+    feedback?: string | null;
+    bloc_id?: number | null;
+    ordre_apparition?: number | null;
+    createdAt?: string;
+}
+
+// SessionBoitier (Voting Device specific to a session instance)
+export interface SessionBoitierData {
+    id: number;
+    session_id: number;
+    original_voting_device_id?: number | null;
+    name: string; // Snapshot of the device name at the time of session
+    serial_number?: string | null; // Snapshot of the serial number
+    createdAt?: string;
+}
+
+// SessionResult
+export interface SessionResultData {
+    id: number;
+    session_id: number;
+    session_question_id: number;
+    session_participant_id: number;
+    reponse_choisie?: string | null; // JSON string or simple value
+    est_correct?: number | null; // Typically 0 or 1
+    points_obtenus?: number | null;
+    temps_reponse?: number | null; // in seconds or milliseconds
+    submitted_at?: string;
+}
+
+// Helper function to map row to SessionData
+const mapRowToSessionData = (row: any): SessionData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        nomSession: row.nomSession,
+        dateSession: row.dateSession,
+        typeSession: row.typeSession,
+        status: row.status,
+        referentiel_id: row.referentiel_id,
+        theme_id: row.theme_id,
+        trainer_id: row.trainer_id,
+        default_voting_device_kit_id: row.default_voting_device_kit_id,
+        selectedBlocIds: row.selectedBlocIds,
+        questionMappings: row.questionMappings,
+        ignoredSlideGuids: row.ignoredSlideGuids,
+        resolvedImportAnomalies: row.resolvedImportAnomalies,
+        donneesOrs: row.donneesOrs,
+        nomFichierOrs: row.nomFichierOrs,
+        location: row.location,
+        notes: row.notes,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+};
+
+// Session CRUD functions
+export const addSession = (data: Partial<Omit<SessionData, 'id' | 'createdAt' | 'updatedAt'>>): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO sessions (
+                       nomSession, dateSession, typeSession, status, referentiel_id, theme_id, trainer_id,
+                       default_voting_device_kit_id, selectedBlocIds, questionMappings, ignoredSlideGuids,
+                       resolvedImportAnomalies, donneesOrs, nomFichierOrs, location, notes,
+                       created_at, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+        const params = [
+            data.nomSession, data.dateSession, data.typeSession || null, data.status || 'planifiée',
+            data.referentiel_id || null, data.theme_id || null, data.trainer_id || null,
+            data.default_voting_device_kit_id || null, data.selectedBlocIds || null,
+            data.questionMappings || null, data.ignoredSlideGuids || null, data.resolvedImportAnomalies || null,
+            data.donneesOrs || null, data.nomFichierOrs || null, data.location || null, data.notes || null
+        ];
+        db.run(sql, params, function(this: sqlite3.Statement, err) {
+            if (err) reject(err); else resolve(this.lastID);
+        });
+    });
+};
+
+export const getSessionById = (id: number): Promise<SessionData | null> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM sessions WHERE id = ?", [id], (err, row: any) => {
+            if (err) reject(err);
+            else resolve(mapRowToSessionData(row));
+        });
+    });
+};
+
+export const getAllSessions = (): Promise<SessionData[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT * FROM sessions ORDER BY dateSession DESC", [], (err, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows.map(row => mapRowToSessionData(row)).filter(s => s !== null) as SessionData[]);
+        });
+    });
+};
+
+export const updateSession = (id: number, data: Partial<Omit<SessionData, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const fieldsToUpdate: string[] = [];
+        const params: any[] = [];
+
+        // Dynamically build query based on provided data
+        Object.entries(data).forEach(([key, value]) => {
+            // Map SessionData keys to database column names
+            const columnKey = key === 'nomSession' ? 'nomSession' :
+                              key === 'dateSession' ? 'dateSession' :
+                              key === 'typeSession' ? 'typeSession' :
+                              key === 'status' ? 'status' :
+                              key === 'referentiel_id' ? 'referentiel_id' :
+                              key === 'theme_id' ? 'theme_id' :
+                              key === 'trainer_id' ? 'trainer_id' :
+                              key === 'default_voting_device_kit_id' ? 'default_voting_device_kit_id' :
+                              key === 'selectedBlocIds' ? 'selectedBlocIds' :
+                              key === 'questionMappings' ? 'questionMappings' :
+                              key === 'ignoredSlideGuids' ? 'ignoredSlideGuids' :
+                              key === 'resolvedImportAnomalies' ? 'resolvedImportAnomalies' :
+                              key === 'donneesOrs' ? 'donneesOrs' :
+                              key === 'nomFichierOrs' ? 'nomFichierOrs' :
+                              key === 'location' ? 'location' :
+                              key === 'notes' ? 'notes' : null;
+
+            if (columnKey) {
+                fieldsToUpdate.push(`${columnKey} = ?`);
+                params.push(value);
+            }
+        });
+
+        if (fieldsToUpdate.length === 0) return resolve(); // No fields to update
+
+        fieldsToUpdate.push("updated_at = CURRENT_TIMESTAMP");
+        params.push(id);
+
+        const sql = `UPDATE sessions SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(sql, params, (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+export const deleteSession = (id: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        // Consider cascading deletes or manual cleanup of related session data
+        // (session_participants, session_questions, etc.) if not handled by FOREIGN KEY ON DELETE CASCADE
+        db.run("DELETE FROM sessions WHERE id = ?", [id], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+
 // AdminSettings (déjà en camelCase ou géré)
 
 export const closeDb = (): Promise<void> => {

@@ -1,6 +1,12 @@
 // Ce fichier permet à TypeScript de connaître la forme de l'API exposée par le preload script.
 export {}; // Assurez-vous que c'est un module
 
+declare module 'sqlite3' {
+    interface Statement {
+        lastID?: number;
+    }
+}
+
 declare global {
   interface Window {
     electronAPI: {
