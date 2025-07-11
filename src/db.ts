@@ -924,6 +924,187 @@ export const getKitsForVotingDevice = (votingDeviceId: number): Promise<DeviceKi
 // Session, SessionParticipant, SessionQuestion, SessionBoitier, SessionResult (déjà harmonisés plus haut)
 // AdminSettings (déjà en camelCase ou géré)
 
+// Placeholder Interfaces and Functions for SessionForm.tsx integration
+
+// Session
+export interface SessionData {
+    id?: number;
+    nomSession: string;
+    dateSession: string;
+    typeSession?: string | null;
+    status?: string;
+    referentiel_id?: number | null;
+    theme_id?: number | null;
+    trainer_id?: number | null;
+    default_voting_device_kit_id?: number | null;
+    selectedBlocIds?: string | null; // JSON
+    questionMappings?: string | null; // JSON
+    ignoredSlideGuids?: string | null; // JSON
+    resolvedImportAnomalies?: string | null; // JSON
+    donneesOrs?: Buffer | null;
+    nomFichierOrs?: string | null;
+    location?: string | null;
+    notes?: string | null;
+    participants?: SessionParticipantData[]; // Added for convenience, might need to be populated separately
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+const mapRowToSessionData = (row: any): SessionData | null => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        nomSession: row.nomSession,
+        dateSession: row.dateSession,
+        typeSession: row.typeSession,
+        status: row.status,
+        referentiel_id: row.referentiel_id,
+        theme_id: row.theme_id,
+        trainer_id: row.trainer_id,
+        default_voting_device_kit_id: row.default_voting_device_kit_id,
+        selectedBlocIds: row.selectedBlocIds,
+        questionMappings: row.questionMappings,
+        ignoredSlideGuids: row.ignoredSlideGuids,
+        resolvedImportAnomalies: row.resolvedImportAnomalies,
+        donneesOrs: row.donneesOrs,
+        nomFichierOrs: row.nomFichierOrs,
+        location: row.location,
+        notes: row.notes,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        // participants will be fetched separately or joined if needed
+    };
+};
+
+export const getSessionById = (id: number): Promise<SessionData | null> => {
+    console.warn(`db.getSessionById(${id}) called - Placeholder implementation`);
+    return Promise.resolve(null); // Placeholder
+};
+export const addSession = (session: Omit<SessionData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
+    console.warn(`db.addSession called with:`, session, `- Placeholder implementation`);
+    return Promise.resolve(Date.now()); // Placeholder, returns a dummy ID
+};
+export const updateSession = (id: number, session: Partial<Omit<SessionData, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    console.warn(`db.updateSession(${id}) called with:`, session, `- Placeholder implementation`);
+    return Promise.resolve(); // Placeholder
+};
+
+// SessionParticipant (structure simplified for now)
+export interface SessionParticipantData {
+    id?: number;
+    session_id: number;
+    nom: string;
+    prenom?: string | null;
+    identification_code?: string | null;
+    score?: number | null;
+    reussite?: number | null; // 0 or 1
+    status_in_session?: string;
+    assigned_voting_device_id?: number | null;
+    original_participant_id?: number | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+// SessionQuestion
+export interface SessionQuestionData {
+    id?: number;
+    session_id: number;
+    original_question_id?: number | null;
+    texte_question: string;
+    type_question: string;
+    options?: string | null; // JSON
+    image?: Buffer | null;
+    image_name?: string | null;
+    points?: number | null;
+    feedback?: string | null;
+    bloc_id?: number | null;
+    ordre_apparition?: number | null;
+    createdAt?: string;
+}
+export const addBulkSessionQuestions = (questions: Omit<SessionQuestionData, 'id' | 'createdAt'>[]): Promise<void> => {
+    console.warn(`db.addBulkSessionQuestions called with ${questions.length} questions - Placeholder implementation`);
+    return Promise.resolve(); // Placeholder
+};
+export const deleteSessionQuestionsBySessionId = (sessionId: number): Promise<void> => {
+    console.warn(`db.deleteSessionQuestionsBySessionId(${sessionId}) called - Placeholder implementation`);
+    return Promise.resolve(); // Placeholder
+};
+export const getSessionQuestionsBySessionId = (sessionId: number): Promise<SessionQuestionData[]> => {
+    console.warn(`db.getSessionQuestionsBySessionId(${sessionId}) called - Placeholder implementation`);
+    return Promise.resolve([]); // Placeholder
+};
+
+
+// SessionBoitier
+export interface SessionBoitierData {
+    id?: number;
+    session_id: number;
+    original_voting_device_id?: number | null;
+    name: string;
+    serial_number?: string | null;
+    createdAt?: string;
+}
+export const addBulkSessionBoitiers = (boitiers: Omit<SessionBoitierData, 'id' | 'createdAt'>[]): Promise<void> => {
+    console.warn(`db.addBulkSessionBoitiers called with ${boitiers.length} boitiers - Placeholder implementation`);
+    return Promise.resolve(); // Placeholder
+};
+export const deleteSessionBoitiersBySessionId = (sessionId: number): Promise<void> => {
+    console.warn(`db.deleteSessionBoitiersBySessionId(${sessionId}) called - Placeholder implementation`);
+    return Promise.resolve(); // Placeholder
+};
+export const getSessionBoitiersBySessionId = (sessionId: number): Promise<SessionBoitierData[]> => {
+    console.warn(`db.getSessionBoitiersBySessionId(${sessionId}) called - Placeholder implementation`);
+    return Promise.resolve([]); // Placeholder
+};
+
+// SessionResult
+export interface SessionResultData {
+    id?: number;
+    session_id: number;
+    session_question_id: number;
+    session_participant_id: number;
+    reponse_choisie?: string | null;
+    est_correct?: number | null; // 0 or 1
+    points_obtenus?: number | null;
+    temps_reponse?: number | null;
+    submitted_at?: string;
+}
+export const addBulkSessionResults = (results: Omit<SessionResultData, 'id' | 'submitted_at'>[]): Promise<number[]> => {
+    console.warn(`db.addBulkSessionResults called with ${results.length} results - Placeholder implementation`);
+    return Promise.resolve(results.map((_, i) => Date.now() + i)); // Placeholder, returns dummy IDs
+};
+export const getSessionResultsBySessionId = (sessionId: number): Promise<SessionResultData[]> => {
+    console.warn(`db.getSessionResultsBySessionId(${sessionId}) called - Placeholder implementation`);
+    return Promise.resolve([]); // Placeholder
+};
+
+
+// Question (for getQuestionsByIds)
+export const getQuestionsByIds = (ids: number[]): Promise<QuestionData[]> => {
+    console.warn(`db.getQuestionsByIds called with ${ids.length} IDs - Placeholder implementation`);
+    return Promise.resolve([]); // Placeholder
+};
+
+// AdminSetting
+export interface AdminSettingData {
+    key: string;
+    value: any;
+    description?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+export const getAdminSetting = (key: string): Promise<any | null> => {
+    console.warn(`db.getAdminSetting(${key}) called - Placeholder implementation`);
+    return Promise.resolve(null); // Placeholder
+};
+
+// Referential (for getReferentialByCode)
+export const getReferentialByCode = (code: string): Promise<ReferentialData | null> => {
+    console.warn(`db.getReferentialByCode(${code}) called - Placeholder implementation`);
+    return Promise.resolve(null); // Placeholder
+};
+
+
 export const closeDb = (): Promise<void> => {
   return new Promise((resolve, reject) => {
     db.close((err) => {

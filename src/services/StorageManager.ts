@@ -20,7 +20,9 @@ import {
   updateQuestion as dbUpdateQuestion,
   deleteQuestion as dbDeleteQuestion,
   getQuestionsByBlocId as dbGetQuestionsByBlocId,
-  QuestionData as DBQuestionData // Type pour le cast
+  QuestionData as DBQuestionData, // Type pour le cast
+  ReferentialData, // Assurer l'import si ce n'est pas déjà fait implicitement
+  getReferentialByCode // Importer la nouvelle fonction
 } from '../db';
 import { QuestionWithId } from '../types'; // QuestionWithId importé d'ici
 // CACESReferential might be unused now. Referential, Theme, Bloc types are likely still needed if StoredQuestion or other types here reference them.
@@ -48,6 +50,18 @@ export const StorageManager = {
   getAllBlocs,
   getBlocsByThemeId, // Assuré qu'il est bien là
   getBlocByCodeAndThemeId, // Assuré qu'il est bien là
+
+  // Add getReferentialByCode to StorageManager
+  async getReferentialByCode(code: string): Promise<ReferentialData | null> { // Utiliser ReferentialData
+    try {
+      // Cette fonction getReferentialByCode doit être ajoutée et exportée depuis ../db.ts
+      const referential = await getReferentialByCode(code);
+      return referential;
+    } catch (error) {
+      console.error(`StorageManager: Error getting referential by code ${code}`, error);
+      return null;
+    }
+  },
 
   /**
    * Adds a new question to the database.

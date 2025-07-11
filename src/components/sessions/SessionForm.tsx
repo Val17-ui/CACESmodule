@@ -18,16 +18,18 @@ import {
   Bloc,
   QuestionWithId as StoredQuestion,
   VotingDevice,
-  DeviceKit
+  DeviceKit,
+  QuestionMapping // Pour typer qm, q
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import {
   addSession,
   updateSession,
   getSessionById,
+  SessionData, // Importer pour le type de retour de prepareSessionDataForDb et handleSaveSession
   addBulkSessionResults,
   getSessionResultsBySessionId,
-  getQuestionsByIds, // Corrigé pour utiliser la nouvelle fonction
+  getQuestionsByIds,
   getAllVotingDevices,
   getAdminSetting,
   getAllTrainers,
@@ -35,6 +37,7 @@ import {
   deleteSessionQuestionsBySessionId,
   addBulkSessionBoitiers,
   deleteSessionBoitiersBySessionId,
+  SessionBoitierData, // Importer le type pour sessionBoitiersToSave
   getSessionQuestionsBySessionId,
   getSessionBoitiersBySessionId,
   getAllDeviceKits,
@@ -100,31 +103,62 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     const fetchGlobalData = async () => {
       setIsLoadingKits(true);
       try {
-        const [devices, trainers, refs, themes, blocs, kits, defaultKitResult] = await Promise.all([
-          getAllVotingDevices(),
-          getAllTrainers(),
+        const [rawDevices, rawTrainers, refs, themes, blocs, rawKits, defaultKitResult] = await Promise.all([
+          getAllVotingDevices(), // returns VotingDeviceData[]
+          getAllTrainers(),      // returns TrainerData[]
           StorageManager.getAllReferentiels(),
           StorageManager.getAllThemes(),
           StorageManager.getAllBlocs(),
-          getAllDeviceKits(),
-          getDefaultDeviceKit()
+          getAllDeviceKits(),    // returns DeviceKitData[]
+          getDefaultDeviceKit()  // returns DeviceKitData | null
         ]);
-        setHardwareDevices(devices.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
-        setTrainersList(trainers.sort((a, b) => a.name.localeCompare(b.name)));
+
+        const formattedHardwareDevices: VotingDevice[] = rawDevices
+          .map(d => ({
+            id: d.id,
+            name: d.name,
+            serialNumber: d.serialNumber || `_SN_MANQUANT_${d.id}`, // Placeholder si null/undefined
+          }))
+          // .filter(d => d.serialNumber !== undefined && d.serialNumber !== null) // Optionnel: filtrer si SN est critique
+          .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+        setHardwareDevices(formattedHardwareDevices);
+
+        const formattedTrainers: Trainer[] = rawTrainers.map(t => ({
+          id: t.id,
+          name: `${t.prenom || ''} ${t.nom}`.trim(),
+          isDefault: t.isDefault as (0 | 1 | undefined),
+        })).sort((a, b) => a.name.localeCompare(b.name));
+        setTrainersList(formattedTrainers);
+
         setReferentielsData(refs);
         setAllThemesData(themes);
         setAllBlocsData(blocs);
-        setDeviceKitsList(kits);
+
+        const formattedDeviceKits: DeviceKit[] = rawKits.map(k => ({
+          id: k.id,
+          name: k.name,
+          isDefault: k.isDefault as (0 | 1 | undefined),
+        }));
+        setDeviceKitsList(formattedDeviceKits);
+
         setHardwareLoaded(true);
         setIsLoadingKits(false);
 
         if (!sessionIdToLoad) {
-          if (trainers.length > 0) {
-            const defaultTrainer = trainers.find(t => t.is_default === 1) || trainers[0]; // isDefault -> is_default
-            if (defaultTrainer?.id) setSelectedTrainerId(defaultTrainer.id);
+          // Utiliser rawTrainers (TrainerData[]) pour trouver le formateur par défaut
+          if (rawTrainers.length > 0) {
+            const defaultTrainerFromRaw = rawTrainers.find(t => t.isDefault === 1) || rawTrainers[0];
+            if (defaultTrainerFromRaw?.id) setSelectedTrainerId(defaultTrainerFromRaw.id);
           }
+          // defaultKitResult est DeviceKitData | null, son `id` est correct
           if (defaultKitResult?.id) {
             setSelectedKitIdState(defaultKitResult.id);
+          } else if (formattedDeviceKits.length > 0 && formattedDeviceKits[0].id !== undefined) {
+            setSelectedKitIdState(formattedDeviceKits[0].id);
+          }
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement des données globales:", error);
           } else if (kits.length > 0 && kits[0].id !== undefined) {
             setSelectedKitIdState(kits[0].id);
           }
@@ -176,41 +210,77 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (sessionIdToLoad && hardwareLoaded && referentielsData.length > 0) {
       const loadSession = async () => {
         try {
-          const sessionData = await getSessionById(sessionIdToLoad);
-          setEditingSessionData(sessionData || null);
-          if (sessionData) {
-            setCurrentSessionDbId(sessionData.id ?? null);
-            setSessionName(sessionData.nomSession);
-            setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
-            if (sessionData.referentiel_id) { // referentielId -> referentiel_id
-              const refObj = referentielsData.find(r => r.id === sessionData.referentiel_id);
+          const dbSessionData = await getSessionById(sessionIdToLoad); // This returns SessionData from db.ts (snake_case)
+
+          if (dbSessionData) {
+            // Convert SessionData (db.ts) to DBSession (types/index.ts Session type)
+            const appSessionData: DBSession = {
+              id: dbSessionData.id,
+              nomSession: dbSessionData.nomSession,
+              dateSession: dbSessionData.dateSession,
+              referentielId: dbSessionData.referentiel_id, // snake_case to camelCase
+              participants: (dbSessionData.participants || []).map(p => ({ // Assuming dbSessionData.participants is SessionParticipantData[]
+                nom: p.nom,
+                prenom: p.prenom || '',
+                identificationCode: p.identification_code,
+                score: p.score || undefined,
+                reussite: p.reussite === 1 ? true : p.reussite === 0 ? false : undefined,
+                assignedGlobalDeviceId: p.assigned_voting_device_id,
+                statusInSession: p.status_in_session as 'present' | 'absent' | undefined,
+              })),
+              selectedBlocIds: dbSessionData.selectedBlocIds ? JSON.parse(dbSessionData.selectedBlocIds) : [],
+              donneesOrs: dbSessionData.donneesOrs,
+              status: dbSessionData.status as DBSession['status'],
+              location: dbSessionData.location || '',
+              questionMappings: dbSessionData.questionMappings ? JSON.parse(dbSessionData.questionMappings) : [],
+              notes: dbSessionData.notes || '',
+              createdAt: dbSessionData.createdAt, // Pas de createdAt dans SessionData, mais DBSession l'a. À voir si on l'ajoute à SessionData ou on le gère.
+                                                 // Pour l'instant, on suppose que dbSessionData.createdAt existe (snake_case)
+              updatedAt: dbSessionData.updatedAt, // Idem pour updatedAt
+              trainerId: dbSessionData.trainer_id,
+              selectedKitId: dbSessionData.default_voting_device_kit_id,
+              ignoredSlideGuids: dbSessionData.ignoredSlideGuids ? JSON.parse(dbSessionData.ignoredSlideGuids) : null,
+              resolvedImportAnomalies: dbSessionData.resolvedImportAnomalies ? JSON.parse(dbSessionData.resolvedImportAnomalies) : null,
+            };
+            setEditingSessionData(appSessionData);
+
+            setCurrentSessionDbId(appSessionData.id ?? null);
+            setSessionName(appSessionData.nomSession);
+            setSessionDate(appSessionData.dateSession ? appSessionData.dateSession.split('T')[0] : '');
+
+            if (appSessionData.referentielId) { // Utiliser camelCase
+              const refObj = referentielsData.find(r => r.id === appSessionData.referentielId);
               if (refObj) {
                 setSelectedReferential(refObj.code as CACESReferential);
                 setSelectedReferentialId(refObj.id!);
               } else {
-                console.warn(`Référentiel avec ID ${sessionData.referentiel_id} non trouvé dans referentielsData.`);
+                console.warn(`Référentiel avec ID ${appSessionData.referentielId} non trouvé dans referentielsData.`);
                 setSelectedReferential('');
                 setSelectedReferentialId(null);
               }
             } else {
-              const oldRefCode = (sessionData as any).referentiel as CACESReferential | ''; // Garder au cas où, mais preferer referentiel_id
-              setSelectedReferential(oldRefCode);
-              const refObj = referentielsData.find(r => r.code === oldRefCode);
-              setSelectedReferentialId(refObj?.id || null);
+              // Gérer le cas où referentielId n'est pas défini mais il y avait un ancien champ 'referentiel' (logique existante)
+              // const oldRefCode = (dbSessionData as any).referentiel as CACESReferential | ''; // Cela ne devrait plus être nécessaire si referentiel_id est la source de vérité
+              // setSelectedReferential(oldRefCode);
+              // const refObj = referentielsData.find(r => r.code === oldRefCode);
+              // setSelectedReferentialId(refObj?.id || null);
+               setSelectedReferential(''); // Si pas de referentielId, on réinitialise
+               setSelectedReferentialId(null);
             }
-            setLocation((sessionData as any).location || ''); // location n'est pas sur SessionData, vérifier si Session l'a
-            setNotes((sessionData as any).notes || ''); // notes n'est pas sur SessionData
-            setSelectedTrainerId(sessionData.trainer_id || null); // trainerId -> trainer_id
-            setSelectedKitIdState((sessionData as any).selectedKitId || null); // selectedKitId n'est pas sur SessionData
+            setLocation(appSessionData.location || '');
+            setNotes(appSessionData.notes || '');
+            setSelectedTrainerId(appSessionData.trainerId || null);
+            setSelectedKitIdState(appSessionData.selectedKitId || null);
             setModifiedAfterOrsGeneration(false);
-            const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
-              ...p_db,
+
+            const formParticipants: FormParticipant[] = appSessionData.participants.map((p_app: DBParticipantType, loopIndex: number) => ({
+              ...p_app, // p_app est déjà DBParticipantType (alias de Participant de types/index.ts)
               id: `loaded-${loopIndex}-${Date.now()}`,
-              firstName: p_db.prenom,
-              lastName: p_db.nom,
-              deviceId: loopIndex + 1,
-              organization: (p_db as any).organization || '',
-              hasSigned: (p_db as any).hasSigned || false,
+              firstName: p_app.prenom, // Participant a déjà prenom et nom
+              lastName: p_app.nom,
+              deviceId: loopIndex + 1, // Visual device ID
+              organization: '', // Participant n'a pas organization, FormParticipant l'ajoute
+              hasSigned: false,  // Participant n'a pas hasSigned, FormParticipant l'ajoute
             }));
             setParticipants(formParticipants);
           } else {
@@ -440,86 +510,140 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const prepareSessionDataForDb = async (includeOrsBlob?: Blob | null): Promise<DBSession | null> => {
-    const dbParticipants: DBParticipantType[] = participants.map((p_form: FormParticipant) => ({
+    // participants pour SessionData (SessionParticipantData[])
+    const dbStyleParticipants: SessionParticipantData[] = participants.map((p_form: FormParticipant) => ({
+      // id: p_form.id, // L'ID du participant de session sera géré par la DB
+      session_id: currentSessionDbId || 0, // Sera mis à jour si nouvelle session
       nom: p_form.lastName,
       prenom: p_form.firstName,
-      identificationCode: p_form.identificationCode,
+      identification_code: p_form.identificationCode,
       score: p_form.score,
-      reussite: p_form.reussite,
-      assignedGlobalDeviceId: p_form.assignedGlobalDeviceId,
-      statusInSession: p_form.statusInSession,
+      reussite: p_form.reussite === true ? 1 : (p_form.reussite === false ? 0 : undefined),
+      assigned_voting_device_id: p_form.assignedGlobalDeviceId,
+      status_in_session: p_form.statusInSession,
+      // original_participant_id: undefined, // À gérer si nécessaire
     }));
-    let currentReferentielId: number | undefined = undefined;
+
+    let currentReferentielDbId: number | undefined = undefined;
     if (selectedReferentialId) {
-        currentReferentielId = selectedReferentialId;
+        currentReferentielDbId = selectedReferentielId;
     } else if (selectedReferential) {
         const refObj = referentielsData.find(r => r.code === selectedReferential);
         if (refObj?.id) {
-            currentReferentielId = refObj.id;
+            currentReferentielDbId = refObj.id;
         } else {
             console.error(`Impossible de trouver l'ID pour le code référentiel: ${selectedReferential}`);
             setImportSummary(`Erreur: Référentiel ${selectedReferential} non valide.`);
             return null;
         }
-    } else if (editingSessionData?.referentiel_id) { // referentielId -> referentiel_id
-        currentReferentielId = editingSessionData.referentiel_id;
+    } else if (editingSessionData?.referentielId) { // Utiliser camelCase ici car editingSessionData est DBSession
+        currentReferentielDbId = editingSessionData.referentielId;
     }
-    const sessionToSave: DBSession = {
+
+    // Construction de l'objet pour la DB (SessionData de db.ts)
+    const sessionToSaveForDb: SessionData = {
       id: currentSessionDbId || undefined,
       nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
       dateSession: sessionDate || new Date().toISOString().split('T')[0],
-      referentiel_id: currentReferentielId, // referentielId -> referentiel_id
-      participants: dbParticipants,
-      selectedBlocIds: editingSessionData?.selectedBlocIds || [],
-      selectedKitId: selectedKitIdState, // Doit être selected_kit_id si la DB l'attend
+      referentiel_id: currentReferentielDbId, // snake_case pour la DB
+      // participants: dbStyleParticipants, // Les participants sont gérés dans une table séparée (session_participants)
+                                        // addSession/updateSession ne prendront probablement pas directement les participants.
+                                        // Ceci sera géré par des appels séparés si nécessaire.
+                                        // Pour l'instant, SessionData n'inclut pas 'participants' directement pour l'écriture.
+      selectedBlocIds: editingSessionData?.selectedBlocIds ? JSON.stringify(editingSessionData.selectedBlocIds) : null,
+      default_voting_device_kit_id: selectedKitIdState, // snake_case pour la DB
       donneesOrs: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.donneesOrs,
       status: editingSessionData?.status || 'planned',
       location: location,
-      questionMappings: editingSessionData?.questionMappings,
+      questionMappings: editingSessionData?.questionMappings ? JSON.stringify(editingSessionData.questionMappings) : null,
       notes: notes,
-      trainer_id: selectedTrainerId ?? undefined, // trainerId -> trainer_id
-      created_at: editingSessionData?.created_at || new Date().toISOString(), // createdAt -> created_at
-      updated_at: new Date().toISOString(), // updatedAt -> updated_at
-      ignoredSlideGuids: editingSessionData?.ignoredSlideGuids,
-      resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
+      trainer_id: selectedTrainerId ?? undefined, // snake_case pour la DB
+      // createdAt et updatedAt sont gérés par la DB ou par les fonctions add/update.
+      // Si editingSessionData (DBSession) a createdAt, et que SessionData (db.ts) doit le recevoir, il faut le passer.
+      // Pour l'instant, on suppose que les fonctions DB gèrent created_at pour les nouvelles sessions.
+      // Pour les mises à jour, updatedAt sera géré par la DB.
+      // created_at: editingSessionData?.createdAt, // Si besoin de préserver un createdAt original venant de DBSession.
+      ignoredSlideGuids: editingSessionData?.ignoredSlideGuids ? JSON.stringify(editingSessionData.ignoredSlideGuids) : null,
+      resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies ? JSON.stringify(editingSessionData.resolvedImportAnomalies) : null,
     };
-    return sessionToSave;
+    // Les champs non définis dans SessionData (comme typeSession, theme_id, nomFichierOrs) ne sont pas inclus
+    // ou sont laissés undefined s'ils sont optionnels dans SessionData.
+    return sessionToSaveForDb;
   };
 
-  const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
+  // handleSaveSession attend maintenant SessionData | null
+  const handleSaveSession = async (sessionDataToSave: SessionData | null) => {
     if (!sessionDataToSave) return null;
     try {
       let savedId: number | undefined;
+      // On enlève les propriétés que addSession/updateSession ne doivent pas gérer directement si elles sont auto-gérées par SQL (comme id, createdAt, updatedAt)
+      // Pour l'instant, les placeholders acceptent tout.
+      const { id, createdAt, updatedAt, participants, ...dataForUpsert } = sessionDataToSave;
+
+
       if (sessionDataToSave.id) {
-        await updateSession(sessionDataToSave.id, sessionDataToSave);
+        await updateSession(sessionDataToSave.id, dataForUpsert);
         savedId = sessionDataToSave.id;
       } else {
-        const newId = await addSession(sessionDataToSave);
+        // Pour addSession, on ne passe pas l'id.
+        // Les placeholders actuels ne distinguent pas, mais une vraie implémentation le ferait.
+        const newId = await addSession(dataForUpsert as Omit<SessionData, 'id' | 'createdAt' | 'updatedAt'>);
         if (newId) { setCurrentSessionDbId(newId); savedId = newId; }
         else { setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée."); return null; }
       }
+
       if (savedId) {
-         const reloadedSession = await getSessionById(savedId);
-         setEditingSessionData(reloadedSession || null);
-         if (reloadedSession) {
+         // Recharger la session pour mettre à jour l'état avec les données de la DB (converties en DBSession)
+         const reloadedDbSessionData = await getSessionById(savedId); // Retourne SessionData
+         if (reloadedDbSessionData) {
+            // Conversion SessionData -> DBSession
+            const reloadedAppSession: DBSession = {
+              id: reloadedDbSessionData.id,
+              nomSession: reloadedDbSessionData.nomSession,
+              dateSession: reloadedDbSessionData.dateSession,
+              referentielId: reloadedDbSessionData.referentiel_id,
+              // TODO: Recharger les participants de la session ici via une fonction dédiée getSessionParticipants(savedId)
+              // Pour l'instant, on réutilise ceux du formulaire, ce qui n'est pas idéal après une sauvegarde.
+              participants: editingSessionData?.participants || [], // Placeholder pour les participants
+              selectedBlocIds: reloadedDbSessionData.selectedBlocIds ? JSON.parse(reloadedDbSessionData.selectedBlocIds) : [],
+              donneesOrs: reloadedDbSessionData.donneesOrs,
+              status: reloadedDbSessionData.status as DBSession['status'],
+              location: reloadedDbSessionData.location || '',
+              questionMappings: reloadedDbSessionData.questionMappings ? JSON.parse(reloadedDbSessionData.questionMappings) : [],
+              notes: reloadedDbSessionData.notes || '',
+              createdAt: reloadedDbSessionData.createdAt,
+              updatedAt: reloadedDbSessionData.updatedAt,
+              trainerId: reloadedDbSessionData.trainer_id,
+              selectedKitId: reloadedDbSessionData.default_voting_device_kit_id,
+              ignoredSlideGuids: reloadedDbSessionData.ignoredSlideGuids ? JSON.parse(reloadedDbSessionData.ignoredSlideGuids) : null,
+              resolvedImportAnomalies: reloadedDbSessionData.resolvedImportAnomalies ? JSON.parse(reloadedDbSessionData.resolvedImportAnomalies) : null,
+            };
+            setEditingSessionData(reloadedAppSession);
             setModifiedAfterOrsGeneration(false);
-            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db: DBParticipantType, index: number) => {
+
+            // Mise à jour de l'affichage des participants du formulaire (potentiellement redondant si on recharge correctement)
+            const formParticipants: FormParticipant[] = (reloadedAppSession.participants || []).map((p_app: DBParticipantType, index: number) => {
               const visualDeviceId = index + 1;
-              const currentParticipantState = participants.find(p => p.nom === p_db.nom && p.prenom === p_db.prenom && p.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId) || participants[index];
+              // Essayer de retrouver l'état existant du participant dans le formulaire pour préserver les ID uniques du formulaire
+              const currentParticipantState = participants.find(
+                fp => fp.firstName === p_app.prenom && fp.lastName === p_app.nom && fp.assignedGlobalDeviceId === p_app.assignedGlobalDeviceId
+              ) || participants[index];
+
               return {
-                nom: p_db.nom,
-                prenom: p_db.prenom,
-                identificationCode: p_db.identificationCode,
-                score: p_db.score,
-                reussite: p_db.reussite,
-                assignedGlobalDeviceId: p_db.assignedGlobalDeviceId,
-                statusInSession: p_db.statusInSession,
-                id: currentParticipantState?.id || `form-reloaded-${index}-${Date.now()}`,
-                firstName: p_db.prenom,
-                lastName: p_db.nom,
-                deviceId: currentParticipantState?.deviceId ?? visualDeviceId,
-                organization: currentParticipantState?.organization || '',
-                hasSigned: currentParticipantState?.hasSigned || false,
+                // ...p_app, // p_app est DBParticipantType (camelCase)
+                nom: p_app.nom,
+                prenom: p_app.prenom,
+                identificationCode: p_app.identificationCode,
+                score: p_app.score,
+                reussite: p_app.reussite,
+                assignedGlobalDeviceId: p_app.assignedGlobalDeviceId,
+                statusInSession: p_app.statusInSession,
+                id: currentParticipantState?.id || `form-reloaded-${index}-${Date.now()}`, // ID unique pour le formulaire
+                firstName: p_app.prenom,
+                lastName: p_app.nom,
+                deviceId: currentParticipantState?.deviceId ?? visualDeviceId, // Numéro visuel
+                organization: currentParticipantState?.organization || '', // Maintenir si déjà là
+                hasSigned: currentParticipantState?.hasSigned || false,   // Maintenir si déjà là
               };
             });
             setParticipants(formParticipants);
@@ -675,9 +799,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           await deleteSessionQuestionsBySessionId(currentSavedId);
           await deleteSessionBoitiersBySessionId(currentSavedId);
           const sessionQuestionsToSave: SessionQuestion[] = [];
-          for (const qMap of questionMappings) {
+          for (const qMap of questionMappings) { // qMap est QuestionMapping de types/index.ts
             if (qMap.slideGuid && qMap.dbQuestionId !== undefined) {
-              const originalQuestion = allSelectedQuestionsForPptx.find(q => q.id === qMap.dbQuestionId);
+              const originalQuestion = allSelectedQuestionsForPptx.find((q: StoredQuestion) => q.id === qMap.dbQuestionId);
               if (originalQuestion) {
                 let blocCodeForSessionQuestion = 'N/A';
                 if (originalQuestion.blocId) {
@@ -844,11 +968,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const respondedGuidsForThisExpected = new Set(responsesForThisExpectedDevice.map((r: ExtractedResultFromXml) => r.questionSlideGuid));
         const missedGuidsForThisExpected: string[] = [];
         if (totalRelevantQuestionsCount > 0) {
-          relevantSessionQuestionGuids.forEach((guid: string) => {
+          // Correction de la boucle forEach en for...of pour une meilleure lisibilité et type safety
+          for (const guid of relevantSessionQuestionGuids) {
             if (!respondedGuidsForThisExpected.has(guid)) {
               missedGuidsForThisExpected.push(guid);
             }
-          });
+          }
         }
         if (missedGuidsForThisExpected.length > 0 && totalRelevantQuestionsCount > 0) {
           if (!detectedAnomaliesData.expectedHavingIssues) detectedAnomaliesData.expectedHavingIssues = [];
@@ -919,12 +1044,35 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
                 message += "\nStatut session: 'Terminée'.";
                 const sessionResultsForScore: SessionResult[] = await getSessionResultsBySessionId(currentSessionDbId); // Renamed
-                let sessionDataForScores = await getSessionById(currentSessionDbId);
+                let sessionDataForScores = await getSessionById(currentSessionDbId); // Retourne SessionData | null
                 if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
-                  const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
-                  const sessionQuestionsDb = await getQuestionsByIds(questionIds); // Utilisation de la nouvelle fonction
+                  // sessionDataForScores.questionMappings est un string JSON, il faut le parser.
+                  // Et s'assurer que l'objet retourné par getSessionById est bien converti en DBSession avant d'accéder à questionMappings comme un tableau.
+                  // Pour l'instant, on suppose que la conversion a eu lieu ou que le type est DBSession.
+                  // Ceci sera à revoir si sessionDataForScores est directement SessionData.
+                  // Supposons que sessionDataForScores a été converti en DBSession (avec questionMappings en tant qu'array)
+                  const questionMappingsArray = typeof sessionDataForScores.questionMappings === 'string'
+                                                ? JSON.parse(sessionDataForScores.questionMappings) as QuestionMapping[]
+                                                : sessionDataForScores.questionMappings as QuestionMapping[];
+
+                  const questionIds = questionMappingsArray.map((q: QuestionMapping) => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
+                  const sessionQuestionsDb = await getQuestionsByIds(questionIds);
                   if (sessionQuestionsDb.length > 0) {
-                    const updatedParticipants = sessionDataForScores.participants.map((p_db: DBParticipantType) => {
+                    // sessionDataForScores.participants ici serait SessionParticipantData[] si sessionDataForScores est SessionData.
+                    // Il faudrait convertir en DBParticipantType[] (qui est Participant[] de types/index.ts)
+                    // Pour l'instant, on va supposer que la structure est compatible ou que la conversion est faite.
+                    // Si sessionDataForScores est SessionData:
+                    const participantsToScore: DBParticipantType[] = (sessionDataForScores.participants || []).map(p_db_data => ({
+                        nom: p_db_data.nom,
+                        prenom: p_db_data.prenom || '',
+                        identificationCode: p_db_data.identification_code,
+                        score: p_db_data.score || undefined,
+                        reussite: p_db_data.reussite === 1 ? true : p_db_data.reussite === 0 ? false : undefined,
+                        assignedGlobalDeviceId: p_db_data.assigned_voting_device_id,
+                        statusInSession: p_db_data.status_in_session as DBParticipantType['statusInSession']
+                    }));
+
+                    const updatedParticipants = participantsToScore.map((p_db: DBParticipantType) => {
                       const matchingGlobalDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
                       if (!matchingGlobalDevice) {
                         console.warn(`Participant ${p_db.nom} ${p_db.prenom} n'a pas de boîtier physique valide assigné pour le calcul des scores.`);
@@ -1166,13 +1314,30 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         let message = `${savedResultIds?.length || 0} résultats (après résolution) sauvegardés !`;
         await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
         message += "\nStatut session: 'Terminée'.";
-        const finalSessionDataForScores = await getSessionById(currentSessionDbId);
+        const finalSessionDataForScores = await getSessionById(currentSessionDbId); // Retourne SessionData | null
         if (finalSessionDataForScores && finalSessionDataForScores.questionMappings) {
-            const questionDbIds = finalSessionDataForScores.questionMappings.map(qm => qm.dbQuestionId).filter(id => id != null) as number[];
-            const questionsForScoreCalc = await getQuestionsByIds(questionDbIds); // Utilisation de la nouvelle fonction
-            const allResultsForScoreCalc = await getSessionResultsBySessionId(currentSessionDbId);
+            // Idem, finalSessionDataForScores.questionMappings est un string JSON si vient de SessionData
+             const finalQuestionMappingsArray = typeof finalSessionDataForScores.questionMappings === 'string'
+                                               ? JSON.parse(finalSessionDataForScores.questionMappings) as QuestionMapping[]
+                                               : finalSessionDataForScores.questionMappings as QuestionMapping[];
+
+            const questionDbIds = finalQuestionMappingsArray.map((qm: QuestionMapping) => qm.dbQuestionId).filter(id => id != null) as number[];
+            const questionsForScoreCalc = await getQuestionsByIds(questionDbIds);
+            const allResultsForScoreCalc = await getSessionResultsBySessionId(currentSessionDbId); // Retourne SessionResultData[]
+
             if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
-                const participantsWithScores = finalSessionDataForScores.participants.map((p: DBParticipantType) => {
+                // Idem, finalSessionDataForScores.participants est SessionParticipantData[] si vient de SessionData
+                const finalParticipantsToScore: DBParticipantType[] = (finalSessionDataForScores.participants || []).map(p_db_data => ({
+                    nom: p_db_data.nom,
+                    prenom: p_db_data.prenom || '',
+                    identificationCode: p_db_data.identification_code,
+                    score: p_db_data.score || undefined,
+                    reussite: p_db_data.reussite === 1 ? true : p_db_data.reussite === 0 ? false : undefined,
+                    assignedGlobalDeviceId: p_db_data.assigned_voting_device_id,
+                    statusInSession: p_db_data.status_in_session as DBParticipantType['statusInSession']
+                }));
+
+                const participantsWithScores = finalParticipantsToScore.map((p: DBParticipantType) => {
                     const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
                     const participantSerialNumber = device ? device.serialNumber : p.identificationCode?.startsWith('NEW_') ? p.identificationCode.substring(4) : null;
                     if (!participantSerialNumber) return { ...p, score: p.score || 0, reussite: p.reussite || false };
