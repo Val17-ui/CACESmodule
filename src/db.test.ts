@@ -1,13 +1,7 @@
 import { addQuestion, getAllQuestions, getQuestionById, updateQuestion, deleteQuestion } from './db.js'; // QuestionWithId retirée d'ici
 // Types are used for casting and defining sample data structure, not for runtime enum values here.
-import { QuestionTheme, ReferentialType, QuestionWithId } from './types/index.js'; // QuestionWithId ajoutée ici
-
-// Define a QuestionType enum locally for test data, mirroring what might be in types.ts or the actual string literals
-enum QuestionTypeForTest {
-  QCM = 'multiple-choice',
-  // QCU = 'multiple-choice', // Assuming QCU is a variant of multiple-choice for data structure
-  TRUE_FALSE = 'true-false',
-}
+// QuestionWithId and QuestionType are imported from the main types file
+import { QuestionTheme, ReferentialType, QuestionWithId, QuestionType } from './types/index.js';
 
 // Using console.log as fs access might be problematic
 const log = (message: string, ...args: any[]) => {
@@ -51,7 +45,7 @@ const runDBTests = async () => {
   log("\nStep 2: Adding a new question...");
   const sampleQuestion: QuestionWithId = {
     text: 'What is the capital of France?',
-    type: QuestionTypeForTest.QCM, // Using the local enum which should map to 'multiple-choice'
+    type: QuestionType.QCM, // Using imported QuestionType enum value
     options: ['Paris', 'London', 'Berlin', 'Madrid'],
     correctAnswer: 'Paris', // Storing answer text
     timeLimit: 30,
@@ -64,27 +58,51 @@ const runDBTests = async () => {
     // We'll need a mock blocId or set up a bloc. For simplicity, we'll omit it for now
     // and rely on addQuestion handling potentially missing blocId if the test is simplified.
     // However, questions table has bloc_id NOT NULL. This test will fail without a valid bloc_id.
-    // This test needs significant rework to align with db.ts schema.
-    // For the image part:
+    // referential and theme are not direct properties of questions table in SQLite db.ts
+    // It uses blocId, referentiel_id, theme_id.
+    // For this test to align with db.ts, it would need to create a bloc first,
+    // then get its ID, and also potentially referentiel_id and theme_id.
+    // This test needs significant rework to create these prerequisite entities
+    // or mock them appropriately for the SQLite context.
+    // For now, focusing on type and image conversion.
     image: mockImageBlob ? Buffer.from(await mockImageBlob.arrayBuffer()) : null, // Convert Blob to Buffer
+    imageName: mockImageBlob ? 'test_image.png' : null, // Add imageName
+    points: 1,
+    feedback: 'Test feedback',
+    blocId: 1, // CRITICAL: This assumes a bloc with id 1 exists. Test will fail if not.
+    referentiel_id: 1, // Placeholder, assumes referentiel with id 1 exists
+    theme_id: 1, // Placeholder, assumes theme with id 1 exists
     createdAt: new Date().toISOString(),
     usageCount: 0,
     correctResponseRate: 0,
-    // blocId is required by QuestionData in db.ts and NOT NULL in table.
-    // This test will fail here. Placeholder for what it should be:
-    blocId: 1, // Placeholder - this assumes a bloc with id 1 exists.
+    slideGuid: 'test-guid',
   };
 
+  // To properly test addQuestion, we need to ensure the data matches db.QuestionData
+  // The StoredQuestion (QuestionWithId) type from types/index.ts might differ.
+  // db.addQuestion expects Partial<Omit<db.QuestionData, 'id'>>
+  const questionDataForDb: Partial<Omit<db.QuestionData, 'id'>> = {
+    text: sampleQuestion.text,
+    type: sampleQuestion.type, // This is 'multiple-choice', mapQuestionTypeStringToDbType in addQuestion will handle it
+    options: JSON.stringify(sampleQuestion.options), // db.QuestionData expects options as JSON string
+    correctAnswer: JSON.stringify(sampleQuestion.correctAnswer), // db.QuestionData expects correctAnswer as JSON string
+    isEliminatory: sampleQuestion.isEliminatory,
+    timeLimit: sampleQuestion.timeLimit,
+    image: sampleQuestion.image as Buffer | null, // Already converted to Buffer
+    imageName: sampleQuestion.imageName,
+    points: sampleQuestion.points,
+    feedback: sampleQuestion.feedback,
+    blocId: sampleQuestion.blocId, // Mandatory
+    referentiel_id: sampleQuestion.referentiel_id,
+    theme_id: sampleQuestion.theme_id,
+    usageCount: sampleQuestion.usageCount,
+    correctResponseRate: sampleQuestion.correctResponseRate,
+    slideGuid: sampleQuestion.slideGuid,
+  };
+
+
   try {
-    // The addQuestion from './db.js' (SQLite) expects different QuestionData structure
-    // (e.g. blocId is mandatory, referential/theme strings are not direct fields)
-    // This test, as written, is more for a Dexie-like structure.
-    // We are focusing on the Blob to Buffer conversion part.
-    // The following call will likely fail due to schema mismatches if not addressed.
-    // To make it runnable for image test, we'd add a dummy blocId.
-    // However, the original addQuestion was likely for Dexie.
-    // Let's assume db.js addQuestion is the SQLite one.
-    newQuestionId = await addQuestion(sampleQuestion as any); // Cast to any to bypass strict type checking for this partial fix
+    newQuestionId = await addQuestion(questionDataForDb);
     if (newQuestionId !== undefined) {
       log(`New question added with ID: ${newQuestionId}`);
     } else {
