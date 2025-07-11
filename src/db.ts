@@ -282,6 +282,23 @@ export const deleteGeneralParticipant = (id: number): Promise<void> => {
     });
 };
 
+export const getQuestionsByIds = (ids: number[]): Promise<QuestionData[]> => {
+    return new Promise((resolve, reject) => {
+        if (!ids || ids.length === 0) {
+            return resolve([]);
+        }
+        const placeholders = ids.map(() => '?').join(',');
+        const sql = `SELECT * FROM questions WHERE id IN (${placeholders})`;
+        db.all(sql, ids, (err, rows: any[]) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(rows.map(mapRowToQuestionData).map(parseQuestionOptions));
+            }
+        });
+    });
+};
+
 export const getAllBaseThemesForReferentialCode = (referentielId: number): Promise<string[]> => {
     return new Promise((resolve, reject) => {
         db.all("SELECT DISTINCT code_theme FROM themes WHERE referentiel_id = ?", [referentielId], (err, rows: any[]) => {
@@ -532,6 +549,65 @@ export const getAllSessionsWithParticipants = async (): Promise<Array<SessionDat
         })
     );
     return sessionsWithParticipants;
+};
+
+export const deleteSessionParticipantsBySessionId = (sessionId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run("DELETE FROM session_participants WHERE session_id = ?", [sessionId], (err) => {
+            if (err) reject(err); else resolve();
+        });
+    });
+};
+
+export const addBulkSessionParticipants = (sessionId: number, participants: Array<Omit<SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>>): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (!participants || participants.length === 0) {
+            return resolve();
+        }
+        db.serialize(() => {
+            const stmt = db.prepare(`INSERT INTO session_participants (
+                                       session_id, nom, prenom, identification_code, score, reussite,
+                                       status_in_session, assigned_voting_device_id, original_participant_id,
+                                       created_at, updated_at
+                                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+            let completed = 0;
+            let failed = 0;
+            participants.forEach(p => {
+                // Reconstruct the full participant data including session_id for insertion
+                const participantFull: Omit<SessionParticipantData, 'id' | 'createdAt' | 'updatedAt'> = {
+                    session_id: sessionId,
+                    nom: p.nom,
+                    prenom: p.prenom,
+                    identification_code: p.identification_code,
+                    score: p.score,
+                    reussite: p.reussite,
+                    status_in_session: p.status_in_session,
+                    assigned_voting_device_id: p.assigned_voting_device_id,
+                    original_participant_id: p.original_participant_id
+                };
+                stmt.run(
+                    participantFull.session_id, participantFull.nom, participantFull.prenom || null,
+                    participantFull.identification_code || null, participantFull.score || null,
+                    participantFull.reussite || null, participantFull.status_in_session || 'inscrit',
+                    participantFull.assigned_voting_device_id || null, participantFull.original_participant_id || null,
+                    function(this: sqlite3.Statement, err) {
+                        if (err) {
+                            console.error(`Erreur ajout session_participant (bulk) pour session ${sessionId}:`, err.message);
+                            failed++;
+                        }
+                        completed++;
+                        if (completed === participants.length) {
+                            stmt.finalize((finalizeErr) => {
+                                if (finalizeErr) return reject(finalizeErr);
+                                if (failed > 0) return reject(new Error(`${failed} participants de session non ajoutés.`));
+                                resolve();
+                            });
+                        }
+                    }
+                );
+            });
+        });
+    });
 };
 
 

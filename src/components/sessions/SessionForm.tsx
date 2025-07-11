@@ -77,7 +77,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [displayedBlockDetails, setDisplayedBlockDetails] = useState<Array<{ themeName: string, blocName: string }>>([]);
   const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
-  const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
+  const [editingSessionData, setEditingSessionData] = useState<db.SessionData | null>(null); // Changed type
   const [hardwareDevices, setHardwareDevices] = useState<VotingDevice[]>([]);
   const [hardwareLoaded, setHardwareLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('details');
@@ -174,64 +174,88 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   useEffect(() => {
     if (sessionIdToLoad && hardwareLoaded && referentielsData.length > 0) {
-      const loadSession = async () => {
+      const loadSessionAndParticipants = async () => {
         try {
-          const sessionData = await getSessionById(sessionIdToLoad);
-          setEditingSessionData(sessionData || null);
-          if (sessionData) {
-            setCurrentSessionDbId(sessionData.id ?? null);
-            setSessionName(sessionData.nomSession);
-            setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
-            if (sessionData.referentiel_id) { // referentielId -> referentiel_id
-              const refObj = referentielsData.find(r => r.id === sessionData.referentiel_id);
+          const sessionDetails = await getSessionById(sessionIdToLoad); // Returns db.SessionData (no participants)
+
+          if (sessionDetails) {
+            // Set basic session data
+            // The type of editingSessionData is DBSession from '../../types' which might include a participants array.
+            // However, sessionDetails from db.getSessionById won't have it.
+            // We need to be careful here. Let's assume editingSessionData state will hold db.SessionData.
+            setEditingSessionData(sessionDetails as any); // Cast to any temporarily if DBSession expects participants
+            setCurrentSessionDbId(sessionDetails.id ?? null);
+            setSessionName(sessionDetails.nomSession);
+            setSessionDate(sessionDetails.dateSession ? sessionDetails.dateSession.split('T')[0] : '');
+
+            if (sessionDetails.referentiel_id) {
+              const refObj = referentielsData.find(r => r.id === sessionDetails.referentiel_id);
               if (refObj) {
                 setSelectedReferential(refObj.code as CACESReferential);
                 setSelectedReferentialId(refObj.id!);
               } else {
-                console.warn(`Référentiel avec ID ${sessionData.referentiel_id} non trouvé dans referentielsData.`);
+                console.warn(`Référentiel avec ID ${sessionDetails.referentiel_id} non trouvé dans referentielsData.`);
                 setSelectedReferential('');
                 setSelectedReferentialId(null);
               }
-            } else {
-              const oldRefCode = (sessionData as any).referentiel as CACESReferential | ''; // Garder au cas où, mais preferer referentiel_id
+            } else { // Fallback for older data if referentiel_id is missing
+              const oldRefCode = (sessionDetails as any).referentiel as CACESReferential | '';
               setSelectedReferential(oldRefCode);
               const refObj = referentielsData.find(r => r.code === oldRefCode);
               setSelectedReferentialId(refObj?.id || null);
             }
-            setLocation((sessionData as any).location || ''); // location n'est pas sur SessionData, vérifier si Session l'a
-            setNotes((sessionData as any).notes || ''); // notes n'est pas sur SessionData
-            setSelectedTrainerId(sessionData.trainer_id || null); // trainerId -> trainer_id
-            setSelectedKitIdState((sessionData as any).selectedKitId || null); // selectedKitId n'est pas sur SessionData
+            setLocation(sessionDetails.location || '');
+            setNotes(sessionDetails.notes || '');
+            setSelectedTrainerId(sessionDetails.trainer_id || null);
+            setSelectedKitIdState(sessionDetails.default_voting_device_kit_id || null); // Use default_voting_device_kit_id
             setModifiedAfterOrsGeneration(false);
-            const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
-              ...p_db,
-              id: `loaded-${loopIndex}-${Date.now()}`,
-              firstName: p_db.prenom,
-              lastName: p_db.nom,
-              deviceId: loopIndex + 1,
-              organization: (p_db as any).organization || '',
-              hasSigned: (p_db as any).hasSigned || false,
+
+            // Fetch participants separately
+            const fetchedParticipants = await getSessionParticipants(sessionIdToLoad); // Returns db.SessionParticipantData[]
+            const formParticipants: FormParticipant[] = fetchedParticipants.map((p_db, loopIndex: number) => ({
+              // Spread db.SessionParticipantData fields
+              nom: p_db.nom,
+              prenom: p_db.prenom,
+              identificationCode: p_db.identification_code,
+              score: p_db.score,
+              reussite: p_db.reussite ? (p_db.reussite === 1) : undefined, // Convert 0/1 to boolean or undefined
+              assignedGlobalDeviceId: p_db.assigned_voting_device_id, // Map assigned_voting_device_id
+              statusInSession: p_db.status_in_session as 'present' | 'absent' | undefined,
+              // FormParticipant specific fields
+              id: `loaded-${p_db.id}-${Date.now()}`, // Use db id for more stable key if possible, or keep unique UI id
+              firstName: p_db.prenom || '',
+              lastName: p_db.nom || '',
+              deviceId: loopIndex + 1, // This is a visual/UI deviceId, not hardware
+              organization: '', // Initialize, or find way to load if stored elsewhere
+              hasSigned: false, // Initialize, or find way to load if stored
             }));
             setParticipants(formParticipants);
+
           } else {
             console.warn(`Session avec ID ${sessionIdToLoad} non trouvée.`);
             resetFormTactic();
           }
         } catch (error) {
-            console.error("Erreur chargement session:", error);
+            console.error("Erreur chargement session et participants:", error);
             resetFormTactic();
         }
       };
-      loadSession();
+      loadSessionAndParticipants();
     } else if (!sessionIdToLoad && referentielsData.length > 0) {
       resetFormTactic();
     }
   }, [sessionIdToLoad, hardwareLoaded, referentielsData, resetFormTactic]);
 
   useEffect(() => {
+    // This useEffect depends on editingSessionData.selectedBlocIds
+    // If editingSessionData is now strictly db.SessionData, this is fine.
     if (editingSessionData?.selectedBlocIds && allThemesData.length > 0 && allBlocsData.length > 0) {
+      const blocIds = typeof editingSessionData.selectedBlocIds === 'string'
+        ? JSON.parse(editingSessionData.selectedBlocIds)
+        : editingSessionData.selectedBlocIds; // Assuming it might be an array already after parsing
+
       const details: Array<{ themeName: string, blocName: string }> = [];
-      for (const blocId of editingSessionData.selectedBlocIds) {
+      for (const blocId of blocIds) {
         const bloc = allBlocsData.find(b => b.id === blocId);
         if (bloc) {
           const theme = allThemesData.find(t => t.id === bloc.theme_id);
@@ -439,75 +463,167 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
-  const prepareSessionDataForDb = async (includeOrsBlob?: Blob | null): Promise<DBSession | null> => {
-    const dbParticipants: DBParticipantType[] = participants.map((p_form: FormParticipant) => ({
-      nom: p_form.lastName,
-      prenom: p_form.firstName,
-      identificationCode: p_form.identificationCode,
-      score: p_form.score,
-      reussite: p_form.reussite,
-      assignedGlobalDeviceId: p_form.assignedGlobalDeviceId,
-      statusInSession: p_form.statusInSession,
-    }));
+  // This function now prepares data strictly for the 'sessions' table (db.SessionData compatible)
+  const prepareSessionBaseDataForDb = async (includeOrsBlob?: Blob | null): Promise<Partial<Omit<db.SessionData, 'id' | 'createdAt' | 'updatedAt'>> & { id?: number }> => {
     let currentReferentielId: number | undefined = undefined;
     if (selectedReferentialId) {
-        currentReferentielId = selectedReferentialId;
+        currentReferentielId = selectedReferentielId;
     } else if (selectedReferential) {
         const refObj = referentielsData.find(r => r.code === selectedReferential);
         if (refObj?.id) {
             currentReferentielId = refObj.id;
         } else {
+            // This case should ideally not happen if UI enforces selection or loads existing
             console.error(`Impossible de trouver l'ID pour le code référentiel: ${selectedReferential}`);
-            setImportSummary(`Erreur: Référentiel ${selectedReferential} non valide.`);
-            return null;
+            throw new Error(`Référentiel ${selectedReferential} non valide.`);
         }
-    } else if (editingSessionData?.referentiel_id) { // referentielId -> referentiel_id
+    } else if (editingSessionData?.referentiel_id) {
         currentReferentielId = editingSessionData.referentiel_id;
     }
-    const sessionToSave: DBSession = {
+
+    // Ensure selectedBlocIds is a JSON string or null
+    let selectedBlocIdsString: string | null = null;
+    if (editingSessionData?.selectedBlocIds) {
+      if (Array.isArray(editingSessionData.selectedBlocIds)) {
+        selectedBlocIdsString = JSON.stringify(editingSessionData.selectedBlocIds);
+      } else if (typeof editingSessionData.selectedBlocIds === 'string') {
+        // Assume it's already a JSON string, or handle if it's not.
+        // For safety, try parsing and re-stringifying if it might not be valid JSON.
+        try {
+            JSON.parse(editingSessionData.selectedBlocIds); // Validate
+            selectedBlocIdsString = editingSessionData.selectedBlocIds;
+        } catch (e) {
+            console.warn("selectedBlocIds was a string but not valid JSON. Clearing.", editingSessionData.selectedBlocIds);
+            selectedBlocIdsString = null;
+        }
+      }
+    }
+
+    // Ensure questionMappings is a JSON string or null
+    let questionMappingsString: string | null = null;
+    if (editingSessionData?.questionMappings) {
+        if (typeof editingSessionData.questionMappings === 'object') { // Assuming it's an array/object
+            questionMappingsString = JSON.stringify(editingSessionData.questionMappings);
+        } else if (typeof editingSessionData.questionMappings === 'string') {
+            try {
+                JSON.parse(editingSessionData.questionMappings); // validate
+                questionMappingsString = editingSessionData.questionMappings;
+            } catch(e) {
+                console.warn("questionMappings was a string but not valid JSON. Clearing.", editingSessionData.questionMappings);
+                questionMappingsString = null;
+            }
+        }
+    }
+
+    let ignoredSlideGuidsString: string | null = null;
+    if (editingSessionData?.ignoredSlideGuids) {
+        if (Array.isArray(editingSessionData.ignoredSlideGuids)) {
+            ignoredSlideGuidsString = JSON.stringify(editingSessionData.ignoredSlideGuids);
+        } else if (typeof editingSessionData.ignoredSlideGuids === 'string') {
+             try {
+                JSON.parse(editingSessionData.ignoredSlideGuids); // validate
+                ignoredSlideGuidsString = editingSessionData.ignoredSlideGuids;
+            } catch(e) {
+                console.warn("ignoredSlideGuids was a string but not valid JSON. Clearing.", editingSessionData.ignoredSlideGuids);
+                ignoredSlideGuidsString = null;
+            }
+        }
+    }
+
+    let resolvedImportAnomaliesString: string | null = null;
+    if (editingSessionData?.resolvedImportAnomalies) {
+        if (typeof editingSessionData.resolvedImportAnomalies === 'object') {
+            resolvedImportAnomaliesString = JSON.stringify(editingSessionData.resolvedImportAnomalies);
+        } else if (typeof editingSessionData.resolvedImportAnomalies === 'string') {
+            try {
+                JSON.parse(editingSessionData.resolvedImportAnomalies); // validate
+                resolvedImportAnomaliesString = editingSessionData.resolvedImportAnomalies;
+            } catch(e) {
+                console.warn("resolvedImportAnomalies was a string but not valid JSON. Clearing.", editingSessionData.resolvedImportAnomalies);
+                resolvedImportAnomaliesString = null;
+            }
+        }
+    }
+
+    const sessionBaseData: Partial<Omit<db.SessionData, 'id' | 'createdAt' | 'updatedAt'>> & { id?: number } = {
       id: currentSessionDbId || undefined,
       nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
       dateSession: sessionDate || new Date().toISOString().split('T')[0],
-      referentiel_id: currentReferentielId, // referentielId -> referentiel_id
-      participants: dbParticipants,
-      selectedBlocIds: editingSessionData?.selectedBlocIds || [],
-      selectedKitId: selectedKitIdState, // Doit être selected_kit_id si la DB l'attend
-      donneesOrs: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.donneesOrs,
+      referentiel_id: currentReferentielId,
+      default_voting_device_kit_id: selectedKitIdState,
+      donneesOrs: includeOrsBlob !== undefined
+                    ? (includeOrsBlob instanceof Blob ? Buffer.from(await includeOrsBlob.arrayBuffer()) : includeOrsBlob)
+                    : (editingSessionData?.donneesOrs instanceof Blob ? Buffer.from(await editingSessionData.donneesOrs.arrayBuffer()) : editingSessionData?.donneesOrs),
       status: editingSessionData?.status || 'planned',
       location: location,
-      questionMappings: editingSessionData?.questionMappings,
       notes: notes,
-      trainer_id: selectedTrainerId ?? undefined, // trainerId -> trainer_id
-      created_at: editingSessionData?.created_at || new Date().toISOString(), // createdAt -> created_at
-      updated_at: new Date().toISOString(), // updatedAt -> updated_at
-      ignoredSlideGuids: editingSessionData?.ignoredSlideGuids,
-      resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
+      trainer_id: selectedTrainerId ?? undefined,
+      // JSON fields should be strings
+      selectedBlocIds: selectedBlocIdsString,
+      questionMappings: questionMappingsString,
+      ignoredSlideGuids: ignoredSlideGuidsString,
+      resolvedImportAnomalies: resolvedImportAnomaliesString,
+      // nomFichierOrs might be part of donneesOrs handling or set separately
     };
-    return sessionToSave;
+    return sessionBaseData;
   };
 
-  const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
-    if (!sessionDataToSave) return null;
+  const handleSaveSession = async (sessionBaseDataToSave: Partial<Omit<db.SessionData, 'id' | 'createdAt' | 'updatedAt'>> & { id?: number } | null) => {
+    if (!sessionBaseDataToSave) return null;
+
     try {
-      let savedId: number | undefined;
-      if (sessionDataToSave.id) {
-        await updateSession(sessionDataToSave.id, sessionDataToSave);
-        savedId = sessionDataToSave.id;
+      let savedSessionId: number | undefined = sessionBaseDataToSave.id;
+
+      if (savedSessionId) {
+        await updateSession(savedSessionId, sessionBaseDataToSave);
       } else {
-        const newId = await addSession(sessionDataToSave);
-        if (newId) { setCurrentSessionDbId(newId); savedId = newId; }
-        else { setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée."); return null; }
+        // Remove 'id' if it's undefined, addSession expects data without id
+        const { id, ...dataForAdd } = sessionBaseDataToSave;
+        const newId = await addSession(dataForAdd as Omit<db.SessionData, 'id' | 'createdAt' | 'updatedAt'>);
+        if (newId) {
+          setCurrentSessionDbId(newId);
+          savedSessionId = newId;
+        } else {
+          setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée.");
+          return null;
+        }
       }
-      if (savedId) {
-         const reloadedSession = await getSessionById(savedId);
-         setEditingSessionData(reloadedSession || null);
-         if (reloadedSession) {
-            setModifiedAfterOrsGeneration(false);
-            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db: DBParticipantType, index: number) => {
-              const visualDeviceId = index + 1;
-              const currentParticipantState = participants.find(p => p.nom === p_db.nom && p.prenom === p_db.prenom && p.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId) || participants[index];
-              return {
-                nom: p_db.nom,
+
+      if (savedSessionId) {
+        // Save participants
+        await deleteSessionParticipantsBySessionId(savedSessionId);
+        const dbParticipantsToSave: Array<Omit<db.SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>> = participants.map(p => ({
+          nom: p.lastName,
+          prenom: p.firstName,
+          identification_code: p.identificationCode,
+          score: p.score,
+          reussite: p.reussite !== undefined ? (p.reussite ? 1 : 0) : undefined,
+          status_in_session: p.statusInSession,
+          assigned_voting_device_id: p.assignedGlobalDeviceId,
+          // original_participant_id might need to be sourced if linking to a global participant list
+        }));
+        if (dbParticipantsToSave.length > 0) {
+          await addBulkSessionParticipants(savedSessionId, dbParticipantsToSave);
+        }
+
+        // Reload session and participants to refresh UI state
+        const reloadedSession = await getSessionById(savedSessionId);
+        setEditingSessionData(reloadedSession || null); // reloadedSession is db.SessionData
+
+        if (reloadedSession) {
+          setModifiedAfterOrsGeneration(false);
+          const reloadedDbParticipants = await getSessionParticipants(savedSessionId);
+          const formParticipants: FormParticipant[] = reloadedDbParticipants.map((p_db, index: number) => {
+            const visualDeviceId = index + 1;
+            // Try to find matching state from before save to preserve UI-specific temporary ID or deviceId (visual)
+            const currentParticipantState = participants.find(p_ui =>
+                p_ui.lastName === p_db.nom &&
+                p_ui.firstName === p_db.prenom &&
+                p_ui.assignedGlobalDeviceId === p_db.assigned_voting_device_id
+            ) || participants[index];
+
+            return {
+              nom: p_db.nom,
                 prenom: p_db.prenom,
                 identificationCode: p_db.identificationCode,
                 score: p_db.score,
@@ -558,15 +674,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
     const upToDateSessionData = await getSessionById(currentSavedId);
     if (!upToDateSessionData) { setImportSummary("Erreur rechargement session après sauvegarde."); setIsGeneratingOrs(false); return; }
-    setEditingSessionData(upToDateSessionData);
+
+    // Use current 'participants' state (FormParticipant[]) for checks and for passing to generator
+    setEditingSessionData(upToDateSessionData); // upToDateSessionData is db.SessionData
     const participantsWithoutValidDevice = [];
-    for (const p of upToDateSessionData.participants) {
+    // The 'participants' state is Array<FormParticipant>
+    for (const p of participants) {
       if (p.assignedGlobalDeviceId === null || p.assignedGlobalDeviceId === undefined) {
-        participantsWithoutValidDevice.push(`${p.prenom} ${p.nom} (aucun boîtier physique assigné)`);
+        participantsWithoutValidDevice.push(`${p.firstName} ${p.lastName} (aucun boîtier physique assigné)`);
       } else {
         const foundDevice = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
         if (!foundDevice) {
-          participantsWithoutValidDevice.push(`${p.prenom} ${p.nom} (boîtier physique assigné introuvable - ID: ${p.assignedGlobalDeviceId})`);
+          participantsWithoutValidDevice.push(`${p.firstName} ${p.lastName} (boîtier physique assigné introuvable - ID: ${p.assignedGlobalDeviceId})`);
         }
       }
     }
@@ -579,14 +698,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     let allSelectedQuestionsForPptx: StoredQuestion[] = [];
     let selectedBlocIdsForSession: number[] = [];
     try {
-      const referentielObject = await StorageManager.getReferentialByCode(refCodeToUse as string);
+      const referentielObject = await StorageManager.getReferentielById(upToDateSessionData.referentiel_id!); // Use ID from upToDateSessionData
       if (!referentielObject || !referentielObject.id) {
-        setImportSummary(`Référentiel avec code "${refCodeToUse}" non trouvé.`);
+        setImportSummary(`Référentiel avec ID "${upToDateSessionData.referentiel_id}" non trouvé.`);
         setIsGeneratingOrs(false); return;
       }
-      const themesForReferential = await StorageManager.getThemesByReferentialId(referentielObject.id);
+      const themesForReferential = await StorageManager.getThemesByReferentielId(referentielObject.id);
       if (!themesForReferential || themesForReferential.length === 0) {
-        setImportSummary(`Aucun thème trouvé pour le référentiel "${refCodeToUse}".`);
+        setImportSummary(`Aucun thème trouvé pour le référentiel "${referentielObject.code}".`);
         setIsGeneratingOrs(false); return;
       }
       for (const theme of themesForReferential) {
@@ -606,6 +725,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const chosenBloc = filteredBlocs[Math.floor(Math.random() * filteredBlocs.length)];
         if (chosenBloc && chosenBloc.id) {
           selectedBlocIdsForSession.push(chosenBloc.id);
+          // Assuming StorageManager.getQuestionsForBloc now correctly uses dbFunctions.getQuestionsByBlocId
           const questionsFromBloc = await StorageManager.getQuestionsForBloc(chosenBloc.id);
           allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBloc);
           logger.info(`Thème: ${theme.code_theme}, Bloc choisi: ${chosenBloc.code_bloc}, Questions: ${questionsFromBloc.length}`);
@@ -615,14 +735,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         setImportSummary("Aucune question sélectionnée après le processus de choix aléatoire des blocs.");
         setIsGeneratingOrs(false); return;
       }
-      const sessionDataWithSelectedBlocs: DBSession = {
-        ...upToDateSessionData,
-        selectedBlocIds: selectedBlocIdsForSession,
-        referentielId: referentielObject.id
+
+      // Data for updateSession call, must be Partial<db.SessionData>
+      const sessionUpdatePayload: Partial<db.SessionData> = {
+        selectedBlocIds: JSON.stringify(selectedBlocIdsForSession), // Ensure it's a string for db.SessionData
+        referentiel_id: referentielObject.id // referentielId for db.SessionData
       };
-      await updateSession(currentSavedId, { selectedBlocIds: selectedBlocIdsForSession, referentielId: referentielObject.id });
-      setEditingSessionData(sessionDataWithSelectedBlocs);
-      const sessionInfoForPptx = { name: sessionDataWithSelectedBlocs.nomSession, date: sessionDataWithSelectedBlocs.dateSession, referential: referentielObject.code as CACESReferential };
+      await updateSession(currentSavedId, sessionUpdatePayload);
+
+      // Update local editingSessionData state with these specific changes
+      setEditingSessionData(prev => prev ? ({ ...prev, ...sessionUpdatePayload }) : null);
+
+      const sessionInfoForPptx = { name: upToDateSessionData.nomSession, date: upToDateSessionData.dateSession, referential: referentielObject.code as CACESReferential };
       const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
       const prefAnswersBulletStyle = await getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
       const prefPollTimeLimit = await getAdminSetting('pollTimeLimit');
@@ -634,47 +758,69 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: prefPollCountdownStartMode,
         pollMultipleResponse: '1'
       };
-      const participantsForGenerator = sessionDataWithSelectedBlocs.participants.map((p_db: DBParticipantType) => {
-        const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
+      // participantsForGenerator should use the 'participants' state (FormParticipant[])
+      const participantsForGenerator = participants.map((p_form: FormParticipant) => {
+        const assignedDevice = hardwareDevices.find(hd => hd.id === p_form.assignedGlobalDeviceId);
         return {
-          idBoitier: assignedDevice ? assignedDevice.serialNumber : '',
-          nom: p_db.nom,
-          prenom: p_db.prenom,
-          identificationCode: p_db.identificationCode,
+          // idBoitier is no longer the primary way; deviceIdentifierString is preferred for XML.
+          // The generatePresentation function in pptxOrchestrator expects Participant[] from types/index.ts
+          // which now includes deviceIdentifierString.
+          nom: p_form.lastName, // or p_form.nom if FormParticipant aligns with DBParticipantType
+          prenom: p_form.firstName, // or p_form.prenom
+          identificationCode: p_form.identificationCode,
+          organization: p_form.organization,
+          deviceIdentifierString: assignedDevice ? assignedDevice.serialNumber : `TMP_ID_${p_form.id}`, // Crucial for ORS XML
+          // Ensure other fields expected by pptxOrchestrator's Participant type are included
+          assignedGlobalDeviceId: p_form.assignedGlobalDeviceId, // if needed by pptxOrchestrator's Participant type
+          statusInSession: p_form.statusInSession, // if needed
+          score: p_form.score, // if needed
+          reussite: p_form.reussite // if needed
         };
       });
-      const stillMissingSerial = participantsForGenerator.find(p => !p.idBoitier);
+
+      const stillMissingSerial = participantsForGenerator.find(p => !p.deviceIdentifierString || p.deviceIdentifierString.startsWith('TMP_ID_'));
       if (stillMissingSerial) {
-          setImportSummary(`Erreur critique: Impossible de trouver le numéro de série pour ${stillMissingSerial.prenom} ${stillMissingSerial.nom}.`);
+          setImportSummary(`Erreur critique: Impossible de trouver le numéro de série pour ${stillMissingSerial.prenom} ${stillMissingSerial.nom}. Boîtier assigné: ${stillMissingSerial.assignedGlobalDeviceId}`);
           setIsGeneratingOrs(false); return;
       }
+
       const generationOutput = await generatePresentation(
         sessionInfoForPptx,
-        participantsForGenerator as DBParticipantType[],
+        participantsForGenerator, // This is now Array of objects matching types/index.ts#Participant
         allSelectedQuestionsForPptx,
-        undefined,
+        undefined, // selectedTemplateId
         adminSettings
       );
-      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
+
+      // upToDateSessionData is db.SessionData (from getSessionById)
+      // sessionUpdatePayload was Partial<db.SessionData>
+      // editingSessionData is db.SessionData | null
+      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && editingSessionData) {
         const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;
-        try {
-          await updateSession(currentSavedId, {
-            donneesOrs: orsBlob,
-            questionMappings: questionMappings,
-            ignoredSlideGuids: newlyIgnoredSlideGuids || [],
+
+        const finalSessionUpdatePayload: Partial<db.SessionData> = {
+            donneesOrs: Buffer.from(await orsBlob.arrayBuffer()), // Convert Blob to Buffer
+            questionMappings: JSON.stringify(questionMappings), // Stringify
+            ignoredSlideGuids: newlyIgnoredSlideGuids ? JSON.stringify(newlyIgnoredSlideGuids) : JSON.stringify([]), // Stringify
             updatedAt: new Date().toISOString(),
             status: 'ready',
-            selectedBlocIds: sessionDataWithSelectedBlocs.selectedBlocIds,
-            referentielId: sessionDataWithSelectedBlocs.referentielId
-          });
-          const freshlyUpdatedSessionData = await getSessionById(currentSavedId);
+            // selectedBlocIds and referentiel_id were already updated and are in editingSessionData
+            selectedBlocIds: editingSessionData.selectedBlocIds,
+            referentiel_id: editingSessionData.referentiel_id
+        };
+
+        try {
+          await updateSession(currentSavedId, finalSessionUpdatePayload);
+          const freshlyUpdatedSessionData = await getSessionById(currentSavedId); // Returns db.SessionData
           if (!freshlyUpdatedSessionData) {
             throw new Error("Impossible de recharger la session après la mise à jour avec l'ORS.");
           }
-          setEditingSessionData(freshlyUpdatedSessionData);
+          setEditingSessionData(freshlyUpdatedSessionData); // Correctly typed
+
           await deleteSessionQuestionsBySessionId(currentSavedId);
           await deleteSessionBoitiersBySessionId(currentSavedId);
-          const sessionQuestionsToSave: SessionQuestion[] = [];
+
+          const sessionQuestionsToSave: SessionQuestion[] = []; // Type from ../../types
           for (const qMap of questionMappings) {
             if (qMap.slideGuid && qMap.dbQuestionId !== undefined) {
               const originalQuestion = allSelectedQuestionsForPptx.find(q => q.id === qMap.dbQuestionId);
@@ -701,25 +847,33 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             }
           }
           if (sessionQuestionsToSave.length > 0) {
-            await addBulkSessionQuestions(sessionQuestionsToSave);
+            // Map SessionQuestion (from ../../types) to Omit<db.SessionQuestionData, 'id' | 'session_id' | 'createdAt'>
+            const dbSessionQuestions: Array<Omit<db.SessionQuestionData, 'id' | 'session_id' | 'createdAt'>> = sessionQuestionsToSave.map(sq => ({
+                original_question_id: sq.dbQuestionId, // Map dbQuestionId to original_question_id
+                texte_question: sq.text,             // Map text to texte_question
+                type_question: allSelectedQuestionsForPptx.find(q => q.id === sq.dbQuestionId)?.type || '', // Get type from original StoredQuestion
+                options: JSON.stringify(sq.options), // Stringify options
+                // image, image_name, points, feedback would need mapping if present in SessionQuestion type and needed by db.SessionQuestionData
+                bloc_id: typeof sq.blockId === 'number' ? sq.blockId : undefined, // Assuming blockId might be string from form, needs to be number for DB
+                ordre_apparition: qMap.orderInPptx, // Assuming orderInPptx can be used for ordre_apparition
+            }));
+            await addBulkSessionQuestions(currentSavedId, dbSessionQuestions);
           }
-              const sessionBoitiersToSave: Omit<SessionBoitierData, 'id' | 'created_at'>[] = []; // Utiliser SessionBoitierData de db.ts
-          freshlyUpdatedSessionData.participants.forEach((p_db: DBParticipantType, p_idx: number) => {
+
+          // Prepare data for addBulkSessionBoitiers
+          const dbSessionBoitiers: Array<Omit<db.SessionBoitierData, 'id' | 'session_id' | 'createdAt'>> = [];
+          freshlyUpdatedSessionData.participants.forEach((p_db: DBParticipantType) => {
             const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
-            if (assignedDevice) {
-                  // const formP = participants.find(fp => fp.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId);
-                  // const visualId = formP?.deviceId ?? (p_idx + 1); // visualId n'est pas dans SessionBoitierData
-              sessionBoitiersToSave.push({
-                    session_id: currentSavedId, // sessionId -> session_id
-                    original_voting_device_id: assignedDevice.id, // Lier au boîtier physique
-                    name: assignedDevice.name, // Utiliser le nom du boîtier physique
-                    serial_number: assignedDevice.serialNumber, // Utiliser le S/N du boîtier physique
-                    // participantName: `${p_db.prenom} ${p_db.nom}`, // participantName n'est pas dans SessionBoitierData
+            if (assignedDevice && assignedDevice.id !== undefined) {
+              dbSessionBoitiers.push({
+                    original_voting_device_id: assignedDevice.id,
+                    name: assignedDevice.name,
+                    serial_number: assignedDevice.serialNumber,
               });
             }
           });
-          if (sessionBoitiersToSave.length > 0) {
-            await addBulkSessionBoitiers(sessionBoitiersToSave);
+          if (dbSessionBoitiers.length > 0) {
+            await addBulkSessionBoitiers(currentSavedId, dbSessionBoitiers);
           }
           setImportSummary(`Session (ID: ${currentSavedId}) .ors, mappings et métadonnées générés. Statut: Prête.`);
           logger.info(`Fichier .ors, mappings et métadonnées générés/mis à jour pour la session "${freshlyUpdatedSessionData.nomSession}"`, {
@@ -1009,7 +1163,27 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       return;
     }
     let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
-    let updatedParticipantsList: DBParticipantType[] = editingSessionData.participants ? [...editingSessionData.participants] : [];
+    // editingSessionData is db.SessionData | null, and does not have 'participants'
+    // The participants list to be updated is the main 'participants' state (FormParticipant[])
+    // which needs to be mapped to DBParticipantType[] or directly to db.SessionParticipantData[] for saving.
+    // For consistency, let's work with a representation of what's in the DB for this part.
+    // We'll fetch current DB participants, apply changes, then save.
+    // However, the logic adds new participants based on 'unknownResolutions',
+    // so modifying a fresh copy of the current UI state (FormParticipant[]) then mapping might be better.
+
+    // Let's reconstruct a list similar to DBParticipantType from the current 'participants' (FormParticipant[]) state
+    // to apply resolutions, then this list will be saved via bulk updates.
+    let workingParticipantsList: DBParticipantType[] = participants.map(fp => ({
+        nom: fp.lastName,
+        prenom: fp.firstName,
+        identificationCode: fp.identificationCode,
+        score: fp.score,
+        reussite: fp.reussite,
+        assignedGlobalDeviceId: fp.assignedGlobalDeviceId,
+        statusInSession: fp.statusInSession,
+        // DBParticipantType from types/index.ts might not have all db.SessionParticipantData fields
+        // This mapping needs to be robust or DBParticipantType must align with db.SessionParticipantData
+    }));
     let participantsDataChanged = false;
     const originalAnomalies = detectedAnomalies;
     if (!originalAnomalies) {
@@ -1022,15 +1196,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         (e: any) => e.serialNumber === resolution.serialNumber
       );
       if (!expectedDeviceData) continue;
-      const participantIndex = updatedParticipantsList.findIndex((p: DBParticipantType) => {
+      const participantIndex = workingParticipantsList.findIndex((p: DBParticipantType) => { // Use workingParticipantsList
         const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
         return device?.serialNumber === resolution.serialNumber;
       });
       if (resolution.action === 'mark_absent' || resolution.action === 'ignore_device') {
         logger.info(`[AnomalyResolution] Traitement pour ${expectedDeviceData.participantName} (SN: ${resolution.serialNumber}): Action = ${resolution.action}.`);
         if (participantIndex !== -1) {
-          const currentParticipant = updatedParticipantsList[participantIndex];
-          updatedParticipantsList[participantIndex] = {
+          const currentParticipant = workingParticipantsList[participantIndex]; // Use workingParticipantsList
+          workingParticipantsList[participantIndex] = { // Use workingParticipantsList
             ...currentParticipant,
             statusInSession: 'absent',
             score: 0,
@@ -1103,7 +1277,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           assignedGlobalDeviceId: assignedGlobalDeviceIdForNew,
           identificationCode: `NEW_${resolution.serialNumber}`,
         };
-        updatedParticipantsList.push(newParticipantEntry);
+        workingParticipantsList.push(newParticipantEntry); // Use workingParticipantsList
         participantsDataChanged = true;
       } else if (resolution.action === 'ignore_responses') {
         logger.info(`[AnomalyResolution] Réponses de l'inconnu SN: ${resolution.serialNumber} ignorées.`);
@@ -1116,17 +1290,38 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
     finalResultsToImport = Array.from(uniqueResultsMap.values());
     logger.info(`[AnomalyResolution] ${finalResultsToImport.length} résultats finaux à importer après résolution.`);
+
     if (participantsDataChanged) {
         try {
-            await updateSession(currentSessionDbId, { participants: updatedParticipantsList, updatedAt: new Date().toISOString() });
-            const reloadedSessionForUI = await getSessionById(currentSessionDbId);
+            // Save the modified workingParticipantsList to the database
+            await deleteSessionParticipantsBySessionId(currentSessionDbId);
+            const dbParticipantsToSave: Array<Omit<db.SessionParticipantData, 'id' | 'session_id' | 'createdAt' | 'updatedAt'>> = workingParticipantsList.map(p => ({
+                nom: p.nom,
+                prenom: p.prenom,
+                identification_code: p.identificationCode,
+                score: p.score,
+                reussite: p.reussite !== undefined ? (p.reussite ? 1 : 0) : undefined,
+                status_in_session: p.statusInSession,
+                assigned_voting_device_id: p.assignedGlobalDeviceId,
+            }));
+            await addBulkSessionParticipants(currentSessionDbId, dbParticipantsToSave);
+
+            // Reload session and participants to refresh UI state
+            const reloadedSessionForUI = await getSessionById(currentSessionDbId); // db.SessionData
+            setEditingSessionData(reloadedSessionForUI);
+
             if (reloadedSessionForUI) {
-                setEditingSessionData(reloadedSessionForUI);
-                const formParticipantsToUpdate: FormParticipant[] = reloadedSessionForUI.participants.map((p_db_updated: DBParticipantType, index: number) => {
+                 const reloadedDbParticipants = await getSessionParticipants(currentSessionDbId);
+                 const formParticipantsToUpdate: FormParticipant[] = reloadedDbParticipants.map((p_db_updated, index: number) => {
                     const visualDeviceId = index + 1;
-                    const currentFormParticipantState = participants[index];
+                    // Try to find matching state from before save to preserve UI-specific temporary ID or deviceId (visual)
+                    const currentFormParticipantState = participants.find(p_ui =>
+                        p_ui.lastName === p_db_updated.nom &&
+                        p_ui.firstName === p_db_updated.prenom &&
+                        p_ui.assignedGlobalDeviceId === p_db_updated.assigned_voting_device_id
+                    ) || participants[index];
                     return {
-                      nom: p_db_updated.nom,
+                      nom: p_db_updated.nom, // This is from db.SessionParticipantData
                       prenom: p_db_updated.prenom,
                       identificationCode: p_db_updated.identificationCode,
                       score: p_db_updated.score,
@@ -1169,45 +1364,70 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const finalSessionDataForScores = await getSessionById(currentSessionDbId);
         if (finalSessionDataForScores && finalSessionDataForScores.questionMappings) {
             const questionDbIds = finalSessionDataForScores.questionMappings.map(qm => qm.dbQuestionId).filter(id => id != null) as number[];
-            const questionsForScoreCalc = await getQuestionsByIds(questionDbIds); // Utilisation de la nouvelle fonction
-            const allResultsForScoreCalc = await getSessionResultsBySessionId(currentSessionDbId);
+            const questionsForScoreCalc = await getQuestionsByIds(questionDbIds);
+            const allResultsForScoreCalc = await getSessionResultsBySessionId(currentSessionDbId); // This gets db.SessionResultData[]
+
             if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
-                const participantsWithScores = finalSessionDataForScores.participants.map((p: DBParticipantType) => {
-                    const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
-                    const participantSerialNumber = device ? device.serialNumber : p.identificationCode?.startsWith('NEW_') ? p.identificationCode.substring(4) : null;
-                    if (!participantSerialNumber) return { ...p, score: p.score || 0, reussite: p.reussite || false };
-                    const participantResults = allResultsForScoreCalc.filter((r: SessionResult) => r.participantIdBoitier === participantSerialNumber);
+                // The participants to update are those in the DB, fetched by getSessionParticipants
+                const currentDbParticipants = await getSessionParticipants(currentSessionDbId);
+
+                const participantsWithScores: db.SessionParticipantData[] = currentDbParticipants.map(p_db => {
+                    const device = hardwareDevices.find(hd => hd.id === p_db.assigned_voting_device_id);
+                    // SessionResultData uses session_participant_id (number), not boitier string.
+                    // The results parser (transformParsedResponsesToSessionResults) should ensure participantIdBoitier is mapped to session_participant_id.
+                    // For now, assuming allResultsForScoreCalc are correctly linked to p_db.id (session_participant_id)
+                    const participantResults = allResultsForScoreCalc.filter(r => r.session_participant_id === p_db.id);
+
                     const score = calculateParticipantScore(participantResults, questionsForScoreCalc);
                     const themeScores = calculateThemeScores(participantResults, questionsForScoreCalc);
                     const reussite = determineIndividualSuccess(score, themeScores);
-                    return { ...p, score, reussite };
+                    return { ...p_db, score, reussite: reussite ? 1: 0 };
                 });
+
+                // Bulk update participants with scores (needs a new db function or individual updates)
+                // For now, let's assume individual updates or a future bulk update function.
+                // This part is complex: we need to update existing session_participant records.
+                // A simple updateSession with 'participants' array won't work.
+                // We'll update them one by one for now if no bulk update for session_participants exists.
+                for (const p_with_score of participantsWithScores) {
+                    const { id, session_id, createdAt, updatedAt, ...updateData } = p_with_score;
+                    await updateSessionParticipant(id, updateData);
+                }
+
                 const anomaliesAuditData = {
                   expectedIssues: expectedResolutions,
                   unknownDevices: unknownResolutions,
                   resolvedAt: new Date().toISOString(),
                 };
+
+                // Update session status and anomaly audit; this is Partial<db.SessionData>
                 await updateSession(currentSessionDbId, {
-                  participants: participantsWithScores,
                   status: 'completed',
-                  resolvedImportAnomalies: anomaliesAuditData,
+                  resolvedImportAnomalies: JSON.stringify(anomaliesAuditData), // Stringify
                   updatedAt: new Date().toISOString()
                 });
+
                 message += "\nScores et réussite calculés. Statut session: 'Terminée', Audit des anomalies sauvegardé.";
                 logger.info(`[AnomalyResolution] Anomalies résolues et auditées pour session ID ${currentSessionDbId}`, {
                   eventType: 'ANOMALIES_RESOLVED_AUDITED',
                   sessionId: currentSessionDbId,
-                  sessionName: finalSessionDataForScores?.nomSession || editingSessionData.nomSession,
+                  sessionName: finalSessionDataForScores?.nomSession || editingSessionData?.nomSession || '',
                   resolutions: anomaliesAuditData
                 });
-                const finalUpdatedSessionWithScores = await getSessionById(currentSessionDbId);
+
+                const finalUpdatedSessionWithScores = await getSessionById(currentSessionDbId); // db.SessionData
                  if (finalUpdatedSessionWithScores) {
                     setEditingSessionData(finalUpdatedSessionWithScores);
-                    const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSessionWithScores.participants.map((p_db_updated: DBParticipantType, index: number) => {
+                    const finalDbParticipants = await getSessionParticipants(currentSessionDbId);
+                    const formParticipantsToUpdate: FormParticipant[] = finalDbParticipants.map((p_db_updated, index: number) => {
                         const visualDeviceId = index + 1;
-                        const currentFormParticipantState = participants[index];
+                        const currentFormParticipantState = participants.find(p_ui =>
+                            p_ui.lastName === p_db_updated.nom &&
+                            p_ui.firstName === p_db_updated.prenom &&
+                            p_ui.assignedGlobalDeviceId === p_db_updated.assigned_voting_device_id
+                        ) || participants[index];
                         return {
-                          nom: p_db_updated.nom,
+                          nom: p_db_updated.nom, // from db.SessionParticipantData
                           prenom: p_db_updated.prenom,
                           identificationCode: p_db_updated.identificationCode,
                           score: p_db_updated.score,
@@ -1323,7 +1543,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               />
               <Select
                 label="Formateur"
-                options={trainersList.map((t: Trainer) => ({ value: t.id?.toString() || '', label: t.name }))}
+                options={trainersList.map((t: Trainer) => ({ value: t.id?.toString() || '', label: t.nom + (t.prenom ? ' ' + t.prenom : '') }))}
                 value={selectedTrainerId?.toString() || ''}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null)}
                 placeholder="Sélectionner un formateur"

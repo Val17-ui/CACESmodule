@@ -57,7 +57,34 @@ export const StorageManager = {
    */
   async addQuestion(questionData: Omit<StoredQuestion, 'id'>): Promise<number | undefined> {
     try {
-      const newId = await dbAddQuestion(questionData as Partial<Omit<DBQuestionData, 'id'>>); // Utiliser l'alias et le type DB
+      let dbCompatibleQuestionData: Partial<Omit<DBQuestionData, 'id'>> = { ...questionData } as any;
+
+      if (questionData.image && questionData.image instanceof Blob) {
+        dbCompatibleQuestionData.image = Buffer.from(await questionData.image.arrayBuffer());
+      } else if (questionData.image === null) {
+        dbCompatibleQuestionData.image = null;
+      } else if (questionData.image !== undefined) {
+        // If it's already a Buffer or some other non-Blob format, this might indicate an issue or prior conversion.
+        // For safety, if it's not explicitly Blob or null, we might want to log or handle.
+        // However, StoredQuestion type says Blob | null, so this path shouldn't be common.
+        console.warn("StorageManager.addQuestion: questionData.image was neither Blob nor null. Type:", typeof questionData.image);
+        // Assuming it might be an ArrayBuffer from IPC, try to convert. If not, it might fail at dbAddQuestion.
+        if (questionData.image instanceof ArrayBuffer) {
+            dbCompatibleQuestionData.image = Buffer.from(questionData.image);
+        } else if (!Buffer.isBuffer(questionData.image)) {
+             // If it's not a buffer already, and not ArrayBuffer, set to null to avoid DB error for incompatible type.
+            dbCompatibleQuestionData.image = undefined; // Or null, depending on how dbAddQuestion handles undefined
+        }
+      }
+
+      // Ensure blocId is present as it's mandatory in DBQuestionData (and StoredQuestion)
+      if (typeof dbCompatibleQuestionData.blocId !== 'number') {
+        // Throw error or handle as per application logic for missing blocId
+        console.error("StorageManager.addQuestion: blocId is missing or not a number.", questionData);
+        throw new Error("blocId is required to add a question.");
+      }
+
+      const newId = await dbAddQuestion(dbCompatibleQuestionData);
       return newId;
     } catch (error) {
       console.error("StorageManager: Error adding question", error);
@@ -102,8 +129,29 @@ export const StorageManager = {
    */
   async updateQuestion(id: number, updates: Partial<StoredQuestion>): Promise<number | undefined> {
     try {
-      await dbUpdateQuestion(id, updates as Partial<DBQuestionData>); // Utiliser l'alias et le type DB
-      return 1;
+      let dbCompatibleUpdates: Partial<DBQuestionData> = { ...updates } as any;
+
+      if (updates.image && updates.image instanceof Blob) {
+        dbCompatibleUpdates.image = Buffer.from(await updates.image.arrayBuffer());
+      } else if (updates.image === null) {
+        dbCompatibleUpdates.image = null;
+      } else if (updates.image !== undefined) {
+        console.warn("StorageManager.updateQuestion: updates.image was neither Blob nor null. Type:", typeof updates.image);
+        if (updates.image instanceof ArrayBuffer) {
+            dbCompatibleUpdates.image = Buffer.from(updates.image);
+        } else if (!Buffer.isBuffer(updates.image)) {
+            dbCompatibleUpdates.image = undefined;
+        }
+      }
+
+      // If blocId is part of updates, ensure it's a number
+      if (updates.blocId !== undefined && typeof updates.blocId !== 'number') {
+        console.error("StorageManager.updateQuestion: updates.blocId is not a number.", updates);
+        throw new Error("If blocId is being updated, it must be a number.");
+      }
+
+      await dbUpdateQuestion(id, dbCompatibleUpdates);
+      return 1; // Assuming 1 means success, though dbUpdateQuestion is void
     } catch (error) {
       console.error(`StorageManager: Error updating question with id ${id}`, error);
       return undefined;

@@ -138,7 +138,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
                 className="w-1/4"
                 options={[
                   { value: 'all', label: 'Tous les formateurs' },
-                  ...trainersListForFilter.map(trainer => ({ value: trainer.id?.toString() || '', label: trainer.name }))
+                  ...trainersListForFilter.map(trainer => ({ value: trainer.id?.toString() || '', label: trainer.nom + (trainer.prenom ? ' ' + trainer.prenom : '') }))
                 ]}
                 disabled={trainersListForFilter.length === 0}
               />

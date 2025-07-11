@@ -51,7 +51,7 @@ const runDBTests = async () => {
   log("\nStep 2: Adding a new question...");
   const sampleQuestion: QuestionWithId = {
     text: 'What is the capital of France?',
-    type: QuestionTypeForTest.QCM,
+    type: 'QCM', // Changed from QuestionTypeForTest.QCM to string literal matching db.ts
     options: ['Paris', 'London', 'Berlin', 'Madrid'],
     correctAnswer: 'Paris', // Storing answer text
     timeLimit: 30,
