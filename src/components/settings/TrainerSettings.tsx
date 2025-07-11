@@ -19,7 +19,8 @@ const TrainerSettings: React.FC = () => {
     setIsLoading(true);
     try {
       const allTrainers = await getAllTrainers();
-      setTrainers(allTrainers.sort((a, b) => a.name.localeCompare(b.name)));
+      // Assuming Trainer type now has 'nom' and 'prenom'
+      setTrainers(allTrainers.sort((a, b) => a.nom.localeCompare(b.nom)));
     } catch (err) {
       setError('Erreur lors de la récupération des formateurs.');
       console.error('Erreur fetchTrainers:', err);
@@ -29,28 +30,7 @@ const TrainerSettings: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Vérifier la version de la base de données
-    const checkDbVersion = () => { // Plus besoin d'async ici si db.verno est utilisé après ouverture
-      if (db.isOpen()) {
-        const version = db.verno;
-        console.log(`Version de la base de données : ${version}`);
-        if (version < 10) {
-          setError('La base de données n\'est pas à la dernière version (10). La version actuelle est '+ version +'. Essayez de vider le cache et de rafraîchir l\'application, ou contactez le support si le problème persiste.');
-        }
-      } else {
-        // La base de données n'est pas encore ouverte, on pourrait attendre l'événement "ready"
-        // ou simplement supposer qu'elle s'ouvrira correctement.
-        // Pour ce log, il est préférable qu'elle soit ouverte.
-        db.on('ready', () => {
-          const version = db.verno;
-          console.log(`Version de la base de données (après ready event) : ${version}`);
-          if (version < 10) {
-             setError('La base de données n\'est pas à la dernière version (10). La version actuelle est '+ version +'. Essayez de vider le cache et de rafraîchir l\'application, ou contactez le support si le problème persiste.');
-          }
-        });
-      }
-    };
-    checkDbVersion();
+    // Removed Dexie-specific db.isOpen() and db.verno checkDbVersion logic
     fetchTrainers();
   }, [fetchTrainers]);
 
@@ -61,7 +41,9 @@ const TrainerSettings: React.FC = () => {
       setSuccess(null);
       return;
     }
-    if (newTrainerName.length > 100) {
+    // Assuming newTrainerName is for 'nom', and 'prenom' will be empty for now from this UI.
+    // Max length check applies to 'nom'.
+    if (newTrainerName.trim().length > 100) {
       setError('Le nom du formateur ne peut pas dépasser 100 caractères.');
       setSuccess(null);
       return;
@@ -69,14 +51,16 @@ const TrainerSettings: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      // Convertir l'état booléen de la case à cocher en 0 ou 1
-      const trainerPayload: Omit<Trainer, 'id'> = {
-        name: newTrainerName.trim(),
+      // Trainer type now expects nom and prenom.
+      // For simplicity from current UI, prenom is empty.
+      const trainerPayload: Omit<Trainer, 'id' | 'createdAt' | 'updatedAt' | 'signature'> = {
+        nom: newTrainerName.trim(),
+        prenom: '', // Or handle prenom with another input field if desired
         isDefault: isDefault ? 1 : 0,
       };
       const id = await addTrainer(trainerPayload);
       if (id !== undefined) {
-        setSuccess(`Formateur "${newTrainerName}" ajouté avec succès.`);
+        setSuccess(`Formateur "${trainerPayload.nom}" ajouté avec succès.`);
         setNewTrainerName('');
         setIsDefault(false);
         await fetchTrainers();
@@ -98,7 +82,7 @@ const TrainerSettings: React.FC = () => {
       setError('Vous ne pouvez pas supprimer le formateur par défaut s\'il en existe d\'autres. Veuillez d\'abord désigner un autre formateur par défaut.');
       return;
     }
-    if (!window.confirm(`Voulez-vous vraiment supprimer le formateur "${trainerToDelete?.name}" ?`)) {
+    if (!window.confirm(`Voulez-vous vraiment supprimer le formateur "${trainerToDelete?.nom}" ?`)) { // Changed .name to .nom
       return;
     }
     try {
@@ -165,9 +149,14 @@ const TrainerSettings: React.FC = () => {
           setError("Formateur non trouvé pour la mise à jour.");
           return;
       }
-      // Assurer que trainerToUpdate.isDefault est bien 0 ou 1. Le type Trainer le garantit déjà.
-      // updateTrainer s'attend à 0 | 1 | undefined pour isDefault.
-      await updateTrainer(id, { name: newName.trim(), isDefault: trainerToUpdate.isDefault });
+      // Assurer que trainerToUpdate.isDefault est bien 0 ou 1.
+      // The Trainer type (aligned with TrainerData) has nom, prenom.
+      // We are only updating 'nom' from this input, keeping existing 'prenom'.
+      await updateTrainer(id, {
+        nom: newName.trim(),
+        prenom: trainerToUpdate.prenom, // Preserve existing prenom
+        isDefault: trainerToUpdate.isDefault
+      });
       setSuccess('Nom du formateur mis à jour avec succès.');
       await fetchTrainers();
     } catch (err: any) {
@@ -224,19 +213,17 @@ const TrainerSettings: React.FC = () => {
               >
                 <Input
                   type="text"
-                  defaultValue={trainer.name}
+                  defaultValue={trainer.nom} // Changed .name to .nom
                   onBlur={(e) => {
-                    if (trainer.id && e.target.value !== trainer.name) {
+                    // Assuming trainer.prenom exists on the Trainer type here
+                    if (trainer.id && e.target.value !== trainer.nom) {
                       handleNameChange(trainer.id, e.target.value);
                     }
                   }}
                   className="mb-0 text-sm font-medium text-gray-900 border-0 focus:ring-2 focus:ring-blue-500 rounded flex-grow mr-2"
-                  // Note: Pour éviter les problèmes de curseur, on pourrait utiliser un état contrôlé
-                  // ou une clé unique pour forcer le re-render de l'input si la valeur par défaut change.
-                  // Pour l'instant, defaultValue est utilisé.
                 />
                 <div className="flex items-center space-x-2">
-                  {trainer.isDefault === 1 ? ( // Comparer avec 1
+                  {trainer.isDefault === 1 ? (
                     <Badge variant="success" className="cursor-default">
                       <Star size={14} className="mr-1 inline-block" /> Par défaut
                     </Badge>
@@ -246,7 +233,7 @@ const TrainerSettings: React.FC = () => {
                       size="sm"
                       onClick={() => trainer.id && handleSetDefaultTrainer(trainer.id)}
                       title="Définir comme formateur par défaut"
-                      disabled={!trainer.id} // Désactiver si l'ID est undefined
+                      disabled={!trainer.id}
                     >
                       <Star size={14} />
                     </Button>
@@ -257,7 +244,7 @@ const TrainerSettings: React.FC = () => {
                     icon={<Trash2 size={14} />}
                     onClick={() => trainer.id && handleDeleteTrainer(trainer.id)}
                     title="Supprimer le formateur"
-                    disabled={!trainer.id} // Désactiver si l'ID est undefined
+                    disabled={!trainer.id}
                   />
                 </div>
               </li>

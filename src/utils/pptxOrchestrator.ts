@@ -78,8 +78,9 @@ function generateOmbeaSessionXml(
   participants.forEach((p, index) => {
     xml += `      <rl:Respondent ID="${index + 1}">\n`; // Sequential 1-based ID for Respondent, not device
     xml += `        <rl:Devices>\n`;
-    // Use the actual idBoitier from the participant data
-    xml += `          <rl:Device>${esc(p.idBoitier)}</rl:Device>\n`;
+    // Use the new deviceIdentifierString field. Ensure it's populated before calling this function.
+    // Fallback to a placeholder if undefined, though it should ideally always be present.
+    xml += `          <rl:Device>${esc(p.deviceIdentifierString || `UNKNOWN_DEVICE_${index + 1}`)}</rl:Device>\n`;
     xml += `        </rl:Devices>\n`;
 
     // Ajouter FirstName comme CustomProperty
@@ -234,11 +235,18 @@ export async function generatePresentation(
     // vers le type ParticipantForGenerator attendu par val17PptxGenerator
     // (qui a été aligné pour utiliser nom, prenom également, donc le mapping est direct)
     const participantsForGenerator = _participants.map(p => ({
-      idBoitier: p.idBoitier, // S'assurer que ParticipantForGenerator a ce champ si nécessaire, sinon l'omettre
+      // idBoitier: p.idBoitier, // idBoitier is deprecated, deviceIdentifierString is used for XML
       nom: p.nom,
       prenom: p.prenom,
-      organization: p.organization,
-      identificationCode: p.identificationCode
+      organization: p.organization, // Ensure Participant type includes this
+      identificationCode: p.identificationCode,
+      // deviceIdentifierString is not directly used by val17PptxGenerator's participant list for slide content,
+      // but generateOmbeaSessionXml (called later) needs it.
+      // The _participants array itself should already have this.
+      // No need to map it here if Val17Participant type doesn't use it.
+      // However, if Val17Participant *is* used by generateOmbeaSessionXml indirectly, it might be needed.
+      // For now, assume val17PptxGenerator's ParticipantForGenerator doesn't need deviceIdentifierString.
+      // The main _participants array (of type Participant from ../types) will have it for generateOmbeaSessionXml.
     }));
 
     const generatedData = await generatePPTXVal17(

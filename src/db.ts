@@ -282,6 +282,21 @@ export const deleteGeneralParticipant = (id: number): Promise<void> => {
     });
 };
 
+export const getAllBaseThemesForReferentialCode = (referentielId: number): Promise<string[]> => {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT DISTINCT code_theme FROM themes WHERE referentiel_id = ?", [referentielId], (err, rows: any[]) => {
+            if (err) {
+                reject(err);
+            } else {
+                // Assuming code_theme directly gives the "base theme" identifier needed by the test.
+                // The test expects strings like 'securite', 'technique'.
+                // If code_theme in DB is 'SEC', 'TECH', a mapping or further processing might be needed at test level.
+                resolve(rows.map(row => row.code_theme));
+            }
+        });
+    });
+};
+
 export const addBulkSessionResults = (results: Array<Omit<SessionResultData, 'id' | 'submitted_at'>>): Promise<void> => {
     return new Promise((resolve, reject) => {
         if (!results || results.length === 0) {

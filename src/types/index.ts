@@ -101,9 +101,13 @@ export interface SessionBoitier {
 
 // Nouveau type pour les formateurs
 export interface Trainer {
-  id?: number; // Sera auto-incrémenté par Dexie
-  name: string;
+  id?: number;
+  nom: string; // Changed from name
+  prenom: string; // Added
+  signature?: Buffer | null; // Added to match db.TrainerData
   isDefault?: 0 | 1; // 0 pour false, 1 pour true
+  createdAt?: string; // Added to match db.TrainerData
+  updatedAt?: string; // Added to match db.TrainerData
 }
 
 // Interface pour le mappage Question DB <-> Slide PPTX (par session)
@@ -126,6 +130,8 @@ export interface Participant {
   reussite?: boolean; // Statut de réussite du participant pour cette session
   assignedGlobalDeviceId?: number | null; // Référence à GlobalDevice.id (VotingDevice.id)
   statusInSession?: 'present' | 'absent'; // Statut du participant pour cette session spécifique
+  deviceIdentifierString?: string; // Added: The actual string identifier (e.g., serial number) of the assigned device
+  organization?: string; // Added as it's used in pptxOrchestrator
 }
 
 // L'interface SelectedBlock n'est plus nécessaire car nous stockons selectedBlocIds directement.
