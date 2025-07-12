@@ -8,7 +8,7 @@ import {
 } from './types'; // Assurez-vous que ces types sont toujours pertinents
 
 // Déterminer le chemin de la base de données de manière plus robuste
-const appName = 'val17-app'; // Nom de votre application
+const appName = 'easycertif'; // Nom de votre application
 let userDataPath;
 if (process.env.APPDATA) { // Windows
   userDataPath = process.env.APPDATA;
