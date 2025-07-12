@@ -25,15 +25,35 @@ if (!fs.existsSync(dbDir)) {
 const dbPath = path.join(dbDir, 'database.sqlite3');
 console.log(`[DB SETUP] Database path determined as: ${dbPath}`);
 
-export const db = new Database(dbPath);
-console.log(`[DB SETUP] SQLite database connection established.`);
+export let db: Database.Database;
 
-// Activer les clés étrangères
-try {
-  db.pragma('foreign_keys = ON');
-  console.log("[DB SETUP] Foreign key support enabled.");
-} catch (error) {
-  console.error("[DB SETUP] Failed to enable foreign keys:", error);
+export function initializeDatabase() {
+  if (db) {
+    console.log('[DB SETUP] Database already initialized.');
+    return;
+  }
+  console.log('[DB SETUP] Initializing database...');
+  db = new Database(dbPath);
+  console.log(`[DB SETUP] SQLite database connection established.`);
+
+  // Activer les clés étrangères
+  try {
+    db.pragma('foreign_keys = ON');
+    console.log("[DB SETUP] Foreign key support enabled.");
+  } catch (error) {
+    console.error("[DB SETUP] Failed to enable foreign keys:", error);
+  }
+
+  // Créer le schéma
+  try {
+    createSchema();
+  } catch (error) {
+    console.error("[DB SETUP] FATAL: Failed to create/verify database schema. Application might not work correctly.", error);
+    // Envisager de quitter l'application si le schéma est critique et ne peut être créé
+    // process.exit(1);
+  }
+
+  console.log("[DB SETUP] SQLite database module loaded and initialized.");
 }
 
 

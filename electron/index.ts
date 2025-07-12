@@ -1,11 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { initializeIpcHandlers } from './ipcHandlers';
-import { fileURLToPath } from 'url';
-
-// Correction pour __dirname en ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // La variable `VITE_DEV_SERVER_URL` est injectée par `vite-plugin-electron`.
 // Voir https://vite-plugin-electron.vercel.app/guide/troubleshooting.html#vite-is-not-defined
@@ -42,6 +37,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Il est crucial d'attendre que l'application soit prête avant d'initialiser la DB,
+  // car cela peut dépendre de chemins système comme `app.getPath('userData')`.
+  const { initializeDatabase } = require('../src/db');
+  initializeDatabase();
+
   createWindow();
   initializeIpcHandlers(); // Initialiser nos gestionnaires IPC
 
