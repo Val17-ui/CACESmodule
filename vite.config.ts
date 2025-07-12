@@ -12,13 +12,21 @@ export default defineConfig({
       {
         // Point d'entrée pour le processus principal d'Electron
         entry: 'electron/index.ts',
+        vite: {
+          build: {
+            // Indiquer à Vite de ne pas bundler `better-sqlite3`
+            // et de le traiter comme une dépendance externe.
+            // C'est crucial pour les modules natifs.
+            rollupOptions: {
+              external: ['better-sqlite3'],
+            },
+          },
+        },
       },
       {
         // Point d'entrée pour le script de préchargement
         entry: 'electron/preload.ts',
         onstart(options) {
-          // Ce script de préchargement sera injecté dans le processus de rendu
-          // et s'exécutera avant le chargement de la page web.
           options.reload();
         },
       },
@@ -26,7 +34,8 @@ export default defineConfig({
     renderer(),
   ],
   optimizeDeps: {
-    exclude: ['lucide-react'],
+    // Exclure également `better-sqlite3` de l'optimisation des dépendances de Vite.
+    exclude: ['lucide-react', 'better-sqlite3'],
   },
   build: {
     sourcemap: false
