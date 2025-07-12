@@ -36,11 +36,19 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  // Il est crucial d'attendre que l'application soit prête avant d'initialiser la DB,
-  // car cela peut dépendre de chemins système comme `app.getPath('userData')`.
-  const { initializeDatabase } = require('../src/db');
-  initializeDatabase();
+app.whenReady().then(async () => {
+  // Il est crucial d'attendre que l'application soit prête avant d'initialiser la DB.
+  // Utilisation d'un import dynamique pour s'assurer que le code de la DB n'est
+  // exécuté qu'à ce moment précis.
+  try {
+    const { initializeDatabase } = await import('../src/db.js');
+    initializeDatabase();
+  } catch (error) {
+    console.error("Failed to initialize database on app ready:", error);
+    // On peut choisir de quitter l'application si la DB est critique
+    // app.quit();
+    // return;
+  }
 
   createWindow();
   initializeIpcHandlers(); // Initialiser nos gestionnaires IPC

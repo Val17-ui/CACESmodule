@@ -59,6 +59,10 @@ export function initializeDatabase() {
 
 // Schéma de la base de données
 const createSchema = () => {
+  if (!db) {
+    console.error('[DB SCHEMA] Cannot create schema, DB not initialized.');
+    return;
+  }
   console.log("[DB SCHEMA] Attempting to create/verify schema...");
   const DDL_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS referentiels (
