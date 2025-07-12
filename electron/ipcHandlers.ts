@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import * as db from './db'; // Ajustez le chemin si ipcHandlers.ts est dans electron-main
+import * as db from '../src/db'; // Chemin corrigé pour pointer vers src/
 
 export function initializeIpcHandlers() {
   console.log('[IPC Handlers] Initializing IPC handlers...');
