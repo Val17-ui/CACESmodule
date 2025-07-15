@@ -26,6 +26,13 @@ export default defineConfig({
       preload: {
         // Point d'entrée pour le script de préchargement
         input: path.join(__dirname, 'electron/preload.ts'),
+        vite: {
+          build: {
+            rollupOptions: {
+              external: ['better-sqlite3'],
+            },
+          },
+        },
       },
     }),
     renderer(),
