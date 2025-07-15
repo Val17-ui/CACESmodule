@@ -1,7 +1,7 @@
 const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
 const { initializeIpcHandlers } = require('./ipcHandlers');
-const { initializeDatabase } = require('./db');
+const { initializeDatabase, getDb } = require('./db');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -43,7 +43,7 @@ app.whenReady().then(async () => {
     });
   });
   try {
-    await initializeDatabase();
+    initializeDatabase();
     initializeIpcHandlers();
     createWindow();
 
@@ -60,6 +60,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    getDb().close();
     app.quit();
   }
 });

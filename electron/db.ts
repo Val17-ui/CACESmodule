@@ -1,6 +1,11 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+import type {
+    QuestionWithId, Session, SessionResult, Trainer,
+    SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
+    VotingDevice, DeviceKit, DeviceKitAssignment
+  } from '../src/types';
 
 // Déterminer le chemin de la base de données de manière plus robuste
 const appName = 'easycertif'; // Nom de votre application
@@ -20,7 +25,7 @@ if (!fs.existsSync(dbDir)) {
 const dbPath = path.join(dbDir, 'database.sqlite3');
 console.log(`[DB SETUP] Database path determined as: ${dbPath}`);
 
-let db;
+let db: import('better-sqlite3').Database;
 
 function initializeDatabase() {
   if (db) {
@@ -33,7 +38,7 @@ function initializeDatabase() {
 
   // Activer les clés étrangères
   try {
-    db.pragma('foreign_keys = ON');
+    getDb().pragma('foreign_keys = ON');
     console.log("[DB SETUP] Foreign key support enabled.");
   } catch (error) {
     console.error("[DB SETUP] Failed to enable foreign keys:", error);
@@ -53,11 +58,13 @@ function initializeDatabase() {
 
 
 // Schéma de la base de données
+const getDb = () => {
+    if (!db) {
+        throw new Error("Database not initialized. Please call initializeDatabase first.");
+    }
+    return db;
+};
 const createSchema = () => {
-  if (!db) {
-    console.error('[DB SCHEMA] Cannot create schema, DB not initialized.');
-    return;
-  }
   console.log("[DB SCHEMA] Attempting to create/verify schema...");
   const DDL_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS referentiels (
@@ -205,10 +212,10 @@ const createSchema = () => {
     `CREATE INDEX IF NOT EXISTS idx_deviceKitAssignments_votingDeviceId ON deviceKitAssignments(votingDeviceId);`
   ];
 
-  const transaction = db.transaction(() => {
+  const transaction = getDb().transaction(() => {
     for (const stmt of DDL_STATEMENTS) {
       try {
-        db.prepare(stmt).run();
+        getDb().prepare(stmt).run();
       } catch (error) {
         console.error(`[DB SCHEMA] Failed to execute DDL: ${stmt.substring(0,60)}...`, error);
         // En cas d'erreur, la transaction sera automatiquement annulée par better-sqlite3
@@ -226,11 +233,11 @@ const createSchema = () => {
   }
 };
 
-type {
-  QuestionWithId, Session, SessionResult, Trainer,
-  SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-  VotingDevice, DeviceKit, DeviceKitAssignment
-};
+export type {
+    QuestionWithId, Session, SessionResult, Trainer,
+    SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
+    VotingDevice, DeviceKit, DeviceKitAssignment
+  };
 
 // --- Helper function to wrap sync better-sqlite3 calls in Promises ---
 // This helps maintain an async API similar to Dexie, minimizing changes in consuming code.
@@ -283,7 +290,7 @@ const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number
   return asyncDbRun(() => {
     try {
       const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options } = question;
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options)
         VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options)
       `);
@@ -308,7 +315,7 @@ const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number
 const getAllQuestions = async (): Promise<QuestionWithId[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM questions");
+      const stmt = getDb().prepare("SELECT * FROM questions");
       const rows = stmt.all() as any[];
       return rows.map(rowToQuestion);
     } catch (error) {
@@ -321,7 +328,7 @@ const getAllQuestions = async (): Promise<QuestionWithId[]> => {
 const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM questions WHERE id = ?");
+      const stmt = getDb().prepare("SELECT * FROM questions WHERE id = ?");
       const row = stmt.get(id) as any;
       return row ? rowToQuestion(row) : undefined;
     } catch (error) {
@@ -337,7 +344,7 @@ const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
     try {
       // SQLite ne supporte pas directement un array dans `IN (?)`. Il faut générer les placeholders.
       const placeholders = ids.map(() => '?').join(',');
-      const stmt = db.prepare(`SELECT * FROM questions WHERE id IN (${placeholders})`);
+      const stmt = getDb().prepare(`SELECT * FROM questions WHERE id IN (${placeholders})`);
       const rows = stmt.all(...ids) as any[];
       return rows.map(rowToQuestion);
     } catch (error) {
@@ -355,7 +362,7 @@ const updateQuestion = async (id: number, updates: Partial<Omit<QuestionWithId, 
       if (fields.length === 0) return 0;
 
       const setClause = fields.map(field => `${field} = @${field}`).join(', ');
-      const stmt = db.prepare(`UPDATE questions SET ${setClause} WHERE id = @id`);
+      const stmt = getDb().prepare(`UPDATE questions SET ${setClause} WHERE id = @id`);
 
       const result = stmt.run({ ...rowUpdates, id });
       return result.changes;
@@ -369,7 +376,7 @@ const updateQuestion = async (id: number, updates: Partial<Omit<QuestionWithId, 
 const deleteQuestion = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("DELETE FROM questions WHERE id = ?");
+      const stmt = getDb().prepare("DELETE FROM questions WHERE id = ?");
       stmt.run(id);
     } catch (error) {
       console.error(`[DB Questions] Error deleting question ${id}:`, error);
@@ -381,7 +388,7 @@ const deleteQuestion = async (id: number): Promise<void> => {
 const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM questions WHERE blocId = ?");
+      const stmt = getDb().prepare("SELECT * FROM questions WHERE blocId = ?");
       const rows = stmt.all(blocId) as any[];
       return rows.map(rowToQuestion);
     } catch (error) {
@@ -399,7 +406,7 @@ const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise
     // Si une logique différente est attendue, il faudra ajuster.
     return asyncDbRun(() => {
       try {
-        const stmt = db.prepare("SELECT * FROM questions WHERE blocId IS NULL");
+        const stmt = getDb().prepare("SELECT * FROM questions WHERE blocId IS NULL");
         const rows = stmt.all() as any[];
         return rows.map(rowToQuestion);
       } catch (error) {
@@ -412,7 +419,7 @@ const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise
   return asyncDbRun(() => {
     try {
       const placeholders = selectedBlocIds.map(() => '?').join(',');
-      const stmt = db.prepare(`SELECT * FROM questions WHERE blocId IN (${placeholders})`);
+      const stmt = getDb().prepare(`SELECT * FROM questions WHERE blocId IN (${placeholders})`);
       const rows = stmt.all(...selectedBlocIds) as any[];
       return rows.map(rowToQuestion);
     } catch (error) {
@@ -438,7 +445,7 @@ const parseAdminSettingValue = (value: string | null): any => {
 const getAdminSetting = async (key: string): Promise<any> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT value FROM adminSettings WHERE key = ?");
+      const stmt = getDb().prepare("SELECT value FROM adminSettings WHERE key = ?");
       const row = stmt.get(key) as { value: string } | undefined;
       return row ? parseAdminSettingValue(row.value) : undefined;
     } catch (error) {
@@ -451,7 +458,7 @@ const getAdminSetting = async (key: string): Promise<any> => {
 const setAdminSetting = async (key: string, value: any): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO adminSettings (key, value)
         VALUES (@key, @value)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -470,7 +477,7 @@ const setAdminSetting = async (key: string, value: any): Promise<void> => {
 const getAllAdminSettings = async (): Promise<{ key: string; value: any }[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT key, value FROM adminSettings");
+      const stmt = getDb().prepare("SELECT key, value FROM adminSettings");
       const rows = stmt.all() as { key: string; value: string }[];
       return rows.map(row => ({
         key: row.key,
@@ -542,7 +549,7 @@ const sessionToRow = (session: Partial<Omit<Session, 'id'> | Session>) => {
 const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO sessions (
           nomSession, dateSession, referentielId, selectedBlocIds, selectedKitId,
           createdAt, location, status, questionMappings, notes, trainerId,
@@ -566,7 +573,7 @@ const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefi
 const getAllSessions = async (): Promise<Session[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM sessions ORDER BY dateSession DESC, createdAt DESC");
+      const stmt = getDb().prepare("SELECT * FROM sessions ORDER BY dateSession DESC, createdAt DESC");
       const rows = stmt.all() as any[];
       return rows.map(rowToSession);
     } catch (error) {
@@ -579,7 +586,7 @@ const getAllSessions = async (): Promise<Session[]> => {
 const getSessionById = async (id: number): Promise<Session | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
+      const stmt = getDb().prepare("SELECT * FROM sessions WHERE id = ?");
       const row = stmt.get(id) as any;
       return row ? rowToSession(row) : undefined;
     } catch (error) {
@@ -597,7 +604,7 @@ const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>):
       if (fields.length === 0) return 0;
 
       const setClause = fields.map(field => `${field} = @${field}`).join(', ');
-      const stmt = db.prepare(`UPDATE sessions SET ${setClause} WHERE id = @id`);
+      const stmt = getDb().prepare(`UPDATE sessions SET ${setClause} WHERE id = @id`);
 
       const result = stmt.run({ ...rowUpdates, id });
       return result.changes;
@@ -613,7 +620,7 @@ const deleteSession = async (id: number): Promise<void> => {
     try {
       // Les tables sessionResults, sessionQuestions, sessionBoitiers devraient être nettoyées
       // par ON DELETE CASCADE défini dans le schéma.
-      const stmt = db.prepare("DELETE FROM sessions WHERE id = ?");
+      const stmt = getDb().prepare("DELETE FROM sessions WHERE id = ?");
       stmt.run(id);
     } catch (error) {
       console.error(`[DB Sessions] Error deleting session ${id}:`, error);
@@ -659,7 +666,7 @@ const sessionResultToRow = (sessionResult: Partial<Omit<SessionResult, 'id'> | S
 const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO sessionResults (sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
         VALUES (@sessionId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
       `);
@@ -678,12 +685,12 @@ const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Prom
 
   return asyncDbRun(() => {
     const insertedIds: (number | undefined)[] = [];
-    const insertStmt = db.prepare(`
+    const insertStmt = getDb().prepare(`
       INSERT INTO sessionResults (sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
       VALUES (@sessionId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
     `);
 
-    const transaction = db.transaction((items: Omit<SessionResult, 'id'>[]) => {
+    const transaction = getDb().transaction((items: Omit<SessionResult, 'id'>[]) => {
       for (const result of items) {
         try {
           const rowData = sessionResultToRow(result);
@@ -721,7 +728,7 @@ const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Prom
 const getAllResults = async (): Promise<SessionResult[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM sessionResults");
+      const stmt = getDb().prepare("SELECT * FROM sessionResults");
       const rows = stmt.all() as any[];
       return rows.map(rowToSessionResult);
     } catch (error) {
@@ -734,7 +741,7 @@ const getAllResults = async (): Promise<SessionResult[]> => {
 const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM sessionResults WHERE sessionId = ? ORDER BY timestamp ASC");
+      const stmt = getDb().prepare("SELECT * FROM sessionResults WHERE sessionId = ? ORDER BY timestamp ASC");
       const rows = stmt.all(sessionId) as any[];
       return rows.map(rowToSessionResult);
     } catch (error) {
@@ -747,7 +754,7 @@ const getResultsForSession = async (sessionId: number): Promise<SessionResult[]>
 const getResultBySessionAndQuestion = async (sessionId: number, questionId: number, participantIdBoitier: string): Promise<SessionResult | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM sessionResults WHERE sessionId = ? AND questionId = ? AND participantIdBoitier = ?");
+      const stmt = getDb().prepare("SELECT * FROM sessionResults WHERE sessionId = ? AND questionId = ? AND participantIdBoitier = ?");
       const row = stmt.get(sessionId, questionId, participantIdBoitier) as any;
       return row ? rowToSessionResult(row) : undefined;
     } catch (error) {
@@ -765,7 +772,7 @@ const updateSessionResult = async (id: number, updates: Partial<Omit<SessionResu
       if (fields.length === 0) return 0;
 
       const setClause = fields.map(field => `${field} = @${field}`).join(', ');
-      const stmt = db.prepare(`UPDATE sessionResults SET ${setClause} WHERE id = @id`);
+      const stmt = getDb().prepare(`UPDATE sessionResults SET ${setClause} WHERE id = @id`);
 
       const result = stmt.run({ ...rowUpdates, id });
       return result.changes;
@@ -779,7 +786,7 @@ const updateSessionResult = async (id: number, updates: Partial<Omit<SessionResu
 const deleteResultsForSession = async (sessionId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("DELETE FROM sessionResults WHERE sessionId = ?");
+      const stmt = getDb().prepare("DELETE FROM sessionResults WHERE sessionId = ?");
       stmt.run(sessionId);
     } catch (error) {
       console.error(`[DB SessionResults] Error deleting results for session ${sessionId}:`, error);
@@ -792,7 +799,7 @@ const deleteResultsForSession = async (sessionId: number): Promise<void> => {
 const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("INSERT INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
+      const stmt = getDb().prepare("INSERT INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
       const result = stmt.run(device);
       return result.lastInsertRowid as number;
     } catch (error) {
@@ -808,7 +815,7 @@ const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number
 const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM votingDevices ORDER BY name ASC, serialNumber ASC");
+      const stmt = getDb().prepare("SELECT * FROM votingDevices ORDER BY name ASC, serialNumber ASC");
       return stmt.all() as VotingDevice[];
     } catch (error) {
       console.error(`[DB VotingDevices] Error getting all voting devices:`, error);
@@ -824,7 +831,7 @@ const updateVotingDevice = async (id: number, updates: Partial<Omit<VotingDevice
       if (fields.length === 0) return 0;
 
       const setClause = fields.map(field => `${field} = @${field}`).join(', ');
-      const stmt = db.prepare(`UPDATE votingDevices SET ${setClause} WHERE id = @id`);
+      const stmt = getDb().prepare(`UPDATE votingDevices SET ${setClause} WHERE id = @id`);
 
       const params: any = { id };
       for (const field of fields) {
@@ -847,7 +854,7 @@ const deleteVotingDevice = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       // ON DELETE CASCADE sur deviceKitAssignments.votingDeviceId devrait gérer les affectations.
-      const stmt = db.prepare("DELETE FROM votingDevices WHERE id = ?");
+      const stmt = getDb().prepare("DELETE FROM votingDevices WHERE id = ?");
       stmt.run(id);
     } catch (error) {
       console.error(`[DB VotingDevices] Error deleting voting device ${id}:`, error);
@@ -860,12 +867,12 @@ const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promis
   if (!devices || devices.length === 0) return Promise.resolve();
 
   return asyncDbRun(() => {
-    const insertStmt = db.prepare("INSERT OR IGNORE INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
+    const insertStmt = getDb().prepare("INSERT OR IGNORE INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
     // Utilisation de "INSERT OR IGNORE" pour éviter les erreurs si un serialNumber existe déjà.
     // Cela signifie que les doublons basés sur serialNumber seront ignorés silencieusement.
     // Si un comportement différent est souhaité (ex: lever une erreur pour le lot), il faudrait ajuster.
 
-    const transaction = db.transaction((items: Omit<VotingDevice, 'id'>[]) => {
+    const transaction = getDb().transaction((items: Omit<VotingDevice, 'id'>[]) => {
       for (const device of items) {
         try {
           insertStmt.run(device);
@@ -893,7 +900,7 @@ const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promis
 const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO trainers (name, isDefault)
         VALUES (@name, @isDefault)
       `);
@@ -911,7 +918,7 @@ const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefi
 const getAllTrainers = async (): Promise<Trainer[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM trainers");
+      const stmt = getDb().prepare("SELECT * FROM trainers");
       const trainers = stmt.all() as any[];
       // Convertir isDefault en booléen pour la logique applicative si nécessaire (ici on garde 0/1 comme dans le schéma)
       return trainers.map(t => ({ ...t, isDefault: t.isDefault === 1 }));
@@ -925,7 +932,7 @@ const getAllTrainers = async (): Promise<Trainer[]> => {
 const getTrainerById = async (id: number): Promise<Trainer | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM trainers WHERE id = ?");
+      const stmt = getDb().prepare("SELECT * FROM trainers WHERE id = ?");
       const trainer = stmt.get(id) as any | undefined;
       if (trainer) {
         return { ...trainer, isDefault: trainer.isDefault === 1 };
@@ -945,7 +952,7 @@ const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>):
       if (fields.length === 0) return 0; // Pas de champs à mettre à jour
 
       const setClause = fields.map(field => `${field} = @${field}`).join(', ');
-      const stmt = db.prepare(`UPDATE trainers SET ${setClause} WHERE id = @id`);
+      const stmt = getDb().prepare(`UPDATE trainers SET ${setClause} WHERE id = @id`);
 
       // Assurer que isDefault est 0 ou 1 si présent dans updates
       const params: any = { ...updates, id };
@@ -965,7 +972,7 @@ const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>):
 const deleteTrainer = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("DELETE FROM trainers WHERE id = ?");
+      const stmt = getDb().prepare("DELETE FROM trainers WHERE id = ?");
       stmt.run(id);
     } catch (error) {
       console.error(`[DB Trainers] Error deleting trainer ${id}:`, error);
@@ -976,12 +983,12 @@ const deleteTrainer = async (id: number): Promise<void> => {
 
 const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
   return asyncDbRun(() => {
-    const transaction = db.transaction(() => {
+    const transaction = getDb().transaction(() => {
       try {
-        const resetStmt = db.prepare("UPDATE trainers SET isDefault = 0 WHERE isDefault = 1");
+        const resetStmt = getDb().prepare("UPDATE trainers SET isDefault = 0 WHERE isDefault = 1");
         resetStmt.run();
 
-        const setStmt = db.prepare("UPDATE trainers SET isDefault = 1 WHERE id = ?");
+        const setStmt = getDb().prepare("UPDATE trainers SET isDefault = 1 WHERE id = ?");
         const result = setStmt.run(id);
 
         if (result.changes === 0) {
@@ -1009,7 +1016,7 @@ const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
 const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM trainers WHERE isDefault = 1 LIMIT 1");
+      const stmt = getDb().prepare("SELECT * FROM trainers WHERE isDefault = 1 LIMIT 1");
       const trainer = stmt.get() as any | undefined;
       if (trainer) {
         return { ...trainer, isDefault: true }; // Assure que isDefault est un booléen
@@ -1026,7 +1033,7 @@ const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
 const addSessionQuestion = async (sq: Omit<SessionQuestion, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO sessionQuestions (sessionId, dbQuestionId, slideGuid, blockId)
         VALUES (@sessionId, @dbQuestionId, @slideGuid, @blockId)
       `);
@@ -1044,12 +1051,12 @@ const addBulkSessionQuestions = async (questions: Omit<SessionQuestion, 'id'>[])
 
   return asyncDbRun(() => {
     const insertedIds: (number | undefined)[] = [];
-    const insertStmt = db.prepare(`
+    const insertStmt = getDb().prepare(`
       INSERT INTO sessionQuestions (sessionId, dbQuestionId, slideGuid, blockId)
       VALUES (@sessionId, @dbQuestionId, @slideGuid, @blockId)
     `);
 
-    const transaction = db.transaction((items: Omit<SessionQuestion, 'id'>[]) => {
+    const transaction = getDb().transaction((items: Omit<SessionQuestion, 'id'>[]) => {
       for (const question of items) {
         try {
           const result = insertStmt.run(question);
@@ -1075,7 +1082,7 @@ const addBulkSessionQuestions = async (questions: Omit<SessionQuestion, 'id'>[])
 const getSessionQuestionsBySessionId = async (sessionId: number): Promise<SessionQuestion[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM sessionQuestions WHERE sessionId = ?");
+      const stmt = getDb().prepare("SELECT * FROM sessionQuestions WHERE sessionId = ?");
       // Il pourrait être utile de trier, par exemple par ID ou un autre critère si l'ordre est important.
       // Pour l'instant, pas de tri explicite.
       return stmt.all(sessionId) as SessionQuestion[];
@@ -1089,7 +1096,7 @@ const getSessionQuestionsBySessionId = async (sessionId: number): Promise<Sessio
 const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("DELETE FROM sessionQuestions WHERE sessionId = ?");
+      const stmt = getDb().prepare("DELETE FROM sessionQuestions WHERE sessionId = ?");
       stmt.run(sessionId);
     } catch (error) {
       console.error(`[DB SessionQuestions] Error deleting session questions for session ${sessionId}:`, error);
@@ -1102,7 +1109,7 @@ const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<voi
 const addSessionBoitier = async (sb: Omit<SessionBoitier, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO sessionBoitiers (sessionId, participantId, visualId, serialNumber)
         VALUES (@sessionId, @participantId, @visualId, @serialNumber)
       `);
@@ -1121,12 +1128,12 @@ const addBulkSessionBoitiers = async (boitiers: Omit<SessionBoitier, 'id'>[]): P
 
   return asyncDbRun(() => {
     const insertedIds: (number | undefined)[] = [];
-    const insertStmt = db.prepare(`
+    const insertStmt = getDb().prepare(`
       INSERT INTO sessionBoitiers (sessionId, participantId, visualId, serialNumber)
       VALUES (@sessionId, @participantId, @visualId, @serialNumber)
     `);
 
-    const transaction = db.transaction((items: Omit<SessionBoitier, 'id'>[]) => {
+    const transaction = getDb().transaction((items: Omit<SessionBoitier, 'id'>[]) => {
       for (const boitier of items) {
         try {
           const result = insertStmt.run(boitier);
@@ -1152,7 +1159,7 @@ const addBulkSessionBoitiers = async (boitiers: Omit<SessionBoitier, 'id'>[]): P
 const getSessionBoitiersBySessionId = async (sessionId: number): Promise<SessionBoitier[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM sessionBoitiers WHERE sessionId = ? ORDER BY visualId ASC, participantId ASC");
+      const stmt = getDb().prepare("SELECT * FROM sessionBoitiers WHERE sessionId = ? ORDER BY visualId ASC, participantId ASC");
       return stmt.all(sessionId) as SessionBoitier[];
     } catch (error) {
       console.error(`[DB SessionBoitiers] Error getting session boitiers for session ${sessionId}:`, error);
@@ -1164,7 +1171,7 @@ const getSessionBoitiersBySessionId = async (sessionId: number): Promise<Session
 const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("DELETE FROM sessionBoitiers WHERE sessionId = ?");
+      const stmt = getDb().prepare("DELETE FROM sessionBoitiers WHERE sessionId = ?");
       stmt.run(sessionId);
     } catch (error) {
       console.error(`[DB SessionBoitiers] Error deleting session boitiers for session ${sessionId}:`, error);
@@ -1177,7 +1184,7 @@ const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void
 const addReferential = async (referential: Omit<Referential, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO referentiels (code, nom_complet)
         VALUES (@code, @nom_complet)
       `);
@@ -1197,7 +1204,7 @@ const addReferential = async (referential: Omit<Referential, 'id'>): Promise<num
 const getAllReferentiels = async (): Promise<Referential[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM referentiels");
+      const stmt = getDb().prepare("SELECT * FROM referentiels");
       const referentiels = stmt.all() as Referential[];
       return referentiels;
     } catch (error) {
@@ -1210,7 +1217,7 @@ const getAllReferentiels = async (): Promise<Referential[]> => {
 const getReferentialByCode = async (code: string): Promise<Referential | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM referentiels WHERE code = ?");
+      const stmt = getDb().prepare("SELECT * FROM referentiels WHERE code = ?");
       const referential = stmt.get(code) as Referential | undefined;
       return referential;
     } catch (error) {
@@ -1223,7 +1230,7 @@ const getReferentialByCode = async (code: string): Promise<Referential | undefin
 const getReferentialById = async (id: number): Promise<Referential | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM referentiels WHERE id = ?");
+      const stmt = getDb().prepare("SELECT * FROM referentiels WHERE id = ?");
       const referential = stmt.get(id) as Referential | undefined;
       return referential;
     } catch (error) {
@@ -1237,7 +1244,7 @@ const getReferentialById = async (id: number): Promise<Referential | undefined> 
 const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO themes (code_theme, nom_complet, referentiel_id)
         VALUES (@code_theme, @nom_complet, @referentiel_id)
       `);
@@ -1256,7 +1263,7 @@ const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> =
 const getAllThemes = async (): Promise<Theme[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM themes");
+      const stmt = getDb().prepare("SELECT * FROM themes");
       return stmt.all() as Theme[];
     } catch (error) {
       console.error(`[DB Themes] Error getting all themes:`, error);
@@ -1268,7 +1275,7 @@ const getAllThemes = async (): Promise<Theme[]> => {
 const getThemesByReferentialId = async (referentialId: number): Promise<Theme[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM themes WHERE referentiel_id = ?");
+      const stmt = getDb().prepare("SELECT * FROM themes WHERE referentiel_id = ?");
       return stmt.all(referentialId) as Theme[];
     } catch (error) {
       console.error(`[DB Themes] Error getting themes by referentialId ${referentialId}:`, error);
@@ -1280,7 +1287,7 @@ const getThemesByReferentialId = async (referentialId: number): Promise<Theme[]>
 const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id: number): Promise<Theme | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM themes WHERE code_theme = ? AND referentiel_id = ?");
+      const stmt = getDb().prepare("SELECT * FROM themes WHERE code_theme = ? AND referentiel_id = ?");
       return stmt.get(code_theme, referentiel_id) as Theme | undefined;
     } catch (error) {
       console.error(`[DB Themes] Error getting theme by code ${code_theme} and referentialId ${referentiel_id}:`, error);
@@ -1292,7 +1299,7 @@ const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id
 const getThemeById = async (id: number): Promise<Theme | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM themes WHERE id = ?");
+      const stmt = getDb().prepare("SELECT * FROM themes WHERE id = ?");
       return stmt.get(id) as Theme | undefined;
     } catch (error) {
       console.error(`[DB Themes] Error getting theme by id ${id}:`, error);
@@ -1305,7 +1312,7 @@ const getThemeById = async (id: number): Promise<Theme | undefined> => {
 const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         INSERT INTO blocs (code_bloc, nom_complet, theme_id)
         VALUES (@code_bloc, @nom_complet, @theme_id)
       `);
@@ -1324,7 +1331,7 @@ const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
 const getAllBlocs = async (): Promise<Bloc[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM blocs");
+      const stmt = getDb().prepare("SELECT * FROM blocs");
       return stmt.all() as Bloc[];
     } catch (error) {
       console.error(`[DB Blocs] Error getting all blocs:`, error);
@@ -1336,7 +1343,7 @@ const getAllBlocs = async (): Promise<Bloc[]> => {
 const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM blocs WHERE theme_id = ?");
+      const stmt = getDb().prepare("SELECT * FROM blocs WHERE theme_id = ?");
       return stmt.all(themeId) as Bloc[];
     } catch (error) {
       console.error(`[DB Blocs] Error getting blocs by themeId ${themeId}:`, error);
@@ -1348,7 +1355,7 @@ const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
 const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM blocs WHERE code_bloc = ? AND theme_id = ?");
+      const stmt = getDb().prepare("SELECT * FROM blocs WHERE code_bloc = ? AND theme_id = ?");
       return stmt.get(code_bloc, theme_id) as Bloc | undefined;
     } catch (error) {
       console.error(`[DB Blocs] Error getting bloc by code ${code_bloc} and themeId ${theme_id}:`, error);
@@ -1360,7 +1367,7 @@ const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Pro
 const getBlocById = async (id: number): Promise<Bloc | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM blocs WHERE id = ?");
+      const stmt = getDb().prepare("SELECT * FROM blocs WHERE id = ?");
       return stmt.get(id) as Bloc | undefined;
     } catch (error) {
       console.error(`[DB Blocs] Error getting bloc by id ${id}:`, error);
@@ -1383,7 +1390,7 @@ const rowToDeviceKit = (row: any): DeviceKit => {
 const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("INSERT INTO deviceKits (name, isDefault) VALUES (@name, @isDefault)");
+      const stmt = getDb().prepare("INSERT INTO deviceKits (name, isDefault) VALUES (@name, @isDefault)");
       const isDefault = kit.isDefault ? 1 : 0;
       const result = stmt.run({ ...kit, isDefault });
       return result.lastInsertRowid as number;
@@ -1400,7 +1407,7 @@ const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefi
 const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM deviceKits ORDER BY name ASC");
+      const stmt = getDb().prepare("SELECT * FROM deviceKits ORDER BY name ASC");
       const rows = stmt.all() as any[];
       return rows.map(rowToDeviceKit);
     } catch (error) {
@@ -1413,7 +1420,7 @@ const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
 const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM deviceKits WHERE id = ?");
+      const stmt = getDb().prepare("SELECT * FROM deviceKits WHERE id = ?");
       const row = stmt.get(id) as any;
       return row ? rowToDeviceKit(row) : undefined;
     } catch (error) {
@@ -1430,7 +1437,7 @@ const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'
       if (fields.length === 0) return 0;
 
       const setClause = fields.map(field => `${field} = @${field}`).join(', ');
-      const stmt = db.prepare(`UPDATE deviceKits SET ${setClause} WHERE id = @id`);
+      const stmt = getDb().prepare(`UPDATE deviceKits SET ${setClause} WHERE id = @id`);
 
       const params: any = { ...updates, id };
       if (updates.isDefault !== undefined) {
@@ -1453,7 +1460,7 @@ const deleteDeviceKit = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       // ON DELETE CASCADE sur deviceKitAssignments.kitId devrait gérer les affectations.
-      const stmt = db.prepare("DELETE FROM deviceKits WHERE id = ?");
+      const stmt = getDb().prepare("DELETE FROM deviceKits WHERE id = ?");
       stmt.run(id);
     } catch (error) {
       console.error(`[DB DeviceKits] Error deleting device kit ${id}:`, error);
@@ -1465,7 +1472,7 @@ const deleteDeviceKit = async (id: number): Promise<void> => {
 const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("SELECT * FROM deviceKits WHERE isDefault = 1 LIMIT 1");
+      const stmt = getDb().prepare("SELECT * FROM deviceKits WHERE isDefault = 1 LIMIT 1");
       const row = stmt.get() as any;
       return row ? rowToDeviceKit(row) : undefined;
     } catch (error) {
@@ -1477,12 +1484,12 @@ const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
 
 const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
   return asyncDbRun(() => {
-    const transaction = db.transaction(() => {
+    const transaction = getDb().transaction(() => {
       try {
-        const resetStmt = db.prepare("UPDATE deviceKits SET isDefault = 0 WHERE isDefault = 1");
+        const resetStmt = getDb().prepare("UPDATE deviceKits SET isDefault = 0 WHERE isDefault = 1");
         resetStmt.run();
 
-        const setStmt = db.prepare("UPDATE deviceKits SET isDefault = 1 WHERE id = ?");
+        const setStmt = getDb().prepare("UPDATE deviceKits SET isDefault = 1 WHERE id = ?");
         const result = setStmt.run(kitId);
 
         if (result.changes === 0) {
@@ -1504,7 +1511,7 @@ const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
 const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("INSERT INTO deviceKitAssignments (kitId, votingDeviceId) VALUES (?, ?)");
+      const stmt = getDb().prepare("INSERT INTO deviceKitAssignments (kitId, votingDeviceId) VALUES (?, ?)");
       const result = stmt.run(kitId, votingDeviceId);
       return result.lastInsertRowid as number;
     } catch (error) {
@@ -1523,7 +1530,7 @@ const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise
 const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE kitId = ? AND votingDeviceId = ?");
+      const stmt = getDb().prepare("DELETE FROM deviceKitAssignments WHERE kitId = ? AND votingDeviceId = ?");
       stmt.run(kitId, votingDeviceId);
     } catch (error) {
       console.error(`[DB DeviceKitAssignments] Error removing device ${votingDeviceId} from kit ${kitId}:`, error);
@@ -1535,7 +1542,7 @@ const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promi
 const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         SELECT vd.*
         FROM votingDevices vd
         JOIN deviceKitAssignments dka ON vd.id = dka.votingDeviceId
@@ -1553,7 +1560,7 @@ const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> =>
 const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare(`
+      const stmt = getDb().prepare(`
         SELECT dk.*
         FROM deviceKits dk
         JOIN deviceKitAssignments dka ON dk.id = dka.kitId
@@ -1572,7 +1579,7 @@ const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit
 const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE kitId = ?");
+      const stmt = getDb().prepare("DELETE FROM deviceKitAssignments WHERE kitId = ?");
       stmt.run(kitId);
     } catch (error) {
       console.error(`[DB DeviceKitAssignments] Error removing assignments by kitId ${kitId}:`, error);
@@ -1584,7 +1591,7 @@ const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
 const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
-      const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE votingDeviceId = ?");
+      const stmt = getDb().prepare("DELETE FROM deviceKitAssignments WHERE votingDeviceId = ?");
       stmt.run(votingDeviceId);
     } catch (error) {
       console.error(`[DB DeviceKitAssignments] Error removing assignments by votingDeviceId ${votingDeviceId}:`, error);
@@ -1614,7 +1621,7 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
       params.push(typeof endDate === 'string' ? endDate : endDate.toISOString());
     }
 
-    const sessionsForBlockUsage = db.prepare(query).all(...params) as Pick<Session, 'id' | 'dateSession' | 'referentielId' | 'selectedBlocIds'>[];
+    const sessionsForBlockUsage = getDb().prepare(query).all(...params) as Pick<Session, 'id' | 'dateSession' | 'referentielId' | 'selectedBlocIds'>[];
 
     const blockUsageMap = new Map<string, BlockUsage>();
 
@@ -1645,7 +1652,7 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
       // Pour chaque blocId, trouver son code_bloc, puis le thème et le référentiel associés
       for (const blocId of blocIds) {
         try {
-          const blocInfoStmt = db.prepare(`
+          const blocInfoStmt = getDb().prepare(`
             SELECT b.code_bloc, t.code_theme, r.code as referentiel_code
             FROM blocs b
             JOIN themes t ON b.theme_id = t.id
