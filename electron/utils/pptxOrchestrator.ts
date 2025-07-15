@@ -3,7 +3,7 @@
 import JSZip from 'jszip';
 // import { saveAs } from 'file-saver'; // saveAs n'est plus utilisé ici directement
 // import { QuestionWithId as StoredQuestion } from '../db'; // Supprimé
-import { Participant, QuestionWithId as StoredQuestion } from '../types'; // Session removed, StoredQuestion importé depuis types
+import { Participant, QuestionWithId as StoredQuestion } from '../../src/types'; // Session removed, StoredQuestion importé depuis types
 // Importer QuestionMapping et ajuster les autres imports si FinalQuestionData a été supprimé
 import {
   Val17Question,
@@ -12,8 +12,8 @@ import {
   generatePPTXVal17,
   QuestionMapping, // Importer directement
   SessionInfo as Val17SessionInfo
-} from '../lib/val17-pptx-generator/val17PptxGenerator';
-import { getActivePptxTemplateFile } from '../utils/templateManager'; // Import de la nouvelle fonction
+} from './val17PptxGenerator';
+import { getActivePptxTemplateFile } from './templateManager'; // Import de la nouvelle fonction
 
 // Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
 export type { QuestionMapping };

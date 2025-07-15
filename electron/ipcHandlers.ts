@@ -81,5 +81,11 @@ exports.initializeIpcHandlers = function() {
   ipcMain.handle('db-set-admin-setting', async (event: any, key: string, value: any) => setAdminSetting(key, value));
   ipcMain.handle('db-get-all-admin-settings', async () => getAllAdminSettings());
 
+  // PPTX Generation
+  ipcMain.handle('pptx-generate', async (event: any, sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => {
+    const { generatePresentation } = require('./utils/pptxOrchestrator');
+    return generatePresentation(sessionInfo, participants, questions, template, adminSettings);
+  });
+
   console.log('[IPC Handlers] IPC handlers registration attempt finished.');
 }
