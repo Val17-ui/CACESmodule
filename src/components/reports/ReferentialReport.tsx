@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 // getQuestionsForSessionBlocks retiré, getAllQuestions retiré car non utilisé
-import { getAllSessions, getAllResults, getAllThemes, getAllBlocs, getReferentialById } from '../../db'; // getAllQuestions removed
+import { StorageManager } from '../../services/StorageManager';
 import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, OverallThemeStats } from '../../types';
 import {
   Table,
@@ -38,11 +38,11 @@ const ReferentialReport: React.FC<ReferentialReportProps> = ({ startDate, endDat
         fetchedThemes,
         fetchedBlocs
       ] = await Promise.all([
-        getAllSessions(),
-        getAllResults(),
+        StorageManager.getAllSessions(),
+        StorageManager.getAllResults(),
         // getAllQuestions(), // On ne charge pas toutes les questions ici, mais celles des blocs des sessions filtrées
-        getAllThemes(),
-        getAllBlocs()
+        StorageManager.getAllThemes(),
+        StorageManager.getAllBlocs()
       ]);
       setSessions(fetchedSessions);
       setAllResults(fetchedResults);

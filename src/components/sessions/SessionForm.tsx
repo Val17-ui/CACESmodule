@@ -21,26 +21,6 @@ import {
   DeviceKit
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
-import {
-  addSession,
-  updateSession,
-  getSessionById,
-  addBulkSessionResults,
-  getResultsForSession,
-  getQuestionsByIds,
-  getAllVotingDevices,
-  getAdminSetting,
-  getAllTrainers,
-  addBulkSessionQuestions,
-  deleteSessionQuestionsBySessionId,
-  addBulkSessionBoitiers,
-  deleteSessionBoitiersBySessionId,
-  getSessionQuestionsBySessionId,
-  getSessionBoitiersBySessionId,
-  getAllDeviceKits,
-  getDefaultDeviceKit,
-  getVotingDevicesForKit
-} from '../../db';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import { logger } from '../../utils/logger';
@@ -110,13 +90,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       setIsLoadingKits(true);
       try {
         const [devices, trainers, refs, themes, blocs, kits, defaultKitResult] = await Promise.all([
-          getAllVotingDevices(),
-          getAllTrainers(),
+          StorageManager.getAllVotingDevices(),
+          StorageManager.getAllTrainers(),
           StorageManager.getAllReferentiels(),
           StorageManager.getAllThemes(),
           StorageManager.getAllBlocs(),
-          getAllDeviceKits(),
-          getDefaultDeviceKit()
+          StorageManager.getAllDeviceKits(),
+          StorageManager.getDefaultDeviceKit()
         ]);
         setHardwareDevices(devices.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
         setTrainersList(trainers.sort((a, b) => a.name.localeCompare(b.name)));
@@ -151,7 +131,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     const fetchDevicesInKit = async () => {
       if (selectedKitIdState !== null) {
         try {
-          const devices = await getVotingDevicesForKit(selectedKitIdState);
+          const devices = await StorageManager.getVotingDevicesForKit(selectedKitIdState);
           setVotingDevicesInSelectedKit(devices);
         } catch (error) {
           console.error(`Erreur lors du chargement des boîtiers pour le kit ${selectedKitIdState}:`, error);
@@ -185,7 +165,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (sessionIdToLoad && hardwareLoaded && referentielsData.length > 0) {
       const loadSession = async () => {
         try {
-          const sessionData = await getSessionById(sessionIdToLoad);
+          const sessionData = await StorageManager.getSessionById(sessionIdToLoad);
           setEditingSessionData(sessionData || null);
           if (sessionData) {
             setCurrentSessionDbId(sessionData.id ?? null);
@@ -500,15 +480,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     try {
       let savedId: number | undefined;
       if (sessionDataToSave.id) {
-        await updateSession(sessionDataToSave.id, sessionDataToSave);
+        await StorageManager.updateSession(sessionDataToSave.id, sessionDataToSave);
         savedId = sessionDataToSave.id;
       } else {
-        const newId = await addSession(sessionDataToSave);
+        const newId = await StorageManager.addSession(sessionDataToSave);
         if (newId) { setCurrentSessionDbId(newId); savedId = newId; }
         else { setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée."); return null; }
       }
       if (savedId) {
-         const reloadedSession = await getSessionById(savedId);
+         const reloadedSession = await StorageManager.getSessionById(savedId);
          setEditingSessionData(reloadedSession || null);
          if (reloadedSession) {
             setModifiedAfterOrsGeneration(false);
@@ -565,7 +545,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         setImportSummary("Erreur lors de la sauvegarde de la session avant génération ORS.");
         setIsGeneratingOrs(false); return;
     }
-    const upToDateSessionData = await getSessionById(currentSavedId);
+    const upToDateSessionData = await StorageManager.getSessionById(currentSavedId);
     if (!upToDateSessionData) { setImportSummary("Erreur rechargement session après sauvegarde."); setIsGeneratingOrs(false); return; }
     setEditingSessionData(upToDateSessionData);
     const participantsWithoutValidDevice = [];
@@ -629,13 +609,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         selectedBlocIds: selectedBlocIdsForSession,
         referentielId: referentielObject.id
       };
-      await updateSession(currentSavedId, { selectedBlocIds: selectedBlocIdsForSession, referentielId: referentielObject.id });
+      await StorageManager.updateSession(currentSavedId, { selectedBlocIds: selectedBlocIdsForSession, referentielId: referentielObject.id });
       setEditingSessionData(sessionDataWithSelectedBlocs);
       const sessionInfoForPptx = { name: sessionDataWithSelectedBlocs.nomSession, date: sessionDataWithSelectedBlocs.dateSession, referential: referentielObject.code as CACESReferential };
-      const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
-      const prefAnswersBulletStyle = await getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
-      const prefPollTimeLimit = await getAdminSetting('pollTimeLimit');
-      const prefPollCountdownStartMode = await getAdminSetting('pollCountdownStartMode') || 'Automatic';
+      const prefPollStartMode = await StorageManager.getAdminSetting('pollStartMode') || 'Automatic';
+      const prefAnswersBulletStyle = await StorageManager.getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
+      const prefPollTimeLimit = await StorageManager.getAdminSetting('pollTimeLimit');
+      const prefPollCountdownStartMode = await StorageManager.getAdminSetting('pollCountdownStartMode') || 'Automatic';
       const timeLimitFromPrefs = prefPollTimeLimit !== undefined ? Number(prefPollTimeLimit) : 30;
       const adminSettings: AdminPPTXSettings = {
         defaultDuration: timeLimitFromPrefs, pollTimeLimit: timeLimitFromPrefs,
@@ -667,7 +647,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
         const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;
         try {
-          await updateSession(currentSavedId, {
+          await StorageManager.updateSession(currentSavedId, {
             donneesOrs: orsBlob,
             questionMappings: questionMappings,
             ignoredSlideGuids: newlyIgnoredSlideGuids || [],
@@ -676,13 +656,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             selectedBlocIds: sessionDataWithSelectedBlocs.selectedBlocIds,
             referentielId: sessionDataWithSelectedBlocs.referentielId
           });
-          const freshlyUpdatedSessionData = await getSessionById(currentSavedId);
+          const freshlyUpdatedSessionData = await StorageManager.getSessionById(currentSavedId);
           if (!freshlyUpdatedSessionData) {
             throw new Error("Impossible de recharger la session après la mise à jour avec l'ORS.");
           }
           setEditingSessionData(freshlyUpdatedSessionData);
-          await deleteSessionQuestionsBySessionId(currentSavedId);
-          await deleteSessionBoitiersBySessionId(currentSavedId);
+          await StorageManager.deleteSessionQuestionsBySessionId(currentSavedId);
+          await StorageManager.deleteSessionBoitiersBySessionId(currentSavedId);
           const sessionQuestionsToSave: SessionQuestion[] = [];
           for (const qMap of questionMappings) {
             if (qMap.slideGuid && qMap.dbQuestionId !== undefined) {
@@ -710,7 +690,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             }
           }
           if (sessionQuestionsToSave.length > 0) {
-            await addBulkSessionQuestions(sessionQuestionsToSave);
+            await StorageManager.addBulkSessionQuestions(sessionQuestionsToSave);
           }
           const sessionBoitiersToSave: SessionBoitier[] = [];
           freshlyUpdatedSessionData.participants.forEach((p_db: DBParticipantType, p_idx: number) => {
@@ -728,7 +708,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             }
           });
           if (sessionBoitiersToSave.length > 0) {
-            await addBulkSessionBoitiers(sessionBoitiersToSave);
+            await StorageManager.addBulkSessionBoitiers(sessionBoitiersToSave);
           }
           setImportSummary(`Session (ID: ${currentSavedId}) .ors, mappings et métadonnées générés. Statut: Prête.`);
           logger.info(`Fichier .ors, mappings et métadonnées générés/mis à jour pour la session "${freshlyUpdatedSessionData.nomSession}"`, {
@@ -813,8 +793,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         setImportSummary("Aucune réponse valide à importer après filtrage et déduplication.");
         return;
       }
-      const sessionQuestionsFromDb = await getSessionQuestionsBySessionId(currentSessionDbId);
-      const sessionBoitiers = await getSessionBoitiersBySessionId(currentSessionDbId);
+      const sessionQuestionsFromDb = await StorageManager.getSessionQuestionsBySessionId(currentSessionDbId);
+      const sessionBoitiers = await StorageManager.getSessionBoitiersBySessionId(currentSessionDbId);
       if (!sessionQuestionsFromDb || sessionQuestionsFromDb.length === 0) {
         setImportSummary("Erreur: Impossible de charger les questions de référence pour cette session.");
         logger.error(`[Import Results] Impossible de charger sessionQuestions pour sessionId: ${currentSessionDbId}`);
@@ -919,19 +899,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       );
       if (sessionResultsToSave.length > 0) {
         try {
-          const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+          const savedResultIds = await StorageManager.addBulkSessionResults(sessionResultsToSave);
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats sauvegardés !`;
             let sessionProcessError: string | null = null;
             try {
               if (currentSessionDbId) {
-                await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+                await StorageManager.updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
                 message += "\nStatut session: 'Terminée'.";
-                const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId);
-                let sessionDataForScores = await getSessionById(currentSessionDbId);
+                const sessionResultsForScore: SessionResult[] = await StorageManager.getResultsForSession(currentSessionDbId);
+                let sessionDataForScores = await StorageManager.getSessionById(currentSessionDbId);
                 if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
-                  const sessionQuestionsDb = await getQuestionsByIds(questionIds);
+                  const sessionQuestionsDb = await StorageManager.getQuestionsByIds(questionIds);
                   if (sessionQuestionsDb.length > 0) {
                     const updatedParticipants = sessionDataForScores.participants.map((p_db: DBParticipantType) => {
                       const matchingGlobalDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
@@ -946,9 +926,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       const reussite = determineIndividualSuccess(score, themeScores);
                       return { ...p_db, score, reussite };
                     });
-                    await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
+                    await StorageManager.updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
                     message += "\nScores et réussite calculés et mis à jour.";
-                    const finalUpdatedSession = await getSessionById(currentSessionDbId);
+                    const finalUpdatedSession = await StorageManager.getSessionById(currentSessionDbId);
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
                       const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db_updated: DBParticipantType, index: number) => {
@@ -1127,8 +1107,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     logger.info(`[AnomalyResolution] ${finalResultsToImport.length} résultats finaux à importer après résolution.`);
     if (participantsDataChanged) {
         try {
-            await updateSession(currentSessionDbId, { participants: updatedParticipantsList, updatedAt: new Date().toISOString() });
-            const reloadedSessionForUI = await getSessionById(currentSessionDbId);
+            await StorageManager.updateSession(currentSessionDbId, { participants: updatedParticipantsList, updatedAt: new Date().toISOString() });
+            const reloadedSessionForUI = await StorageManager.getSessionById(currentSessionDbId);
             if (reloadedSessionForUI) {
                 setEditingSessionData(reloadedSessionForUI);
                 const formParticipantsToUpdate: FormParticipant[] = reloadedSessionForUI.participants.map((p_db_updated: DBParticipantType, index: number) => {
@@ -1171,15 +1151,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         currentSessionDbId
       );
       if (sessionResultsToSave.length > 0) {
-        const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+        const savedResultIds = await StorageManager.addBulkSessionResults(sessionResultsToSave);
         let message = `${savedResultIds?.length || 0} résultats (après résolution) sauvegardés !`;
-        await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+        await StorageManager.updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
         message += "\nStatut session: 'Terminée'.";
-        const finalSessionDataForScores = await getSessionById(currentSessionDbId);
+        const finalSessionDataForScores = await StorageManager.getSessionById(currentSessionDbId);
         if (finalSessionDataForScores && finalSessionDataForScores.questionMappings) {
             const questionDbIds = finalSessionDataForScores.questionMappings.map(qm => qm.dbQuestionId).filter(id => id != null) as number[];
-            const questionsForScoreCalc = await getQuestionsByIds(questionDbIds);
-            const allResultsForScoreCalc = await getResultsForSession(currentSessionDbId);
+            const questionsForScoreCalc = await StorageManager.getQuestionsByIds(questionDbIds);
+            const allResultsForScoreCalc = await StorageManager.getResultsForSession(currentSessionDbId);
             if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
                 const participantsWithScores = finalSessionDataForScores.participants.map((p: DBParticipantType) => {
                     const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
@@ -1209,7 +1189,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   sessionName: finalSessionDataForScores?.nomSession || editingSessionData.nomSession,
                   resolutions: anomaliesAuditData
                 });
-                const finalUpdatedSessionWithScores = await getSessionById(currentSessionDbId);
+                const finalUpdatedSessionWithScores = await StorageManager.getSessionById(currentSessionDbId);
                  if (finalUpdatedSessionWithScores) {
                     setEditingSessionData(finalUpdatedSessionWithScores);
                     const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSessionWithScores.participants.map((p_db_updated: DBParticipantType, index: number) => {

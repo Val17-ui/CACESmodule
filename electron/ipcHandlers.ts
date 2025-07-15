@@ -5,6 +5,7 @@ const {
     deleteSessionQuestionsBySessionId, getSessionQuestionsBySessionId, addBulkSessionBoitiers,
     deleteSessionBoitiersBySessionId, getSessionBoitiersBySessionId, getAllDeviceKits,
     getDefaultDeviceKit, addReferential, getAllReferentiels, getReferentialByCode,
+    exportAllData, importAllData,
     getReferentialById, getAllTrainers, addTheme, getThemeByCodeAndReferentialId,
     getThemesByReferentialId, getThemeById, getAllThemes, addBloc, getBlocByCodeAndThemeId,
     getBlocsByThemeId, getBlocById, getAllBlocs, addQuestion, getQuestionById,
@@ -80,6 +81,10 @@ exports.initializeIpcHandlers = function() {
   ipcMain.handle('db-get-admin-setting', async (event: any, key: string) => getAdminSetting(key));
   ipcMain.handle('db-set-admin-setting', async (event: any, key: string, value: any) => setAdminSetting(key, value));
   ipcMain.handle('db-get-all-admin-settings', async () => getAllAdminSettings());
+
+  // Backup/Restore
+  ipcMain.handle('db-export-all-data', async () => exportAllData());
+  ipcMain.handle('db-import-all-data', async (event: any, data: any) => importAllData(data));
 
   // PPTX Generation
   ipcMain.handle('pptx-generate', async (event: any, sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => {
