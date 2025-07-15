@@ -265,7 +265,7 @@ const rowToQuestion = (row: any): QuestionWithId => {
     options: row.options ? JSON.parse(row.options) : [],
     isEliminatory: row.isEliminatory === 1,
     // createdAt devrait déjà être un string ISO, pas de transformation nécessaire a priori
-  } as QuestionWithId;
+  };
 };
 
 const questionToRow = (question: Partial<Omit<QuestionWithId, 'id'> | QuestionWithId>) => {
@@ -294,7 +294,7 @@ export const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise
       `);
       const rowData = questionToRow({
         blocId, text, type, correctAnswer, timeLimit,
-        isEliminatory: isEliminatory, // Sera converti en 0/1 par questionToRow
+        isEliminatory, // Sera converti en 0/1 par questionToRow
         createdAt,
         usageCount: usageCount ?? 0,
         correctResponseRate: correctResponseRate ?? 0,
@@ -903,7 +903,7 @@ export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number |
         VALUES (@name, @isDefault)
       `);
       // Assurer que isDefault est bien 0 ou 1 si non fourni explicitement
-      const isDefault = trainer.isDefault === 1 || trainer.isDefault === true ? 1 : 0;
+      const isDefault = trainer.isDefault ? 1 : 0;
       const result = stmt.run({ ...trainer, isDefault });
       return result.lastInsertRowid as number;
     } catch (error) {
@@ -917,7 +917,7 @@ export const getAllTrainers = async (): Promise<Trainer[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM trainers");
-      const trainers = stmt.all() as Trainer[];
+      const trainers = stmt.all() as any[];
       // Convertir isDefault en booléen pour la logique applicative si nécessaire (ici on garde 0/1 comme dans le schéma)
       return trainers.map(t => ({ ...t, isDefault: t.isDefault === 1 }));
     } catch (error) {
@@ -931,7 +931,7 @@ export const getTrainerById = async (id: number): Promise<Trainer | undefined> =
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM trainers WHERE id = ?");
-      const trainer = stmt.get(id) as Trainer | undefined;
+      const trainer = stmt.get(id) as any | undefined;
       if (trainer) {
         return { ...trainer, isDefault: trainer.isDefault === 1 };
       }
@@ -955,7 +955,7 @@ export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, '
       // Assurer que isDefault est 0 ou 1 si présent dans updates
       const params: any = { ...updates, id };
       if (updates.isDefault !== undefined) {
-        params.isDefault = updates.isDefault === true || updates.isDefault === 1 ? 1 : 0;
+        params.isDefault = updates.isDefault ? 1 : 0;
       }
 
       const result = stmt.run(params);
@@ -1015,7 +1015,7 @@ export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM trainers WHERE isDefault = 1 LIMIT 1");
-      const trainer = stmt.get() as Trainer | undefined;
+      const trainer = stmt.get() as any | undefined;
       if (trainer) {
         return { ...trainer, isDefault: true }; // Assure que isDefault est un booléen
       }
@@ -1382,7 +1382,7 @@ const rowToDeviceKit = (row: any): DeviceKit => {
   return {
     ...row,
     isDefault: row.isDefault === 1,
-  } as DeviceKit;
+  };
 };
 
 export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
@@ -1439,7 +1439,7 @@ export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKi
 
       const params: any = { ...updates, id };
       if (updates.isDefault !== undefined) {
-        params.isDefault = updates.isDefault === true || updates.isDefault === 1 ? 1 : 0;
+        params.isDefault = updates.isDefault ? 1 : 0;
       }
 
       const result = stmt.run(params);
