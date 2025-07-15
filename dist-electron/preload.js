@@ -1,17 +1,34 @@
-import { contextBridge, ipcRenderer } from "electron";
+const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("dbAPI", {
-  // Pour les sessions
+  // Sessions
   getAllSessions: () => ipcRenderer.invoke("db-get-all-sessions"),
   getSessionById: (id) => ipcRenderer.invoke("db-get-session-by-id", id),
-  // Pour les référentiels (basé sur les exemples dans ipcHandlers.ts)
+  addSession: (data) => ipcRenderer.invoke("db-add-session", data),
+  updateSession: (id, updates) => ipcRenderer.invoke("db-update-session", id, updates),
+  // SessionResults
+  addBulkSessionResults: (results) => ipcRenderer.invoke("db-add-bulk-session-results", results),
+  getResultsForSession: (sessionId) => ipcRenderer.invoke("db-get-results-for-session", sessionId),
+  // VotingDevices
+  getAllVotingDevices: () => ipcRenderer.invoke("db-get-all-voting-devices"),
+  getVotingDevicesForKit: (kitId) => ipcRenderer.invoke("db-get-voting-devices-for-kit", kitId),
+  // SessionQuestions
+  addBulkSessionQuestions: (questions) => ipcRenderer.invoke("db-add-bulk-session-questions", questions),
+  deleteSessionQuestionsBySessionId: (sessionId) => ipcRenderer.invoke("db-delete-session-questions-by-session-id", sessionId),
+  getSessionQuestionsBySessionId: (sessionId) => ipcRenderer.invoke("db-get-session-questions-by-session-id", sessionId),
+  // SessionBoitiers
+  addBulkSessionBoitiers: (boitiers) => ipcRenderer.invoke("db-add-bulk-session-boitiers", boitiers),
+  deleteSessionBoitiersBySessionId: (sessionId) => ipcRenderer.invoke("db-delete-session-boitiers-by-session-id", sessionId),
+  getSessionBoitiersBySessionId: (sessionId) => ipcRenderer.invoke("db-get-session-boitiers-by-session-id", sessionId),
+  // DeviceKits
+  getAllDeviceKits: () => ipcRenderer.invoke("db-get-all-device-kits"),
+  getDefaultDeviceKit: () => ipcRenderer.invoke("db-get-default-device-kit"),
+  // Referentiels
   addReferential: (data) => ipcRenderer.invoke("db-add-referential", data),
   getAllReferentiels: () => ipcRenderer.invoke("db-get-all-referentiels"),
-  // Pour les trainers (basé sur les exemples dans ipcHandlers.ts)
-  getAllTrainers: () => ipcRenderer.invoke("db-get-all-trainers"),
-  // Referentiels
   getReferentialByCode: (code) => ipcRenderer.invoke("db-get-referential-by-code", code),
   getReferentialById: (id) => ipcRenderer.invoke("db-get-referential-by-id", id),
-  // addReferential et getAllReferentiels sont déjà là
+  // Trainers
+  getAllTrainers: () => ipcRenderer.invoke("db-get-all-trainers"),
   // Themes
   addTheme: (data) => ipcRenderer.invoke("db-add-theme", data),
   getThemeByCodeAndReferentialId: (code, refId) => ipcRenderer.invoke("db-get-theme-by-code-and-referential-id", code, refId),
@@ -36,10 +53,10 @@ contextBridge.exposeInMainWorld("dbAPI", {
   // AdminSettings
   getAdminSetting: (key) => ipcRenderer.invoke("db-get-admin-setting", key),
   setAdminSetting: (key, value) => ipcRenderer.invoke("db-set-admin-setting", key, value),
-  getAllAdminSettings: () => ipcRenderer.invoke("db-get-all-admin-settings")
-  // N'oubliez pas d'ajouter les autres fonctions CRUD pour les autres entités au fur et à mesure
-  // (SessionResults, VotingDevices, sessionQuestions, sessionBoitiers,
-  // deviceKits, deviceKitAssignments, etc.)
-  // Et mettre à jour le fichier de déclaration de types (renderer.d.ts) en conséquence.
+  getAllAdminSettings: () => ipcRenderer.invoke("db-get-all-admin-settings"),
+  // Backup/Restore
+  exportAllData: () => ipcRenderer.invoke("db-export-all-data"),
+  importAllData: (data) => ipcRenderer.invoke("db-import-all-data", data),
+  // PPTX Generation
+  generatePresentation: (sessionInfo, participants, questions, template, adminSettings) => ipcRenderer.invoke("pptx-generate", sessionInfo, participants, questions, template, adminSettings)
 });
-console.log("[Preload Script] Context bridge for dbAPI initialized.");
