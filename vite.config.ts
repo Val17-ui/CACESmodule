@@ -32,7 +32,7 @@ export default defineConfig({
   ],
   optimizeDeps: {
     // Exclure également `better-sqlite3` de l'optimisation des dépendances de Vite.
-    exclude: ['lucide-react', 'better-sqlite3'],
+    // exclude: ['lucide-react', 'better-sqlite3'],
   },
   build: {
     sourcemap: false

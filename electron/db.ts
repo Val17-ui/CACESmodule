@@ -212,7 +212,7 @@ const createSchema = () => {
       } catch (error) {
         console.error(`[DB SCHEMA] Failed to execute DDL: ${stmt.substring(0,60)}...`, error);
         // En cas d'erreur, la transaction sera automatiquement annulée par better-sqlite3
-        throw error; 
+        throw error;
       }
     }
   });
