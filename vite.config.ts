@@ -13,6 +13,9 @@ export default defineConfig({
         // Point d'entrée pour le processus principal d'Electron
         entry: 'electron/index.ts',
         vite: {
+          define: {
+            'VITE_DEV_SERVER_URL': JSON.stringify(process.env.VITE_DEV_SERVER_URL)
+          },
           build: {
             // Indiquer à Vite de ne pas bundler `better-sqlite3`
             // et de le traiter comme une dépendance externe.
