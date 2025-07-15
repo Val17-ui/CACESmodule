@@ -1,10 +1,24 @@
-import { Session, Referential, Trainer, Theme, Bloc, QuestionWithId, Omit } from './types';
+import { Session, Referential, Trainer, Theme, Bloc, QuestionWithId, Omit, SessionResult, VotingDevice, DeviceKit, SessionQuestion, SessionBoitier } from './types';
 
 declare global {
   interface Window {
     dbAPI: {
       getAllSessions: () => Promise<Session[]>;
       getSessionById: (id: number) => Promise<Session | undefined>;
+      addSession: (data: Omit<Session, 'id'>) => Promise<number | undefined>;
+      updateSession: (id: number, updates: Partial<Omit<Session, 'id'>>) => Promise<number | undefined>;
+      addBulkSessionResults: (results: Omit<SessionResult, 'id'>[]) => Promise<(number | undefined)[] | undefined>;
+      getResultsForSession: (sessionId: number) => Promise<SessionResult[]>;
+      getAllVotingDevices: () => Promise<VotingDevice[]>;
+      addBulkSessionQuestions: (questions: Omit<SessionQuestion, 'id'>[]) => Promise<(number | undefined)[] | undefined>;
+      deleteSessionQuestionsBySessionId: (sessionId: number) => Promise<void>;
+      addBulkSessionBoitiers: (boitiers: Omit<SessionBoitier, 'id'>[]) => Promise<(number | undefined)[] | undefined>;
+      deleteSessionBoitiersBySessionId: (sessionId: number) => Promise<void>;
+      getSessionQuestionsBySessionId: (sessionId: number) => Promise<SessionQuestion[]>;
+      getSessionBoitiersBySessionId: (sessionId: number) => Promise<SessionBoitier[]>;
+      getAllDeviceKits: () => Promise<DeviceKit[]>;
+      getDefaultDeviceKit: () => Promise<DeviceKit | undefined>;
+      getVotingDevicesForKit: (kitId: number) => Promise<VotingDevice[]>;
       addReferential: (data: Omit<Referential, 'id'>) => Promise<number | undefined>;
       getAllReferentiels: () => Promise<Referential[]>;
       getAllTrainers: () => Promise<Trainer[]>;

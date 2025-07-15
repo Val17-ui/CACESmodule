@@ -1,21 +1,42 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('dbAPI', {
-  // Pour les sessions
+  // Sessions
   getAllSessions: () => ipcRenderer.invoke('db-get-all-sessions'),
   getSessionById: (id: number) => ipcRenderer.invoke('db-get-session-by-id', id),
+  addSession: (data: any) => ipcRenderer.invoke('db-add-session', data),
+  updateSession: (id: number, updates: any) => ipcRenderer.invoke('db-update-session', id, updates),
 
-  // Pour les référentiels (basé sur les exemples dans ipcHandlers.ts)
-  addReferential: (data: any) => ipcRenderer.invoke('db-add-referential', data),
-  getAllReferentiels: () => ipcRenderer.invoke('db-get-all-referentiels'),
+  // SessionResults
+  addBulkSessionResults: (results: any) => ipcRenderer.invoke('db-add-bulk-session-results', results),
+  getResultsForSession: (sessionId: number) => ipcRenderer.invoke('db-get-results-for-session', sessionId),
 
-  // Pour les trainers (basé sur les exemples dans ipcHandlers.ts)
-  getAllTrainers: () => ipcRenderer.invoke('db-get-all-trainers'),
+  // VotingDevices
+  getAllVotingDevices: () => ipcRenderer.invoke('db-get-all-voting-devices'),
+  getVotingDevicesForKit: (kitId: number) => ipcRenderer.invoke('db-get-voting-devices-for-kit', kitId),
+
+  // SessionQuestions
+  addBulkSessionQuestions: (questions: any) => ipcRenderer.invoke('db-add-bulk-session-questions', questions),
+  deleteSessionQuestionsBySessionId: (sessionId: number) => ipcRenderer.invoke('db-delete-session-questions-by-session-id', sessionId),
+  getSessionQuestionsBySessionId: (sessionId: number) => ipcRenderer.invoke('db-get-session-questions-by-session-id', sessionId),
+
+  // SessionBoitiers
+  addBulkSessionBoitiers: (boitiers: any) => ipcRenderer.invoke('db-add-bulk-session-boitiers', boitiers),
+  deleteSessionBoitiersBySessionId: (sessionId: number) => ipcRenderer.invoke('db-delete-session-boitiers-by-session-id', sessionId),
+  getSessionBoitiersBySessionId: (sessionId: number) => ipcRenderer.invoke('db-get-session-boitiers-by-session-id', sessionId),
+
+  // DeviceKits
+  getAllDeviceKits: () => ipcRenderer.invoke('db-get-all-device-kits'),
+  getDefaultDeviceKit: () => ipcRenderer.invoke('db-get-default-device-kit'),
 
   // Referentiels
+  addReferential: (data: any) => ipcRenderer.invoke('db-add-referential', data),
+  getAllReferentiels: () => ipcRenderer.invoke('db-get-all-referentiels'),
   getReferentialByCode: (code: string) => ipcRenderer.invoke('db-get-referential-by-code', code),
   getReferentialById: (id: number) => ipcRenderer.invoke('db-get-referential-by-id', id),
-  // addReferential et getAllReferentiels sont déjà là
+
+  // Trainers
+  getAllTrainers: () => ipcRenderer.invoke('db-get-all-trainers'),
 
   // Themes
   addTheme: (data: any) => ipcRenderer.invoke('db-add-theme', data),
