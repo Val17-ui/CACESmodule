@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const VITE_DEV_SERVER_URL = 'http://localhost:5173';
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
