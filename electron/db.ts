@@ -1707,7 +1707,7 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
 // 7. Logging: Added more console logs with prefixes for easier debugging of setup and stub calls.
 
 module.exports = {
-  db,
+  getDb,
   initializeDatabase,
   addQuestion,
   getAllQuestions,
