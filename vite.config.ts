@@ -8,8 +8,8 @@ import path from 'path';
 export default defineConfig({
   plugins: [
     react(),
-    electron([
-      {
+    electron({
+      main: {
         // Point d'entrée pour le processus principal d'Electron
         entry: 'electron/index.ts',
         vite: {
@@ -23,14 +23,11 @@ export default defineConfig({
           },
         },
       },
-      {
+      preload: {
         // Point d'entrée pour le script de préchargement
-        entry: 'electron/preload.ts',
-        onstart(options) {
-          options.reload();
-        },
+        input: path.join(__dirname, 'electron/preload.ts'),
       },
-    ]),
+    }),
     renderer(),
   ],
   optimizeDeps: {
