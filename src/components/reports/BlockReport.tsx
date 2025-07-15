@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions, getAllResults, getAllQuestions, getAllReferentiels, getAllThemes, getAllBlocs } from '../../db';
+import { StorageManager } from '../../services/StorageManager';
 import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, CalculatedBlockOverallStats } from '../../types'; // QuestionWithId et CalculatedBlockOverallStats importés de types
 import {
   Table,
@@ -36,12 +36,12 @@ const BlockReport: React.FC<BlockReportProps> = ({ startDate, endDate }) => {
         fetchedThemes,
         fetchedBlocs
       ] = await Promise.all([
-        getAllSessions(),
-        getAllResults(),
-        getAllQuestions(),
-        getAllReferentiels(),
-        getAllThemes(),
-        getAllBlocs()
+        StorageManager.getAllSessions(),
+        StorageManager.getAllResults(),
+        StorageManager.getAllQuestions(),
+        StorageManager.getAllReferentiels(),
+        StorageManager.getAllThemes(),
+        StorageManager.getAllBlocs()
       ]);
       setSessions(fetchedSessions);
       setAllResults(fetchedResults);

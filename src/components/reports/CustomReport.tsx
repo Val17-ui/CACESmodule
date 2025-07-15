@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { getAllSessions, getAllReferentiels } from '../../db'; // Ajout de getAllReferentiels
+import { StorageManager } from '../../services/StorageManager';
 import { Session, Referential } from '../../types'; // Ajout de Referential, CACESReferential enlevé
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -50,8 +50,8 @@ const CustomReport = () => {
   useEffect(() => {
     const loadData = async () => {
       const [fetchedSessions, fetchedReferentiels] = await Promise.all([
-        getAllSessions(),
-        getAllReferentiels(),
+        StorageManager.getAllSessions(),
+        StorageManager.getAllReferentiels(),
       ]);
       setSessions(fetchedSessions);
       setAllReferentielsDb(fetchedReferentiels.sort((a, b) => a.code.localeCompare(b.code)));
