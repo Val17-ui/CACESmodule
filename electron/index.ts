@@ -22,6 +22,7 @@ function createWindow() {
     win.webContents.send('main-process-message', new Date().toLocaleString());
   });
 
+  // Charge l'URL du serveur de dev ou le fichier HTML local
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
