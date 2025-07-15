@@ -2,7 +2,6 @@
   "name": "easycertif",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
   "main": "dist-electron/index.js",
   "scripts": {
     "dev": "vite",
