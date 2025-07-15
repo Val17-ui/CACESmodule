@@ -4,52 +4,59 @@ import electron from 'vite-plugin-electron';
 import renderer from 'vite-plugin-electron-renderer';
 import path from 'path';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    electron({
-      main: {
-        // Point d'entrée pour le processus principal d'Electron
+    electron([
+      {
         entry: 'electron/index.ts',
         vite: {
           build: {
-            // Indiquer à Vite de ne pas bundler `better-sqlite3`
-            // et de le traiter comme une dépendance externe.
-            // C'est crucial pour les modules natifs.
+            outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
+              input: {
+                main: 'electron/index.ts',
+                ipcHandlers: 'electron/ipcHandlers.ts', // <-- Ajoute cette ligne
+              },
+              output: {
+                entryFileNames: '[name].js', // Génère index.js et ipcHandlers.js
+                format: 'cjs',
+              },
             },
-            // Forcer le format de sortie en CommonJS
             commonjsOptions: {
               ignoreDynamicRequires: true,
             },
           },
-          // Forcer le format de sortie en CommonJS
           esbuild: {
             format: 'cjs',
           },
         },
       },
-      preload: {
-        // Point d'entrée pour le script de préchargement
-        input: path.join(__dirname, 'electron/preload.ts'),
+      {
+        entry: path.join(__dirname, 'electron/preload.ts'),
         vite: {
           build: {
+            outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
+              output: {
+                format: 'cjs',
+              },
             },
           },
         },
-      },
-    }),
+      }
+    ]),
     renderer(),
   ],
-  optimizeDeps: {
-    // Exclure également `better-sqlite3` de l'optimisation des dépendances de Vite.
-    // exclude: ['lucide-react', 'better-sqlite3'],
-  },
+  optimizeDeps: {},
   build: {
-    sourcemap: false
-  }
+    sourcemap: false,
+    rollupOptions: {
+      input: 'index.html',
+    },
+    outDir: 'dist',
+    assetsDir: 'assets',
+  },
 });

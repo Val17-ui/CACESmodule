@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../components/layout/Layout';
-import GlobalStats from '../components/reports/GlobalStats';
+import GlobalStats from '../components/reports/GlobalStats.tsx';
 import ReportTypeSelector, { ReportType } from '../components/reports/ReportTypeSelector';
 import ReportsList from '../components/reports/ReportsList';
 import ReportDetails from '../components/reports/ReportDetails';
@@ -137,7 +137,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
 
   const renderContent = () => {
     if (selectedSession) {
-      return <ReportDetails session={selectedSession} participants={sessionParticipants} />;
+      return <ReportDetails session={selectedSession} />;
     }
 
     switch (activeReport) {
