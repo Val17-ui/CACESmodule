@@ -20,27 +20,6 @@ import {
   VotingDevice,
   DeviceKit
 } from '../../types';
-import { StorageManager } from '../../services/StorageManager';
-import {
-  addSession,
-  updateSession,
-  getSessionById,
-  addBulkSessionResults,
-  getResultsForSession,
-  getQuestionsByIds,
-  getAllVotingDevices,
-  getAdminSetting,
-  getAllTrainers,
-  addBulkSessionQuestions,
-  deleteSessionQuestionsBySessionId,
-  addBulkSessionBoitiers,
-  deleteSessionBoitiersBySessionId,
-  getSessionQuestionsBySessionId,
-  getSessionBoitiersBySessionId,
-  getAllDeviceKits,
-  getDefaultDeviceKit,
-  getVotingDevicesForKit
-} from '../../db';
 import { generatePresentation, AdminPPTXSettings } from '../../utils/pptxOrchestrator';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
@@ -101,16 +80,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       setIsLoadingKits(true);
       try {
         const [devices, trainers, refs, themes, blocs, kits, defaultKitResult] = await Promise.all([
-          getAllVotingDevices(),
-          getAllTrainers(),
-          StorageManager.getAllReferentiels(),
-          StorageManager.getAllThemes(),
-          StorageManager.getAllBlocs(),
-          getAllDeviceKits(),
-          getDefaultDeviceKit()
+          window.dbAPI.getAllVotingDevices(),
+          window.dbAPI.getAllTrainers(),
+          window.dbAPI.getAllReferentiels(),
+          window.dbAPI.getAllThemes(),
+          window.dbAPI.getAllBlocs(),
+          window.dbAPI.getAllDeviceKits(),
+          window.dbAPI.getDefaultDeviceKit()
         ]);
-        setHardwareDevices(devices.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
-        setTrainersList(trainers.sort((a, b) => a.name.localeCompare(b.name)));
+        setHardwareDevices(devices.sort((a: VotingDevice, b: VotingDevice) => (a.id ?? 0) - (b.id ?? 0)));
+        setTrainersList(trainers.sort((a: Trainer, b: Trainer) => a.name.localeCompare(b.name)));
         setReferentielsData(refs);
         setAllThemesData(themes);
         setAllBlocsData(blocs);
@@ -142,7 +121,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     const fetchDevicesInKit = async () => {
       if (selectedKitIdState !== null) {
         try {
-          const devices = await getVotingDevicesForKit(selectedKitIdState);
+          const devices = await window.dbAPI.getVotingDevicesForKit(selectedKitIdState);
           setVotingDevicesInSelectedKit(devices);
         } catch (error) {
           console.error(`Erreur lors du chargement des boîtiers pour le kit ${selectedKitIdState}:`, error);
@@ -176,7 +155,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (sessionIdToLoad && hardwareLoaded && referentielsData.length > 0) {
       const loadSession = async () => {
         try {
-          const sessionData = await getSessionById(sessionIdToLoad);
+          const sessionData = await window.dbAPI.getSessionById(sessionIdToLoad);
           setEditingSessionData(sessionData || null);
           if (sessionData) {
             setCurrentSessionDbId(sessionData.id ?? null);
@@ -491,15 +470,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     try {
       let savedId: number | undefined;
       if (sessionDataToSave.id) {
-        await updateSession(sessionDataToSave.id, sessionDataToSave);
+        await window.dbAPI.updateSession(sessionDataToSave.id, sessionDataToSave);
         savedId = sessionDataToSave.id;
       } else {
-        const newId = await addSession(sessionDataToSave);
+        const newId = await window.dbAPI.addSession(sessionDataToSave);
         if (newId) { setCurrentSessionDbId(newId); savedId = newId; }
         else { setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée."); return null; }
       }
       if (savedId) {
-         const reloadedSession = await getSessionById(savedId);
+         const reloadedSession = await window.dbAPI.getSessionById(savedId);
          setEditingSessionData(reloadedSession || null);
          if (reloadedSession) {
             setModifiedAfterOrsGeneration(false);
@@ -556,7 +535,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         setImportSummary("Erreur lors de la sauvegarde de la session avant génération ORS.");
         setIsGeneratingOrs(false); return;
     }
-    const upToDateSessionData = await getSessionById(currentSavedId);
+    const upToDateSessionData = await window.dbAPI.getSessionById(currentSavedId);
     if (!upToDateSessionData) { setImportSummary("Erreur rechargement session après sauvegarde."); setIsGeneratingOrs(false); return; }
     setEditingSessionData(upToDateSessionData);
     const participantsWithoutValidDevice = [];
@@ -579,19 +558,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     let allSelectedQuestionsForPptx: StoredQuestion[] = [];
     let selectedBlocIdsForSession: number[] = [];
     try {
-      const referentielObject = await StorageManager.getReferentialByCode(refCodeToUse as string);
+      const referentielObject = await window.dbAPI.getReferentialByCode(refCodeToUse as string);
       if (!referentielObject || !referentielObject.id) {
         setImportSummary(`Référentiel avec code "${refCodeToUse}" non trouvé.`);
         setIsGeneratingOrs(false); return;
       }
-      const themesForReferential = await StorageManager.getThemesByReferentialId(referentielObject.id);
+      const themesForReferential = await window.dbAPI.getThemesByReferentialId(referentielObject.id);
       if (!themesForReferential || themesForReferential.length === 0) {
         setImportSummary(`Aucun thème trouvé pour le référentiel "${refCodeToUse}".`);
         setIsGeneratingOrs(false); return;
       }
       for (const theme of themesForReferential) {
         if (!theme.id) continue;
-        const blocsForTheme = await StorageManager.getBlocsByThemeId(theme.id);
+        const blocsForTheme = await window.dbAPI.getBlocsByThemeId(theme.id);
         if (!blocsForTheme || blocsForTheme.length === 0) {
           console.warn(`Aucun bloc trouvé pour le thème "${theme.code_theme}" (ID: ${theme.id}).`);
           continue;
@@ -606,7 +585,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const chosenBloc = filteredBlocs[Math.floor(Math.random() * filteredBlocs.length)];
         if (chosenBloc && chosenBloc.id) {
           selectedBlocIdsForSession.push(chosenBloc.id);
-          const questionsFromBloc = await StorageManager.getQuestionsForBloc(chosenBloc.id);
+          const questionsFromBloc = await window.dbAPI.getQuestionsByBlocId(chosenBloc.id);
           allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBloc);
           logger.info(`Thème: ${theme.code_theme}, Bloc choisi: ${chosenBloc.code_bloc}, Questions: ${questionsFromBloc.length}`);
         }
@@ -620,13 +599,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         selectedBlocIds: selectedBlocIdsForSession,
         referentielId: referentielObject.id
       };
-      await updateSession(currentSavedId, { selectedBlocIds: selectedBlocIdsForSession, referentielId: referentielObject.id });
+      await window.dbAPI.updateSession(currentSavedId, { selectedBlocIds: selectedBlocIdsForSession, referentielId: referentielObject.id });
       setEditingSessionData(sessionDataWithSelectedBlocs);
       const sessionInfoForPptx = { name: sessionDataWithSelectedBlocs.nomSession, date: sessionDataWithSelectedBlocs.dateSession, referential: referentielObject.code as CACESReferential };
-      const prefPollStartMode = await getAdminSetting('pollStartMode') || 'Automatic';
-      const prefAnswersBulletStyle = await getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
-      const prefPollTimeLimit = await getAdminSetting('pollTimeLimit');
-      const prefPollCountdownStartMode = await getAdminSetting('pollCountdownStartMode') || 'Automatic';
+      const prefPollStartMode = await window.dbAPI.getAdminSetting('pollStartMode') || 'Automatic';
+      const prefAnswersBulletStyle = await window.dbAPI.getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
+      const prefPollTimeLimit = await window.dbAPI.getAdminSetting('pollTimeLimit');
+      const prefPollCountdownStartMode = await window.dbAPI.getAdminSetting('pollCountdownStartMode') || 'Automatic';
       const timeLimitFromPrefs = prefPollTimeLimit !== undefined ? Number(prefPollTimeLimit) : 30;
       const adminSettings: AdminPPTXSettings = {
         defaultDuration: timeLimitFromPrefs, pollTimeLimit: timeLimitFromPrefs,
@@ -658,7 +637,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
         const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;
         try {
-          await updateSession(currentSavedId, {
+          await window.dbAPI.updateSession(currentSavedId, {
             donneesOrs: orsBlob,
             questionMappings: questionMappings,
             ignoredSlideGuids: newlyIgnoredSlideGuids || [],
@@ -667,13 +646,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             selectedBlocIds: sessionDataWithSelectedBlocs.selectedBlocIds,
             referentielId: sessionDataWithSelectedBlocs.referentielId
           });
-          const freshlyUpdatedSessionData = await getSessionById(currentSavedId);
+          const freshlyUpdatedSessionData = await window.dbAPI.getSessionById(currentSavedId);
           if (!freshlyUpdatedSessionData) {
             throw new Error("Impossible de recharger la session après la mise à jour avec l'ORS.");
           }
           setEditingSessionData(freshlyUpdatedSessionData);
-          await deleteSessionQuestionsBySessionId(currentSavedId);
-          await deleteSessionBoitiersBySessionId(currentSavedId);
+          await window.dbAPI.deleteSessionQuestionsBySessionId(currentSavedId);
+          await window.dbAPI.deleteSessionBoitiersBySessionId(currentSavedId);
           const sessionQuestionsToSave: SessionQuestion[] = [];
           for (const qMap of questionMappings) {
             if (qMap.slideGuid && qMap.dbQuestionId !== undefined) {
@@ -701,7 +680,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             }
           }
           if (sessionQuestionsToSave.length > 0) {
-            await addBulkSessionQuestions(sessionQuestionsToSave);
+            await window.dbAPI.addBulkSessionQuestions(sessionQuestionsToSave);
           }
           const sessionBoitiersToSave: SessionBoitier[] = [];
           freshlyUpdatedSessionData.participants.forEach((p_db: DBParticipantType, p_idx: number) => {
@@ -719,7 +698,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             }
           });
           if (sessionBoitiersToSave.length > 0) {
-            await addBulkSessionBoitiers(sessionBoitiersToSave);
+            await window.dbAPI.addBulkSessionBoitiers(sessionBoitiersToSave);
           }
           setImportSummary(`Session (ID: ${currentSavedId}) .ors, mappings et métadonnées générés. Statut: Prête.`);
           logger.info(`Fichier .ors, mappings et métadonnées générés/mis à jour pour la session "${freshlyUpdatedSessionData.nomSession}"`, {
@@ -804,8 +783,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         setImportSummary("Aucune réponse valide à importer après filtrage et déduplication.");
         return;
       }
-      const sessionQuestionsFromDb = await getSessionQuestionsBySessionId(currentSessionDbId);
-      const sessionBoitiers = await getSessionBoitiersBySessionId(currentSessionDbId);
+      const sessionQuestionsFromDb = await window.dbAPI.getSessionQuestionsBySessionId(currentSessionDbId);
+      const sessionBoitiers = await window.dbAPI.getSessionBoitiersBySessionId(currentSessionDbId);
       if (!sessionQuestionsFromDb || sessionQuestionsFromDb.length === 0) {
         setImportSummary("Erreur: Impossible de charger les questions de référence pour cette session.");
         logger.error(`[Import Results] Impossible de charger sessionQuestions pour sessionId: ${currentSessionDbId}`);
@@ -815,9 +794,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
            console.warn(`[Import Results] Aucune information de boîtier (sessionBoitiers) trouvée pour sessionId: ${currentSessionDbId}.`);
       }
       const relevantSessionQuestions = editingSessionData.ignoredSlideGuids
-        ? sessionQuestionsFromDb.filter((sq: SessionQuestion) => !editingSessionData.ignoredSlideGuids!.includes(sq.slideGuid))
+            ? sessionQuestionsFromDb.filter((sq: SessionQuestion) => !editingSessionData.ignoredSlideGuids!.includes(sq.slideGuid))
         : sessionQuestionsFromDb;
-      const relevantSessionQuestionGuids = new Set(relevantSessionQuestions.map((sq: SessionQuestion) => sq.slideGuid));
+        const relevantSessionQuestionGuids = new Set(relevantSessionQuestions.map((sq: SessionQuestion) => sq.slideGuid));
       const totalRelevantQuestionsCount = relevantSessionQuestionGuids.size;
       logger.info(`[Import Results] Nombre total de questions pertinentes pour la session: ${totalRelevantQuestionsCount}`);
       for (const result of finalExtractedResults) {
@@ -844,9 +823,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const respondedGuidsForThisExpected = new Set(responsesForThisExpectedDevice.map((r: ExtractedResultFromXml) => r.questionSlideGuid));
         const missedGuidsForThisExpected: string[] = [];
         if (totalRelevantQuestionsCount > 0) {
-          relevantSessionQuestionGuids.forEach((guid: string) => {
-            if (!respondedGuidsForThisExpected.has(guid)) {
-              missedGuidsForThisExpected.push(guid);
+          relevantSessionQuestionGuids.forEach((guid) => {
+            if (!respondedGuidsForThisExpected.has(guid as string)) {
+              missedGuidsForThisExpected.push(guid as string);
             }
           });
         }
@@ -880,7 +859,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           unknownSerialNumbersResponses[result.participantDeviceID].push(result);
         }
       }
-      Object.entries(unknownSerialNumbersResponses).forEach(([serialNumber, responses]: [string, ExtractedResultFromXml[]]) => {
+      Object.entries(unknownSerialNumbersResponses).forEach(([serialNumber, responses]) => {
         if (!detectedAnomaliesData.unknownThatResponded) detectedAnomaliesData.unknownThatResponded = [];
         detectedAnomaliesData.unknownThatResponded.push({
           serialNumber: serialNumber,
@@ -910,19 +889,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       );
       if (sessionResultsToSave.length > 0) {
         try {
-          const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+          const savedResultIds = await window.dbAPI.addBulkSessionResults(sessionResultsToSave);
           if (savedResultIds && savedResultIds.length > 0) {
             let message = `${savedResultIds.length} résultats sauvegardés !`;
             let sessionProcessError: string | null = null;
             try {
               if (currentSessionDbId) {
-                await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+                await window.dbAPI.updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
                 message += "\nStatut session: 'Terminée'.";
-                const sessionResultsForScore: SessionResult[] = await getResultsForSession(currentSessionDbId);
-                let sessionDataForScores = await getSessionById(currentSessionDbId);
+                const sessionResultsForScore: SessionResult[] = await window.dbAPI.getResultsForSession(currentSessionDbId);
+                let sessionDataForScores = await window.dbAPI.getSessionById(currentSessionDbId);
                 if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
                   const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
-                  const sessionQuestionsDb = await getQuestionsByIds(questionIds);
+                  const sessionQuestionsDb = await window.dbAPI.getQuestionsByIds(questionIds);
                   if (sessionQuestionsDb.length > 0) {
                     const updatedParticipants = sessionDataForScores.participants.map((p_db: DBParticipantType) => {
                       const matchingGlobalDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
@@ -937,9 +916,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       const reussite = determineIndividualSuccess(score, themeScores);
                       return { ...p_db, score, reussite };
                     });
-                    await updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
+                    await window.dbAPI.updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
                     message += "\nScores et réussite calculés et mis à jour.";
-                    const finalUpdatedSession = await getSessionById(currentSessionDbId);
+                    const finalUpdatedSession = await window.dbAPI.getSessionById(currentSessionDbId);
                     if (finalUpdatedSession) {
                       setEditingSessionData(finalUpdatedSession);
                       const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db_updated: DBParticipantType, index: number) => {
@@ -1118,8 +1097,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     logger.info(`[AnomalyResolution] ${finalResultsToImport.length} résultats finaux à importer après résolution.`);
     if (participantsDataChanged) {
         try {
-            await updateSession(currentSessionDbId, { participants: updatedParticipantsList, updatedAt: new Date().toISOString() });
-            const reloadedSessionForUI = await getSessionById(currentSessionDbId);
+            await window.dbAPI.updateSession(currentSessionDbId, { participants: updatedParticipantsList, updatedAt: new Date().toISOString() });
+            const reloadedSessionForUI = await window.dbAPI.getSessionById(currentSessionDbId);
             if (reloadedSessionForUI) {
                 setEditingSessionData(reloadedSessionForUI);
                 const formParticipantsToUpdate: FormParticipant[] = reloadedSessionForUI.participants.map((p_db_updated: DBParticipantType, index: number) => {
@@ -1162,18 +1141,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         currentSessionDbId
       );
       if (sessionResultsToSave.length > 0) {
-        const savedResultIds = await addBulkSessionResults(sessionResultsToSave);
+        const savedResultIds = await window.dbAPI.addBulkSessionResults(sessionResultsToSave);
         let message = `${savedResultIds?.length || 0} résultats (après résolution) sauvegardés !`;
-        await updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
+        await window.dbAPI.updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
         message += "\nStatut session: 'Terminée'.";
-        const finalSessionDataForScores = await getSessionById(currentSessionDbId);
+        const finalSessionDataForScores = await window.dbAPI.getSessionById(currentSessionDbId);
         if (finalSessionDataForScores && finalSessionDataForScores.questionMappings) {
-            const questionDbIds = finalSessionDataForScores.questionMappings.map(qm => qm.dbQuestionId).filter(id => id != null) as number[];
-            const questionsForScoreCalc = await getQuestionsByIds(questionDbIds);
-            const allResultsForScoreCalc = await getResultsForSession(currentSessionDbId);
+                const questionDbIds = finalSessionDataForScores.questionMappings.map((qm: any) => qm.dbQuestionId).filter((id: any) => id != null) as number[];
+            const questionsForScoreCalc = await window.dbAPI.getQuestionsByIds(questionDbIds);
+            const allResultsForScoreCalc = await window.dbAPI.getResultsForSession(currentSessionDbId);
             if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
-                const participantsWithScores = finalSessionDataForScores.participants.map((p: DBParticipantType) => {
-                    const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
+                    const participantsWithScores = finalSessionDataForScores.participants.map((p: DBParticipantType) => {
+                        const device = hardwareDevices.find((hd: VotingDevice) => hd.id === p.assignedGlobalDeviceId);
                     const participantSerialNumber = device ? device.serialNumber : p.identificationCode?.startsWith('NEW_') ? p.identificationCode.substring(4) : null;
                     if (!participantSerialNumber) return { ...p, score: p.score || 0, reussite: p.reussite || false };
                     const participantResults = allResultsForScoreCalc.filter((r: SessionResult) => r.participantIdBoitier === participantSerialNumber);
@@ -1187,7 +1166,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   unknownDevices: unknownResolutions,
                   resolvedAt: new Date().toISOString(),
                 };
-                await updateSession(currentSessionDbId, {
+                await window.dbAPI.updateSession(currentSessionDbId, {
                   participants: participantsWithScores,
                   status: 'completed',
                   resolvedImportAnomalies: anomaliesAuditData,
@@ -1200,7 +1179,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   sessionName: finalSessionDataForScores?.nomSession || editingSessionData.nomSession,
                   resolutions: anomaliesAuditData
                 });
-                const finalUpdatedSessionWithScores = await getSessionById(currentSessionDbId);
+                const finalUpdatedSessionWithScores = await window.dbAPI.getSessionById(currentSessionDbId);
                  if (finalUpdatedSessionWithScores) {
                     setEditingSessionData(finalUpdatedSessionWithScores);
                     const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSessionWithScores.participants.map((p_db_updated: DBParticipantType, index: number) => {
@@ -1311,7 +1290,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   const newSelectedCode = e.target.value as CACESReferential | '';
                   setSelectedReferential(newSelectedCode);
                   if (newSelectedCode) {
-                    const refObj = referentielsData.find(r => r.code === newSelectedCode);
+                    const refObj = referentielsData.find((r: Referential) => r.code === newSelectedCode);
                     setSelectedReferentialId(refObj?.id || null);
                   } else {
                     setSelectedReferentialId(null);
