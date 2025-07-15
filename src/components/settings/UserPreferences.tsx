@@ -4,7 +4,7 @@ import Select from '../ui/Select';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { Save, UploadCloud, Trash2, Star, FileText, CheckCircle } from 'lucide-react'; // Ajout des icônes
-import { getAdminSetting, setAdminSetting } from '../../db';
+import { StorageManager } from '../../services/StorageManager';
 
 // Définition des types pour les préférences existantes
 interface UserPreferencesData {
@@ -55,12 +55,12 @@ const UserPreferences: React.FC = () => {
           loadedTemplates,
           defaultTemplateId,
         ] = await Promise.all([
-          getAdminSetting('pollStartMode'),
-          getAdminSetting('answersBulletStyle'),
-          getAdminSetting('pollTimeLimit'),
-          getAdminSetting('pollCountdownStartMode'),
-          getAdminSetting('userPptxTemplates'),
-          getAdminSetting('userDefaultPptxTemplateId'),
+          StorageManager.getAdminSetting('pollStartMode'),
+          StorageManager.getAdminSetting('answersBulletStyle'),
+          StorageManager.getAdminSetting('pollTimeLimit'),
+          StorageManager.getAdminSetting('pollCountdownStartMode'),
+          StorageManager.getAdminSetting('userPptxTemplates'),
+          StorageManager.getAdminSetting('userDefaultPptxTemplateId'),
         ]);
 
         setPreferences({
@@ -88,14 +88,14 @@ const UserPreferences: React.FC = () => {
     setSaveStatus('saving');
     try {
       // Sauvegarde des préférences existantes
-      await setAdminSetting('pollStartMode', preferences.pollStartMode);
-      await setAdminSetting('answersBulletStyle', preferences.answersBulletStyle);
-      await setAdminSetting('pollTimeLimit', preferences.pollTimeLimit);
-      await setAdminSetting('pollCountdownStartMode', preferences.pollCountdownStartMode);
+      await StorageManager.setAdminSetting('pollStartMode', preferences.pollStartMode);
+      await StorageManager.setAdminSetting('answersBulletStyle', preferences.answersBulletStyle);
+      await StorageManager.setAdminSetting('pollTimeLimit', preferences.pollTimeLimit);
+      await StorageManager.setAdminSetting('pollCountdownStartMode', preferences.pollCountdownStartMode);
 
       // Sauvegarde des préférences de modèles
-      await setAdminSetting('userPptxTemplates', userPptxTemplates);
-      await setAdminSetting('userDefaultPptxTemplateId', userDefaultPptxTemplateId);
+      await StorageManager.setAdminSetting('userPptxTemplates', userPptxTemplates);
+      await StorageManager.setAdminSetting('userDefaultPptxTemplateId', userDefaultPptxTemplateId);
 
       setSaveStatus('success');
       setTemplateStatus({ type: 'idle', message: '' }); // Reset template status on global save
