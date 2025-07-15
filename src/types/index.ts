@@ -221,46 +221,6 @@ export interface GeneralSettings {
   // Potentiellement d'autres paramètres globaux pour les rapports ici
 }
 
-export enum CACESReferential {
-  R482 = 'R482',
-  R484 = 'R484',
-  R485 = 'R485',
-  R486 = 'R486',
-  R489 = 'R489',
-  R490 = 'R490'
-}
-
-export type ReferentialType = 'R482' | 'R484' | 'R485' | 'R486' | 'R489' | 'R490';
-
-export const referentials: Record<ReferentialType, string> = {
-  'R482': 'Engins de chantier',
-  'R484': 'Ponts roulants',
-  'R485': 'Chariots de manutention',
-  'R486': 'Plates-formes élévatrices',
-  'R489': 'Chariots élévateurs',
-  'R490': 'Grues de chargement'
-};
-
-export const referentialLimits: Record<ReferentialType, { min: number; max: number }> = {
-  'R482': { min: 20, max: 45 },
-  'R484': { min: 25, max: 50 },
-  'R485': { min: 20, max: 40 },
-  'R486': { min: 25, max: 50 },
-  'R489': { min: 20, max: 50 },
-  'R490': { min: 30, max: 55 }
-};
-
-export type QuestionTheme =
-  | 'reglementation'
-  | 'securite'
-  | 'technique';
-
-export const questionThemes: Record<QuestionTheme, string> = {
-  reglementation: 'Réglementation',
-  securite: 'Sécurité',
-  technique: 'Technique'
-};
-
 export const questionTypes: Record<QuestionType, string> = {
   [QuestionType.QCM]: 'Questionnaire à choix multiples',
   [QuestionType.QCU]: 'Questionnaire à choix unique',
