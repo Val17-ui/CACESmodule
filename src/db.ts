@@ -231,15 +231,6 @@ const createSchema = () => {
   }
 };
 
-// Exécuter la création du schéma au démarrage de ce module
-try {
-  createSchema();
-} catch (error) {
-  console.error("[DB SETUP] FATAL: Failed to create/verify database schema. Application might not work correctly.", error);
-  // Envisager de quitter l'application si le schéma est critique et ne peut être créé
-  // process.exit(1); 
-}
-
 export type {
   QuestionWithId, Session, SessionResult, Trainer,
   SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
@@ -1694,8 +1685,6 @@ export const calculateBlockUsage = async (startDate?: string | Date, endDate?: s
     return Array.from(blockUsageMap.values());
   });
 };
-
-console.log("[DB SETUP] SQLite database module loaded. Schema applied. CRUD functions are placeholders.");
 
 // General Notes for this file:
 // 1. Path Resolution: The database path is now more robust for typical application user data directories.
