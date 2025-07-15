@@ -21,6 +21,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
-  "exclude": ["src/db.ts", "electron"]
+  "include": ["src", "src/renderer.d.ts"],
+  "exclude": ["electron"]
 }
