@@ -24,7 +24,7 @@ exports.initializeIpcHandlers = function() {
   });
 
   // Handler pour getSessionById
-  ipcMain.handle('db-get-session-by-id', async (event, sessionId: number) => {
+  ipcMain.handle('db-get-session-by-id', async (event: any, sessionId: number) => {
     console.log(`[IPC Main] Received db-get-session-by-id for id: ${sessionId}`);
     if (typeof sessionId !== 'number') {
         console.error('[IPC Main] Invalid sessionId received for db-get-session-by-id:', sessionId);
@@ -41,7 +41,7 @@ exports.initializeIpcHandlers = function() {
 
   // ----- Ajoutez d'autres gestionnaires IPC ici au fur et à mesure -----
   // Exemple pour addReferential (à adapter pour toutes les fonctions CRUD)
-  ipcMain.handle('db-add-referential', async (event, referentialData: any) => {
+  ipcMain.handle('db-add-referential', async (event: any, referentialData: any) => {
     console.log('[IPC Main] Received db-add-referential with data:', referentialData);
     try {
       const newId = await addReferential(referentialData);
@@ -75,24 +75,24 @@ exports.initializeIpcHandlers = function() {
   });
 
   // Referentiels (addReferential, getAllReferentiels sont déjà là en exemple)
-  ipcMain.handle('db-get-referential-by-code', async (event, code: string) => {
+  ipcMain.handle('db-get-referential-by-code', async (event: any, code: string) => {
     try { return await getReferentialByCode(code); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-referential-by-id', async (event, id: number) => {
+  ipcMain.handle('db-get-referential-by-id', async (event: any, id: number) => {
     try { return await getReferentialById(id); } catch (e) { console.error(e); throw e; }
   });
 
   // Themes
-  ipcMain.handle('db-add-theme', async (event, data: any) => {
+  ipcMain.handle('db-add-theme', async (event: any, data: any) => {
     try { return await addTheme(data); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-theme-by-code-and-referential-id', async (event, code: string, refId: number) => {
+  ipcMain.handle('db-get-theme-by-code-and-referential-id', async (event: any, code: string, refId: number) => {
     try { return await getThemeByCodeAndReferentialId(code, refId); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-themes-by-referential-id', async (event, refId: number) => {
+  ipcMain.handle('db-get-themes-by-referential-id', async (event: any, refId: number) => {
     try { return await getThemesByReferentialId(refId); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-theme-by-id', async (event, id: number) => {
+  ipcMain.handle('db-get-theme-by-id', async (event: any, id: number) => {
     try { return await getThemeById(id); } catch (e) { console.error(e); throw e; }
   });
    ipcMain.handle('db-get-all-themes', async () => {
@@ -101,16 +101,16 @@ exports.initializeIpcHandlers = function() {
 
 
   // Blocs
-  ipcMain.handle('db-add-bloc', async (event, data: any) => {
+  ipcMain.handle('db-add-bloc', async (event: any, data: any) => {
     try { return await addBloc(data); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-bloc-by-code-and-theme-id', async (event, code: string, themeId: number) => {
+  ipcMain.handle('db-get-bloc-by-code-and-theme-id', async (event: any, code: string, themeId: number) => {
     try { return await getBlocByCodeAndThemeId(code, themeId); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-blocs-by-theme-id', async (event, themeId: number) => {
+  ipcMain.handle('db-get-blocs-by-theme-id', async (event: any, themeId: number) => {
     try { return await getBlocsByThemeId(themeId); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-bloc-by-id', async (event, id: number) => {
+  ipcMain.handle('db-get-bloc-by-id', async (event: any, id: number) => {
     try { return await getBlocById(id); } catch (e) { console.error(e); throw e; }
   });
   ipcMain.handle('db-get-all-blocs', async () => {
@@ -118,37 +118,37 @@ exports.initializeIpcHandlers = function() {
   });
 
   // Questions
-  ipcMain.handle('db-add-question', async (event, data: any) => {
+  ipcMain.handle('db-add-question', async (event: any, data: any) => {
     try { return await addQuestion(data); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-question-by-id', async (event, id: number) => {
+  ipcMain.handle('db-get-question-by-id', async (event: any, id: number) => {
     try { return await getQuestionById(id); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-questions-by-bloc-id', async (event, blocId: number) => {
+  ipcMain.handle('db-get-questions-by-bloc-id', async (event: any, blocId: number) => {
     try { return await getQuestionsByBlocId(blocId); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-update-question', async (event, id: number, updates: any) => {
+  ipcMain.handle('db-update-question', async (event: any, id: number, updates: any) => {
     try { return await updateQuestion(id, updates); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-delete-question', async (event, id: number) => {
+  ipcMain.handle('db-delete-question', async (event: any, id: number) => {
     try { await deleteQuestion(id); return; } catch (e) { console.error(e); throw e; }
   });
   ipcMain.handle('db-get-all-questions', async () => {
     try { return await getAllQuestions(); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-get-questions-by-ids', async (event, ids: number[]) => {
+  ipcMain.handle('db-get-questions-by-ids', async (event: any, ids: number[]) => {
     try { return await getQuestionsByIds(ids); } catch (e) { console.error(e); throw e; }
   });
   // getQuestionsForSessionBlocks
-  ipcMain.handle('db-get-questions-for-session-blocks', async (event, blocIds?: number[]) => {
+  ipcMain.handle('db-get-questions-for-session-blocks', async (event: any, blocIds?: number[]) => {
     try { return await getQuestionsForSessionBlocks(blocIds); } catch (e) { console.error(e); throw e; }
   });
 
   // AdminSettings
-  ipcMain.handle('db-get-admin-setting', async (event, key: string) => {
+  ipcMain.handle('db-get-admin-setting', async (event: any, key: string) => {
     try { return await getAdminSetting(key); } catch (e) { console.error(e); throw e; }
   });
-  ipcMain.handle('db-set-admin-setting', async (event, key: string, value: any) => {
+  ipcMain.handle('db-set-admin-setting', async (event: any, key: string, value: any) => {
     try { await setAdminSetting(key, value); return; } catch (e) { console.error(e); throw e; }
   });
   ipcMain.handle('db-get-all-admin-settings', async () => {

@@ -32,7 +32,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   // Set a Content Security Policy
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+  session.defaultSession.webRequest.onHeadersReceived((details: any, callback: any) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
