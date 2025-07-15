@@ -1,11 +1,7 @@
-import { app, BrowserWindow } from 'electron';
-import path from 'path';
-import { initializeIpcHandlers } from './ipcHandlers';
-import { initializeDatabase } from '../src/db';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { app, BrowserWindow, session } = require('electron');
+const path = require('path');
+const { initializeIpcHandlers } = require('./ipcHandlers');
+const { initializeDatabase } = require('./db');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -26,7 +22,7 @@ function createWindow() {
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    win.loadFile(path.join(__dirname, '..', 'dist-electron', 'index.html'));
   }
 
   if (!app.isPackaged) {
@@ -35,6 +31,17 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Set a Content Security Policy
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self' 'unsafe-inline' data:; script-src 'self' 'unsafe-eval' 'unsafe-inline' data:"
+        ]
+      }
+    });
+  });
   try {
     await initializeDatabase();
     initializeIpcHandlers();

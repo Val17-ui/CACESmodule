@@ -1,7 +1,7 @@
-import { ipcMain } from 'electron';
-import * as db from '../src/db'; // Chemin corrigé pour pointer vers src/
+const { ipcMain } = require('electron');
+const db = require('./db');
 
-export function initializeIpcHandlers() {
+exports.initializeIpcHandlers = function() {
   console.log('[IPC Handlers] Initializing IPC handlers...');
 
   // Handler pour getAllSessions

@@ -1,5 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import type { Session, Referential, Trainer, Theme, Bloc, QuestionWithId } from '../src/types'; // Chemin corrigé pour pointer vers src/
+const { contextBridge, ipcRenderer } = require('electron');
 
 // Exposer un objet global `window.dbAPI` au processus de rendu
 // avec les fonctions que nous voulons rendre disponibles.

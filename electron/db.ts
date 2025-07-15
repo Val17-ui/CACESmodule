@@ -1,11 +1,6 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
-import {
-  QuestionWithId, Session, SessionResult, Trainer,
-  SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-  VotingDevice, DeviceKit, DeviceKitAssignment
-} from './types'; // Assurez-vous que ces types sont toujours pertinents
+const Database = require('better-sqlite3');
+const path = require('path');
+const fs = require('fs');
 
 // Déterminer le chemin de la base de données de manière plus robuste
 const appName = 'easycertif'; // Nom de votre application
@@ -25,9 +20,9 @@ if (!fs.existsSync(dbDir)) {
 const dbPath = path.join(dbDir, 'database.sqlite3');
 console.log(`[DB SETUP] Database path determined as: ${dbPath}`);
 
-export let db: Database.Database;
+let db;
 
-export function initializeDatabase() {
+function initializeDatabase() {
   if (db) {
     console.log('[DB SETUP] Database already initialized.');
     return;
@@ -231,7 +226,7 @@ const createSchema = () => {
   }
 };
 
-export type {
+type {
   QuestionWithId, Session, SessionResult, Trainer,
   SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
   VotingDevice, DeviceKit, DeviceKitAssignment
@@ -284,7 +279,7 @@ const questionToRow = (question: Partial<Omit<QuestionWithId, 'id'> | QuestionWi
 };
 
 
-export const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number | undefined> => {
+const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options } = question;
@@ -310,7 +305,7 @@ export const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise
   });
 };
 
-export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
+const getAllQuestions = async (): Promise<QuestionWithId[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM questions");
@@ -323,7 +318,7 @@ export const getAllQuestions = async (): Promise<QuestionWithId[]> => {
   });
 };
 
-export const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> => {
+const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM questions WHERE id = ?");
@@ -336,7 +331,7 @@ export const getQuestionById = async (id: number): Promise<QuestionWithId | unde
   });
 }
 
-export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
+const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
   if (!ids || ids.length === 0) return Promise.resolve([]);
   return asyncDbRun(() => {
     try {
@@ -352,7 +347,7 @@ export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]
   });
 }
 
-export const updateQuestion = async (id: number, updates: Partial<Omit<QuestionWithId, 'id'>>): Promise<number | undefined> => {
+const updateQuestion = async (id: number, updates: Partial<Omit<QuestionWithId, 'id'>>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const rowUpdates = questionToRow(updates);
@@ -371,7 +366,7 @@ export const updateQuestion = async (id: number, updates: Partial<Omit<QuestionW
   });
 }
 
-export const deleteQuestion = async (id: number): Promise<void> => {
+const deleteQuestion = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("DELETE FROM questions WHERE id = ?");
@@ -383,7 +378,7 @@ export const deleteQuestion = async (id: number): Promise<void> => {
   });
 }
 
-export const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> => {
+const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM questions WHERE blocId = ?");
@@ -396,7 +391,7 @@ export const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWith
   });
 }
 
-export const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise<QuestionWithId[]> => {
+const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise<QuestionWithId[]> => {
   if (!selectedBlocIds || selectedBlocIds.length === 0) {
     // Si aucun blocId n'est sélectionné, doit-on retourner toutes les questions SANS blocId (orphelines)
     // ou toutes les questions de l'application ? La logique Dexie d'origine serait à vérifier.
@@ -440,7 +435,7 @@ const parseAdminSettingValue = (value: string | null): any => {
   }
 };
 
-export const getAdminSetting = async (key: string): Promise<any> => {
+const getAdminSetting = async (key: string): Promise<any> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT value FROM adminSettings WHERE key = ?");
@@ -453,7 +448,7 @@ export const getAdminSetting = async (key: string): Promise<any> => {
   });
 };
 
-export const setAdminSetting = async (key: string, value: any): Promise<void> => {
+const setAdminSetting = async (key: string, value: any): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -472,7 +467,7 @@ export const setAdminSetting = async (key: string, value: any): Promise<void> =>
   });
 };
 
-export const getAllAdminSettings = async (): Promise<{ key: string; value: any }[]> => {
+const getAllAdminSettings = async (): Promise<{ key: string; value: any }[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT key, value FROM adminSettings");
@@ -488,7 +483,7 @@ export const getAllAdminSettings = async (): Promise<{ key: string; value: any }
   });
 };
 
-export const getGlobalPptxTemplate = async (): Promise<File | null> => {
+const getGlobalPptxTemplate = async (): Promise<File | null> => {
   console.warn("[DB AdminSettings] getGlobalPptxTemplate: Returning null. Logic to fetch/construct File object from path/blob is outside direct DB scope for now.");
   // Potentiellement:
   // const filePath = await getAdminSetting('globalPptxTemplatePath');
@@ -544,7 +539,7 @@ const sessionToRow = (session: Partial<Omit<Session, 'id'> | Session>) => {
   return rowData;
 };
 
-export const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
+const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -568,7 +563,7 @@ export const addSession = async (session: Omit<Session, 'id'>): Promise<number |
   });
 };
 
-export const getAllSessions = async (): Promise<Session[]> => {
+const getAllSessions = async (): Promise<Session[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM sessions ORDER BY dateSession DESC, createdAt DESC");
@@ -581,7 +576,7 @@ export const getAllSessions = async (): Promise<Session[]> => {
   });
 };
 
-export const getSessionById = async (id: number): Promise<Session | undefined> => {
+const getSessionById = async (id: number): Promise<Session | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
@@ -594,7 +589,7 @@ export const getSessionById = async (id: number): Promise<Session | undefined> =
   });
 };
 
-export const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>): Promise<number | undefined> => {
+const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const rowUpdates = sessionToRow(updates);
@@ -613,7 +608,7 @@ export const updateSession = async (id: number, updates: Partial<Omit<Session, '
   });
 };
 
-export const deleteSession = async (id: number): Promise<void> => {
+const deleteSession = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       // Les tables sessionResults, sessionQuestions, sessionBoitiers devraient être nettoyées
@@ -661,7 +656,7 @@ const sessionResultToRow = (sessionResult: Partial<Omit<SessionResult, 'id'> | S
   return rowData;
 };
 
-export const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promise<number | undefined> => {
+const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -678,7 +673,7 @@ export const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promi
   });
 };
 
-export const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
+const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
   if (!results || results.length === 0) return Promise.resolve([]);
 
   return asyncDbRun(() => {
@@ -723,7 +718,7 @@ export const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]
   });
 };
 
-export const getAllResults = async (): Promise<SessionResult[]> => {
+const getAllResults = async (): Promise<SessionResult[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM sessionResults");
@@ -736,7 +731,7 @@ export const getAllResults = async (): Promise<SessionResult[]> => {
   });
 };
 
-export const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
+const getResultsForSession = async (sessionId: number): Promise<SessionResult[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM sessionResults WHERE sessionId = ? ORDER BY timestamp ASC");
@@ -749,7 +744,7 @@ export const getResultsForSession = async (sessionId: number): Promise<SessionRe
   });
 };
 
-export const getResultBySessionAndQuestion = async (sessionId: number, questionId: number, participantIdBoitier: string): Promise<SessionResult | undefined> => {
+const getResultBySessionAndQuestion = async (sessionId: number, questionId: number, participantIdBoitier: string): Promise<SessionResult | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM sessionResults WHERE sessionId = ? AND questionId = ? AND participantIdBoitier = ?");
@@ -762,7 +757,7 @@ export const getResultBySessionAndQuestion = async (sessionId: number, questionI
   });
 };
 
-export const updateSessionResult = async (id: number, updates: Partial<Omit<SessionResult, 'id'>>): Promise<number | undefined> => {
+const updateSessionResult = async (id: number, updates: Partial<Omit<SessionResult, 'id'>>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const rowUpdates = sessionResultToRow(updates);
@@ -781,7 +776,7 @@ export const updateSessionResult = async (id: number, updates: Partial<Omit<Sess
   });
 };
 
-export const deleteResultsForSession = async (sessionId: number): Promise<void> => {
+const deleteResultsForSession = async (sessionId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("DELETE FROM sessionResults WHERE sessionId = ?");
@@ -794,7 +789,7 @@ export const deleteResultsForSession = async (sessionId: number): Promise<void> 
 };
 
 // VotingDevices
-export const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
+const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("INSERT INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
@@ -810,7 +805,7 @@ export const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise
   });
 };
 
-export const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
+const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM votingDevices ORDER BY name ASC, serialNumber ASC");
@@ -822,7 +817,7 @@ export const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
   });
 };
 
-export const updateVotingDevice = async (id: number, updates: Partial<Omit<VotingDevice, 'id'>>): Promise<number> => {
+const updateVotingDevice = async (id: number, updates: Partial<Omit<VotingDevice, 'id'>>): Promise<number> => {
   return asyncDbRun(() => {
     try {
       const fields = Object.keys(updates).filter(key => key !== 'id' && (updates as any)[key] !== undefined);
@@ -848,7 +843,7 @@ export const updateVotingDevice = async (id: number, updates: Partial<Omit<Votin
   });
 };
 
-export const deleteVotingDevice = async (id: number): Promise<void> => {
+const deleteVotingDevice = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       // ON DELETE CASCADE sur deviceKitAssignments.votingDeviceId devrait gérer les affectations.
@@ -861,7 +856,7 @@ export const deleteVotingDevice = async (id: number): Promise<void> => {
   });
 };
 
-export const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promise<void> => {
+const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promise<void> => {
   if (!devices || devices.length === 0) return Promise.resolve();
 
   return asyncDbRun(() => {
@@ -895,7 +890,7 @@ export const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]):
 };
 
 // Trainers
-export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
+const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -913,7 +908,7 @@ export const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number |
   });
 };
 
-export const getAllTrainers = async (): Promise<Trainer[]> => {
+const getAllTrainers = async (): Promise<Trainer[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM trainers");
@@ -927,7 +922,7 @@ export const getAllTrainers = async (): Promise<Trainer[]> => {
   });
 };
 
-export const getTrainerById = async (id: number): Promise<Trainer | undefined> => {
+const getTrainerById = async (id: number): Promise<Trainer | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM trainers WHERE id = ?");
@@ -943,7 +938,7 @@ export const getTrainerById = async (id: number): Promise<Trainer | undefined> =
   });
 };
 
-export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> => {
+const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const fields = Object.keys(updates).filter(key => key !== 'id'); // Exclure 'id' des champs à mettre à jour
@@ -967,7 +962,7 @@ export const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, '
   });
 };
 
-export const deleteTrainer = async (id: number): Promise<void> => {
+const deleteTrainer = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("DELETE FROM trainers WHERE id = ?");
@@ -979,7 +974,7 @@ export const deleteTrainer = async (id: number): Promise<void> => {
   });
 };
 
-export const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
+const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
   return asyncDbRun(() => {
     const transaction = db.transaction(() => {
       try {
@@ -1011,7 +1006,7 @@ export const setDefaultTrainer = async (id: number): Promise<number | undefined>
   });
 };
 
-export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
+const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM trainers WHERE isDefault = 1 LIMIT 1");
@@ -1028,7 +1023,7 @@ export const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
 };
 
 // SessionQuestions
-export const addSessionQuestion = async (sq: Omit<SessionQuestion, 'id'>): Promise<number | undefined> => {
+const addSessionQuestion = async (sq: Omit<SessionQuestion, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -1044,7 +1039,7 @@ export const addSessionQuestion = async (sq: Omit<SessionQuestion, 'id'>): Promi
   });
 };
 
-export const addBulkSessionQuestions = async (questions: Omit<SessionQuestion, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
+const addBulkSessionQuestions = async (questions: Omit<SessionQuestion, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
   if (!questions || questions.length === 0) return Promise.resolve([]);
 
   return asyncDbRun(() => {
@@ -1077,7 +1072,7 @@ export const addBulkSessionQuestions = async (questions: Omit<SessionQuestion, '
   });
 };
 
-export const getSessionQuestionsBySessionId = async (sessionId: number): Promise<SessionQuestion[]> => {
+const getSessionQuestionsBySessionId = async (sessionId: number): Promise<SessionQuestion[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM sessionQuestions WHERE sessionId = ?");
@@ -1091,7 +1086,7 @@ export const getSessionQuestionsBySessionId = async (sessionId: number): Promise
   });
 };
 
-export const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<void> => {
+const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("DELETE FROM sessionQuestions WHERE sessionId = ?");
@@ -1104,7 +1099,7 @@ export const deleteSessionQuestionsBySessionId = async (sessionId: number): Prom
 };
 
 // SessionBoitiers
-export const addSessionBoitier = async (sb: Omit<SessionBoitier, 'id'>): Promise<number | undefined> => {
+const addSessionBoitier = async (sb: Omit<SessionBoitier, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -1121,7 +1116,7 @@ export const addSessionBoitier = async (sb: Omit<SessionBoitier, 'id'>): Promise
   });
 };
 
-export const addBulkSessionBoitiers = async (boitiers: Omit<SessionBoitier, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
+const addBulkSessionBoitiers = async (boitiers: Omit<SessionBoitier, 'id'>[]): Promise<(number | undefined)[] | undefined> => {
   if (!boitiers || boitiers.length === 0) return Promise.resolve([]);
 
   return asyncDbRun(() => {
@@ -1154,7 +1149,7 @@ export const addBulkSessionBoitiers = async (boitiers: Omit<SessionBoitier, 'id'
   });
 };
 
-export const getSessionBoitiersBySessionId = async (sessionId: number): Promise<SessionBoitier[]> => {
+const getSessionBoitiersBySessionId = async (sessionId: number): Promise<SessionBoitier[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM sessionBoitiers WHERE sessionId = ? ORDER BY visualId ASC, participantId ASC");
@@ -1166,7 +1161,7 @@ export const getSessionBoitiersBySessionId = async (sessionId: number): Promise<
   });
 };
 
-export const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void> => {
+const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("DELETE FROM sessionBoitiers WHERE sessionId = ?");
@@ -1179,7 +1174,7 @@ export const deleteSessionBoitiersBySessionId = async (sessionId: number): Promi
 };
 
 // Referentiels
-export const addReferential = async (referential: Omit<Referential, 'id'>): Promise<number | undefined> => {
+const addReferential = async (referential: Omit<Referential, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -1199,7 +1194,7 @@ export const addReferential = async (referential: Omit<Referential, 'id'>): Prom
   });
 };
 
-export const getAllReferentiels = async (): Promise<Referential[]> => {
+const getAllReferentiels = async (): Promise<Referential[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM referentiels");
@@ -1212,7 +1207,7 @@ export const getAllReferentiels = async (): Promise<Referential[]> => {
   });
 };
 
-export const getReferentialByCode = async (code: string): Promise<Referential | undefined> => {
+const getReferentialByCode = async (code: string): Promise<Referential | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM referentiels WHERE code = ?");
@@ -1225,7 +1220,7 @@ export const getReferentialByCode = async (code: string): Promise<Referential | 
   });
 };
 
-export const getReferentialById = async (id: number): Promise<Referential | undefined> => {
+const getReferentialById = async (id: number): Promise<Referential | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM referentiels WHERE id = ?");
@@ -1239,7 +1234,7 @@ export const getReferentialById = async (id: number): Promise<Referential | unde
 };
 
 // Themes
-export const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> => {
+const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -1258,7 +1253,7 @@ export const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undef
   });
 };
 
-export const getAllThemes = async (): Promise<Theme[]> => {
+const getAllThemes = async (): Promise<Theme[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM themes");
@@ -1270,7 +1265,7 @@ export const getAllThemes = async (): Promise<Theme[]> => {
   });
 };
 
-export const getThemesByReferentialId = async (referentialId: number): Promise<Theme[]> => {
+const getThemesByReferentialId = async (referentialId: number): Promise<Theme[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM themes WHERE referentiel_id = ?");
@@ -1282,7 +1277,7 @@ export const getThemesByReferentialId = async (referentialId: number): Promise<T
   });
 };
 
-export const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id: number): Promise<Theme | undefined> => {
+const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id: number): Promise<Theme | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM themes WHERE code_theme = ? AND referentiel_id = ?");
@@ -1294,7 +1289,7 @@ export const getThemeByCodeAndReferentialId = async (code_theme: string, referen
   });
 };
 
-export const getThemeById = async (id: number): Promise<Theme | undefined> => {
+const getThemeById = async (id: number): Promise<Theme | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM themes WHERE id = ?");
@@ -1307,7 +1302,7 @@ export const getThemeById = async (id: number): Promise<Theme | undefined> => {
 };
 
 // Blocs
-export const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
+const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -1326,7 +1321,7 @@ export const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefine
   });
 };
 
-export const getAllBlocs = async (): Promise<Bloc[]> => {
+const getAllBlocs = async (): Promise<Bloc[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM blocs");
@@ -1338,7 +1333,7 @@ export const getAllBlocs = async (): Promise<Bloc[]> => {
   });
 };
 
-export const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
+const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM blocs WHERE theme_id = ?");
@@ -1350,7 +1345,7 @@ export const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
   });
 };
 
-export const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
+const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Promise<Bloc | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM blocs WHERE code_bloc = ? AND theme_id = ?");
@@ -1362,7 +1357,7 @@ export const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: numbe
   });
 };
 
-export const getBlocById = async (id: number): Promise<Bloc | undefined> => {
+const getBlocById = async (id: number): Promise<Bloc | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM blocs WHERE id = ?");
@@ -1385,7 +1380,7 @@ const rowToDeviceKit = (row: any): DeviceKit => {
   };
 };
 
-export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
+const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("INSERT INTO deviceKits (name, isDefault) VALUES (@name, @isDefault)");
@@ -1402,7 +1397,7 @@ export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number |
   });
 };
 
-export const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
+const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM deviceKits ORDER BY name ASC");
@@ -1415,7 +1410,7 @@ export const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
   });
 };
 
-export const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
+const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM deviceKits WHERE id = ?");
@@ -1428,7 +1423,7 @@ export const getDeviceKitById = async (id: number): Promise<DeviceKit | undefine
   });
 };
 
-export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'>>): Promise<number | undefined> => {
+const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'>>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const fields = Object.keys(updates).filter(key => key !== 'id');
@@ -1454,7 +1449,7 @@ export const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKi
   });
 };
 
-export const deleteDeviceKit = async (id: number): Promise<void> => {
+const deleteDeviceKit = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       // ON DELETE CASCADE sur deviceKitAssignments.kitId devrait gérer les affectations.
@@ -1467,7 +1462,7 @@ export const deleteDeviceKit = async (id: number): Promise<void> => {
   });
 };
 
-export const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
+const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("SELECT * FROM deviceKits WHERE isDefault = 1 LIMIT 1");
@@ -1480,7 +1475,7 @@ export const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
   });
 };
 
-export const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
+const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
   return asyncDbRun(() => {
     const transaction = db.transaction(() => {
       try {
@@ -1506,7 +1501,7 @@ export const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
 };
 
 // DeviceKitAssignments
-export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
+const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("INSERT INTO deviceKitAssignments (kitId, votingDeviceId) VALUES (?, ?)");
@@ -1525,7 +1520,7 @@ export const assignDeviceToKit = async (kitId: number, votingDeviceId: number): 
   });
 };
 
-export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promise<void> => {
+const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE kitId = ? AND votingDeviceId = ?");
@@ -1537,7 +1532,7 @@ export const removeDeviceFromKit = async (kitId: number, votingDeviceId: number)
   });
 };
 
-export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
+const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -1555,7 +1550,7 @@ export const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevic
   });
 };
 
-export const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit[]> => {
+const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare(`
@@ -1574,7 +1569,7 @@ export const getKitsForVotingDevice = async (votingDeviceId: number): Promise<De
   });
 };
 
-export const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
+const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE kitId = ?");
@@ -1586,7 +1581,7 @@ export const removeAssignmentsByKitId = async (kitId: number): Promise<void> => 
   });
 };
 
-export const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number): Promise<void> => {
+const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number): Promise<void> => {
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("DELETE FROM deviceKitAssignments WHERE votingDeviceId = ?");
@@ -1599,13 +1594,13 @@ export const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number):
 };
 
 // Reporting
-export interface BlockUsage {
+interface BlockUsage {
   referentiel: string; // code of referentiel
   theme: string; // code_theme of theme
   blockId: string; // code_bloc of bloc
   usageCount: number;
 }
-export const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
+const calculateBlockUsage = async (startDate?: string | Date, endDate?: string | Date): Promise<BlockUsage[]> => {
   return asyncDbRun(() => {
     let query = "SELECT id, dateSession, referentielId, selectedBlocIds FROM sessions WHERE status = 'completed'";
     const params: (string | number)[] = [];
@@ -1703,3 +1698,80 @@ export const calculateBlockUsage = async (startDate?: string | Date, endDate?: s
 // 6. Transactions: The schema creation is wrapped in a transaction. Individual CRUD operations
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console logs with prefixes for easier debugging of setup and stub calls.
+
+module.exports = {
+  db,
+  initializeDatabase,
+  addQuestion,
+  getAllQuestions,
+  getQuestionById,
+  getQuestionsByIds,
+  updateQuestion,
+  deleteQuestion,
+  getQuestionsByBlocId,
+  getQuestionsForSessionBlocks,
+  getAdminSetting,
+  setAdminSetting,
+  getAllAdminSettings,
+  getGlobalPptxTemplate,
+  addSession,
+  getAllSessions,
+  getSessionById,
+  updateSession,
+  deleteSession,
+  addSessionResult,
+  addBulkSessionResults,
+  getAllResults,
+  getResultsForSession,
+  getResultBySessionAndQuestion,
+  updateSessionResult,
+  deleteResultsForSession,
+  addVotingDevice,
+  getAllVotingDevices,
+  updateVotingDevice,
+  deleteVotingDevice,
+  bulkAddVotingDevices,
+  addTrainer,
+  getAllTrainers,
+  getTrainerById,
+  updateTrainer,
+  deleteTrainer,
+  setDefaultTrainer,
+  getDefaultTrainer,
+  addSessionQuestion,
+  addBulkSessionQuestions,
+  getSessionQuestionsBySessionId,
+  deleteSessionQuestionsBySessionId,
+  addSessionBoitier,
+  addBulkSessionBoitiers,
+  getSessionBoitiersBySessionId,
+  deleteSessionBoitiersBySessionId,
+  addReferential,
+  getAllReferentiels,
+  getReferentialByCode,
+  getReferentialById,
+  addTheme,
+  getAllThemes,
+  getThemesByReferentialId,
+  getThemeByCodeAndReferentialId,
+  getThemeById,
+  addBloc,
+  getAllBlocs,
+  getBlocsByThemeId,
+  getBlocByCodeAndThemeId,
+  getBlocById,
+  addDeviceKit,
+  getAllDeviceKits,
+  getDeviceKitById,
+  updateDeviceKit,
+  deleteDeviceKit,
+  getDefaultDeviceKit,
+  setDefaultDeviceKit,
+  assignDeviceToKit,
+  removeDeviceFromKit,
+  getVotingDevicesForKit,
+  getKitsForVotingDevice,
+  removeAssignmentsByKitId,
+  removeAssignmentsByVotingDeviceId,
+  calculateBlockUsage,
+};

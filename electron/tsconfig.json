@@ -1,19 +1,14 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2023", "DOM"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
+    "target": "es2020",
+    "module": "CommonJS",
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "composite": true
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "composite": true,
+    "outDir": "dist-electron"
   },
-  "include": ["./**/*.ts", "../src/db.ts"]
+  "include": ["./**/*.ts"]
 }
