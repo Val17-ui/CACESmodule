@@ -67,10 +67,6 @@ contextBridge.exposeInMainWorld('dbAPI', {
   setAdminSetting: (key: string, value: any) => ipcRenderer.invoke('db-set-admin-setting', key, value),
   getAllAdminSettings: () => ipcRenderer.invoke('db-get-all-admin-settings'),
 
-  // Backup/Restore
-  exportAllData: () => ipcRenderer.invoke('db-export-all-data'),
-  importAllData: (data: any) => ipcRenderer.invoke('db-import-all-data', data),
-
   // PPTX Generation
   generatePresentation: (sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => ipcRenderer.invoke('pptx-generate', sessionInfo, participants, questions, template, adminSettings),
 });

@@ -13,7 +13,7 @@ import {
   TableCell,
 } from '../ui/Table';
 import { calculateSessionStats } from '../../utils/reportCalculators';
-import { StorageManager } from '../../services/StorageManager';
+import { getResultsForSession, getQuestionsForSessionBlocks } from '../../db';
 
 type ReportsListProps = {
   sessions: Session[];
@@ -29,9 +29,9 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, refer
       const stats: {[sessionId: number]: { averageScore: number, successRate: number }} = {};
       for (const session of sessions) {
         if (session.id && session.status === 'completed') {
-          const results = await StorageManager.getResultsForSession(session.id);
+          const results = await getResultsForSession(session.id);
           // Utiliser session.selectedBlocIds au lieu de session.selectionBlocs
-          const questions = await StorageManager.getQuestionsForSessionBlocks(session.selectedBlocIds || []);
+          const questions = await getQuestionsForSessionBlocks(session.selectedBlocIds || []);
           stats[session.id] = calculateSessionStats(session, results, questions);
         }
       }

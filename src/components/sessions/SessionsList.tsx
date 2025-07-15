@@ -5,6 +5,7 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import { Session as DBSession, Referential } from '../../types'; // Ajout Referential
 import { saveAs } from 'file-saver';
+import { StorageManager } from '../../services/StorageManager'; // Ajout StorageManager
 
 type SessionsListProps = {
   sessions: DBSession[];
@@ -21,15 +22,11 @@ const SessionsList: React.FC<SessionsListProps> = ({
 
   useEffect(() => {
     const loadReferentiels = async () => {
-      if (window.dbAPI && typeof window.dbAPI.getAllReferentiels === 'function') {
-        try {
-          const refs = await window.dbAPI.getAllReferentiels();
-          setReferentielsData(refs);
-        } catch (error) {
-          console.error("Erreur chargement des référentiels pour SessionsList:", error);
-        }
-      } else {
-        console.error("dbAPI.getAllReferentiels not available");
+      try {
+        const refs = await StorageManager.getAllReferentiels();
+        setReferentielsData(refs);
+      } catch (error) {
+        console.error("Erreur chargement des référentiels pour SessionsList:", error);
       }
     };
     loadReferentiels();

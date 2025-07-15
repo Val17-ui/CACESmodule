@@ -3,7 +3,7 @@ import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { Save, CheckCircle } from 'lucide-react';
-import { StorageManager } from '../../services/StorageManager';
+import { getAdminSetting, setAdminSetting } from '../../db';
 
 interface TechnicalSettingsData {
   reportPrefix: string;
@@ -23,9 +23,9 @@ const TechnicalSettings: React.FC = () => {
   useEffect(() => {
     const loadSettings = async () => {
       setIsLoading(true);
-      const reportPrefix = await StorageManager.getAdminSetting('reportPrefix');
-      const pptxPrefix = await StorageManager.getAdminSetting('pptxPrefix');
-      const backupFileName = await StorageManager.getAdminSetting('backupFileName');
+      const reportPrefix = await getAdminSetting('reportPrefix');
+      const pptxPrefix = await getAdminSetting('pptxPrefix');
+      const backupFileName = await getAdminSetting('backupFileName');
 
       setSettings({
         reportPrefix: reportPrefix || 'Rapport_',
@@ -40,9 +40,9 @@ const TechnicalSettings: React.FC = () => {
   const handleSave = async () => {
     setSaveStatus('saving');
     try {
-      await StorageManager.setAdminSetting('reportPrefix', settings.reportPrefix);
-      await StorageManager.setAdminSetting('pptxPrefix', settings.pptxPrefix);
-      await StorageManager.setAdminSetting('backupFileName', settings.backupFileName);
+      await setAdminSetting('reportPrefix', settings.reportPrefix);
+      await setAdminSetting('pptxPrefix', settings.pptxPrefix);
+      await setAdminSetting('backupFileName', settings.backupFileName);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {

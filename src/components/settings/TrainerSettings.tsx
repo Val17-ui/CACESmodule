@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Trainer } from '../../types';
-import { StorageManager } from '../../services/StorageManager';
+import { getAllTrainers, addTrainer, updateTrainer, deleteTrainer, setDefaultTrainer, db } from '../../db';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
@@ -18,7 +18,7 @@ const TrainerSettings: React.FC = () => {
   const fetchTrainers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const allTrainers = await StorageManager.getAllTrainers();
+      const allTrainers = await getAllTrainers();
       setTrainers(allTrainers.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
       setError('Erreur lors de la récupération des formateurs.');
@@ -29,6 +29,28 @@ const TrainerSettings: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Vérifier la version de la base de données
+    const checkDbVersion = () => { // Plus besoin d'async ici si db.verno est utilisé après ouverture
+      if (db.isOpen()) {
+        const version = db.verno;
+        console.log(`Version de la base de données : ${version}`);
+        if (version < 10) {
+          setError('La base de données n\'est pas à la dernière version (10). La version actuelle est '+ version +'. Essayez de vider le cache et de rafraîchir l\'application, ou contactez le support si le problème persiste.');
+        }
+      } else {
+        // La base de données n'est pas encore ouverte, on pourrait attendre l'événement "ready"
+        // ou simplement supposer qu'elle s'ouvrira correctement.
+        // Pour ce log, il est préférable qu'elle soit ouverte.
+        db.on('ready', () => {
+          const version = db.verno;
+          console.log(`Version de la base de données (après ready event) : ${version}`);
+          if (version < 10) {
+             setError('La base de données n\'est pas à la dernière version (10). La version actuelle est '+ version +'. Essayez de vider le cache et de rafraîchir l\'application, ou contactez le support si le problème persiste.');
+          }
+        });
+      }
+    };
+    checkDbVersion();
     fetchTrainers();
   }, [fetchTrainers]);
 
@@ -52,7 +74,7 @@ const TrainerSettings: React.FC = () => {
         name: newTrainerName.trim(),
         isDefault: isDefault ? 1 : 0,
       };
-      const id = await StorageManager.addTrainer(trainerPayload);
+      const id = await addTrainer(trainerPayload);
       if (id !== undefined) {
         setSuccess(`Formateur "${newTrainerName}" ajouté avec succès.`);
         setNewTrainerName('');
@@ -80,7 +102,7 @@ const TrainerSettings: React.FC = () => {
       return;
     }
     try {
-      await StorageManager.deleteTrainer(id);
+      await deleteTrainer(id);
       setSuccess('Formateur supprimé avec succès.');
       await fetchTrainers();
       // Si le formateur supprimé était par défaut et qu'il reste d'autres formateurs, définir le premier comme par défaut
@@ -88,12 +110,12 @@ const TrainerSettings: React.FC = () => {
       // Il faudrait s'assurer que `trainers` est à jour avant de choisir.
       // Une meilleure approche serait de re-fetcher la liste, puis de vérifier.
       // Cependant, `fetchTrainers` est déjà appelé, donc `trainers` sera la liste mise à jour *après* suppression.
-      const currentTrainers = await StorageManager.getAllTrainers(); // Re-fetch pour la logique de défaut
+      const currentTrainers = await getAllTrainers(); // Re-fetch pour la logique de défaut
       // Utiliser === 1 pour la condition
       if (trainerToDelete?.isDefault === 1 && currentTrainers.length > 0) {
          const defaultCandidate = currentTrainers.sort((a,b) => (a.id ?? 0) - (b.id ?? 0))[0];
          if(defaultCandidate.id) { // s'assurer que defaultCandidate.id est défini
-            await StorageManager.setDefaultTrainer(defaultCandidate.id); // setDefaultTrainer gère déjà les 0/1 en interne
+            await setDefaultTrainer(defaultCandidate.id); // setDefaultTrainer gère déjà les 0/1 en interne
             await fetchTrainers(); // Re-fetch final pour UI
          }
       } else if (currentTrainers.length === 0) {
@@ -110,7 +132,7 @@ const TrainerSettings: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const result = await StorageManager.setDefaultTrainer(id);
+      const result = await setDefaultTrainer(id);
       if (result !== undefined) {
         setSuccess('Formateur défini comme par défaut.');
         await fetchTrainers();
@@ -145,7 +167,7 @@ const TrainerSettings: React.FC = () => {
       }
       // Assurer que trainerToUpdate.isDefault est bien 0 ou 1. Le type Trainer le garantit déjà.
       // updateTrainer s'attend à 0 | 1 | undefined pour isDefault.
-      await StorageManager.updateTrainer(id, { name: newName.trim(), isDefault: trainerToUpdate.isDefault });
+      await updateTrainer(id, { name: newName.trim(), isDefault: trainerToUpdate.isDefault });
       setSuccess('Nom du formateur mis à jour avec succès.');
       await fetchTrainers();
     } catch (err: any) {

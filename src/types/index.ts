@@ -6,9 +6,9 @@ export interface User {
   role: 'admin' | 'instructor' | 'viewer';
 }
 
-// Nouvelle interface Session pour le stockage
+// Nouvelle interface Session pour le stockage Dexie
 export interface Session {
-  id?: number; // Auto-incremented primary key
+  id?: number; // Auto-incremented primary key par Dexie
   nomSession: string;
   dateSession: string; // ISO string date
   referentielId?: number; // FK vers Referential.id - Remplacer l'ancien champ 'referentiel'
@@ -79,7 +79,7 @@ export interface UnknownDeviceResolution {
 
 // Interface pour stocker les métadonnées des questions d'une session
 export interface SessionQuestion {
-  id?: number; // Auto-incremented primary key
+  id?: number; // Auto-incremented primary key par Dexie
   sessionId: number; // Clé étrangère vers Session.id
   dbQuestionId: number; // Clé étrangère vers QuestionWithId.id (l'ID original de la question)
   slideGuid: string; // GUID de la slide dans le PPTX généré
@@ -91,7 +91,7 @@ export interface SessionQuestion {
 
 // Interface pour stocker les métadonnées des boîtiers assignés à une session
 export interface SessionBoitier {
-  id?: number; // Auto-incremented primary key
+  id?: number; // Auto-incremented primary key par Dexie
   sessionId: number; // Clé étrangère vers Session.id
   participantId: string; // Identifiant unique du participant au sein de la session (par exemple, un UUID ou index)
   visualId: number; // Numéro visuel du boîtier dans l'interface (1, 2, 3...)
@@ -101,7 +101,7 @@ export interface SessionBoitier {
 
 // Nouveau type pour les formateurs
 export interface Trainer {
-  id?: number; // Auto-incremented primary key
+  id?: number; // Sera auto-incrémenté par Dexie
   name: string;
   isDefault?: 0 | 1; // 0 pour false, 1 pour true
 }
@@ -137,7 +137,7 @@ export interface Participant {
 
 // Nouvelle interface pour stocker les résultats d'une session
 export interface SessionResult {
-  id?: number; // Auto-incremented primary key
+  id?: number; // Auto-incremented primary key par Dexie
   sessionId: number; // Clé étrangère vers Session.id
   // Doit correspondre à l'ID de la question DANS LA DB (QuestionWithId.id)
   questionId: number;
@@ -155,8 +155,9 @@ export enum QuestionType {
 }
 
 // Interface pour les questions telles qu'elles pourraient être définies initialement
+// L'objet stocké dans Dexie (`QuestionWithId` dans `db.ts`) aura un `id: number`
 export interface Question {
-  id: string; // ID original de la question
+  id: string; // ID original de la question (non celui de la DB Dexie)
   text: string;
   type: QuestionType;
   options: string[];

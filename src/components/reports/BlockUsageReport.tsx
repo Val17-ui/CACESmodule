@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { BlockUsage } from '../../types';
-import { StorageManager } from '../../services/StorageManager';
+import { BlockUsage, calculateBlockUsage, getAllReferentiels } from '../../db';
 import { Referential } from '../../types'; // Removed CACESReferential
 
 // Importer les composants UI réutilisables
@@ -38,7 +37,7 @@ const BlockUsageReport: React.FC = () => {
       // La fonction calculateBlockUsage est appelée sans arguments initiaux pour charger toutes les données
       // ou avec les dates si elles sont définies.
       // Le filtrage par référentiel se fera côté client après récupération pour ce composant.
-      const data = await StorageManager.calculateBlockUsage(
+      const data = await calculateBlockUsage(
         startDate || undefined,
         endDate || undefined
       );
@@ -52,7 +51,7 @@ const BlockUsageReport: React.FC = () => {
 
   useEffect(() => {
     const loadReferentiels = async () => {
-      const refs = await StorageManager.getAllReferentiels();
+      const refs = await getAllReferentiels();
       setAllReferentielsDb(refs.sort((a,b) => a.code.localeCompare(b.code)));
     };
     loadReferentiels();

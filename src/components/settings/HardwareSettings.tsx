@@ -4,7 +4,7 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { Plus, Upload, Trash2, Save, AlertCircle } from 'lucide-react';
 import { VotingDevice } from '../../types'; // VotingDevice importé depuis types
-import { StorageManager } from '../../services/StorageManager';
+import { getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices } from '../../db'; // Fonctions DB uniquement
 import * as XLSX from 'xlsx';
 
 interface EditableVotingDevice extends VotingDevice {
@@ -24,7 +24,7 @@ const HardwareSettings: React.FC = () => {
   }, []);
 
   const loadDevices = async () => {
-    const allDevices = await StorageManager.getAllVotingDevices();
+    const allDevices = await getAllVotingDevices();
     const sortedDevices = allDevices.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
     setDevices(sortedDevices.map(d => ({
       ...d,
@@ -51,7 +51,7 @@ const HardwareSettings: React.FC = () => {
       return;
     }
     try {
-      await StorageManager.addVotingDevice({ name: newDeviceName.trim(), serialNumber: newDeviceSerialNumber.trim() });
+      await addVotingDevice({ name: newDeviceName.trim(), serialNumber: newDeviceSerialNumber.trim() });
       setNewDeviceName('');
       setNewDeviceSerialNumber('');
       loadDevices();
@@ -100,7 +100,7 @@ const HardwareSettings: React.FC = () => {
     }
 
     try {
-      await StorageManager.updateVotingDevice(id, {
+      await updateVotingDevice(id, {
         name: deviceToSave.currentNameValue.trim(),
         serialNumber: deviceToSave.currentSerialNumberValue.trim()
       });
@@ -114,7 +114,7 @@ const HardwareSettings: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Êtes-vous sûr de vouloir supprimer ce boîtier ? Cette action est irréversible et peut affecter les sessions passées si ce boîtier y était référencé.')) {
       try {
-        await StorageManager.deleteVotingDevice(id);
+        await deleteVotingDevice(id);
         loadDevices();
       } catch (e: any) {
         console.error("Erreur suppression boîtier:", e);
@@ -174,7 +174,7 @@ const HardwareSettings: React.FC = () => {
         const duplicateCount = devicesFromFile.length - newDevicesToAdd.length;
 
         if (newDevicesToAdd.length > 0) {
-          await StorageManager.bulkAddVotingDevices(newDevicesToAdd.map(d => ({name: d.name, serialNumber: d.serialNumber})));
+          await bulkAddVotingDevices(newDevicesToAdd.map(d => ({name: d.name, serialNumber: d.serialNumber})));
           loadDevices();
           let importMessage = `${newDevicesToAdd.length} nouveaux boîtiers importés avec succès.`;
           if (duplicateCount > 0) {

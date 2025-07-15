@@ -1,6 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
-import { StorageManager } from '../../services/StorageManager';
+import {
+  getAllSessions,
+  getResultsForSession,
+  getQuestionsForSessionBlocks,
+  getAllReferentiels,
+  getAllVotingDevices,
+  getAllThemes,
+  getAllBlocs,
+  // getBlocById, // Unused
+  // getThemeById, // Unused
+  getAdminSetting,
+  getTrainerById
+} from '../../db';
 import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails } from '../../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -75,11 +87,11 @@ const ParticipantReport = () => {
         fetchedThemes,
         fetchedBlocs
       ] = await Promise.all([
-        StorageManager.getAllSessions(),
-        StorageManager.getAllReferentiels(),
-        StorageManager.getAllVotingDevices(),
-        StorageManager.getAllThemes(),
-        StorageManager.getAllBlocs()
+        getAllSessions(),
+        getAllReferentiels(),
+        getAllVotingDevices(),
+        getAllThemes(),
+        getAllBlocs()
       ]);
       setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
       setAllReferentiels(fetchedReferentiels);
@@ -151,8 +163,8 @@ const ParticipantReport = () => {
     }
 
     try {
-      const sessionResults = await StorageManager.getResultsForSession(targetSession.id!);
-      const baseSessionQuestions = await StorageManager.getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
+      const sessionResults = await getResultsForSession(targetSession.id!);
+      const baseSessionQuestions = await getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
 
       const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
         baseSessionQuestions.map(async (question, index) => {
@@ -207,12 +219,12 @@ const ParticipantReport = () => {
 
     let fetchedTrainerName = 'N/A';
     if (trainerId) {
-      const trainer = await StorageManager.getTrainerById(trainerId);
+      const trainer = await getTrainerById(trainerId);
       if (trainer) fetchedTrainerName = trainer.name;
     }
 
     const reportDate = new Date().toLocaleDateString('fr-FR');
-    const logoBase64 = await StorageManager.getAdminSetting('reportLogoBase64') as string || null;
+    const logoBase64 = await getAdminSetting('reportLogoBase64') as string || null;
     const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId === null ? undefined : participantRef.assignedGlobalDeviceId) || 'N/A';
 
     const currentReferential = referentielId ? allReferentiels.find(r => r.id === referentielId) : null;

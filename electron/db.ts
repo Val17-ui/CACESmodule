@@ -1706,61 +1706,9 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console logs with prefixes for easier debugging of setup and stub calls.
 
-// --- Fonctions d'Export/Import ---
-
-async function exportAllData() {
-  return asyncDbRun(() => {
-    const tables = [
-      'referentiels', 'themes', 'blocs', 'questions', 'trainers',
-      'deviceKits', 'sessions', 'sessionResults', 'adminSettings',
-      'votingDevices', 'sessionQuestions', 'sessionBoitiers', 'deviceKitAssignments'
-    ];
-    const data = {};
-    for (const table of tables) {
-      data[table] = getDb().prepare(`SELECT * FROM ${table}`).all();
-    }
-    return data;
-  });
-}
-
-async function importAllData(data) {
-  return asyncDbRun(() => {
-    const tables = [
-      'referentiels', 'themes', 'blocs', 'questions', 'trainers',
-      'deviceKits', 'sessions', 'sessionResults', 'adminSettings',
-      'votingDevices', 'sessionQuestions', 'sessionBoitiers', 'deviceKitAssignments'
-    ];
-
-    const transaction = getDb().transaction(() => {
-      // Désactiver les clés étrangères pour le TRUNCATE
-      getDb().pragma('foreign_keys = OFF');
-
-      for (const table of tables) {
-        if (data[table] && data[table].length > 0) {
-          getDb().prepare(`DELETE FROM ${table}`).run();
-          const columns = Object.keys(data[table][0]);
-          const placeholders = columns.map(() => '?').join(', ');
-          const insertStmt = getDb().prepare(`INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`);
-          for (const row of data[table]) {
-            insertStmt.run(...Object.values(row));
-          }
-        }
-      }
-
-      // Réactiver les clés étrangères
-      getDb().pragma('foreign_keys = ON');
-    });
-
-    transaction();
-    return { success: true };
-  });
-}
-
 module.exports = {
   getDb,
   initializeDatabase,
-  exportAllData,
-  importAllData,
   addQuestion,
   getAllQuestions,
   getQuestionById,

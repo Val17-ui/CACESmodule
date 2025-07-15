@@ -8,7 +8,17 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { StorageManager } from '../../services/StorageManager';
+import {
+  getResultsForSession,
+  getQuestionsByIds,
+  getTrainerById,
+  getReferentialById,
+  getThemeById,
+  getBlocById,
+  getAllVotingDevices,
+  getAllThemes,
+  getAllBlocs
+} from '../../db';
 import {
   calculateParticipantScore,
   calculateThemeScores,
@@ -50,21 +60,21 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   useEffect(() => {
     const fetchData = async () => {
       if (session.id) {
-        const allVotingDevicesData = await StorageManager.getAllVotingDevices();
+        const allVotingDevicesData = await getAllVotingDevices();
         setVotingDevices(allVotingDevicesData);
 
-        const allThemesData = await StorageManager.getAllThemes();
+        const allThemesData = await getAllThemes();
         setAllThemesDb(allThemesData);
-        const allBlocsData = await StorageManager.getAllBlocs();
+        const allBlocsData = await getAllBlocs();
         setAllBlocsDb(allBlocsData);
 
         if (session.trainerId) {
-          const trainer = await StorageManager.getTrainerById(session.trainerId);
+          const trainer = await getTrainerById(session.trainerId);
           if (trainer) setTrainerName(trainer.name);
         }
 
         if (session.referentielId) {
-          const referential = await StorageManager.getReferentialById(session.referentielId);
+          const referential = await getReferentialById(session.referentielId);
           if (referential && referential.code) {
             setReferentialCode(referential.code);
           } else {
@@ -77,20 +87,20 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
           const uniqueThemeIds = new Set<number>();
           for (const blocId of session.selectedBlocIds) {
-            const bloc = await StorageManager.getBlocById(blocId); // Assumes getBlocById is efficient or blocs are preloaded/cached
+            const bloc = await getBlocById(blocId); // Assumes getBlocById is efficient or blocs are preloaded/cached
             if (bloc && bloc.theme_id) {
               uniqueThemeIds.add(bloc.theme_id);
             }
           }
           const fetchedThemeNames = [];
           for (const themeId of uniqueThemeIds) {
-            const theme = await StorageManager.getThemeById(themeId); // Assumes getThemeById is efficient or themes are preloaded/cached
+            const theme = await getThemeById(themeId); // Assumes getThemeById is efficient or themes are preloaded/cached
             if (theme) fetchedThemeNames.push(theme.nom_complet);
           }
           setThemeNames(fetchedThemeNames.sort());
         }
 
-        const results = await StorageManager.getResultsForSession(session.id);
+        const results = await getResultsForSession(session.id);
         setSessionResults(results);
 
         if (session.questionMappings && session.questionMappings.length > 0) {
@@ -99,7 +109,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
             .filter((id): id is number => id !== null && id !== undefined);
 
           if (questionIds.length > 0) {
-            const baseQuestions = await StorageManager.getQuestionsByIds(questionIds);
+            const baseQuestions = await getQuestionsByIds(questionIds);
             const enrichedQuestions = await Promise.all(
               baseQuestions.map(async (question) => {
                 let resolvedThemeName = 'Thème non spécifié';

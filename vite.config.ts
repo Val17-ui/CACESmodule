@@ -8,20 +8,48 @@ import path from 'path';
 export default defineConfig({
   plugins: [
     react(),
-    electron([
-      {
-        // Main-Process entry file of the Electron App.
+    electron({
+      main: {
+        // Point d'entrée pour le processus principal d'Electron
         entry: 'electron/index.ts',
-      },
-      {
-        entry: 'electron/preload.ts',
-        onstart(options) {
-          // Notify the Renderer-Process to reload the page when the Preload-Scripts build is complete,
-          // instead of restarting the entire Electron App.
-          options.reload()
+        vite: {
+          build: {
+            // Indiquer à Vite de ne pas bundler `better-sqlite3`
+            // et de le traiter comme une dépendance externe.
+            // C'est crucial pour les modules natifs.
+            rollupOptions: {
+              external: ['better-sqlite3'],
+            },
+            // Forcer le format de sortie en CommonJS
+            commonjsOptions: {
+              ignoreDynamicRequires: true,
+            },
+          },
+          // Forcer le format de sortie en CommonJS
+          esbuild: {
+            format: 'cjs',
+          },
         },
       },
-    ]),
+      preload: {
+        // Point d'entrée pour le script de préchargement
+        input: path.join(__dirname, 'electron/preload.ts'),
+        vite: {
+          build: {
+            rollupOptions: {
+              external: ['better-sqlite3'],
+            },
+          },
+        },
+      },
+    }),
     renderer(),
   ],
+  optimizeDeps: {
+    // Exclure également `better-sqlite3` de l'optimisation des dépendances de Vite.
+    // exclude: ['lucide-react', 'better-sqlite3'],
+  },
+  build: {
+    sourcemap: false
+  }
 });
