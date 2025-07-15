@@ -1389,7 +1389,7 @@ export const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number |
   return asyncDbRun(() => {
     try {
       const stmt = db.prepare("INSERT INTO deviceKits (name, isDefault) VALUES (@name, @isDefault)");
-      const isDefault = kit.isDefault === true || kit.isDefault === 1 ? 1 : 0;
+      const isDefault = kit.isDefault ? 1 : 0;
       const result = stmt.run({ ...kit, isDefault });
       return result.lastInsertRowid as number;
     } catch (error) {
