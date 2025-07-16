@@ -40,6 +40,15 @@ export default defineConfig({
           },
         },
       },
+      {
+        // Point d'entrée pour les gestionnaires IPC
+        entry: 'electron/ipcHandlers.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+          },
+        },
+      },
     ]),
   ],
   build: {
