@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld("dbAPI", {
   // VotingDevices
   getAllVotingDevices: () => ipcRenderer.invoke("db-get-all-voting-devices"),
   getVotingDevicesForKit: (kitId) => ipcRenderer.invoke("db-get-voting-devices-for-kit", kitId),
+  addVotingDevice: (data) => ipcRenderer.invoke("db-add-voting-device", data),
+  updateVotingDevice: (id, updates) => ipcRenderer.invoke("db-update-voting-device", id, updates),
+  deleteVotingDevice: (id) => ipcRenderer.invoke("db-delete-voting-device", id),
+  bulkAddVotingDevices: (devices) => ipcRenderer.invoke("db-bulk-add-voting-devices", devices),
   // SessionQuestions
   addBulkSessionQuestions: (questions) => ipcRenderer.invoke("db-add-bulk-session-questions", questions),
   deleteSessionQuestionsBySessionId: (sessionId) => ipcRenderer.invoke("db-delete-session-questions-by-session-id", sessionId),
@@ -23,6 +27,13 @@ contextBridge.exposeInMainWorld("dbAPI", {
   // DeviceKits
   getAllDeviceKits: () => ipcRenderer.invoke("db-get-all-device-kits"),
   getDefaultDeviceKit: () => ipcRenderer.invoke("db-get-default-device-kit"),
+  addDeviceKit: (data) => ipcRenderer.invoke("db-add-device-kit", data),
+  updateDeviceKit: (id, updates) => ipcRenderer.invoke("db-update-device-kit", id, updates),
+  deleteDeviceKit: (id) => ipcRenderer.invoke("db-delete-device-kit", id),
+  setDefaultDeviceKit: (id) => ipcRenderer.invoke("db-set-default-device-kit", id),
+  assignDeviceToKit: (kitId, deviceId) => ipcRenderer.invoke("db-assign-device-to-kit", kitId, deviceId),
+  removeDeviceFromKit: (kitId, deviceId) => ipcRenderer.invoke("db-remove-device-from-kit", kitId, deviceId),
+  getDeviceKitById: (id) => ipcRenderer.invoke("db-get-device-kit-by-id", id),
   // Referentiels
   addReferential: (data) => ipcRenderer.invoke("db-add-referential", data),
   getAllReferentiels: () => ipcRenderer.invoke("db-get-all-referentiels"),
@@ -30,6 +41,11 @@ contextBridge.exposeInMainWorld("dbAPI", {
   getReferentialById: (id) => ipcRenderer.invoke("db-get-referential-by-id", id),
   // Trainers
   getAllTrainers: () => ipcRenderer.invoke("db-get-all-trainers"),
+  addTrainer: (data) => ipcRenderer.invoke("db-add-trainer", data),
+  deleteTrainer: (id) => ipcRenderer.invoke("db-delete-trainer", id),
+  updateTrainer: (id, updates) => ipcRenderer.invoke("db-update-trainer", id, updates),
+  setDefaultTrainer: (id) => ipcRenderer.invoke("db-set-default-trainer", id),
+  getDefaultTrainer: () => ipcRenderer.invoke("db-get-default-trainer"),
   // Themes
   addTheme: (data) => ipcRenderer.invoke("db-add-theme", data),
   getThemeByCodeAndReferentialId: (code, refId) => ipcRenderer.invoke("db-get-theme-by-code-and-referential-id", code, refId),
