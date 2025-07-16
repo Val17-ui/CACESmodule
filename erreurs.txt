@@ -1,80 +1,42 @@
-PS E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule> npm run dev
-> easycertif@0.0.0 dev
-> concurrently "vite" "npm run electron-watch"
+chunk-YZVM2MHU.js?v=d4a11973:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+VM4 sandbox_bundle:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
 
-(node:19880) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
-(Use `node --trace-deprecation ...` to show where the warning was created)
-[0] The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
-[0] 
-[0]   VITE v5.4.19  ready in 359 ms
-[0]
-[0]   ?  Local:   http://localhost:5173/
-[0]   ?  Network: use --host to expose
-[1]
-[1] > easycertif@0.0.0 electron-watch
-[1] > wait-on tcp:5173 && electron .
-[1]
-[0] vite v5.4.19 building for development...
-[0]
-[0] watching for file changes...
-[0] vite v5.4.19 building for development...
-[0]
-[0] watching for file changes...
-[0] vite v5.4.19 building for development...
-[0]
-[0] watching for file changes...
-[0] 
-[0] build started...
-[0]
-[0] build started...
-[0]
-[0] build started...
-[1] 
-[0] transforming...
-[0] ? 1 modules transformed.
-[0] transforming...
-[0] transforming...
-[0] ? 1 modules transformed.
-[0] rendering chunks...
-[1] App threw an error during load
-[1] Error: Cannot find module './ipcHandlers'
-[1] Require stack:
-[1] - E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\index.js   
-[1]     at Module._resolveFilename (node:internal/modules/cjs/loader:1408:15)
-[1]     at s._resolveFilename (node:electron/js2c/browser_init:2:129632)
-[1]     at defaultResolveImpl (node:internal/modules/cjs/loader:1064:19)
-[1]     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1069:22)
-[1]     at Module._load (node:internal/modules/cjs/loader:1218:37)
-[1]     at c._load (node:electron/js2c/node_init:2:18013)
-[1]     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
-[1]     at wrapModuleLoad (node:internal/modules/cjs/loader:242:24)
-[1]     at Module.require (node:internal/modules/cjs/loader:1494:12)
-[1]     at require (node:internal/modules/helpers:135:16)
-[0] ? 1 modules transformed.
-[0] rendering chunks...
-[0] computing gzip size...
-[0] rendering chunks...
-[0] computing gzip size...
-[0] dist-electron/preload.js  4.34 kB ? gzip: 0.98 kB
-[0] built in 521ms.
-[0] dist-electron/index.js  1.66 kB ? gzip: 0.79 kB
-[0] built in 525ms.
-[0] computing gzip size...
-[0] dist-electron/db.js  52.94 kB ? gzip: 8.28 kB
-[0] built in 581ms.
-[0] 
-[0] App threw an error during load
-[0] Error: Cannot find module './ipcHandlers'
-[0] Require stack:
-[0] - E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\index.js   
-[0]     at Module._resolveFilename (node:internal/modules/cjs/loader:1408:15)
-[0]     at s._resolveFilename (node:electron/js2c/browser_init:2:129632)
-[0]     at defaultResolveImpl (node:internal/modules/cjs/loader:1064:19)
-[0]     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1069:22)
-[0]     at Module._load (node:internal/modules/cjs/loader:1218:37)
-[0]     at c._load (node:electron/js2c/node_init:2:18013)
-[0]     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
-[0]     at wrapModuleLoad (node:internal/modules/cjs/loader:242:24)
-[0]     at Module.require (node:internal/modules/cjs/loader:1494:12)
-[0]     at require (node:internal/modules/helpers:135:16)
-
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+warnAboutInsecureCSP @ VM4 sandbox_bundle:2
+logSecurityWarnings @ VM4 sandbox_bundle:2
+(anonymous) @ VM4 sandbox_bundle:2
+DashboardCards.tsx:12 Sessions dans DashboardCards : [{…}]
+DashboardCards.tsx:12 Sessions dans DashboardCards : [{…}]
+logger.ts:62 2025-07-16 13:23:37 | INFO | Navigation vers settings
+TrainerSettings.tsx:65 Erreur lors de l'ajout du formateur: StorageManager.addTrainer is not a function TypeError: StorageManager.addTrainer is not a function
+    at handleAddTrainer (http://localhost:5173/src/components/settings/TrainerSettings.tsx:67:39)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:3674:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:3699:24)
+    at invokeGuardedCallback (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:3733:39)
+    at invokeGuardedCallbackAndCatchFirstError (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:3736:33)
+    at executeDispatch (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7014:11)
+    at processDispatchQueueItemsInOrder (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7034:15)
+    at processDispatchQueue (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7043:13)
+    at dispatchEventsForPlugins (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7051:11)
+    at http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7174:20
+handleAddTrainer @ TrainerSettings.tsx:65
+callCallback2 @ chunk-YZVM2MHU.js?v=d4a11973:3674
+invokeGuardedCallbackDev @ chunk-YZVM2MHU.js?v=d4a11973:3699
+invokeGuardedCallback @ chunk-YZVM2MHU.js?v=d4a11973:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-YZVM2MHU.js?v=d4a11973:3736
+executeDispatch @ chunk-YZVM2MHU.js?v=d4a11973:7014
+processDispatchQueueItemsInOrder @ chunk-YZVM2MHU.js?v=d4a11973:7034
+processDispatchQueue @ chunk-YZVM2MHU.js?v=d4a11973:7043
+dispatchEventsForPlugins @ chunk-YZVM2MHU.js?v=d4a11973:7051
+(anonymous) @ chunk-YZVM2MHU.js?v=d4a11973:7174
+batchedUpdates$1 @ chunk-YZVM2MHU.js?v=d4a11973:18913
+batchedUpdates @ chunk-YZVM2MHU.js?v=d4a11973:3579
+dispatchEventForPluginEventSystem @ chunk-YZVM2MHU.js?v=d4a11973:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-YZVM2MHU.js?v=d4a11973:5478
+dispatchEvent @ chunk-YZVM2MHU.js?v=d4a11973:5472
+dispatchDiscreteEvent @ chunk-YZVM2MHU.js?v=d4a11973:5449

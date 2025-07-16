@@ -6,7 +6,7 @@
   "main": "dist-electron/index.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"npm run electron-watch\"",
-    "electron-watch": "wait-on tcp:5173 && electron .",
+    "electron-watch": "wait-on tcp:5173",
     "build": "tsc && vite build && electron-builder",
     "electron-dev": "electron .",
     "start": "npm run build && electron ."

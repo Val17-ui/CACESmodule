@@ -6,7 +6,7 @@ const {
     deleteSessionBoitiersBySessionId, getSessionBoitiersBySessionId, getAllDeviceKits,
     getDefaultDeviceKit, addReferential, getAllReferentiels, getReferentialByCode,
     exportAllData, importAllData,
-    getReferentialById, getAllTrainers, addTheme, getThemeByCodeAndReferentialId,
+    getReferentialById, getAllTrainers, addTrainer, deleteTrainer, setDefaultTrainer, updateTrainer, addTheme, getThemeByCodeAndReferentialId,
     getThemesByReferentialId, getThemeById, getAllThemes, addBloc, getBlocByCodeAndThemeId,
     getBlocsByThemeId, getBlocById, getAllBlocs, addQuestion, getQuestionById,
     getQuestionsByBlocId, updateQuestion, deleteQuestion, getAllQuestions, getQuestionsByIds,
@@ -52,6 +52,10 @@ exports.initializeIpcHandlers = function() {
 
   // Trainers
   ipcMain.handle('db-get-all-trainers', async () => getAllTrainers());
+  ipcMain.handle('db-add-trainer', async (event: any, data: any) => addTrainer(data));
+  ipcMain.handle('db-delete-trainer', async (event: any, id: number) => deleteTrainer(id));
+  ipcMain.handle('db-set-default-trainer', async (event: any, id: number) => setDefaultTrainer(id));
+  ipcMain.handle('db-update-trainer', async (event: any, id: number, updates: any) => updateTrainer(id, updates));
 
   // Themes
   ipcMain.handle('db-add-theme', async (event: any, data: any) => addTheme(data));
