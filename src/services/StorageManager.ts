@@ -194,6 +194,11 @@ export const StorageManager = {
     return window.dbAPI.getVotingDevicesForKit(kitId);
   },
 
+  async bulkAddVotingDevices(devices: any[]) {
+    if (!window.dbAPI?.addBulkSessionBoitiers) throw new Error("dbAPI.addBulkSessionBoitiers is not available.");
+    return window.dbAPI.addBulkSessionBoitiers(devices);
+  },
+
   // SessionQuestions
   async addBulkSessionQuestions(questions: any) {
     if (!window.dbAPI?.addBulkSessionQuestions) throw new Error("dbAPI.addBulkSessionQuestions is not available.");

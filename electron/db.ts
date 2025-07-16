@@ -816,7 +816,9 @@ const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
   return asyncDbRun(() => {
     try {
       const stmt = getDb().prepare("SELECT * FROM votingDevices ORDER BY name ASC, serialNumber ASC");
-      return stmt.all() as VotingDevice[];
+      const devices = stmt.all() as VotingDevice[];
+      console.log(`[DB VotingDevices] getAllVotingDevices returned: ${devices.length} devices`, devices);
+      return devices;
     } catch (error) {
       console.error(`[DB VotingDevices] Error getting all voting devices:`, error);
       throw error;
