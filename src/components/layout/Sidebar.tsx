@@ -5,6 +5,7 @@ import {
   BarChart3, 
   Settings, 
 } from 'lucide-react';
+import logo from '../../assets/images/logo.png';
 
 type SidebarItemProps = {
   icon: React.ReactNode;
@@ -13,11 +14,11 @@ type SidebarItemProps = {
   onClick: () => void;
 };
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ 
-  icon, 
-  label, 
-  active = false, 
-  onClick 
+const SidebarItem: React.FC<SidebarItemProps> = ({
+  icon,
+  label,
+  active = false,
+  onClick
 }) => {
   return (
     <li>
@@ -26,7 +27,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
         className={`
           w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg
           transition-colors duration-150 ease-in-out
-          ${active 
+          ${active
             ? 'bg-accent-neutre/20 text-accent-neutre'
             : 'text-texte-principal hover:bg-gris-moyen/20'
           }
@@ -60,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
     <div className="w-64 bg-fond-clair-principal h-full shadow-sm border-r border-gris-moyen/50 flex flex-col">
       <div className="p-6">
         <div className="flex items-center">
-          <img src="https://static.wixstatic.com/media/76e58b_2c597a8efc3e4dd6a3658edec55ec801~mv2.png" alt="easy'certif Logo" className="h-10" />
+          <img src={logo} alt="easy'certif Logo" className="h-10" />
         </div>
       </div>
       

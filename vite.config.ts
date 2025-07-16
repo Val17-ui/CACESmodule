@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
-import renderer from 'vite-plugin-electron-renderer';
 import path from 'path';
 
 export default defineConfig({
@@ -9,53 +8,42 @@ export default defineConfig({
     react(),
     electron([
       {
+        // Point d'entrée pour le processus principal d'Electron
         entry: 'electron/index.ts',
         vite: {
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
-              input: {
-                main: 'electron/index.ts',
-                ipcHandlers: 'electron/ipcHandlers.ts', // <-- Ajoute cette ligne
-              },
-              output: {
-                entryFileNames: '[name].js', // Génère index.js et ipcHandlers.js
-                format: 'cjs',
-              },
             },
-            commonjsOptions: {
-              ignoreDynamicRequires: true,
-            },
-          },
-          esbuild: {
-            format: 'cjs',
           },
         },
       },
       {
+        // Point d'entrée pour le script de preload
         entry: path.join(__dirname, 'electron/preload.ts'),
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+          },
+        },
+      },
+      {
+        // Point d'entrée pour le module de base de données
+        entry: 'electron/db.ts',
         vite: {
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
-              output: {
-                format: 'cjs',
-              },
             },
           },
         },
-      }
+      },
     ]),
-    renderer(),
   ],
-  optimizeDeps: {},
   build: {
-    sourcemap: false,
-    rollupOptions: {
-      input: 'index.html',
-    },
+    // Configuration pour le processus de rendu (votre application React)
     outDir: 'dist',
     assetsDir: 'assets',
   },

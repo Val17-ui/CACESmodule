@@ -30,7 +30,7 @@
     "linux": {
       "target": "AppImage"
     },
-    "npmRebuild": false
+    "npmRebuild": true
   },
   "dependencies": {
     "@types/jspdf": "^1.3.3",
