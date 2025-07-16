@@ -5,8 +5,8 @@
   "type": "commonjs",
   "main": "dist-electron/index.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"npm run electron-watch\"",
-    "electron-watch": "wait-on tcp:5173",
+    "dev": "concurrently \"npx vite\" \"npm run electron-watch\"",
+    "electron-watch": "wait-on tcp:5173 && electron .",
     "build": "tsc && vite build && electron-builder",
     "electron-dev": "electron .",
     "start": "npm run build && electron ."

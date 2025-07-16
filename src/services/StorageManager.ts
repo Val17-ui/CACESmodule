@@ -194,9 +194,41 @@ export const StorageManager = {
     return window.dbAPI.getVotingDevicesForKit(kitId);
   },
 
+  async addVotingDevice(deviceData: Omit<VotingDevice, 'id'>): Promise<number | undefined> {
+    if (!window.dbAPI?.addVotingDevice) throw new Error("dbAPI.addVotingDevice is not available.");
+    try {
+      const id = await window.dbAPI.addVotingDevice(deviceData);
+      return id;
+    } catch (error) {
+      console.error("StorageManager: Error adding voting device via IPC", error);
+      throw error;
+    }
+  },
+
+  async updateVotingDevice(id: number, updates: Partial<Omit<VotingDevice, 'id'>>): Promise<number | undefined> {
+    if (!window.dbAPI?.updateVotingDevice) throw new Error("dbAPI.updateVotingDevice is not available.");
+    try {
+      const numUpdated = await window.dbAPI.updateVotingDevice(id, updates);
+      return numUpdated;
+    } catch (error) {
+      console.error(`StorageManager: Error updating voting device with id ${id} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async deleteVotingDevice(id: number): Promise<void> {
+    if (!window.dbAPI?.deleteVotingDevice) throw new Error("dbAPI.deleteVotingDevice is not available.");
+    try {
+      await window.dbAPI.deleteVotingDevice(id);
+    } catch (error) {
+      console.error(`StorageManager: Error deleting voting device with id ${id} via IPC`, error);
+      throw error;
+    }
+  },
+
   async bulkAddVotingDevices(devices: any[]) {
-    if (!window.dbAPI?.addBulkSessionBoitiers) throw new Error("dbAPI.addBulkSessionBoitiers is not available.");
-    return window.dbAPI.addBulkSessionBoitiers(devices);
+    if (!window.dbAPI?.bulkAddVotingDevices) throw new Error("dbAPI.bulkAddVotingDevices is not available.");
+    return window.dbAPI.bulkAddVotingDevices(devices);
   },
 
   // SessionQuestions

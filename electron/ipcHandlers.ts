@@ -1,10 +1,10 @@
 const { ipcMain } = require('electron');
 const {
     getAllSessions, getSessionById, addSession, updateSession, addBulkSessionResults,
-    getResultsForSession, getAllVotingDevices, getVotingDevicesForKit, addBulkSessionQuestions,
+    getResultsForSession, getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addBulkSessionQuestions,
     deleteSessionQuestionsBySessionId, getSessionQuestionsBySessionId, addBulkSessionBoitiers,
     deleteSessionBoitiersBySessionId, getSessionBoitiersBySessionId, getAllDeviceKits,
-    getDefaultDeviceKit, addReferential, getAllReferentiels, getReferentialByCode,
+    getDefaultDeviceKit, addDeviceKit, updateDeviceKit, deleteDeviceKit, setDefaultDeviceKit, assignDeviceToKit, removeDeviceFromKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, addReferential, getAllReferentiels, getReferentialByCode,
     exportAllData, importAllData,
     getReferentialById, getAllTrainers, addTrainer, deleteTrainer, setDefaultTrainer, updateTrainer, addTheme, getThemeByCodeAndReferentialId,
     getThemesByReferentialId, getThemeById, getAllThemes, addBloc, getBlocByCodeAndThemeId,
@@ -28,7 +28,10 @@ exports.initializeIpcHandlers = function() {
 
   // VotingDevices
   ipcMain.handle('db-get-all-voting-devices', async () => getAllVotingDevices());
-  ipcMain.handle('db-get-voting-devices-for-kit', async (event: any, kitId: number) => getVotingDevicesForKit(kitId));
+  ipcMain.handle('db-add-voting-device', async (event: any, device: any) => addVotingDevice(device));
+  ipcMain.handle('db-update-voting-device', async (event: any, id: number, updates: any) => updateVotingDevice(id, updates));
+  ipcMain.handle('db-delete-voting-device', async (event: any, id: number) => deleteVotingDevice(id));
+  ipcMain.handle('db-bulk-add-voting-devices', async (event: any, devices: any[]) => bulkAddVotingDevices(devices));
 
   // SessionQuestions
   ipcMain.handle('db-add-bulk-session-questions', async (event: any, questions: any) => addBulkSessionQuestions(questions));
@@ -43,6 +46,16 @@ exports.initializeIpcHandlers = function() {
   // DeviceKits
   ipcMain.handle('db-get-all-device-kits', async () => getAllDeviceKits());
   ipcMain.handle('db-get-default-device-kit', async () => getDefaultDeviceKit());
+  ipcMain.handle('db-add-device-kit', async (event: any, data: any) => addDeviceKit(data));
+  ipcMain.handle('db-update-device-kit', async (event: any, id: number, updates: any) => updateDeviceKit(id, updates));
+  ipcMain.handle('db-delete-device-kit', async (event: any, id: number) => deleteDeviceKit(id));
+  ipcMain.handle('db-set-default-device-kit', async (event: any, id: number) => setDefaultDeviceKit(id));
+  ipcMain.handle('db-assign-device-to-kit', async (event: any, kitId: number, votingDeviceId: number) => assignDeviceToKit(kitId, votingDeviceId));
+  ipcMain.handle('db-remove-device-from-kit', async (event: any, kitId: number, votingDeviceId: number) => removeDeviceFromKit(kitId, votingDeviceId));
+  
+  ipcMain.handle('db-get-kits-for-voting-device', async (event: any, votingDeviceId: number) => getKitsForVotingDevice(votingDeviceId));
+  ipcMain.handle('db-remove-assignments-by-kit-id', async (event: any, kitId: number) => removeAssignmentsByKitId(kitId));
+  ipcMain.handle('db-remove-assignments-by-voting-device-id', async (event: any, votingDeviceId: number) => removeAssignmentsByVotingDeviceId(votingDeviceId));
 
   // Referentiels
   ipcMain.handle('db-add-referential', async (event: any, data: any) => addReferential(data));

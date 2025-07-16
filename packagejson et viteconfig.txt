@@ -1,0 +1,198 @@
+{
+  "name": "easycertif",
+  "private": true,
+  "version": "0.0.0",
+  "type": "commonjs",
+  "main": "dist-electron/index.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"npm run electron-watch\"",
+    "electron-watch": "wait-on tcp:5173 && electron .",
+    "build": "tsc && vite build && electron-builder",
+    "electron-dev": "electron .",
+    "start": "npm run build && electron ."
+  },
+  "build": {
+    "appId": "com.easycertif.app",
+    "productName": "EasyCertif",
+    "files": [
+      "dist",
+      "dist-electron"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "npmRebuild": true
+  },
+  "dependencies": {
+    "@types/jspdf": "^1.3.3",
+    "better-sqlite3": "^12.2.0",
+    "date-fns": "^3.3.1",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.344.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-dropzone": "^14.3.8",
+    "ts-node": "^10.9.2",
+    "xlsx": "^0.18.5",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/file-saver": "^2.0.7",
+    "@types/node": "^24.0.14",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@types/xlsx": "^0.0.35",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.18",
+    "concurrently": "^8.2.2",
+    "depcheck": "^1.4.7",
+    "electron": "^37.2.1",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.11",
+    "globals": "^15.9.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.3.0",
+    "vite": "^5.4.2",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "wait-on": "^7.0.1"
+  }
+}
+
+
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import electron from 'vite-plugin-electron';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [
+    react(),
+    electron([
+      {
+        // Point d'entrée pour le processus principal d'Electron
+        entry: 'electron/index.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['better-sqlite3'],
+            },
+          },
+        },
+      },
+      {
+        // Point d'entrée pour le script de preload
+        entry: path.join(__dirname, 'electron/preload.ts'),
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+          },
+        },
+      },
+      {
+        // Point d'entrée pour le module de base de données
+        entry: 'electron/db.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['better-sqlite3'],
+            },
+          },
+        },
+      },
+    ]),
+  ],
+  build: {
+    // Configuration pour le processus de rendu (votre application React)
+    outDir: 'dist',
+    assetsDir: 'assets',
+  },
+});
+
+const { app, BrowserWindow, session } = require('electron');
+const path = require('path');
+const { initializeIpcHandlers } = require('./ipcHandlers');
+const { initializeDatabase, getDb } = require('./db');
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.send('main-process-message', new Date().toLocaleString());
+  });
+
+  // Charge l'URL du serveur de dev ou le fichier HTML local
+  if (process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else {
+    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  }
+
+  if (!app.isPackaged) {
+    win.webContents.openDevTools();
+  }
+}
+
+app.whenReady().then(async () => {
+  // Set a Content Security Policy
+  session.defaultSession.webRequest.onHeadersReceived((details: any, callback: any) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self' 'unsafe-inline' data:; script-src 'self' 'unsafe-eval' 'unsafe-inline' data:"
+        ]
+      }
+    });
+  });
+  try {
+    initializeDatabase();
+    initializeIpcHandlers();
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  } catch (error) {
+    console.error('[Main] Failed to initialize application:', error);
+    app.quit(); // Quit on critical error
+  }
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    getDb().close();
+    app.quit();
+  }
+});

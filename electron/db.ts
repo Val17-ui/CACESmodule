@@ -1392,9 +1392,11 @@ const rowToDeviceKit = (row: any): DeviceKit => {
 const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
+      console.log(`[DB DeviceKits] Attempting to add device kit:`, kit);
       const stmt = getDb().prepare("INSERT INTO deviceKits (name, isDefault) VALUES (@name, @isDefault)");
       const isDefault = kit.isDefault ? 1 : 0;
       const result = stmt.run({ ...kit, isDefault });
+      console.log(`[DB DeviceKits] Successfully added device kit with ID: ${result.lastInsertRowid}`);
       return result.lastInsertRowid as number;
     } catch (error) {
       console.error(`[DB DeviceKits] Error adding device kit:`, error);

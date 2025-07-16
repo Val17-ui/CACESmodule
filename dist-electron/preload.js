@@ -11,18 +11,25 @@ contextBridge.exposeInMainWorld("dbAPI", {
   getResultsForSession: (sessionId) => ipcRenderer.invoke("db-get-results-for-session", sessionId),
   // VotingDevices
   getAllVotingDevices: () => ipcRenderer.invoke("db-get-all-voting-devices"),
+  addVotingDevice: (device) => ipcRenderer.invoke("db-add-voting-device", device),
+  updateVotingDevice: (id, updates) => ipcRenderer.invoke("db-update-voting-device", id, updates),
+  deleteVotingDevice: (id) => ipcRenderer.invoke("db-delete-voting-device", id),
+  bulkAddVotingDevices: (devices) => ipcRenderer.invoke("db-bulk-add-voting-devices", devices),
   getVotingDevicesForKit: (kitId) => ipcRenderer.invoke("db-get-voting-devices-for-kit", kitId),
-  // SessionQuestions
-  addBulkSessionQuestions: (questions) => ipcRenderer.invoke("db-add-bulk-session-questions", questions),
-  deleteSessionQuestionsBySessionId: (sessionId) => ipcRenderer.invoke("db-delete-session-questions-by-session-id", sessionId),
-  getSessionQuestionsBySessionId: (sessionId) => ipcRenderer.invoke("db-get-session-questions-by-session-id", sessionId),
-  // SessionBoitiers
   addBulkSessionBoitiers: (boitiers) => ipcRenderer.invoke("db-add-bulk-session-boitiers", boitiers),
   deleteSessionBoitiersBySessionId: (sessionId) => ipcRenderer.invoke("db-delete-session-boitiers-by-session-id", sessionId),
   getSessionBoitiersBySessionId: (sessionId) => ipcRenderer.invoke("db-get-session-boitiers-by-session-id", sessionId),
   // DeviceKits
   getAllDeviceKits: () => ipcRenderer.invoke("db-get-all-device-kits"),
   getDefaultDeviceKit: () => ipcRenderer.invoke("db-get-default-device-kit"),
+  addDeviceKit: (data) => ipcRenderer.invoke("db-add-device-kit", data),
+  updateDeviceKit: (id, updates) => ipcRenderer.invoke("db-update-device-kit", id, updates),
+  deleteDeviceKit: (id) => ipcRenderer.invoke("db-delete-device-kit", id),
+  setDefaultDeviceKit: (id) => ipcRenderer.invoke("db-set-default-device-kit", id),
+  assignDeviceToKit: (kitId, votingDeviceId) => ipcRenderer.invoke("db-assign-device-to-kit", kitId, votingDeviceId),
+  removeDeviceFromKit: (kitId, votingDeviceId) => ipcRenderer.invoke("db-remove-device-from-kit", kitId, votingDeviceId),
+  removeAssignmentsByKitId: (kitId) => ipcRenderer.invoke("db-remove-assignments-by-kit-id", kitId),
+  removeAssignmentsByVotingDeviceId: (votingDeviceId) => ipcRenderer.invoke("db-remove-assignments-by-voting-device-id", votingDeviceId),
   // Referentiels
   addReferential: (data) => ipcRenderer.invoke("db-add-referential", data),
   getAllReferentiels: () => ipcRenderer.invoke("db-get-all-referentiels"),

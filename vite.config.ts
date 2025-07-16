@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     electron([
       {
-        // Point d'entrée pour le processus principal d'Electron
+        // Point d'entre pour le processus principal d'Electron
         entry: 'electron/index.ts',
         vite: {
           build: {
@@ -20,7 +20,7 @@ export default defineConfig({
         },
       },
       {
-        // Point d'entrée pour le script de preload
+        // Point d'entre pour le script de preload
         entry: path.join(__dirname, 'electron/preload.ts'),
         vite: {
           build: {
@@ -29,7 +29,7 @@ export default defineConfig({
         },
       },
       {
-        // Point d'entrée pour le module de base de données
+        // Point d'entre pour le module de base de donnes
         entry: 'electron/db.ts',
         vite: {
           build: {
@@ -41,11 +41,14 @@ export default defineConfig({
         },
       },
       {
-        // Point d'entrée pour les gestionnaires IPC
+        // Point d'entre pour le module de gestion des IPC
         entry: 'electron/ipcHandlers.ts',
         vite: {
           build: {
             outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['better-sqlite3'],
+            },
           },
         },
       },
