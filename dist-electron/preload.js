@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld("dbAPI", {
   getReferentialById: (id) => ipcRenderer.invoke("db-get-referential-by-id", id),
   // Trainers
   getAllTrainers: () => ipcRenderer.invoke("db-get-all-trainers"),
+  addTrainer: (data) => ipcRenderer.invoke("db-add-trainer", data),
+  deleteTrainer: (id) => ipcRenderer.invoke("db-delete-trainer", id),
+  setDefaultTrainer: (id) => ipcRenderer.invoke("db-set-default-trainer", id),
+  updateTrainer: (id, updates) => ipcRenderer.invoke("db-update-trainer", id, updates),
   // Themes
   addTheme: (data) => ipcRenderer.invoke("db-add-theme", data),
   getThemeByCodeAndReferentialId: (code, refId) => ipcRenderer.invoke("db-get-theme-by-code-and-referential-id", code, refId),

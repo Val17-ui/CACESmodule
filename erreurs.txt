@@ -12,8 +12,9 @@ logSecurityWarnings @ VM4 sandbox_bundle:2
 (anonymous) @ VM4 sandbox_bundle:2
 DashboardCards.tsx:12 Sessions dans DashboardCards : [{…}]
 DashboardCards.tsx:12 Sessions dans DashboardCards : [{…}]
-logger.ts:62 2025-07-16 13:23:37 | INFO | Navigation vers settings
-TrainerSettings.tsx:65 Erreur lors de l'ajout du formateur: StorageManager.addTrainer is not a function TypeError: StorageManager.addTrainer is not a function
+logger.ts:62 2025-07-16 13:27:43 | INFO | Navigation vers settings
+TrainerSettings.tsx:65 Erreur lors de l'ajout du formateur: dbAPI.addTrainer is not available. Error: dbAPI.addTrainer is not available.
+    at Object.addTrainer (http://localhost:5173/src/services/StorageManager.ts:222:42)
     at handleAddTrainer (http://localhost:5173/src/components/settings/TrainerSettings.tsx:67:39)
     at HTMLUnknownElement.callCallback2 (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:3674:22)
     at Object.invokeGuardedCallbackDev (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:3699:24)
@@ -23,8 +24,8 @@ TrainerSettings.tsx:65 Erreur lors de l'ajout du formateur: StorageManager.addTr
     at processDispatchQueueItemsInOrder (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7034:15)
     at processDispatchQueue (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7043:13)
     at dispatchEventsForPlugins (http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7051:11)
-    at http://localhost:5173/node_modules/.vite/deps/chunk-YZVM2MHU.js?v=d4a11973:7174:20
 handleAddTrainer @ TrainerSettings.tsx:65
+await in handleAddTrainer
 callCallback2 @ chunk-YZVM2MHU.js?v=d4a11973:3674
 invokeGuardedCallbackDev @ chunk-YZVM2MHU.js?v=d4a11973:3699
 invokeGuardedCallback @ chunk-YZVM2MHU.js?v=d4a11973:3733

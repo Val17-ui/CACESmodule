@@ -264,9 +264,58 @@ export const StorageManager = {
   },
 
   // Trainers
-  async getAllTrainers() {
+  async addTrainer(trainerData: Omit<Trainer, 'id'>): Promise<number | undefined> {
+    if (!window.dbAPI?.addTrainer) throw new Error("dbAPI.addTrainer is not available.");
+    try {
+      const id = await window.dbAPI.addTrainer(trainerData);
+      return id;
+    } catch (error) {
+      console.error("StorageManager: Error adding trainer via IPC", error);
+      throw error;
+    }
+  },
+
+  async getAllTrainers(): Promise<Trainer[]> {
     if (!window.dbAPI?.getAllTrainers) throw new Error("dbAPI.getAllTrainers is not available.");
-    return window.dbAPI.getAllTrainers();
+    try {
+      const trainers = await window.dbAPI.getAllTrainers();
+      return trainers;
+    } catch (error) {
+      console.error("StorageManager: Error getting all trainers via IPC", error);
+      throw error;
+    }
+  },
+
+  async deleteTrainer(id: number): Promise<void> {
+    if (!window.dbAPI?.deleteTrainer) throw new Error("dbAPI.deleteTrainer is not available.");
+    try {
+      await window.dbAPI.deleteTrainer(id);
+    } catch (error) {
+      console.error(`StorageManager: Error deleting trainer with id ${id} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async setDefaultTrainer(id: number): Promise<number | undefined> {
+    if (!window.dbAPI?.setDefaultTrainer) throw new Error("dbAPI.setDefaultTrainer is not available.");
+    try {
+      const result = await window.dbAPI.setDefaultTrainer(id);
+      return result;
+    } catch (error) {
+      console.error(`StorageManager: Error setting default trainer with id ${id} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async updateTrainer(id: number, updates: Partial<Omit<Trainer, 'id'>>): Promise<number | undefined> {
+    if (!window.dbAPI?.updateTrainer) throw new Error("dbAPI.updateTrainer is not available.");
+    try {
+      const numUpdated = await window.dbAPI.updateTrainer(id, updates);
+      return numUpdated;
+    } catch (error) {
+      console.error(`StorageManager: Error updating trainer with id ${id} via IPC`, error);
+      throw error;
+    }
   },
 
   // Themes
