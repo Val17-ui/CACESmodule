@@ -20,6 +20,10 @@ const {
 exports.initializeIpcHandlers = function() {
   console.log('[IPC Handlers] Initializing IPC handlers...');
 
+  // Log all registered handlers
+  const handlers = ipcMain.getHandlerChannelNames();
+  console.log('[IPC Handlers] Registered handlers:', handlers);
+
   // Sessions
   ipcMain.handle('db-get-all-sessions', async () => getAllSessions());
   ipcMain.handle('db-get-session-by-id', async (event: any, sessionId: number) => getSessionById(sessionId));
