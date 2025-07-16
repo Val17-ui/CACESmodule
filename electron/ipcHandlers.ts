@@ -10,7 +10,11 @@ const {
     getThemesByReferentialId, getThemeById, getAllThemes, addBloc, getBlocByCodeAndThemeId,
     getBlocsByThemeId, getBlocById, getAllBlocs, addQuestion, getQuestionById,
     getQuestionsByBlocId, updateQuestion, deleteQuestion, getAllQuestions, getQuestionsByIds,
-    getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings
+    getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings,
+    addTrainer, deleteTrainer, updateTrainer, setDefaultTrainer, getDefaultTrainer,
+    addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices,
+    addDeviceKit, updateDeviceKit, deleteDeviceKit, setDefaultDeviceKit,
+    assignDeviceToKit, removeDeviceFromKit, getDeviceKitById
 } = require('./db');
 
 exports.initializeIpcHandlers = function() {
@@ -29,6 +33,10 @@ exports.initializeIpcHandlers = function() {
   // VotingDevices
   ipcMain.handle('db-get-all-voting-devices', async () => getAllVotingDevices());
   ipcMain.handle('db-get-voting-devices-for-kit', async (event: any, kitId: number) => getVotingDevicesForKit(kitId));
+  ipcMain.handle('db-add-voting-device', async (event: any, data: any) => addVotingDevice(data));
+  ipcMain.handle('db-update-voting-device', async (event: any, id: number, updates: any) => updateVotingDevice(id, updates));
+  ipcMain.handle('db-delete-voting-device', async (event: any, id: number) => deleteVotingDevice(id));
+  ipcMain.handle('db-bulk-add-voting-devices', async (event: any, devices: any) => bulkAddVotingDevices(devices));
 
   // SessionQuestions
   ipcMain.handle('db-add-bulk-session-questions', async (event: any, questions: any) => addBulkSessionQuestions(questions));
@@ -43,6 +51,13 @@ exports.initializeIpcHandlers = function() {
   // DeviceKits
   ipcMain.handle('db-get-all-device-kits', async () => getAllDeviceKits());
   ipcMain.handle('db-get-default-device-kit', async () => getDefaultDeviceKit());
+  ipcMain.handle('db-add-device-kit', async (event: any, data: any) => addDeviceKit(data));
+  ipcMain.handle('db-update-device-kit', async (event: any, id: number, updates: any) => updateDeviceKit(id, updates));
+  ipcMain.handle('db-delete-device-kit', async (event: any, id: number) => deleteDeviceKit(id));
+  ipcMain.handle('db-set-default-device-kit', async (event: any, id: number) => setDefaultDeviceKit(id));
+  ipcMain.handle('db-assign-device-to-kit', async (event: any, kitId: number, deviceId: number) => assignDeviceToKit(kitId, deviceId));
+  ipcMain.handle('db-remove-device-from-kit', async (event: any, kitId: number, deviceId: number) => removeDeviceFromKit(kitId, deviceId));
+  ipcMain.handle('db-get-device-kit-by-id', async (event: any, id: number) => getDeviceKitById(id));
 
   // Referentiels
   ipcMain.handle('db-add-referential', async (event: any, data: any) => addReferential(data));
@@ -52,6 +67,11 @@ exports.initializeIpcHandlers = function() {
 
   // Trainers
   ipcMain.handle('db-get-all-trainers', async () => getAllTrainers());
+  ipcMain.handle('db-add-trainer', async (event: any, data: any) => addTrainer(data));
+  ipcMain.handle('db-delete-trainer', async (event: any, id: number) => deleteTrainer(id));
+  ipcMain.handle('db-update-trainer', async (event: any, id: number, updates: any) => updateTrainer(id, updates));
+  ipcMain.handle('db-set-default-trainer', async (event: any, id: number) => setDefaultTrainer(id));
+  ipcMain.handle('db-get-default-trainer', async () => getDefaultTrainer());
 
   // Themes
   ipcMain.handle('db-add-theme', async (event: any, data: any) => addTheme(data));

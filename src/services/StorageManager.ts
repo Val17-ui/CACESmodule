@@ -195,8 +195,8 @@ export const StorageManager = {
   },
 
   async bulkAddVotingDevices(devices: any[]) {
-    if (!window.dbAPI?.addBulkSessionBoitiers) throw new Error("dbAPI.addBulkSessionBoitiers is not available.");
-    return window.dbAPI.addBulkSessionBoitiers(devices);
+    if (!window.dbAPI?.bulkAddVotingDevices) throw new Error("dbAPI.bulkAddVotingDevices is not available.");
+    return window.dbAPI.bulkAddVotingDevices(devices);
   },
 
   // SessionQuestions
@@ -352,7 +352,85 @@ export const StorageManager = {
   async generatePresentation(sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) {
     if (!window.dbAPI?.generatePresentation) throw new Error("dbAPI.generatePresentation is not available.");
     return window.dbAPI.generatePresentation(sessionInfo, participants, questions, template, adminSettings);
-  }
+  },
+
+  // Trainers
+  async addTrainer(data: any) {
+    if (!window.dbAPI?.addTrainer) throw new Error("dbAPI.addTrainer is not available.");
+    return window.dbAPI.addTrainer(data);
+  },
+
+  async deleteTrainer(id: number) {
+    if (!window.dbAPI?.deleteTrainer) throw new Error("dbAPI.deleteTrainer is not available.");
+    return window.dbAPI.deleteTrainer(id);
+  },
+
+  async updateTrainer(id: number, updates: any) {
+    if (!window.dbAPI?.updateTrainer) throw new Error("dbAPI.updateTrainer is not available.");
+    return window.dbAPI.updateTrainer(id, updates);
+  },
+
+  async setDefaultTrainer(id: number) {
+    if (!window.dbAPI?.setDefaultTrainer) throw new Error("dbAPI.setDefaultTrainer is not available.");
+    return window.dbAPI.setDefaultTrainer(id);
+  },
+
+  async getDefaultTrainer() {
+    if (!window.dbAPI?.getDefaultTrainer) throw new Error("dbAPI.getDefaultTrainer is not available.");
+    return window.dbAPI.getDefaultTrainer();
+  },
+
+  // VotingDevices
+  async addVotingDevice(data: any) {
+    if (!window.dbAPI?.addVotingDevice) throw new Error("dbAPI.addVotingDevice is not available.");
+    return window.dbAPI.addVotingDevice(data);
+  },
+
+  async updateVotingDevice(id: number, updates: any) {
+    if (!window.dbAPI?.updateVotingDevice) throw new Error("dbAPI.updateVotingDevice is not available.");
+    return window.dbAPI.updateVotingDevice(id, updates);
+  },
+
+  async deleteVotingDevice(id: number) {
+    if (!window.dbAPI?.deleteVotingDevice) throw new Error("dbAPI.deleteVotingDevice is not available.");
+    return window.dbAPI.deleteVotingDevice(id);
+  },
+
+  // DeviceKits
+  async addDeviceKit(data: any) {
+    if (!window.dbAPI?.addDeviceKit) throw new Error("dbAPI.addDeviceKit is not available.");
+    return window.dbAPI.addDeviceKit(data);
+  },
+
+  async updateDeviceKit(id: number, updates: any) {
+    if (!window.dbAPI?.updateDeviceKit) throw new Error("dbAPI.updateDeviceKit is not available.");
+    return window.dbAPI.updateDeviceKit(id, updates);
+  },
+
+  async deleteDeviceKit(id: number) {
+    if (!window.dbAPI?.deleteDeviceKit) throw new Error("dbAPI.deleteDeviceKit is not available.");
+    return window.dbAPI.deleteDeviceKit(id);
+  },
+
+  async setDefaultDeviceKit(id: number) {
+    if (!window.dbAPI?.setDefaultDeviceKit) throw new Error("dbAPI.setDefaultDeviceKit is not available.");
+    return window.dbAPI.setDefaultDeviceKit(id);
+  },
+
+  async assignDeviceToKit(kitId: number, deviceId: number) {
+    if (!window.dbAPI?.assignDeviceToKit) throw new Error("dbAPI.assignDeviceToKit is not available.");
+    return window.dbAPI.assignDeviceToKit(kitId, deviceId);
+  },
+
+  async removeDeviceFromKit(kitId: number, deviceId: number) {
+    if (!window.dbAPI?.removeDeviceFromKit) throw new Error("dbAPI.removeDeviceFromKit is not available.");
+    return window.dbAPI.removeDeviceFromKit(kitId, deviceId);
+  },
+
+  async getDeviceKitById(id: number) {
+    if (!window.dbAPI?.getDeviceKitById) throw new Error("dbAPI.getDeviceKitById is not available.");
+    return window.dbAPI.getDeviceKitById(id);
+  },
 };
 
 // Example usage (optional, for testing or demonstration within this file):
