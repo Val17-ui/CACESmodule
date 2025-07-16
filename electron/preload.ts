@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   addVotingDevice: (data: any) => ipcRenderer.invoke('db-add-voting-device', data),
   updateVotingDevice: (id: number, updates: any) => ipcRenderer.invoke('db-update-voting-device', id, updates),
   deleteVotingDevice: (id: number) => ipcRenderer.invoke('db-delete-voting-device', id),
-  bulkAddVotingDevices: (devices: any) => ipcRenderer.invoke('db-bulk-add-voting-devices', devices),
+  bulkAddVotingDevices: (devices: any) => ipcRenderer.invoke('db-import-voting-devices', devices),
 
   // SessionQuestions
   addBulkSessionQuestions: (questions: any) => ipcRenderer.invoke('db-add-bulk-session-questions', questions),
@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
 
   // Trainers
   getAllTrainers: () => ipcRenderer.invoke('db-get-all-trainers'),
-  addTrainer: (data: any) => ipcRenderer.invoke('db-add-trainer', data),
+  addTrainer: (data: any) => ipcRenderer.invoke('db-create-trainer', data),
   deleteTrainer: (id: number) => ipcRenderer.invoke('db-delete-trainer', id),
   updateTrainer: (id: number, updates: any) => ipcRenderer.invoke('db-update-trainer', id, updates),
   setDefaultTrainer: (id: number) => ipcRenderer.invoke('db-set-default-trainer', id),

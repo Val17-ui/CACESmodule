@@ -40,7 +40,7 @@ exports.initializeIpcHandlers = function() {
   ipcMain.handle('db-add-voting-device', async (event: any, data: any) => addVotingDevice(data));
   ipcMain.handle('db-update-voting-device', async (event: any, id: number, updates: any) => updateVotingDevice(id, updates));
   ipcMain.handle('db-delete-voting-device', async (event: any, id: number) => deleteVotingDevice(id));
-  ipcMain.handle('db-bulk-add-voting-devices', async (event: any, devices: any) => bulkAddVotingDevices(devices));
+  ipcMain.handle('db-import-voting-devices', async (event: any, devices: any) => bulkAddVotingDevices(devices));
 
   // SessionQuestions
   ipcMain.handle('db-add-bulk-session-questions', async (event: any, questions: any) => addBulkSessionQuestions(questions));
@@ -71,7 +71,7 @@ exports.initializeIpcHandlers = function() {
 
   // Trainers
   ipcMain.handle('db-get-all-trainers', async () => getAllTrainers());
-  ipcMain.handle('db-add-trainer', async (event: any, data: any) => addTrainer(data));
+  ipcMain.handle('db-create-trainer', async (event: any, data: any) => addTrainer(data));
   ipcMain.handle('db-delete-trainer', async (event: any, id: number) => deleteTrainer(id));
   ipcMain.handle('db-update-trainer', async (event: any, id: number, updates: any) => updateTrainer(id, updates));
   ipcMain.handle('db-set-default-trainer', async (event: any, id: number) => setDefaultTrainer(id));
