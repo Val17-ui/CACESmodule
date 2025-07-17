@@ -471,6 +471,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       updatedAt: new Date().toISOString(),
       ignoredSlideGuids: editingSessionData?.ignoredSlideGuids,
       resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
+      resultsImportedAt: null,
     };
     return sessionToSave;
   };
