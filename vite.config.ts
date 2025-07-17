@@ -21,6 +21,30 @@ export default defineConfig({
         },
       },
       {
+        entry: 'electron/utils/pptxOrchestrator.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron/utils',
+            rollupOptions: {
+              external: ['better-sqlite3'],
+              output: { format: 'es' }
+            },
+          },
+        },
+      },
+      {
+        entry: 'electron/utils/val17PptxGenerator.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron/utils',
+            rollupOptions: {
+              external: ['better-sqlite3'],
+              output: { format: 'es' }
+            },
+          },
+        },
+      },
+      {
         // Point d'entre pour le script de preload
         entry: path.join(__dirname, 'electron/preload.ts'),
         vite: {
