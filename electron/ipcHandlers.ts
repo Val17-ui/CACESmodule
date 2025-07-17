@@ -4,6 +4,7 @@ import { AdminPPTXSettings } from './utils/pptxOrchestrator';
 
 
 const fs = require('fs').promises;
+const path = require('path');
 const {
     getAllSessions, getSessionById, addSession, updateSession, addBulkSessionResults,
     getResultsForSession, getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addBulkSessionQuestions,
@@ -111,7 +112,7 @@ export function initializeIpcHandlers() {
 
   // PPTX Generation
     ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referential: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
-    const { generatePresentation } = require('./utils/pptxOrchestrator');
+    const { generatePresentation } = require(path.join(__dirname, 'utils', 'pptxOrchestrator.js'));
     let templateArrayBuffer: ArrayBuffer;
 
     console.log("Type of template received in pptx-generate IPC handler:", typeof template, template instanceof ArrayBuffer, template && typeof template.arrayBuffer === 'function');
