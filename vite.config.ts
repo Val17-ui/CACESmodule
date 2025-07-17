@@ -15,6 +15,7 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
+              output: { format: 'es' }
             },
           },
         },
@@ -36,6 +37,7 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
+              output: { format: 'es' }
             },
           },
         },
@@ -48,6 +50,7 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
+              output: { format: 'es' }
             },
           },
         },

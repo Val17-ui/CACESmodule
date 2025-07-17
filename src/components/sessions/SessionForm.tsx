@@ -244,7 +244,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }));
 
   const handleAddParticipant = () => {
-    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+    if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     if (!selectedKitIdState) {
       alert("Veuillez d'abord sélectionner un kit de boîtiers dans l'onglet 'Participants'.");
       setActiveTab('participants');
@@ -290,13 +290,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const handleRemoveParticipant = (id: string) => {
-    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+    if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     const updatedParticipants = participants.filter(p => p.id !== id);
     setParticipants(updatedParticipants);
   };
 
   const handleParticipantChange = (id: string, field: keyof FormParticipant, value: string | number | boolean | null) => {
-    if (editingSessionData?.donneesOrs && field !== 'deviceId' && editingSessionData.status !== 'completed') {
+    if (editingSessionData?.orsFilePath && field !== 'deviceId' && editingSessionData.status !== 'completed') {
       setModifiedAfterOrsGeneration(true);
     }
     setParticipants(participants.map((p: FormParticipant) => {
@@ -368,7 +368,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     parsedData: Array<Partial<DBParticipantType>>,
     fileName: string
   ) => {
-    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+    if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     if (parsedData.length > 0) {
       const newFormParticipants: FormParticipant[] = parsedData.map((p, index) => ({
         nom: p.nom || '',
@@ -461,7 +461,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       participants: dbParticipants,
       selectedBlocIds: editingSessionData?.selectedBlocIds || [],
       selectedKitId: selectedKitIdState,
-      donneesOrs: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.donneesOrs,
+      orsFilePath: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.orsFilePath,
       status: editingSessionData?.status || 'planned',
       location: location,
       questionMappings: editingSessionData?.questionMappings,
@@ -523,7 +523,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const handleSaveDraft = async () => {
-    const sessionData = await prepareSessionDataForDb(editingSessionData?.donneesOrs);
+    const sessionData = await prepareSessionDataForDb(editingSessionData?.orsFilePath);
     if (sessionData) {
       const savedId = await handleSaveSession(sessionData);
       if (savedId) { setImportSummary(`Session (ID: ${savedId}) sauvegardée avec succès !`); }
@@ -646,9 +646,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       );
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
         const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;
+        const fileName = `${sessionDataWithSelectedBlocs.nomSession}.ors`; // Use .ors extension
+        const saveResult = await window.dbAPI.savePptxFile(orsBlob, fileName);
+
+        if (!saveResult.success) {
+          throw new Error(`Échec de la sauvegarde du fichier ORS: ${saveResult.error}`);
+        }
+
         try {
           await StorageManager.updateSession(currentSavedId, {
-            donneesOrs: orsBlob,
+            orsFilePath: saveResult.filePath, // Store the file path
             questionMappings: questionMappings,
             ignoredSlideGuids: newlyIgnoredSlideGuids || [],
             updatedAt: new Date().toISOString(),
@@ -743,12 +750,23 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     };
 
     const handleImportResults = async () => {
-        if (!resultsFile) { setImportSummary("Veuillez sélectionner un fichier de résultats."); return; }
+        if (!resultsFile && !editingSessionData?.orsFilePath) { setImportSummary("Veuillez sélectionner un fichier de résultats ou enregistrer un chemin ORS."); return; }
         if (!currentSessionDbId || !editingSessionData) { setImportSummary("Aucune session active."); return; }
-        if (!editingSessionData.donneesOrs) { setImportSummary("Veuillez d'abord générer un fichier .ors pour cette session."); return; }
+        if (!editingSessionData.orsFilePath) { setImportSummary("Veuillez d'abord générer un fichier .ors pour cette session."); return; }
     setImportSummary("Lecture .ors...");
     try {
-      const arrayBuffer = await resultsFile.arrayBuffer();
+      let arrayBuffer;
+      if (resultsFile) {
+        arrayBuffer = await resultsFile.arrayBuffer();
+      } else {
+        const fileData = await window.dbAPI.openResultsFile();
+        if (fileData.canceled || !fileData.fileBuffer) {
+          setImportSummary("Aucun fichier sélectionné.");
+          return;
+        }
+        arrayBuffer = Buffer.from(fileData.fileBuffer, 'base64');
+      }
+
       const zip = await JSZip.loadAsync(arrayBuffer);
       const orSessionXmlFile = zip.file("ORSession.xml");
       if (!orSessionXmlFile) { setImportSummary("Erreur: ORSession.xml introuvable dans le .zip."); return; }
@@ -1267,7 +1285,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const renderTabContent = () => {
     const isReadOnly = editingSessionData?.status === 'completed';
-    const isOrsGeneratedAndNotEditable = !!editingSessionData?.donneesOrs && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
+    const isOrsGeneratedAndNotEditable = !!editingSessionData?.orsFilePath && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
 
     switch (activeTab) {
       case 'details':
@@ -1372,7 +1390,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       if (window.confirm("Changer de kit réinitialisera les assignations de boîtiers pour tous les participants de cette session et videra la liste des participants actuels. Voulez-vous continuer ?")) {
                         setParticipants([]); // Vider les participants car les assignations de boîtiers ne sont plus valides
                         setSelectedKitIdState(newKitId);
-                        if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
+                        if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') {
                           setModifiedAfterOrsGeneration(true);
                         }
                       } else {
@@ -1381,7 +1399,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       }
                     } else {
                       setSelectedKitIdState(newKitId);
-                      if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
+                      if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') {
                         setModifiedAfterOrsGeneration(true);
                       }
                     }
@@ -1538,14 +1556,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           <Card title="Résultats de la Session (Import)" className="mb-6">
           <div className="space-y-4">
             <div>
-              <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.zip contenant ORSession.xml)</label>
+              <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
               <Input
                 id="resultsFileInput"
                 type="file"
                 accept=".ors"
                 onChange={handleResultsFileSelect}
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                disabled={!editingSessionData?.donneesOrs || isReadOnly}
+                disabled={!editingSessionData?.orsFilePath || isReadOnly}
               />
               {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
             </div>
@@ -1553,11 +1571,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               variant="secondary"
               icon={<FileUp size={16} />}
               onClick={handleImportResults}
-              disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.donneesOrs}
+              disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
             >
               Importer les Résultats
             </Button>
-            {!editingSessionData?.donneesOrs && !isReadOnly && (
+            {!editingSessionData?.orsFilePath && !isReadOnly && (
                <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
             )}
             {isReadOnly && (
@@ -1580,10 +1598,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
                     title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
                            isReadOnly ? "La session est terminée, regénération bloquée." :
-                           (!!editingSessionData?.donneesOrs) ? "Régénérer .ors & PPTX (Attention : ceci écrasera l'ORS existant)" :
+                           (!!editingSessionData?.orsFilePath) ? "Régénérer .ors & PPTX (Attention : ceci écrasera l'ORS existant)" :
                            "Générer .ors & PPTX"}
                   >
-                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.donneesOrs ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
+                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
                   </Button>
                   {isReadOnly && (
                      <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération de l'ORS est bloquée.</p>
@@ -1591,7 +1609,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                    {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
                      <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
                   )}
-                  {modifiedAfterOrsGeneration && !!editingSessionData?.donneesOrs && !isReadOnly && (
+                  {modifiedAfterOrsGeneration && !!editingSessionData?.orsFilePath && !isReadOnly && (
                     <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
                       <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
                       <span>
@@ -1599,6 +1617,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         Veuillez regénérer le fichier .ors et PPTX pour inclure ces changements.
                       </span>
                     </p>
+                  )}
+                  {editingSessionData?.orsFilePath && (
+                    <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <h4 className="text-md font-semibold text-gray-700 mb-2">Fichier ORS généré :</h4>
+                      <p className="text-sm text-gray-600 font-mono">{editingSessionData.orsFilePath}</p>
+                      <Button
+                        variant="link"
+                        onClick={() => window.dbAPI.openDirectoryDialog(editingSessionData.orsFilePath)}
+                        className="mt-2"
+                      >
+                        Ouvrir le dossier
+                      </Button>
+                    </div>
                   )}
              </Card>
           </>

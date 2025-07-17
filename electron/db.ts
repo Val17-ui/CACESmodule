@@ -5,7 +5,7 @@ import type {
     QuestionWithId, Session, SessionResult, Trainer,
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
     VotingDevice, DeviceKit, DeviceKitAssignment
-  } from '../src/types';
+  } from '../src/types/index';
 
 // Déterminer le chemin de la base de données de manière plus robuste
 const appName = 'easycertif'; // Nom de votre application
@@ -138,7 +138,8 @@ const createSchema = () => {
       ignoredSlideGuids TEXT, /* JSON array of strings */
       resolvedImportAnomalies TEXT, /* JSON object or array */
       participants TEXT, /* JSON array of participant info, structure TBD */
-      donneesOrs TEXT, /* New column for ORS data */
+      orsFilePath TEXT, /* path to the generated ORS file */
+      resultsImportedAt TEXT, /* ISO8601 string for when results were imported */
       FOREIGN KEY (referentielId) REFERENCES referentiels(id) ON DELETE SET NULL,
       FOREIGN KEY (selectedKitId) REFERENCES deviceKits(id) ON DELETE SET NULL,
       FOREIGN KEY (trainerId) REFERENCES trainers(id) ON DELETE SET NULL
@@ -228,6 +229,48 @@ const createSchema = () => {
   try {
     transaction();
     console.log("[DB SCHEMA] Database schema created/verified successfully.");
+
+    // --- Migrations for 'sessions' table ---
+    const db = getDb();
+
+    // Migration step 1: Rename old column if it exists
+    interface TableInfo { name: string; type: string; cid: number; notnull: number; dflt_value: any; pk: number; }
+    try {
+        // Check if the old column exists before trying to rename
+        const columns: TableInfo[] = db.pragma('table_info(sessions)') as TableInfo[];
+        const hasDonneesOrs = columns.some(col => col.name === 'donneesOrs');
+        const hasOrsFilePath = columns.some(col => col.name === 'orsFilePath');
+
+        if (hasDonneesOrs && !hasOrsFilePath) {
+            db.prepare("ALTER TABLE sessions RENAME COLUMN donneesOrs TO orsFilePath").run();
+            console.log("[DB MIGRATION] Renamed column 'donneesOrs' to 'orsFilePath'.");
+        }
+    } catch (error) {
+        // This might fail for other reasons, log it but proceed.
+        console.error("[DB MIGRATION] Error during rename check/operation for 'donneesOrs':", error);
+    }
+
+    // Migration step 2: Add new columns if they don't exist
+    const columnsToAdd = [
+        { name: 'orsFilePath', type: 'TEXT' },
+        { name: 'resultsImportedAt', type: 'TEXT' },
+        { name: 'updatedAt', type: 'TEXT' }
+    ];
+
+    const existingColumns = (db.pragma('table_info(sessions)') as TableInfo[]).map(col => col.name);
+
+    for (const column of columnsToAdd) {
+        if (!existingColumns.includes(column.name)) {
+            try {
+                db.prepare(`ALTER TABLE sessions ADD COLUMN ${column.name} ${column.type}`).run();
+                console.log(`[DB MIGRATION] Added '${column.name}' column to 'sessions' table.`);
+            } catch (error: any) {
+                // Catching errors here just in case, though the check should prevent duplicates.
+                console.error(`[DB MIGRATION] Error adding '${column.name}' column:`, error);
+            }
+        }
+    }
+
   } catch(error) {
     console.error("[DB SCHEMA] Transaction failed during schema creation. No changes were applied.", error);
     throw error; // Renvoyer l'erreur pour indiquer l'échec de createSchema
@@ -554,11 +597,11 @@ const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefi
         INSERT INTO sessions (
           nomSession, dateSession, referentielId, selectedBlocIds, selectedKitId,
           createdAt, location, status, questionMappings, notes, trainerId,
-          ignoredSlideGuids, resolvedImportAnomalies, participants
+          ignoredSlideGuids, resolvedImportAnomalies, participants, orsFilePath, resultsImportedAt
         ) VALUES (
           @nomSession, @dateSession, @referentielId, @selectedBlocIds, @selectedKitId,
           @createdAt, @location, @status, @questionMappings, @notes, @trainerId,
-          @ignoredSlideGuids, @resolvedImportAnomalies, @participants
+          @ignoredSlideGuids, @resolvedImportAnomalies, @participants, @orsFilePath, @resultsImportedAt
         )
       `);
       const rowData = sessionToRow(session);
@@ -1701,79 +1744,4 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console logs with prefixes for easier debugging of setup and stub calls.
 
-module.exports = {
-  getDb,
-  initializeDatabase,
-  addQuestion,
-  getAllQuestions,
-  getQuestionById,
-  getQuestionsByIds,
-  updateQuestion,
-  deleteQuestion,
-  getQuestionsByBlocId,
-  getQuestionsForSessionBlocks,
-  getAdminSetting,
-  setAdminSetting,
-  getAllAdminSettings,
-  getGlobalPptxTemplate,
-  addSession,
-  getAllSessions,
-  getSessionById,
-  updateSession,
-  deleteSession,
-  addSessionResult,
-  addBulkSessionResults,
-  getAllResults,
-  getResultsForSession,
-  getResultBySessionAndQuestion,
-  updateSessionResult,
-  deleteResultsForSession,
-  addVotingDevice,
-  getAllVotingDevices,
-  updateVotingDevice,
-  deleteVotingDevice,
-  bulkAddVotingDevices,
-  addTrainer,
-  getAllTrainers,
-  getTrainerById,
-  updateTrainer,
-  deleteTrainer,
-  setDefaultTrainer,
-  getDefaultTrainer,
-  addSessionQuestion,
-  addBulkSessionQuestions,
-  getSessionQuestionsBySessionId,
-  deleteSessionQuestionsBySessionId,
-  addSessionBoitier,
-  addBulkSessionBoitiers,
-  getSessionBoitiersBySessionId,
-  deleteSessionBoitiersBySessionId,
-  addReferential,
-  getAllReferentiels,
-  getReferentialByCode,
-  getReferentialById,
-  addTheme,
-  getAllThemes,
-  getThemesByReferentialId,
-  getThemeByCodeAndReferentialId,
-  getThemeById,
-  addBloc,
-  getAllBlocs,
-  getBlocsByThemeId,
-  getBlocByCodeAndThemeId,
-  getBlocById,
-  addDeviceKit,
-  getAllDeviceKits,
-  getDeviceKitById,
-  updateDeviceKit,
-  deleteDeviceKit,
-  getDefaultDeviceKit,
-  setDefaultDeviceKit,
-  assignDeviceToKit,
-  removeDeviceFromKit,
-  getVotingDevicesForKit,
-  getKitsForVotingDevice,
-  removeAssignmentsByKitId,
-  removeAssignmentsByVotingDeviceId,
-  calculateBlockUsage,
-};
+export { getDb, initializeDatabase, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, };

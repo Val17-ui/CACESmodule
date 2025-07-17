@@ -14,7 +14,7 @@ export interface SessionInfo {
 // Participant interface alignée sur src/types/index.ts Participant
 // Renommée pour éviter confusion avec le type Participant de l'orchestrateur si jamais il y avait import direct.
 export interface ParticipantForGenerator {
-  idBoitier: string;
+  idBoitier?: string;
   nom: string;
   prenom: string;
   organization?: string;
@@ -1508,7 +1508,7 @@ async function getLayoutXml(zip: JSZip, layoutFileName: string): Promise<string 
 
 // Fonction principale exportée
 export async function generatePPTXVal17(
-  templateFile: File | null,
+  templateFile: any,
   questions: Val17Question[],
   options: GenerationOptions = {},
   sessionInfo?: SessionInfo,
@@ -1517,14 +1517,11 @@ export async function generatePPTXVal17(
   try {
     // const executionId = Date.now(); // Unused
     validateQuestions(questions);
-    let currentTemplateFile: File;
-    if (templateFile) {
-      currentTemplateFile = templateFile;
-    } else {
+    if (!templateFile) {
       console.warn("Aucun fichier modèle fourni.");
       throw new Error("Template file is required by generatePPTXVal17.");
     }
-    const templateZip = await JSZip.loadAsync(currentTemplateFile);
+    const templateZip = await JSZip.loadAsync(templateFile);
 
     // ---> DÉBUT : Logique d'extraction exhaustive des GUIDs des questions préexistantes (sans logs internes excessifs) <---
     const preExistingQuestionSlideGuids: string[] = [];

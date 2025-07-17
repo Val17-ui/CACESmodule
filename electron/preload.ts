@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('dbAPI', {
   // Sessions
@@ -85,9 +85,12 @@ contextBridge.exposeInMainWorld('dbAPI', {
 
   // PPTX Generation
   generatePresentation: (sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => ipcRenderer.invoke('pptx-generate', sessionInfo, participants, questions, template, adminSettings),
+  savePptxFile: (fileBuffer: string, fileName: string) => ipcRenderer.invoke('save-pptx-file', fileBuffer, fileName),
 
   // File Operations
   openExcelFileDialog: () => ipcRenderer.invoke('open-excel-file-dialog'),
+  openDirectoryDialog: (filePath?: string) => ipcRenderer.invoke('open-directory-dialog', filePath),
+  openResultsFile: () => ipcRenderer.invoke('open-results-file'),
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {

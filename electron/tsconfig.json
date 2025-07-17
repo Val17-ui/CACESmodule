@@ -1,15 +1,25 @@
 {
   "compilerOptions": {
-    "target": "es2020",
-    "module": "CommonJS",
+    "target": "es6",
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
     "strict": true,
-    "moduleResolution": "node",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "composite": true,
-    "outDir": "dist-electron",
-    "rootDir": ".."
+    "outDir": "./dist",
+    "rootDir": "../..",
+    "typeRoots": ["../../node_modules/@types"],
+    "paths": {
+      "../../src/types/index": ["E:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/src/types/index.ts"]
+    }
   },
-  "include": ["./**/*.ts", "../src/types/**/*.ts"]
+  "include": [
+    "./**/*.ts",
+    "../../src/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

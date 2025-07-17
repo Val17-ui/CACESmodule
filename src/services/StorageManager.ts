@@ -189,10 +189,7 @@ export const StorageManager = {
     return window.dbAPI.getAllVotingDevices();
   },
 
-  async getVotingDevicesForKit(kitId: number) {
-    if (!window.dbAPI?.getVotingDevicesForKit) throw new Error("dbAPI.getVotingDevicesForKit is not available.");
-    return window.dbAPI.getVotingDevicesForKit(kitId);
-  },
+  
 
   async addVotingDevice(deviceData: Omit<VotingDevice, 'id'>): Promise<number | undefined> {
     if (!window.dbAPI?.addVotingDevice) throw new Error("dbAPI.addVotingDevice is not available.");
@@ -379,16 +376,7 @@ export const StorageManager = {
     return window.dbAPI.getSessionBoitiersBySessionId(sessionId);
   },
 
-  // DeviceKits
-  async getAllDeviceKits() {
-    if (!window.dbAPI?.getAllDeviceKits) throw new Error("dbAPI.getAllDeviceKits is not available.");
-    return window.dbAPI.getAllDeviceKits();
-  },
-
-  async getDefaultDeviceKit() {
-    if (!window.dbAPI?.getDefaultDeviceKit) throw new Error("dbAPI.getDefaultDeviceKit is not available.");
-    return window.dbAPI.getDefaultDeviceKit();
-  },
+  
 
   // Referentiels
   async addReferential(data: any) {
