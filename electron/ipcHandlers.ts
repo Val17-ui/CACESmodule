@@ -1,4 +1,5 @@
-const { ipcMain } = require('electron');
+const { ipcMain, dialog } = require('electron');
+const fs = require('fs').promises;
 const {
     getAllSessions, getSessionById, addSession, updateSession, addBulkSessionResults,
     getResultsForSession, getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addBulkSessionQuestions,
@@ -10,7 +11,8 @@ const {
     getThemesByReferentialId, getThemeById, getAllThemes, addBloc, getBlocByCodeAndThemeId,
     getBlocsByThemeId, getBlocById, getAllBlocs, addQuestion, getQuestionById,
     getQuestionsByBlocId, updateQuestion, deleteQuestion, getAllQuestions, getQuestionsByIds,
-    getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings
+    getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings,
+    getVotingDevicesForKit // Add this line
 } = require('./db');
 
 exports.initializeIpcHandlers = function() {
@@ -44,6 +46,7 @@ exports.initializeIpcHandlers = function() {
   ipcMain.handle('db-get-session-boitiers-by-session-id', async (event: any, sessionId: number) => getSessionBoitiersBySessionId(sessionId));
 
   // DeviceKits
+  ipcMain.handle('db-get-voting-devices-for-kit', async (event: any, kitId: number) => require('./db').getVotingDevicesForKit(kitId));
   ipcMain.handle('db-get-all-device-kits', async () => getAllDeviceKits());
   ipcMain.handle('db-get-default-device-kit', async () => getDefaultDeviceKit());
   ipcMain.handle('db-add-device-kit', async (event: any, data: any) => addDeviceKit(data));
@@ -54,7 +57,6 @@ exports.initializeIpcHandlers = function() {
   ipcMain.handle('db-remove-device-from-kit', async (event: any, kitId: number, votingDeviceId: number) => removeDeviceFromKit(kitId, votingDeviceId));
   
   ipcMain.handle('db-get-kits-for-voting-device', async (event: any, votingDeviceId: number) => getKitsForVotingDevice(votingDeviceId));
-  ipcMain.handle('db-remove-assignments-by-kit-id', async (event: any, kitId: number) => removeAssignmentsByKitId(kitId));
   ipcMain.handle('db-remove-assignments-by-voting-device-id', async (event: any, votingDeviceId: number) => removeAssignmentsByVotingDeviceId(votingDeviceId));
 
   // Referentiels
@@ -107,6 +109,34 @@ exports.initializeIpcHandlers = function() {
   ipcMain.handle('pptx-generate', async (event: any, sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => {
     const { generatePresentation } = require('./utils/pptxOrchestrator');
     return generatePresentation(sessionInfo, participants, questions, template, adminSettings);
+  });
+
+  // File Operations
+  ipcMain.handle('open-excel-file-dialog', async (event) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        { name: 'Fichiers Excel', extensions: ['xlsx', 'xls'] },
+        { name: 'Tous les fichiers', extensions: ['*'] }
+      ]
+    });
+
+    if (canceled || filePaths.length === 0) {
+      return { canceled: true };
+    }
+
+    const filePath = filePaths[0];
+    try {
+      const fileBuffer = await fs.readFile(filePath);
+      return {
+        canceled: false,
+        fileName: filePath.split(/[\\/]/).pop(), // Get base name
+        fileBuffer: fileBuffer.toString('base64') // Send as base64 string
+      };
+    } catch (error: any) {
+      console.error('Failed to read file:', error);
+      return { canceled: false, error: error.message };
+    }
   });
 
   console.log('[IPC Handlers] IPC handlers registration attempt finished.');

@@ -4,6 +4,7 @@ const { initializeIpcHandlers } = require('./ipcHandlers');
 const { initializeDatabase, getDb } = require('./db');
 
 function createWindow() {
+  console.log('createWindow() called');
   const win = new BrowserWindow({
     width: 1200,
     height: 800,

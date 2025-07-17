@@ -70,5 +70,11 @@ contextBridge.exposeInMainWorld("dbAPI", {
   exportAllData: () => ipcRenderer.invoke("db-export-all-data"),
   importAllData: (data) => ipcRenderer.invoke("db-import-all-data", data),
   // PPTX Generation
-  generatePresentation: (sessionInfo, participants, questions, template, adminSettings) => ipcRenderer.invoke("pptx-generate", sessionInfo, participants, questions, template, adminSettings)
+  generatePresentation: (sessionInfo, participants, questions, template, adminSettings) => ipcRenderer.invoke("pptx-generate", sessionInfo, participants, questions, template, adminSettings),
+  // File Operations
+  openExcelFileDialog: () => ipcRenderer.invoke("open-excel-file-dialog")
+});
+contextBridge.exposeInMainWorld("electronAPI", {
+  Buffer_from: Buffer.from
+  // Expose Buffer.from directly
 });

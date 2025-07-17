@@ -85,4 +85,11 @@ contextBridge.exposeInMainWorld('dbAPI', {
 
   // PPTX Generation
   generatePresentation: (sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => ipcRenderer.invoke('pptx-generate', sessionInfo, participants, questions, template, adminSettings),
+
+  // File Operations
+  openExcelFileDialog: () => ipcRenderer.invoke('open-excel-file-dialog'),
+});
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  Buffer_from: Buffer.from // Expose Buffer.from directly
 });

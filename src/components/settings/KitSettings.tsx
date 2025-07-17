@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
-import { Plus, Edit3, Trash2, CheckSquare } from 'lucide-react';
+import { Plus, Edit3, Trash2, Star } from 'lucide-react';
 import { StorageManager } from '../../services/StorageManager';
 import { DeviceKit, VotingDevice } from '../../types';
 
@@ -110,10 +110,11 @@ const KitSettings: React.FC = () => {
       loadKits();
     } catch (err: any) {
       console.error("Error saving kit:", err);
-      if (err.message && err.message.toLowerCase().includes('constraint')) {
-        setError("Un kit avec ce nom existe déjà, ou une autre contrainte a été violée.");
+      const errorMessage = err.message || "Erreur inconnue lors de la sauvegarde du kit.";
+      if (errorMessage.toLowerCase().includes('constraint')) {
+        setError("Un kit avec ce nom existe déjà, ou une autre contrainte a été violée: " + errorMessage);
       } else {
-        setError("Erreur lors de la sauvegarde du kit.");
+        setError("Erreur lors de la sauvegarde du kit: " + errorMessage);
       }
     }
   };
@@ -282,7 +283,7 @@ const KitSettings: React.FC = () => {
                          title="Définir comme kit par défaut"
                          disabled={isCreatingKit || !!editingKit}
                        >
-                         <CheckSquare size={16} />
+                         <Star size={16} />
                        </Button>
                      )}
                   </div>

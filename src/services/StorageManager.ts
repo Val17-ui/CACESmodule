@@ -231,6 +231,122 @@ export const StorageManager = {
     return window.dbAPI.bulkAddVotingDevices(devices);
   },
 
+  // DeviceKits
+  async addDeviceKit(kitData: Omit<DeviceKit, 'id'>): Promise<number | undefined> {
+    if (!window.dbAPI?.addDeviceKit) throw new Error("dbAPI.addDeviceKit is not available.");
+    try {
+      const id = await window.dbAPI.addDeviceKit(kitData);
+      return id;
+    } catch (error) {
+      console.error("StorageManager: Error adding device kit via IPC", error);
+      throw error;
+    }
+  },
+
+  async updateDeviceKit(id: number, updates: Partial<Omit<DeviceKit, 'id'>>): Promise<number | undefined> {
+    if (!window.dbAPI?.updateDeviceKit) throw new Error("dbAPI.updateDeviceKit is not available.");
+    try {
+      const numUpdated = await window.dbAPI.updateDeviceKit(id, updates);
+      return numUpdated;
+    } catch (error) {
+      console.error(`StorageManager: Error updating device kit with id ${id} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async deleteDeviceKit(id: number): Promise<void> {
+    if (!window.dbAPI?.deleteDeviceKit) throw new Error("dbAPI.deleteDeviceKit is not available.");
+    try {
+      await window.dbAPI.deleteDeviceKit(id);
+    } catch (error) {
+      console.error(`StorageManager: Error deleting device kit with id ${id} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async getDefaultDeviceKit() {
+    if (!window.dbAPI?.getDefaultDeviceKit) throw new Error("dbAPI.getDefaultDeviceKit is not available.");
+    return window.dbAPI.getDefaultDeviceKit();
+  },
+
+  async getAllDeviceKits() {
+    if (!window.dbAPI?.getAllDeviceKits) throw new Error("dbAPI.getAllDeviceKits is not available.");
+    return window.dbAPI.getAllDeviceKits();
+  },
+
+  async setDefaultDeviceKit(id: number): Promise<void> {
+    if (!window.dbAPI?.setDefaultDeviceKit) throw new Error("dbAPI.setDefaultDeviceKit is not available.");
+    try {
+      await window.dbAPI.setDefaultDeviceKit(id);
+    } catch (error) {
+      console.error(`StorageManager: Error setting default device kit with id ${id} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async assignDeviceToKit(kitId: number, votingDeviceId: number): Promise<number | undefined> {
+    if (!window.dbAPI?.assignDeviceToKit) throw new Error("dbAPI.assignDeviceToKit is not available.");
+    try {
+      const id = await window.dbAPI.assignDeviceToKit(kitId, votingDeviceId);
+      return id;
+    } catch (error) {
+      console.error(`StorageManager: Error assigning device ${votingDeviceId} to kit ${kitId} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async removeDeviceFromKit(kitId: number, votingDeviceId: number): Promise<void> {
+    if (!window.dbAPI?.removeDeviceFromKit) throw new Error("dbAPI.removeDeviceFromKit is not available.");
+    try {
+      await window.dbAPI.removeDeviceFromKit(kitId, votingDeviceId);
+    } catch (error) {
+      console.error(`StorageManager: Error removing device ${votingDeviceId} from kit ${kitId} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async getVotingDevicesForKit(kitId: number): Promise<VotingDevice[]> {
+    if (!window.dbAPI?.getVotingDevicesForKit) throw new Error("dbAPI.getVotingDevicesForKit is not available.");
+    try {
+      const devices = await window.dbAPI.getVotingDevicesForKit(kitId);
+      return devices;
+    } catch (error) {
+      console.error(`StorageManager: Error getting voting devices for kit ${kitId} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async getKitsForVotingDevice(votingDeviceId: number): Promise<DeviceKit[]> {
+    if (!window.dbAPI?.getKitsForVotingDevice) throw new Error("dbAPI.getKitsForVotingDevice is not available.");
+    try {
+      const kits = await window.dbAPI.getKitsForVotingDevice(votingDeviceId);
+      return kits;
+    } catch (error) {
+      console.error(`StorageManager: Error getting kits for voting device ${votingDeviceId} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async removeAssignmentsByKitId(kitId: number): Promise<void> {
+    if (!window.dbAPI?.removeAssignmentsByKitId) throw new Error("dbAPI.removeAssignmentsByKitId is not available.");
+    try {
+      await window.dbAPI.removeAssignmentsByKitId(kitId);
+    } catch (error) {
+      console.error(`StorageManager: Error removing assignments by kitId ${kitId} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async removeAssignmentsByVotingDeviceId(votingDeviceId: number): Promise<void> {
+    if (!window.dbAPI?.removeAssignmentsByVotingDeviceId) throw new Error("dbAPI.removeAssignmentsByVotingDeviceId is not available.");
+    try {
+      await window.dbAPI.removeAssignmentsByVotingDeviceId(votingDeviceId);
+    } catch (error) {
+      console.error(`StorageManager: Error removing assignments by votingDeviceId ${votingDeviceId} via IPC`, error);
+      throw error;
+    }
+  },
+
   // SessionQuestions
   async addBulkSessionQuestions(questions: any) {
     if (!window.dbAPI?.addBulkSessionQuestions) throw new Error("dbAPI.addBulkSessionQuestions is not available.");

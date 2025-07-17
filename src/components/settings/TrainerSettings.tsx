@@ -110,13 +110,15 @@ const TrainerSettings: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const result = await StorageManager.setDefaultTrainer(id);
-      if (result !== undefined) {
-        setSuccess('Formateur défini comme par défaut.');
-        await fetchTrainers();
-      } else {
-        setError('Échec de la définition du formateur par défaut.');
-      }
+      await StorageManager.setDefaultTrainer(id);
+      setSuccess('Formateur défini comme par défaut.');
+      // Mettre à jour l'état local immédiatement pour un feedback visuel instantané
+      setTrainers(prevTrainers =>
+        prevTrainers.map(t =>
+          t.id === id ? { ...t, isDefault: 1 } : { ...t, isDefault: 0 }
+        )
+      );
+      await fetchTrainers(); // Recharger pour s'assurer de la cohérence avec la DB
     } catch (err: any) {
       console.error('Erreur lors de la définition du formateur par défaut:', err.message, err.stack);
       setError(`Erreur lors de la définition du formateur par défaut : ${err.message}`);

@@ -138,6 +138,7 @@ const createSchema = () => {
       ignoredSlideGuids TEXT, /* JSON array of strings */
       resolvedImportAnomalies TEXT, /* JSON object or array */
       participants TEXT, /* JSON array of participant info, structure TBD */
+      donneesOrs TEXT, /* New column for ORS data */
       FOREIGN KEY (referentielId) REFERENCES referentiels(id) ON DELETE SET NULL,
       FOREIGN KEY (selectedKitId) REFERENCES deviceKits(id) ON DELETE SET NULL,
       FOREIGN KEY (trainerId) REFERENCES trainers(id) ON DELETE SET NULL
@@ -983,7 +984,7 @@ const deleteTrainer = async (id: number): Promise<void> => {
   });
 };
 
-const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
+const setDefaultTrainer = async (id: number): Promise<void> => {
   return asyncDbRun(() => {
     const transaction = getDb().transaction(() => {
       try {
@@ -994,24 +995,14 @@ const setDefaultTrainer = async (id: number): Promise<number | undefined> => {
         const result = setStmt.run(id);
 
         if (result.changes === 0) {
-          // Aucun formateur trouvé avec cet ID, ou il était déjà le défaut (et seul défaut)
-          // On peut choisir de lever une erreur ou de simplement retourner 0.
-          // Pour être cohérent avec Dexie qui retournait le nombre de lignes modifiées, on retourne `result.changes`
-          // Mais ici, on s'attend à ce que `result.changes` soit 1 si le formateur existe.
-          // Si l'ID n'existe pas, result.changes sera 0.
-          // Dexie aurait pu retourner 1 (pour le set) ou 2 (si un autre était reset).
-          // SQLite `changes` pour `setStmt` sera 1 si l'update a eu lieu.
-          // Le nombre total de changements dans la transaction est plus complexe à suivre directement.
-          // On se concentre sur le succès du set.
           console.warn(`[DB Trainers] setDefaultTrainer: Trainer with id ${id} not found or no change made.`);
         }
-        return result.changes; // Nombre de lignes affectées par la DERNIÈRE opération (le set)
       } catch (error) {
         console.error(`[DB Trainers] Error setting default trainer ${id}:`, error);
         throw error; // Annule la transaction
       }
     });
-    return transaction();
+    transaction();
   });
 };
 

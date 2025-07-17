@@ -38,10 +38,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   const [isImporting, setIsImporting] = useState(false);
   const [importStatusMessage, setImportStatusMessage] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // Refs pour les nouveaux imports
-  const referentialFileInputRef = useRef<HTMLInputElement>(null);
-  const themeFileInputRef = useRef<HTMLInputElement>(null);
+  
 
   // États pour les messages d'import spécifiques
   const [isImportingReferentiels, setIsImportingReferentiels] = useState(false);
@@ -128,17 +125,28 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     }
   }, [selectedTheme]);
 
-  const handleFileImport = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const handleFileImport = async () => {
     setIsImporting(true);
-    setImportStatusMessage(`Importation du fichier ${file.name}...`);
+    setImportStatusMessage(`Ouverture de la boîte de dialogue...`);
     setImportError(null);
 
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
+      const result = await window.dbAPI.openExcelFileDialog();
+
+      if (result.canceled) {
+        setImportStatusMessage('Importation annulée.');
+        setIsImporting(false);
+        return;
+      }
+
+      if (result.error) {
+        throw new Error(`Erreur de lecture du fichier: ${result.error}`);
+      }
+
+      const fileBuffer = window.electronAPI.Buffer_from(result.fileBuffer, 'base64');
+      setImportStatusMessage(`Importation du fichier ${result.fileName}...`);
+
+      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -261,7 +269,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           if (!bloc || !bloc.id) {
             // MODIFICATION: Tentative de création de n'importe quel bloc (GEN ou non-GEN) s'il n'existe pas.
             console.log(`Bloc "${blocCode}" non trouvé pour le thème "${themeCode}". Tentative de création...`);
-            const newBlocId = await StorageManager.addBloc({ code_bloc: blocCode, theme_id: theme.id });
+            const newBlocId = await StorageManager.addBloc({ code_bloc: blocCode, nom_complet: blocCode, theme_id: theme.id });
             if (newBlocId) {
               blocIdToStore = newBlocId;
               console.log(`Bloc "${blocCode}" créé automatiquement pour le thème "${themeCode}" avec ID: ${newBlocId}.`);
@@ -372,36 +380,45 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       setImportStatusMessage(null);
     } finally {
       setIsImporting(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""; // Reset file input
-      }
+      
     }
   };
 
   const triggerFileInput = () => {
-    fileInputRef.current?.click();
+    handleFileImport();
   };
 
   const triggerReferentialFileInput = () => {
-    referentialFileInputRef.current?.click();
+    handleReferentialFileImport();
   };
 
   const triggerThemeFileInput = () => {
-    themeFileInputRef.current?.click();
+    handleThemeFileImport();
   };
 
   // Placeholder import handlers for referentiels and themes
-  const handleReferentialFileImport = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const handleReferentialFileImport = async () => {
     setIsImportingReferentiels(true);
-    setImportReferentielsStatusMessage(`Importation des référentiels du fichier ${file.name}...`);
+    setImportReferentielsStatusMessage(`Ouverture de la boîte de dialogue...`);
     setImportReferentielsError(null);
 
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
+      const result = await window.dbAPI.openExcelFileDialog();
+
+      if (result.canceled) {
+        setImportReferentielsStatusMessage('Importation annulée.');
+        setIsImportingReferentiels(false);
+        return;
+      }
+
+      if (result.error) {
+        throw new Error(`Erreur de lecture du fichier: ${result.error}`);
+      }
+
+      const fileBuffer = window.electronAPI.Buffer_from(result.fileBuffer, 'base64');
+      setImportReferentielsStatusMessage(`Importation des référentiels du fichier ${result.fileName}...`);
+
+      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -443,13 +460,16 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           // Vérifier si le référentiel existe déjà par son code
           const existing = await StorageManager.getReferentialByCode(code);
           if (existing) {
-            errors.push(`Ligne ${i + 1}: Le référentiel avec le code "${code}" existe déjà (ID: ${existing.id}). Pas d'ajout.`);
+            // Ne pas ajouter d'erreur si le référentiel existe déjà, juste ignorer l'ajout.
+            console.log(`Ligne ${i + 1}: Le référentiel avec le code "${code}" existe déjà (ID: ${existing.id}). Ignoré.`);
             continue;
           }
           await StorageManager.addReferential({ code, nom_complet });
           addedCount++;
         } catch (e: any) {
-          errors.push(`Ligne ${i + 1} (Code: ${code}): Erreur DB - ${e.message}`);
+          const errorMessage = e.message || 'Erreur inconnue';
+          console.error(`[Import Referentiels] Erreur à la ligne ${i + 1} (Code: ${code}):`, errorMessage);
+          errors.push(`Ligne ${i + 1} (Code: ${code}): Erreur DB - ${errorMessage}`);
         }
       }
 
@@ -469,21 +489,32 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       setImportReferentielsStatusMessage(null);
     } finally {
       setIsImportingReferentiels(false);
-      if (referentialFileInputRef.current) referentialFileInputRef.current.value = "";
+      
     }
   };
 
-  const handleThemeFileImport = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const handleThemeFileImport = async () => {
     setIsImportingThemes(true);
-    setImportThemesStatusMessage(`Importation des thèmes du fichier ${file.name}...`);
+    setImportThemesStatusMessage(`Ouverture de la boîte de dialogue...`);
     setImportThemesError(null);
 
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
+      const result = await window.dbAPI.openExcelFileDialog();
+
+      if (result.canceled) {
+        setImportThemesStatusMessage('Importation annulée.');
+        setIsImportingThemes(false);
+        return;
+      }
+
+      if (result.error) {
+        throw new Error(`Erreur de lecture du fichier: ${result.error}`);
+      }
+
+      const fileBuffer = window.electronAPI.Buffer_from(result.fileBuffer, 'base64');
+      setImportThemesStatusMessage(`Importation des thèmes du fichier ${result.fileName}...`);
+
+      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -536,7 +567,8 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
           const existingTheme = await StorageManager.getThemeByCodeAndReferentialId(code_theme, parentReferentiel.id);
           if (existingTheme) {
-            errors.push(`Ligne ${i + 1}: Le thème avec le code "${code_theme}" existe déjà pour le référentiel "${referentiel_code}". Pas d'ajout.`);
+            // Ne pas ajouter d'erreur si le thème existe déjà, juste ignorer l'ajout.
+            console.log(`Ligne ${i + 1}: Le thème avec le code "${code_theme}" existe déjà pour le référentiel "${referentiel_code}". Ignoré.`);
             continue;
           }
 
@@ -547,7 +579,9 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           });
           addedCount++;
         } catch (e: any) {
-          errors.push(`Ligne ${i + 1} (Code Thème: ${code_theme}): Erreur DB - ${e.message}`);
+          const errorMessage = e.message || 'Erreur inconnue';
+          console.error(`[Import Themes] Erreur à la ligne ${i + 1} (Code Thème: ${code_theme}):`, errorMessage);
+          errors.push(`Ligne ${i + 1} (Code Thème: ${code_theme}): Erreur DB - ${errorMessage}`);
         }
       }
 
@@ -566,7 +600,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       setImportThemesStatusMessage(null);
     } finally {
       setIsImportingThemes(false);
-      if (themeFileInputRef.current) themeFileInputRef.current.value = "";
+      
     }
   };
 
@@ -784,14 +818,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                 </div>
             </div>
             <div className="ml-4 flex-shrink-0 mt-6 space-y-2"> {/* Adjusted margin and added space-y-2 for button stacking */}
-                {/* Input pour l'import de questions */}
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileImport}
-                    className="hidden"
-                    accept=".xlsx, .xls, .csv"
-                />
+                
                 <Button
                     variant="primary"
                     icon={<Upload size={16}/>}
@@ -802,14 +829,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                     {isImporting ? 'Importation Questions...' : 'Importer Questions'}
                 </Button>
 
-                {/* Input pour l'import de référentiels */}
-                <input
-                    type="file"
-                    ref={referentialFileInputRef}
-                    onChange={handleReferentialFileImport}
-                    className="hidden"
-                    accept=".xlsx, .xls, .csv"
-                />
+                
                 <Button
                     variant="secondary" // Different color for distinction
                     icon={<Upload size={16}/>}
@@ -820,14 +840,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                     {isImportingReferentiels ? 'Importation Référentiels...' : 'Importer Référentiels'}
                 </Button>
 
-                {/* Input pour l'import de thèmes */}
-                <input
-                    type="file"
-                    ref={themeFileInputRef}
-                    onChange={handleThemeFileImport}
-                    className="hidden"
-                    accept=".xlsx, .xls, .csv"
-                />
+                
                 <Button
                     variant="secondary" // Different color for distinction
                     icon={<Upload size={16}/>}
@@ -883,43 +896,52 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         )}
       </Card>
 
-      {/* Original filter and search card content moved above, this card is now just for the table */}
-      {/*
-      <Card title="Filtres et recherche" className="mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <Select
-            label="Recommandation"
-            options={referentialOptions}
-            value={selectedReferential}
-            onChange={(e) => setSelectedReferential(e.target.value)}
-          />
-          <Select
-            label="Thème"
-            options={themeOptions}
-            value={selectedTheme}
-            onChange={(e) => setSelectedTheme(e.target.value)}
-          />
-          <Select
-            label="Type"
-            options={eliminatoryOptions}
-            value={selectedEliminatory}
-            onChange={(e) => setSelectedEliminatory(e.target.value)}
-          />
-          <Select
-            label="Trier par"
-            options={sortOptions}
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-          />
+      <Card title={`Référentiels (${referentielsData.length})`} className="mb-6">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Complet</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {referentielsData.map((ref) => (
+                <tr key={ref.id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ref.code}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ref.nom_complet}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <Input
-          label="Recherche dans le texte"
-          placeholder="Rechercher une question..."
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-        />
       </Card>
-      */}
+
+      <Card title={`Thèmes (${allThemesData.length})`} className="mb-6">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Thème</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Complet</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référentiel</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {allThemesData.map((theme) => {
+                const referentiel = referentielsData.find(r => r.id === theme.referentiel_id);
+                return (
+                  <tr key={theme.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{theme.code_theme}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{theme.nom_complet}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{referentiel ? referentiel.code : 'N/A'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       <Card title={`Questions (${sortedQuestions.length})`}>
         <div className="overflow-x-auto">
