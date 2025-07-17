@@ -5,8 +5,9 @@
   "type": "commonjs",
   "main": "dist-electron/index.js",
   "scripts": {
-    "dev": "concurrently \"npx vite\" \"npm run electron-watch\"",
-    "electron-watch": "wait-on tcp:5173 && electron .",
+    "dev": "npx vite & npm run electron-watch",
+    "electron-watch": "wait-on tcp:5173 -t 30000 && xvfb-run electron .",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
     "build": "tsc && vite build && electron-builder",
     "electron-dev": "electron .",
     "start": "npm run build && electron ."
@@ -61,8 +62,9 @@
     "autoprefixer": "^10.4.18",
     "concurrently": "^8.2.2",
     "depcheck": "^1.4.7",
-    "electron": "^37.2.1",
-    "electron-builder": "^26.0.12",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-rebuild": "^3.2.9",
     "eslint": "^9.9.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",

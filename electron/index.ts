@@ -1,6 +1,6 @@
 const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
-const { initializeIpcHandlers } = require('./ipcHandlers');
+const { initializeIpcHandlers } = require('./ipcHandlers.js');
 const { initializeDatabase, getDb } = require('./db');
 
 function createWindow() {
