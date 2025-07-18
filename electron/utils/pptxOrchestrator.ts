@@ -1,6 +1,8 @@
 // Timestamp: 2024-06-24T18:50:00Z (Adding debug log before calling Val17 generator)
 // import PptxGenJS from 'pptxgenjs'; // Not directly used now
 import JSZip from 'jszip';
+import fs from 'fs';
+import path from 'path';
 // import { saveAs } from 'file-saver'; // saveAs n'est plus utilisé ici directement
 // import { QuestionWithId as StoredQuestion } from '../db'; // Supprimé
 import { Participant, QuestionWithId as StoredQuestion } from '../../src/types/index';
@@ -158,10 +160,15 @@ export async function generatePresentation(
 ): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
 
   let templateBuffer: ArrayBuffer;
-  if (templateFile instanceof File) {
-    templateBuffer = await templateFile.arrayBuffer();
+  if (templateFile) {
+    if (templateFile instanceof File) {
+      templateBuffer = await templateFile.arrayBuffer();
+    } else {
+      templateBuffer = templateFile;
+    }
   } else {
-    templateBuffer = templateFile;
+    const defaultTemplatePath = path.join(__dirname, '..', '..', 'src', 'assets', 'templates', 'default.pptx');
+    templateBuffer = fs.readFileSync(defaultTemplatePath);
   }
 
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
