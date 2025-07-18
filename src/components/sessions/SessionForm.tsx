@@ -22,6 +22,7 @@ import {
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
+import { getActivePptxTemplateFile } from '../../utils/templateManager';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import { logger } from '../../utils/logger';
 import JSZip from 'jszip';
@@ -638,11 +639,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setImportSummary(`Erreur critique: Impossible de trouver le numéro de série pour ${stillMissingSerial.prenom} ${stillMissingSerial.nom}.`);
           setIsGeneratingOrs(false); return;
       }
+      const templateFile = await getActivePptxTemplateFile();
       const generationOutput = await window.dbAPI.generatePresentation(
         sessionInfoForPptx,
         participantsForGenerator as DBParticipantType[],
         allSelectedQuestionsForPptx,
-        null,
+        templateFile,
         adminSettings
       );
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
