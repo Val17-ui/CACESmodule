@@ -642,7 +642,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         sessionInfoForPptx,
         participantsForGenerator as DBParticipantType[],
         allSelectedQuestionsForPptx,
-        undefined,
+        null,
         adminSettings
       );
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
