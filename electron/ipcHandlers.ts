@@ -112,7 +112,7 @@ export function initializeIpcHandlers() {
 
   // PPTX Generation
     ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referential: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
-    const { generatePresentation } = require(path.join(__dirname, 'utils', 'pptxOrchestrator.js'));
+    const { generatePresentation } = require('./utils/pptxOrchestrator');
     let templateArrayBuffer: ArrayBuffer;
 
     console.log("Type of template received in pptx-generate IPC handler:", typeof template, template instanceof ArrayBuffer, template && typeof template.arrayBuffer === 'function');

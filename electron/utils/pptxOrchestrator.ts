@@ -9,7 +9,7 @@ import {
   Val17Question,
   GenerationOptions as Val17GenerationOptions,
   ConfigOptions as Val17ConfigOptions,
-  handleGeneratePPTXFromVal17Tool,
+  generatePPTXVal17,
   QuestionMapping, // Importer directement
   SessionInfo as Val17SessionInfo
 } from './val17PptxGenerator';
@@ -196,9 +196,12 @@ export async function generatePresentation(
       identificationCode: p.identificationCode
     }));
 
-    const generatedData = await handleGeneratePPTXFromVal17Tool(
+    const generatedData = await generatePPTXVal17(
       templateBuffer,
-      transformedQuestions
+      transformedQuestions,
+      generationOptions,
+      val17SessionInfo,
+      participantsForGenerator
     );
 
     if (generatedData && generatedData.pptxBlob && generatedData.questionMappings && generatedData.preExistingQuestionSlideGuids) {
