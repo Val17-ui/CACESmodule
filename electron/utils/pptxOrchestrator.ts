@@ -159,12 +159,17 @@ export async function generatePresentation(
   adminSettings: AdminPPTXSettings
 ): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
 
-  let templateBuffer: ArrayBuffer;
+  let templateBuffer: Buffer;
   if (templateFile) {
-    if (templateFile instanceof File) {
-      templateBuffer = await templateFile.arrayBuffer();
-    } else {
+    if (typeof templateFile === 'string') {
+      // Assuming templateFile is a path to a pptx file
+      templateBuffer = fs.readFileSync(templateFile);
+    } else if (templateFile instanceof Buffer) {
       templateBuffer = templateFile;
+    } else if (templateFile instanceof ArrayBuffer) {
+      templateBuffer = Buffer.from(templateFile);
+    } else {
+      throw new Error('Invalid template format provided to pptx-generate IPC handler.');
     }
   } else {
     const defaultTemplatePath = path.join(process.resourcesPath, 'assets', 'templates', 'default.pptx');
