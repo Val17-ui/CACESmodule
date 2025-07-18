@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import path from 'path';
+import copy from 'rollup-plugin-copy';
 
 export default defineConfig({
   plugins: [
@@ -15,31 +16,14 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
-              output: { format: 'es' }
-            },
-          },
-        },
-      },
-      {
-        entry: 'electron/utils/pptxOrchestrator.ts',
-        vite: {
-          build: {
-            outDir: 'dist-electron/utils',
-            rollupOptions: {
-              external: ['better-sqlite3'],
-              output: { format: 'es' }
-            },
-          },
-        },
-      },
-      {
-        entry: 'electron/utils/val17PptxGenerator.ts',
-        vite: {
-          build: {
-            outDir: 'dist-electron/utils',
-            rollupOptions: {
-              external: ['better-sqlite3'],
-              output: { format: 'es' }
+              output: { format: 'es' },
+              plugins: [
+                copy({
+                  targets: [
+                    { src: 'electron/utils/*', dest: 'dist-electron/utils' }
+                  ]
+                })
+              ]
             },
           },
         },
