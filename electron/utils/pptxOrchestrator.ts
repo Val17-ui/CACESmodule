@@ -167,7 +167,7 @@ export async function generatePresentation(
       templateBuffer = templateFile;
     }
   } else {
-    const defaultTemplatePath = path.join(__dirname, '..', '..', 'src', 'assets', 'templates', 'default.pptx');
+    const defaultTemplatePath = path.join(process.resourcesPath, 'assets', 'templates', 'default.pptx');
     templateBuffer = fs.readFileSync(defaultTemplatePath);
   }
 
