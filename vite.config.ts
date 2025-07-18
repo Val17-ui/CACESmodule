@@ -69,5 +69,14 @@ export default defineConfig({
     // Configuration pour le processus de rendu (votre application React)
     outDir: 'dist',
     assetsDir: 'assets',
+    rollupOptions: {
+      plugins: [
+        copy({
+          targets: [
+            { src: 'src/assets/templates/*', dest: 'dist/assets/templates' }
+          ]
+        })
+      ]
+    }
   },
 });
