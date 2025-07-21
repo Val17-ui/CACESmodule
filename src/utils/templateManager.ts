@@ -54,28 +54,7 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
   if (isToolDefault || !templateToUse) {
     // Utiliser le modèle par défaut de l'outil
     console.log("[templateManager] Utilisation du modèle PowerPoint par défaut de l'outil.");
-    try {
-      const response = await fetch(defaultTemplateUrlPath);
-      if (!response.ok) {
-        throw new Error(`HTTP error when fetching tool default template! status: ${response.status} - ${response.statusText}`);
-      }
-      const blob = await response.blob();
-
-      // Nom du fichier dans le log correspondra au nom source
-      console.log(`[templateManager] Default tool template ('default.pptx') blob details: Size: ${blob.size} bytes, Type: ${blob.type}`);
-
-      const mimeType = blob.type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-      // Vérifier si le type MIME est suspect
-      if (mimeType !== 'application/vnd.openxmlformats-officedocument.presentationml.presentation' && !mimeType.startsWith('application/vnd.ms-powerpoint') && mimeType !== 'application/zip' && mimeType !== 'application/octet-stream') {
-          console.warn(`[templateManager] Suspicious MIME type for default template: ${mimeType}. Expected a PowerPoint type or application/zip.`);
-      }
-
-      // Utiliser le nom original pour l'objet File
-      return new File([blob], "default.pptx", { type: mimeType });
-    } catch (error) {
-      console.error("[templateManager] Failed to fetch or process the tool's default PPTX template:", error);
-      throw new Error("Impossible de charger le modèle PowerPoint par défaut de l'outil. Vérifiez la console pour plus de détails.");
-    }
+    return Promise.resolve('tool_default_template');
   } else {
     // Utiliser le modèle personnalisé (templateToUse est non null ici)
     console.log(`[templateManager] Utilisation du modèle PowerPoint personnalisé: "${templateToUse.name}" (ID: ${templateToUse.id})`);

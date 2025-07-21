@@ -72,6 +72,7 @@ electron.contextBridge.exposeInMainWorld("dbAPI", {
   // PPTX Generation
   generatePresentation: (sessionInfo, participants, questions, template, adminSettings) => electron.ipcRenderer.invoke("pptx-generate", sessionInfo, participants, questions, template, adminSettings),
   savePptxFile: (fileBuffer, fileName) => electron.ipcRenderer.invoke("save-pptx-file", fileBuffer, fileName),
+  getDefaultPptxTemplate: () => electron.ipcRenderer.invoke("get-default-pptx-template"),
   // File Operations
   openExcelFileDialog: () => electron.ipcRenderer.invoke("open-excel-file-dialog"),
   openDirectoryDialog: (filePath) => electron.ipcRenderer.invoke("open-directory-dialog", filePath),

@@ -46,6 +46,7 @@ declare global {
       setAdminSetting: (key: string, value: any) => Promise<void>;
       getAllAdminSettings: () => Promise<{ key: string; value: any }[]>;
       generatePresentation: (sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => Promise<any>;
+      getDefaultPptxTemplate: () => Promise<Buffer>;
     };
   }
 }

@@ -115,8 +115,17 @@ export function initializeIpcHandlers() {
     const { generatePresentation } = require('./utils/pptxOrchestrator');
     let templateArrayBuffer: ArrayBuffer;
 
-    console.log("Type of template received in pptx-generate IPC handler:", typeof template, template instanceof ArrayBuffer, template && typeof template.arrayBuffer === 'function');
-    if (template instanceof ArrayBuffer) {
+    if (template === 'tool_default_template') {
+      const templatePath = path.join(__dirname, '..', 'public', 'templates', 'default.pptx');
+      try {
+        templateArrayBuffer = await fs.readFile(templatePath);
+      } catch (error) {
+        console.error('Failed to read default PPTX template within pptx-generate:', error);
+        throw new Error('Could not load default PPTX template.');
+      }
+    } else if (template && template.type === 'Buffer' && Array.isArray(template.data)) {
+      templateArrayBuffer = Buffer.from(template.data);
+    } else if (template instanceof ArrayBuffer) {
       templateArrayBuffer = template;
     } else if (template && typeof template.arrayBuffer === 'function') {
       templateArrayBuffer = await template.arrayBuffer();
@@ -125,6 +134,19 @@ export function initializeIpcHandlers() {
     }
 
     return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings);
+  });
+
+  ipcMain.handle('get-default-pptx-template', async () => {
+    const templatePath = path.join(__dirname, '..', 'public', 'templates', 'default.pptx');
+    console.log('[get-default-pptx-template] Calculated template path:', templatePath);
+    try {
+      const fileBuffer = await fs.readFile(templatePath);
+      console.log('[get-default-pptx-template] Successfully read file, buffer length:', fileBuffer.length);
+      return fileBuffer;
+    } catch (error) {
+      console.error('[get-default-pptx-template] Failed to read default PPTX template:', error);
+      throw new Error('Could not load default PPTX template.');
+    }
   });
 
   ipcMain.handle('save-pptx-file', async (event: IpcMainInvokeEvent, fileBuffer: string, fileName: string) => {

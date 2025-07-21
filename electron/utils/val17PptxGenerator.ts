@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import sizeOf from 'image-size';
 
 // Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.
 // These should ideally come from a './val17PptxTypes' import if that file is created with your type definitions.
@@ -114,7 +115,7 @@ function escapeXml(unsafe: string): string {
     if (unsafe === null || unsafe === undefined) return "";
     unsafe = String(unsafe);
   }
-  const cleaned = unsafe.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""); // prefer-const
+  const cleaned = unsafe.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ""); // prefer-const
   return cleaned
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -213,26 +214,8 @@ function processCloudUrl(url: string): string {
   }
 }
 
-function getImageDimensions(
-  blob: Blob
-): Promise<{ width: number; height: number }> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(blob);
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve({ width: img.width, height: img.height });
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve({ width: 1920, height: 1080 });
-    };
-    img.src = objectUrl;
-  });
-}
-
 async function downloadImageFromCloudWithDimensions(url: string): Promise<{
-  data: ArrayBuffer;
+  data: Buffer;
   extension: string;
   width: number;
   height: number;
@@ -248,30 +231,16 @@ async function downloadImageFromCloudWithDimensions(url: string): Promise<{
         `HTTP ${response.status}: ${response.statusText} for ${finalUrl}`
       );
     }
-    const blob = await response.blob();
-    if (!blob.type.startsWith("image/")) {
-      console.warn(
-        `[IMAGE] Type MIME non-image détecté: ${blob.type} pour ${finalUrl}, on continue quand même`
-      );
-    }
-    const arrayBuffer = await blob.arrayBuffer();
-    let extension = "jpg";
-    if (blob.type) {
-      const mimeToExt: { [key: string]: string } = {
-        "image/jpeg": "jpg",
-        "image/png": "png",
-        "image/gif": "gif",
-        "image/webp": "webp",
-        "image/svg+xml": "svg",
-      };
-      extension = mimeToExt[blob.type] || "jpg";
-    }
-    const dimensions = await getImageDimensions(blob);
+    const arrayBuffer = await response.arrayBuffer();
+    const imageBuffer = Buffer.from(arrayBuffer);
+    const dimensions = sizeOf(imageBuffer);
+    const extension = dimensions.type || 'jpg';
+
     return {
-      data: arrayBuffer,
+      data: imageBuffer,
       extension,
-      width: dimensions.width,
-      height: dimensions.height,
+      width: dimensions.width || 1920,
+      height: dimensions.height || 1080,
     };
   } catch (error) {
     console.error(`[IMAGE] ✗ Échec pour ${url}:`, error);
@@ -322,7 +291,7 @@ async function findNextAvailableSlideLayoutId(
   if (!masterRelsFile) throw new Error("slideMaster1.xml.rels non trouvé");
 
   const masterRelsContent = await masterRelsFile.async("string");
-  const layoutMatches = masterRelsContent.match(/slideLayout(\d+)\.xml/g) || [];
+  const layoutMatches = masterRelsContent.match(/slideLayout\d+\.xml/g) || [];
   let maxLayoutNum = 0;
   layoutMatches.forEach((match) => {
     const numPart = match.match(/slideLayout(\d+)\.xml/);
@@ -331,8 +300,8 @@ async function findNextAvailableSlideLayoutId(
   });
   const nextLayoutNum = maxLayoutNum + 1;
   const allRIds = extractExistingRIds(masterRelsContent);
-  const existingRIds = allRIds.map((m) => m.rId);
-  const nextRId = getNextAvailableRId(existingRIds); // prefer-const
+  const existingRIds = allRIds.map((m) => m.rId); 
+  const nextRId = getNextAvailableRId(existingRIds); 
   return {
     layoutId: nextLayoutNum,
     layoutFileName: `slideLayout${nextLayoutNum}.xml`,
@@ -345,7 +314,7 @@ async function ensureOmbeaSlideLayoutExists(
 ): Promise<{ layoutFileName: string; layoutRId: string }> {
   const { layoutId, layoutFileName, rId } =
     await findNextAvailableSlideLayoutId(zip);
-  const slideLayoutContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="tx" preserve="1"><p:cSld name="Titre et texte"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Titre 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez le style du titre</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Espace réservé du texte 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="0"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez les styles du texte du masque</a:t></a:r></a:p><a:p><a:pPr lvl="1"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Deuxième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="2"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Troisième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="3"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Quatrième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="4"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Cinquième niveau</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Espace réservé de la date 3"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="dt" sz="half" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{ABB4FD2C-0372-488A-B992-EB1BD753A34A}" type="datetimeFigureOut"><a:rPr lang="fr-FR" smtClean="0"/><a:t>28/05/2025</a:t></a:fld><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="5" name="Espace réservé du pied de page 4"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="ftr" sz="quarter" idx="11"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="6" name="Espace réservé du numéro de diapositive 5"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldNum" sz="quarter" idx="12"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{CD42254F-ACD2-467B-9045-5226EEC3B6AB}" type="slidenum"><a:rPr lang="fr-FR" smtClean="0"/><a:t>‹N°›</a:t></a:fld><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp></p:spTree><p:extLst><p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}"><p14:creationId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="${
+  const slideLayoutContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="tx" preserve="1"><p:cSld name="Titre et texte"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Titre 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez le style du titre</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Espace réservé du texte 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="0"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez les styles du texte du masque</a:t></a:r></a:p><a:p><a:pPr lvl="1"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Deuxième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="2"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Troisième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="3"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Quatrième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="4"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Cinquième niveau</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Espace réservé de la date 3"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="dt" sz="half" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{ABB4FD2C-0372-488A-B992-EB1BD753A34A}" type="datetimeFigureOut"><a:rPr lang="fr-FR" smtClean=... [truncated]
     Math.floor(Math.random() * 2147483647) + 1
   }"/></p:ext></p:extLst></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
   zip.file(`ppt/slideLayouts/${layoutFileName}`, slideLayoutContent);
@@ -392,7 +361,7 @@ async function updateSlideMasterForNewLayout(
     const layoutIdLstEnd = content.indexOf("</p:sldLayoutIdLst>");
     if (layoutIdLstEnd > -1) {
       const layoutIdValue = 2147483648 + layoutId;
-      const newLayoutId = `\n    <p:sldLayoutId id="${layoutIdValue}" r:id="${rId}"/>`;
+      const newLayoutId = `\n    <p:sldId id="${layoutIdValue}" r:id="${rId}"/>`;
       content =
         content.slice(0, layoutIdLstEnd) +
         newLayoutId +
@@ -435,54 +404,17 @@ function createIntroTitleSlideXml(
 ): string {
   const slideComment = `<!-- Intro Slide ${slideNumber}: Title -->`;
   const baseId = slideNumber * 1000;
-  const titlePlaceholder = `<p:sp>
-    <p:nvSpPr>
-      <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>
-      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-      <p:nvPr><p:ph type="title"/></p:nvPr>
-    </p:nvSpPr>
-    <p:spPr/>
-    <p:txBody>
-      <a:bodyPr/><a:lstStyle/>
-      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-        sessionInfo.title
-      )}</a:t></a:r></a:p>
-    </p:txBody>
-  </p:sp>`;
+  const titlePlaceholder = `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="title"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
+    sessionInfo.title
+  )}</a:t></a:r></a:p>\n    </p:txBody>\n  </p:sp>`;
 
   const datePlaceholder = sessionInfo.date
-    ? `<p:sp>
-    <p:nvSpPr>
-      <p:cNvPr id="${baseId + 2}" name="Subtitle Placeholder"/>
-      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-      <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
-    </p:nvSpPr>
-    <p:spPr/>
-    <p:txBody>
-      <a:bodyPr/><a:lstStyle/>
-      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
+    ? `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 2}" name="Subtitle Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
         sessionInfo.date
-      )}</a:t></a:r></a:p>
-    </p:txBody>
-  </p:sp>`
+      )}</a:t></a:r></a:p>\n    </p:txBody>\n  </p:sp>`
     : "";
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-  ${slideComment}
-  <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-    <p:cSld>
-      <p:spTree>
-        <p:nvGrpSpPr>
-          <p:cNvPr id="${baseId}" name="Intro Title Group"/>
-          <p:cNvGrpSpPr/><p:nvPr/>
-        </p:nvGrpSpPr>
-        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-        ${titlePlaceholder}
-        ${datePlaceholder}
-      </p:spTree>
-    </p:cSld>
-    <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-  </p:sld>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n  ${slideComment}\n  <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n    <p:cSld>\n      <p:spTree>\n        <p:nvGrpSpPr>\n          <p:cNvPr id="${baseId}" name="Intro Title Group"/>\n          <p:cNvGrpSpPr/><p:nvPr/>\n        </p:nvGrpSpPr>\n        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n        ${titlePlaceholder}\n        ${datePlaceholder}\n      </p:spTree>\n    </p:cSld>\n    <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n  </p:sld>`;
 }
 
 function generateTableRowsXml(
@@ -551,35 +483,16 @@ function generateTableGraphicFrame(participants: ParticipantForGenerator[], base
         colWidths.push(Math.round(tableCx * 0.335));
         colWidths.push(Math.round(tableCx * 0.335));
     }
-    const sumWidths = colWidths.reduce((a, b) => a + b, 0); // prefer-const
+    const sumWidths = colWidths.reduce((a, b) => a + b, 0); 
     if (sumWidths !== tableCx && colWidths.length > 0) {
         colWidths[colWidths.length - 1] += (tableCx - sumWidths);
     }
 
     const tableRows = generateTableRowsXml(participants, rowHeightEMU);
 
-    let tableXml = `<p:graphicFrame>
-      <p:nvGraphicFramePr>
-        <p:cNvPr id="${baseSpId}" name="Tableau Participants"/>
-        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>
-        <p:nvPr/>
-      </p:nvGraphicFramePr>
-      <p:xfrm>
-        <a:off x="${tableX}" y="${tableY}"/>
-        <a:ext cx="${tableCx}" cy="${tableCy}"/>
-      </p:xfrm>
-      <a:graphic>
-        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
-          <a:tbl>
-            <a:tblPr firstRow="1" bandRow="1">
-              <a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>
-            </a:tblPr>
-            <a:tblGrid>`;
+    let tableXml = `<p:graphicFrame>\n      <p:nvGraphicFramePr>\n        <p:cNvPr id="${baseSpId}" name="Tableau Participants"/>\n        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>\n        <p:nvPr/>\n      </p:nvGraphicFramePr>\n      <p:xfrm>\n        <a:off x="${tableX}" y="${tableY}"/>\n        <a:ext cx="${tableCx}" cy="${tableCy}"/>\n      </p:xfrm>\n      <a:graphic>\n        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">\n          <a:tbl>\n            <a:tblPr firstRow="1" bandRow="1">\n              <a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>\n            </a:tblPr>\n            <a:tblGrid>`;
     colWidths.forEach(w => { tableXml += `<a:gridCol w="${w}"/>`; });
-    tableXml += `</a:tblGrid>${tableRows}</a:tbl>
-        </a:graphicData>
-      </a:graphic>
-    </p:graphicFrame>`;
+    tableXml += `</a:tblGrid>${tableRows}</a:tbl>\n        </a:graphicData>\n      </a:graphic>\n    </p:graphicFrame>`;
     return tableXml;
 }
 
@@ -607,62 +520,14 @@ function createIntroParticipantsSlideXml(
       newFullTblXml
     );
 
-    const baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-    ${slideComment}
-    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">
-        <p:spTree>
-          <p:nvGrpSpPr>
-            <p:cNvPr id="${slideNumber * 1000 + 0}" name="Group Shape"/> <p:cNvGrpSpPr/><p:nvPr/>
-          </p:nvGrpSpPr>
-          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-          <p:sp>
-            <p:nvSpPr>
-              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>
-              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-              <p:nvPr><p:ph type="title"/></p:nvPr>
-            </p:nvSpPr>
-            <p:spPr/>
-            <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p></p:txBody>
-          </p:sp>
-          ${graphicFrameWithNewTable}
-        </p:spTree>
-      </p:cSld>
-      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-    </p:sld>`;
+    const baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000 + 0}" name="Group Shape"/> <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p></a:txBody>\n          </p:sp>\n          ${graphicFrameWithNewTable}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
     finalSlideXml = baseSlideStructure;
 
   } else {
     console.log("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
     const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2);
 
-    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-    ${slideComment}
-    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">
-        <p:spTree>
-          <p:nvGrpSpPr>
-            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>
-            <p:cNvGrpSpPr/><p:nvPr/>
-          </p:nvGrpSpPr>
-          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-          <p:sp>
-            <p:nvSpPr>
-              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>
-              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-              <p:nvPr><p:ph type="title"/></p:nvPr>
-            </p:nvSpPr>
-            <p:spPr/>
-            <p:txBody>
-              <a:bodyPr/><a:lstStyle/>
-              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p>
-            </p:txBody>
-          </p:sp>
-          ${dynamicTableGraphicFrame}
-        </p:spTree>
-      </p:cSld>
-      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-    </p:sld>`;
+    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
   }
   return finalSlideXml;
 }
@@ -677,20 +542,9 @@ function createIntroParticipantsSlideXml(
 //     "Instructions de vote :\n1. Connectez-vous...\n2. Votez...\n3. Amusez-vous !";
 //   const currentInstructionsText = instructionsText || defaultInstructions;
 //   const titleText = "Instructions";
-//   const titlePlaceholder = `<p:sp>
-//     <p:nvSpPr>
-//       <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>
-//       <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-//       <p:nvPr><p:ph type="title"/></p:nvPr>
-//     </p:nvSpPr>
-//     <p:spPr/>
-//     <p:txBody>
-//       <a:bodyPr/><a:lstStyle/>
-//       <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
+//   const titlePlaceholder = `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="title"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
 //         titleText
-//       )}</a:t></a:r></a:p>
-//     </p:txBody>
-//   </p:sp>`;
+//       )}</a:t></a:r></a:p>\n    </p:txBody>\n  </p:sp>`;
 //
 //   const instructionsBodyXml = currentInstructionsText
 //     .split("\n")
@@ -702,35 +556,9 @@ function createIntroParticipantsSlideXml(
 //     )
 //     .join("");
 //
-//   const bodyPlaceholder = `<p:sp>
-//     <p:nvSpPr>
-//       <p:cNvPr id="${baseId + 2}" name="Body Placeholder"/>
-//       <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-//       <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
-//     </p:nvSpPr>
-//     <p:spPr/>
-//     <p:txBody>
-//       <a:bodyPr/><a:lstStyle/>
-//       ${instructionsBodyXml}
-//     </p:txBody>
-//   </p:sp>`;
+//   const bodyPlaceholder = `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 2}" name="Body Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      ${instructionsBodyXml}\n    </p:txBody>\n  </p:sp>`;
 //
-//   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-//   ${slideComment}
-//   <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-//     <p:cSld>
-//       <p:spTree>
-//         <p:nvGrpSpPr>
-//           <p:cNvPr id="${baseId}" name="Intro Instructions Group"/>
-//           <p:cNvGrpSpPr/><p:nvPr/>
-//         </p:nvGrpSpPr>
-//         <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-//         ${titlePlaceholder}
-//         ${bodyPlaceholder}
-//       </p:spTree>
-//     </p:cSld>
-//     <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-//   </p:sld>`;
+//   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n  ${slideComment}\n  <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n    <p:cSld>\n      <p:spTree>\n        <p:nvGrpSpPr>\n          <p:cNvPr id="${baseId}" name="Intro Instructions Group"/>\n          <p:cNvGrpSpPr/><p:nvPr/>\n        </p:nvGrpSpPr>\n        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n        ${titlePlaceholder}\n        ${bodyPlaceholder}\n      </p:spTree>\n    </p:cSld>\n    <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n  </p:sld>`;
 // }
 
 function createSlideXml(
@@ -754,7 +582,7 @@ function createSlideXml(
   // L'ancienne méthode de calcul des IDs basée sur slideNumber * 100 est supprimée
   // pour ces éléments spécifiques dans les diapositives de questions OMBEA.
 
-  const countdownDisplayText = // prefer-const
+  const countdownDisplayText = 
     ombeaConfig?.pollTimeLimit !== undefined
       ? ombeaConfig.pollTimeLimit
       : duration;
@@ -882,8 +710,8 @@ async function findLayoutByCSldName(
             }
           }
         }
-       } catch (_error) { // Unused
-        // console.error(`[DEBUG_ERREUR] Erreur lors du traitement du layout ${fileEntry.name}:`, error);
+       } catch (_error) { 
+        
       }
     }
   }
@@ -914,7 +742,7 @@ function createSlideTagFiles(
 ): TagInfo[] {
   const baseTagNumber = calculateBaseTagNumber(questionIndexInBatch, tagOffset);
   const slideGuid = generateGUID();
-  const points = options // prefer-const
+  const points = options 
     .map((_, index) =>
       correctAnswerIndex !== undefined && index === correctAnswerIndex
         ? "1.00"
@@ -954,12 +782,12 @@ function createSlideTagFiles(
     fileName: `tag${baseTagNumber + 2}.xml`,
     content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tag name="OR_SHAPE_TYPE" val="OR_ANSWERS"/><p:tag name="OR_ANSWER_POINTS" val="${points}"/><p:tag name="OR_ANSWERS_TEXT" val="${options
       .map(escapeXml)
-      .join("&#13;")}"/></p:tagLst>`,
+      .join("&#13;")}"/></p:tagLst>`, 
   });
   tags.push({
     tagNumber: baseTagNumber + 3,
     fileName: `tag${baseTagNumber + 3}.xml`,
-    content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tag name="OR_SHAPE_TYPE" val="OR_COUNTDOWN"/></p:tagLst>`,
+    content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tag name="OR_SHAPE_TYPE" val="OR_COUNTDOWN"/></p:tagLst>`, 
   });
   return tags;
 }
@@ -1065,7 +893,7 @@ function updatePresentationRelsWithMappings(
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
-      target: `slides/slide${questionSlideFileNumber}.xml`,
+      target: `slides/slide${questionSlideFileNumber}.xml`
     });
     slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   }
@@ -1278,7 +1106,7 @@ function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
   let updated = content;
   updated = updated.replace(
     /<Slides>\d+<\/Slides>/,
-    `<Slides>${metadata.totalSlides}</Slides>`
+    `<Slides>${metadata.totalSlides}<\/Slides>`
   );
 
   const wordsMatch = updated.match(/<Words>(\d+)<\/Words>/);
@@ -1286,7 +1114,7 @@ function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
     wordsMatch && wordsMatch[1] ? parseInt(wordsMatch[1], 10) : 0;
   updated = updated.replace(
     /<Words>\d*<\/Words>/,
-    `<Words>${existingWords + metadata.totalWords}</Words>`
+    `<Words>${existingWords + metadata.totalWords}<\/Words>`
   );
 
   const paragraphsMatch = updated.match(/<Paragraphs>(\d+)<\/Paragraphs>/);
@@ -1296,13 +1124,13 @@ function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
       : 0;
   updated = updated.replace(
     /<Paragraphs>\d*<\/Paragraphs>/,
-    `<Paragraphs>${existingParagraphs + metadata.totalParagraphs}</Paragraphs>`
+    `<Paragraphs>${existingParagraphs + metadata.totalParagraphs}<\/Paragraphs>`
   );
 
   if (!updated.includes("<TotalTime>")) {
     const propertiesEnd = updated.indexOf("</Properties>");
     if (propertiesEnd > -1) {
-      const totalTimeTag = "\n  <TotalTime>2</TotalTime>";
+      const totalTimeTag = "\n  <TotalTime>2<\/TotalTime>";
       updated =
         updated.slice(0, propertiesEnd) +
         totalTimeTag +
@@ -1335,9 +1163,9 @@ function updateHeadingPairsAndTitles(
     /<vt:lpstr>Titres des diapositives<\/vt:lpstr>\s*<\/vt:variant>\s*<vt:variant>\s*<vt:i4>(\d+)<\/vt:i4>/;
   updated = updated.replace(headingPairsRegex, (_match, p1) => {
     const existingCount = parseInt(p1, 10);
-    return `<vt:lpstr>Titres des diapositives</vt:lpstr></vt:variant><vt:variant><vt:i4>${
+    return `<vt:lpstr>Titres des diapositives<\/vt:lpstr><\/vt:variant><vt:variant><vt:i4>${
       existingCount + titlesToAddCount
-    }</vt:i4>`;
+    }<\/vt:i4>`;
   });
 
   const titlesOfPartsEndIndex = updated.indexOf(
@@ -1349,7 +1177,7 @@ function updateHeadingPairsAndTitles(
     newOmbeaSlideTitles.forEach((title) => {
       titlesXmlToAdd += `\n      <vt:lpstr>${escapeXml(
         title.substring(0, 250)
-      )}</vt:lpstr>`;
+      )}<\/vt:lpstr>`;
     });
     updated =
       updated.slice(0, titlesOfPartsEndIndex) +
@@ -1383,7 +1211,7 @@ function buildHeadingPairs(
   ).length;
   if (fontCount > 0) {
     pairs.push(
-      `\n      <vt:variant><vt:lpstr>Polices utilisées</vt:lpstr></vt:variant>\n      <vt:variant><vt:i4>${fontCount}</vt:i4></vt:variant>`
+      `\n      <vt:variant><vt:lpstr>Polices utilisées<\/vt:lpstr><\/vt:variant>\n      <vt:variant><vt:i4>${fontCount}<\/vt:i4><\/vt:variant>`
     );
   }
   const hasTheme = nonSlideTitles.some(
@@ -1391,12 +1219,12 @@ function buildHeadingPairs(
   );
   if (hasTheme) {
     pairs.push(
-      `\n      <vt:variant><vt:lpstr>Thème</vt:lpstr></vt:variant>\n      <vt:variant><vt:i4>1</vt:i4></vt:variant>`
+      `\n      <vt:variant><vt:lpstr>Thème<\/vt:lpstr><\/vt:variant>\n      <vt:variant><vt:i4>1<\/vt:i4><\/vt:variant>`
     );
   }
   if (allSlideTitles.length > 0) {
     pairs.push(
-      `\n      <vt:variant><vt:lpstr>Titres des diapositives</vt:lpstr></vt:variant>\n      <vt:variant><vt:i4>${allSlideTitles.length}</vt:i4></vt:variant>`
+      `\n      <vt:variant><vt:lpstr>Titres des diapositives<\/vt:lpstr><\/vt:variant>\n      <vt:variant><vt:i4>${allSlideTitles.length}<\/vt:i4><\/vt:variant>`
     );
   }
   const vectorSize = pairs.reduce(
@@ -1405,7 +1233,7 @@ function buildHeadingPairs(
   );
   return `<HeadingPairs><vt:vector size="${vectorSize}" baseType="variant">${pairs.join(
     ""
-  )}\n    </vt:vector></HeadingPairs>`;
+  )}\n    <\/vt:vector><\/HeadingPairs>`;
 }
 
 function buildTitlesOfParts(
@@ -1424,9 +1252,9 @@ function buildTitlesOfParts(
     allTitles.push(escapeXml(truncatedTitle));
   });
   const vectorContent = allTitles
-    .map((title) => `\n      <vt:lpstr>${title}</vt:lpstr>`)
+    .map((title) => `\n      <vt:lpstr>${title}<\/vt:lpstr>`)
     .join("");
-  return `<TitlesOfParts><vt:vector size="${allTitles.length}" baseType="lpstr">${vectorContent}\n    </vt:vector></TitlesOfParts>`;
+  return `<TitlesOfParts><vt:vector size="${allTitles.length}" baseType="lpstr">${vectorContent}\n    <\/vt:vector><\/TitlesOfParts>`;
 }
 
 function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata): void {
@@ -1443,13 +1271,7 @@ function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata): void {
     metadata.slideTitles
   );
 
-  const appXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-  <TotalTime>2</TotalTime><Words>${metadata.totalWords}</Words><Application>Microsoft Office PowerPoint</Application>
-  <PresentationFormat>Affichage à l'écran (4:3)</PresentationFormat><Paragraphs>${metadata.totalParagraphs}</Paragraphs>
-  <Slides>${metadata.totalSlides}</Slides><Notes>0</Notes><HiddenSlides>0</HiddenSlides><MMClips>0</MMClips>
-  <ScaleCrop>false</ScaleCrop>${headingPairs}${titlesOfParts}<Company/><LinksUpToDate>false</LinksUpToDate>
-  <SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><AppVersion>14.0000</AppVersion></Properties>`;
+  const appXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">\n  <TotalTime>2<\/TotalTime><Words>${metadata.totalWords}<\/Words><Application>Microsoft Office PowerPoint<\/Application>\n  <PresentationFormat>Affichage à l'écran (4:3)<\/PresentationFormat><Paragraphs>${metadata.totalParagraphs}<\/Paragraphs>\n  <Slides>${metadata.totalSlides}<\/Slides><Notes>0<\/Notes><HiddenSlides>0<\/HiddenSlides><MMClips>0<\/MMClips>\n  <ScaleCrop>false<\/ScaleCrop>${headingPairs}${titlesOfParts}<Company/><LinksUpToDate>false<\/LinksUpToDate>\n  <SharedDoc>false<\/SharedDoc><HyperlinksChanged>false<\/HyperlinksChanged><AppVersion>14.0000<\/AppVersion><\/Properties>`;
   zip.file("docProps/app.xml", appXmlContent);
 }
 
@@ -1465,17 +1287,17 @@ async function updateCoreXml(
     }`;
     content = content.replace(
       /<dc:title>.*?<\/dc:title>/,
-      `<dc:title>${escapeXml(title)}</dc:title>`
+      `<dc:title>${escapeXml(title)}<\/dc:title>`
     );
     const now = new Date().toISOString();
     content = content.replace(
       /<dcterms:modified.*?>.*?<\/dcterms:modified>/,
-      `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>`
+      `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}<\/dcterms:W3CDTF>`
     );
-    if (!content.includes("<dcterms:created")) {
+    if (!content.includes("<dcterms:created>")) {
       const lastModifiedEnd =
         content.indexOf("</dcterms:modified>") + "</dcterms:modified>".length;
-      const createdTag = `\n  <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>`;
+      const createdTag = `\n  <dcterms:created xsi:type="dcterms:W3CDTF">${now}<\/dcterms:W3CDTF>`;
       if (lastModifiedEnd > -1 && lastModifiedEnd <= content.length) {
         content =
           content.slice(0, lastModifiedEnd) +
@@ -1515,7 +1337,7 @@ export async function generatePPTXVal17(
   participants?: ParticipantForGenerator[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
   try {
-    // const executionId = Date.now(); // Unused
+    // const executionId = Date.now(); 
     validateQuestions(questions);
     if (!templateFile) {
       console.warn("Aucun fichier modèle fourni.");
@@ -1540,7 +1362,7 @@ export async function generatePPTXVal17(
 
             if (relsFile) {
               const promise = relsFile.async("string").then(async (relsContent) => {
-                const tagRelationshipRegex = /<Relationship[^>]*Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/tags"[^>]*Target="..\/tags\/(tag\d+\.xml)"[^>]*\/>/g;
+                const tagRelationshipRegex = /<Relationship[^>]*Type="http:\/\/schemas.openxmlformats.org\/officeDocument\/2006\/relationships\/tags"[^>]*Target="..\/tags\/(tag\d+\.xml)"[^>]*\/>/g;
                 let relMatch;
                 while ((relMatch = tagRelationshipRegex.exec(relsContent)) !== null) {
                   const tagFileName = relMatch[1];
@@ -1557,12 +1379,12 @@ export async function generatePPTXVal17(
                           preExistingQuestionSlideGuids.push(foundGuid);
                         }
                       }
-                    } catch (_e) { // e unused
+                    } catch (_e) { 
                       // Silently ignore errors for individual tag files
                     }
                   }
                 }
-              }).catch(_err => { // err unused
+              }).catch(_err => { 
                 // Silently ignore errors for individual rels files
               });
               slideProcessingPromises.push(promise);
@@ -1592,7 +1414,7 @@ export async function generatePPTXVal17(
       const presentationXmlContent =
         await presentationXmlFileFromTemplate.async("string");
       const sldSzMatch = presentationXmlContent.match(
-        /<p:sldSz\s+cx="(\d+)"\s+cy="(\d+)"(?:\s+type="(\w+)")?/
+        /<p:sldSz\s+cx="(\d+)"\s+cy="(\d+)"(?:\s+type="(\w+)")?\/>/
       );
       if (sldSzMatch) {
         slideSizeAttrs = { cx: sldSzMatch[1], cy: sldSzMatch[2] };
@@ -1616,7 +1438,7 @@ export async function generatePPTXVal17(
     templateZip.forEach((relativePath, file) => {
       if (!file.dir) {
         const copyPromise: Promise<void> = file
-          .async("blob")
+          .async("nodebuffer")
           .then((content) => {
             outputZip.file(relativePath, content);
           });
@@ -1645,10 +1467,7 @@ export async function generatePPTXVal17(
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
         const layoutRIdInSlide = "rId1";
         const titleLayoutBaseName = actualTitleLayoutPath.substring(actualTitleLayoutPath.lastIndexOf('/') + 1);
-        const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${titleLayoutBaseName}"/>
-</Relationships>`;
+        const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${titleLayoutBaseName}"/>\n</Relationships>`;
         outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
         newIntroSlideDetails.push({
           slideNumber: currentIntroSlideNumber,
@@ -1740,10 +1559,7 @@ export async function generatePPTXVal17(
 
         const layoutRIdInSlide = "rId1";
         const participantsLayoutBaseName = actualParticipantsLayoutPath.substring(actualParticipantsLayoutPath.lastIndexOf('/') + 1);
-        const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${participantsLayoutBaseName}"/>
-</Relationships>`;
+        const slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n  <Relationship Id="${layoutRIdInSlide}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/${participantsLayoutBaseName}"/>\n</Relationships>`;
         outputZip.file(`ppt/slides/_rels/slide${currentIntroSlideNumber}.xml.rels`, slideRelsXml);
 
         newIntroSlideDetails.push({
@@ -1753,7 +1569,7 @@ export async function generatePPTXVal17(
         });
         introSlidesAddedCount++;
       } else {
-        console.warn(`[TEST_PPTX_GEN] Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé.`);
+        console.warn(`Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé.`);
       }
     }
 
@@ -1770,7 +1586,7 @@ export async function generatePPTXVal17(
     const imageExtensions = new Set<string>();
     interface DownloadedImage {
       fileName: string;
-      data: ArrayBuffer;
+      data: Buffer;
       width: number;
       height: number;
       dimensions: ImageDimensions;
@@ -1992,78 +1808,6 @@ export async function generatePPTXVal17(
   } catch (error: any) {
     console.error(`=== ERREUR GÉNÉRATION VAL17 ===`);
     console.error(error.message);
-    alert(
-      `Erreur lors de la génération du PPTX interactif des questions OMBEA: ${error.message}`
-    );
-    return null;
+    throw new Error(`Erreur lors de la génération du PPTX interactif des questions OMBEA: ${error.message}`);
   }
-} // Fin de generatePPTXVal17
-
-export async function testConsistency(
-  templateFile: File,
-  questions: Val17Question[]
-): Promise<void> {
-  console.log("=== TEST DE COHÉRENCE (val17PptxGenerator) ===");
-  const results = [];
-  for (let i = 0; i < 1; i++) {
-    console.log(`\nTest de cohérence ${i + 1}...`);
-    try {
-      const templateCopy = new File(
-        [await templateFile.arrayBuffer()],
-        templateFile.name,
-        { type: templateFile.type }
-      );
-      const result = await generatePPTXVal17(
-        templateCopy,
-        questions,
-        { fileName: `Test_Coherence_${i + 1}.pptx` },
-        undefined,
-        undefined
-      );
-      if (result && result.pptxBlob) {
-        results.push("SUCCÈS - Blob PPTX généré");
-      } else {
-        results.push("ÉCHEC - Le générateur n'a pas retourné de blob PPTX");
-      }
-    } catch (error: any) {
-      results.push(`ÉCHEC: ${error.message}`);
-    }
-  }
-  console.log("\n=== RÉSULTATS TEST DE COHÉRENCE ===");
-  results.forEach((result, i) => console.log(`Test ${i + 1}: ${result}`));
 }
-
-export const handleGeneratePPTXFromVal17Tool = async (
-  templateFile: File,
-  questions: Val17Question[]
-) => {
-  try {
-    const result = await generatePPTXVal17(
-      templateFile,
-      questions,
-      { fileName: "Quiz_OMBEA_Interactif_Val17.pptx" },
-      undefined,
-      undefined
-    );
-    if (result && result.pptxBlob) {
-      console.log(
-        "handleGeneratePPTXFromVal17Tool: PPTX Blob généré, sauvegarde..."
-      );
-      saveAs(result.pptxBlob, "Quiz_OMBEA_Interactif_Val17_Tool.pptx");
-    } else {
-      console.error(
-        "handleGeneratePPTXFromVal17Tool: Échec de la génération du Blob PPTX."
-      );
-      alert(
-        "handleGeneratePPTXFromVal17Tool: N'a pas pu générer le fichier PPTX."
-      );
-    }
-  } catch (error: any) {
-    console.error("Erreur dans handleGeneratePPTXFromVal17Tool:", error);
-    alert(
-      `Erreur lors de la génération (handleGeneratePPTXFromVal17Tool): ${error.message}`
-    );
-  }
-};
-
-export type { TagInfo, RIdMapping, AppXmlMetadata };
