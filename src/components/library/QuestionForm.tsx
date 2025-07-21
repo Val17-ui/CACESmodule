@@ -4,7 +4,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import { QuestionType, CACESReferential, Referential, Theme, Bloc, QuestionWithId } from '../../types/index';
+import { QuestionType, CACESReferential, Referential, Theme, Bloc, QuestionWithId } from '../../types/index.ts';
 import { StorageManager } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
@@ -213,28 +213,28 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         if (imagePreview) URL.revokeObjectURL(imagePreview);
 
         if (newInitialState.image) {
-            if (typeof newInitialState.image === 'string') {
-                try {
-                    const imageBase64 = await window.electron.readImageFile(newInitialState.image);
-                    const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
-                    setHasImage(true);
-                    setImageFile(blob);
-                    setImagePreview(URL.createObjectURL(blob));
-                } catch (error) {
-                    logger.error("Failed to load initial image from path:", newInitialState.image, error);
-                    setHasImage(false);
-                    setImageFile(null);
-                    setImagePreview(null);
-                }
-            } else if (newInitialState.image instanceof Blob) {
-                setHasImage(true);
-                setImageFile(newInitialState.image);
-                setImagePreview(URL.createObjectURL(newInitialState.image));
+          if (typeof newInitialState.image === 'string') {
+            try {
+              const imageBase64 = await window.electron.readImageFile(newInitialState.image);
+              const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
+              setHasImage(true);
+              setImageFile(blob);
+              setImagePreview(URL.createObjectURL(blob));
+            } catch (error) {
+              logger.error("Failed to load initial image from path:", newInitialState.image, error);
+              setHasImage(false);
+              setImageFile(null);
+              setImagePreview(null);
             }
+          } else if (newInitialState.image instanceof Blob) {
+            setHasImage(true);
+            setImageFile(newInitialState.image);
+            setImagePreview(URL.createObjectURL(newInitialState.image));
+          }
         } else {
-            setHasImage(false);
-            setImageFile(null);
-            setImagePreview(null);
+          setHasImage(false);
+          setImageFile(null);
+          setImagePreview(null);
         }
       }
     };
