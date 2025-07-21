@@ -110,14 +110,7 @@ export interface AdminPPTXSettings extends Val17ConfigOptions {
   defaultDuration?: number;
 }
 
-let tempImageUrls: string[] = [];
-
 export function transformQuestionsForVal17Generator(storedQuestions: StoredQuestion[]): Val17Question[] {
-  tempImageUrls.forEach(url => {
-    try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL for transformQuestionsForVal17Generator:", url, e); }
-  });
-  tempImageUrls = [];
-
   return storedQuestions.map((sq) => {
     let correctAnswerIndex: number | undefined = undefined;
     if (sq.correctAnswer) {
@@ -132,13 +125,12 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
     }
 
     let imageUrl: string | undefined = undefined;
-    if (sq.image instanceof Blob) {
-      try {
-        imageUrl = URL.createObjectURL(sq.image);
-        tempImageUrls.push(imageUrl);
-      } catch (e) {
-        console.error("Error creating object URL for image in transformQuestionsForVal17Generator:", e);
-      }
+    // Assuming sq.image is now a string (file path) or undefined
+    if (typeof sq.image === 'string' && sq.image.length > 0) {
+      imageUrl = sq.image;
+    } else if (sq.image instanceof Blob) {
+      // This case should ideally not happen if the upstream is sending paths
+      console.warn("Received Blob for image in transformQuestionsForVal17Generator. Expected file path. Ignoring Blob.");
     }
 
     return {

@@ -1,5 +1,4 @@
 import JSZip from "jszip";
-import { saveAs } from "file-saver";
 import sizeOf from 'image-size';
 
 // Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.

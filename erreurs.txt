@@ -1,574 +1,157 @@
-PS E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule> npm run dev 
-
-> easycertif@0.0.0 dev
-> npx vite & npm run electron-watch
-
-The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
-
-  VITE v5.4.19  ready in 307 ms
-
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: use --host to expose  
-  ➜  press h + enter to show help   
-vite v5.4.19 building for development...
-
-watching for file changes...
-vite v5.4.19 building for development...
-
-watching for file changes...
-vite v5.4.19 building for development...
-
-watching for file changes...
-vite v5.4.19 building for development...
-
-watching for file changes...
-
-build started...
-
-build started... (x2)
-
-build started... (x3)
-
-build started... (x4)
-✓ 1 modules transformed.
-✓ 1 modules transformed. (x2)
-✓ 1 modules transformed. (x3)
-✓ 1 modules transformed. (x4)
-dist-electron/index.js  1.70 kB │ gzip: 0.80 kB
-built in 572ms.
-dist-electron/preload.js  6.53 kB │ gzip: 1.33 kB
-built in 574ms.
-dist-electron/ipcHandlers.js  12.81 kB │ gzip: 2.59 kB
-built in 569ms.
-dist-electron/db.js  56.62 kB │ gzip: 8.95 kB
-built in 576ms.
-
-[DB SETUP] Database path determined as: C:\Users\Vincent Vermeulen\AppData\Roaming\easycertif\db_data\database.sqlite3
-[DB SETUP] Initializing database...
-[DB SETUP] SQLite database connection established.        
-[DB SETUP] Foreign key support enabled.
-[DB SCHEMA] Attempting to create/verify schema...
-[DB SCHEMA] Database schema created/verified successfully.
-[DB SETUP] SQLite database module loaded and initialized. 
-[IPC Handlers] Initializing IPC handlers...
-[IPC Handlers] IPC handlers registration attempt finished.
-createWindow() called
-[868:0721/145322.187:ERROR:CONSOLE:1] "Request Autofill.enable failed. {"code":-32601,"message":"'Autofill.enable' wasn't found"}", source: devtools://devtools/bundled/core/protocol_client/protocol_client.js (1)
-[868:0721/145322.187:ERROR:CONSOLE:1] "Request Autofill.setAddresses failed. {"code":-32601,"message":"'Autofill.setAddresses' wasn't found"}", source: devtools://devtools/bundled/core/protocol_client/protocol_client.js (1)
-[DB VotingDevices] getAllVotingDevices returned: 12 devices [
-  { id: 1, name: 'Boitier A-1', serialNumber: '13AB71' },    
-  { id: 2, name: 'Boitier A-2', serialNumber: '13AB63' },    
-  { id: 3, name: 'Boitier A-3', serialNumber: '13AB40' },    
-  { id: 4, name: 'Boitier A-4', serialNumber: '13AB60' },    
-  { id: 5, name: 'Boitier A-5', serialNumber: '13AB61' },    
-  { id: 6, name: 'Boitier A-6', serialNumber: '13A9FA' },    
-  { id: 7, name: 'Boitier B-1', serialNumber: '13A9F4' },    
-  { id: 8, name: 'Boitier B-2', serialNumber: '13AAB7' },    
-  { id: 9, name: 'Boitier B-3', serialNumber: '13AAC0' },    
-  { id: 10, name: 'Boitier B-4', serialNumber: '13A9A3' },   
-  { id: 11, name: 'Boitier B-5', serialNumber: '13AADB' },   
-  { id: 12, name: 'Boitier B-6', serialNumber: '13AB12' }    
-]
-[DB VotingDevices] getAllVotingDevices returned: 12 devices [
-  { id: 1, name: 'Boitier A-1', serialNumber: '13AB71' },    
-  { id: 2, name: 'Boitier A-2', serialNumber: '13AB63' },    
-  { id: 3, name: 'Boitier A-3', serialNumber: '13AB40' },
-  { id: 4, name: 'Boitier A-4', serialNumber: '13AB60' },
-  { id: 5, name: 'Boitier A-5', serialNumber: '13AB61' },
-  { id: 6, name: 'Boitier A-6', serialNumber: '13A9FA' },
-  { id: 7, name: 'Boitier B-1', serialNumber: '13A9F4' },
-  { id: 8, name: 'Boitier B-2', serialNumber: '13AAB7' },
-  { id: 9, name: 'Boitier B-3', serialNumber: '13AAC0' },
-  { id: 10, name: 'Boitier B-4', serialNumber: '13A9A3' },
-  { id: 11, name: 'Boitier B-5', serialNumber: '13AADB' },
-  { id: 12, name: 'Boitier B-6', serialNumber: '13AB12' }
-]
-[val17PptxGenerator] GUIDs des questions OMBEA pr├®existantes trouv├®s dans le mod├¿le: [ '4CDC65B8-1C16-49E4-B16D-EBF9A3474742' ]
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of '[Content_Types].xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(Use `electron --trace-warnings ...` to show where the warning was created)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 2)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of '_rels/.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) 
-?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 4)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slides/_rels/slide2.xml.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 6)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slides/_rels/slide1.xml.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 8)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/_rels/presentation.xml.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 10)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/presentation.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 12)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slides/slide1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 14)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slides/slide2.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 16)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/_rels/slideLayout4.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 18)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/slideLayout3.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 20)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/slideLayout2.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 22)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideMasters/slideMaster1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 24)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/slideLayout1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 26)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/_rels/slideLayout1.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 28)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/_rels/slideLayout2.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 30)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/_rels/slideLayout3.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 32)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideMasters/_rels/slideMaster1.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 34)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/slideLayout4.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 36)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/theme/theme1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 38)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/viewProps.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 40)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/presProps.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 42)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tableStyles.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 44)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'docProps/core.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 46)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tags/tag1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 48)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tags/tag2.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 50)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tags/tag3.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 52)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tags/tag4.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 54)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'docProps/app.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, 
-etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 56)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font5.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 58)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font6.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 60)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font7.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 62)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'docProps/thumbnail.jpeg'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 64)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font8.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 66)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/media/image1.png'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 68)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font9.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 70)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font10.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 72)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font12.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 74)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font11.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 76)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/media/image2.png'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 78)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font3.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 80)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font4.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 82)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font2.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 84)
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 20)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font1.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 86)
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 22)
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 26)
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 36)
-Layout de titre avec nom approchant "Title Slide Layout" non trouv├®. Slide de titre non ajout├®e.
-[TEST_PPTX_GEN] Layout des participants avec nom approchant "Participants Slide Layout" non trouv├®.
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 34)
-=== ERREUR G├ëN├ëRATION VAL17 ===
-Can't read the data of 'ppt/slideMasters/_rels/slideMaster1.xml.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-Erreur dans generatePresentation: ReferenceError: alert is not defined
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\utils\val17PptxGenerator.js:1501:13
-    at Generator.throw (<anonymous>)
-    at rejected (E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\utils\val17PptxGenerator.js:6:65)
-Error occurred in handler for 'pptx-generate': ReferenceError: alert is not defined
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\utils\pptxOrchestrator.js:201:17
-    at Generator.throw (<anonymous>)
-    at rejected (E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\utils\pptxOrchestrator.js:6:65)
-[DB VotingDevices] getAllVotingDevices returned: 12 devices [
-  { id: 1, name: 'Boitier A-1', serialNumber: '13AB71' },
-  { id: 2, name: 'Boitier A-2', serialNumber: '13AB63' },
-  { id: 3, name: 'Boitier A-3', serialNumber: '13AB40' },
-  { id: 4, name: 'Boitier A-4', serialNumber: '13AB60' },
-  { id: 5, name: 'Boitier A-5', serialNumber: '13AB61' },
-  { id: 6, name: 'Boitier A-6', serialNumber: '13A9FA' },
-  { id: 7, name: 'Boitier B-1', serialNumber: '13A9F4' },
-  { id: 8, name: 'Boitier B-2', serialNumber: '13AAB7' },
-  { id: 9, name: 'Boitier B-3', serialNumber: '13AAC0' },
-  { id: 10, name: 'Boitier B-4', serialNumber: '13A9A3' },
-  { id: 11, name: 'Boitier B-5', serialNumber: '13AADB' },
-  { id: 12, name: 'Boitier B-6', serialNumber: '13AB12' }
-]
-[DB VotingDevices] getAllVotingDevices returned: 12 devices [
-  { id: 1, name: 'Boitier A-1', serialNumber: '13AB71' },
-  { id: 2, name: 'Boitier A-2', serialNumber: '13AB63' },
-  { id: 3, name: 'Boitier A-3', serialNumber: '13AB40' },
-  { id: 4, name: 'Boitier A-4', serialNumber: '13AB60' },
-  { id: 5, name: 'Boitier A-5', serialNumber: '13AB61' },
-  { id: 6, name: 'Boitier A-6', serialNumber: '13A9FA' },
-  { id: 7, name: 'Boitier B-1', serialNumber: '13A9F4' },
-  { id: 8, name: 'Boitier B-2', serialNumber: '13AAB7' },
-  { id: 9, name: 'Boitier B-3', serialNumber: '13AAC0' },
-  { id: 10, name: 'Boitier B-4', serialNumber: '13A9A3' },
-  { id: 11, name: 'Boitier B-5', serialNumber: '13AADB' },
-  { id: 12, name: 'Boitier B-6', serialNumber: '13AB12' }
-]
-[val17PptxGenerator] GUIDs des questions OMBEA pr├®existantes trouv├®s dans le mod├¿le: [ '4CDC65B8-1C16-49E4-B16D-EBF9A3474742' ]
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of '[Content_Types].xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 88)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of '_rels/.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) 
-?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 90)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slides/_rels/slide2.xml.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 92)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slides/_rels/slide1.xml.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 94)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/_rels/presentation.xml.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 96)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/presentation.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 98)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slides/slide1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 100)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slides/slide2.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 102)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/_rels/slideLayout4.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 104)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/slideLayout3.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 106)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/slideLayout2.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 108)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideMasters/slideMaster1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 110)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/slideLayout1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 112)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/_rels/slideLayout1.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 114)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/_rels/slideLayout2.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 116)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/_rels/slideLayout3.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 118)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideMasters/_rels/slideMaster1.xml.rels'. Is it in a supported JavaScript type 
-(String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 120)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/slideLayouts/slideLayout4.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 122)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/theme/theme1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 124)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/viewProps.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 126)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/presProps.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 128)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tableStyles.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 130)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'docProps/core.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 132)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tags/tag1.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 134)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tags/tag2.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 136)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tags/tag3.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 138)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/tags/tag4.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 140)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'docProps/app.xml'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, 
-etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 142)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font5.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 144)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font6.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 146)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font7.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 148)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'docProps/thumbnail.jpeg'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 150)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font8.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 152)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/media/image1.png'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 154)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font9.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 156)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font10.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 158)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font12.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 160)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font11.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 162)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/media/image2.png'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 164)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font3.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 166)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font4.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 168)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font2.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-    at runNextTicks (node:internal/process/task_queues:65:5)
-    at process.processImmediate (node:internal/timers:453:9)
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 170)
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 106)
-(node:868) UnhandledPromiseRejectionWarning: Error: Can't read the data of 'ppt/fonts/font1.fntdata'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\node_modules\jszip\lib\utils.js:479:17
-(node:868) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 172)
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 108)
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 112)
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 122)
-Layout de titre avec nom approchant "Title Slide Layout" non trouv├®. Slide de titre non ajout├®e.
-[TEST_PPTX_GEN] Layout des participants avec nom approchant "Participants Slide Layout" non trouv├®.
-(node:868) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 120)
-=== ERREUR G├ëN├ëRATION VAL17 ===
-Can't read the data of 'ppt/slideMasters/_rels/slideMaster1.xml.rels'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?
-Erreur dans generatePresentation: ReferenceError: alert is not defined
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\utils\val17PptxGenerator.js:1501:13
-    at Generator.throw (<anonymous>)
-    at rejected (E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\utils\val17PptxGenerator.js:6:65)
-Error occurred in handler for 'pptx-generate': ReferenceError: alert is not defined
-    at E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\utils\pptxOrchestrator.js:201:17
-    at Generator.throw (<anonymous>)
-    at rejected (E:\AAS\Devis\Vente\Camira\projet CACES\plateforme sur github\CACESmodule\dist-electron\utils\pptxOrchestrator.js:6:65)
+[{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 543,
+	"startColumn": 24,
+	"endLineNumber": 543,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 544,
+	"startColumn": 24,
+	"endLineNumber": 544,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 545,
+	"startColumn": 24,
+	"endLineNumber": 545,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 546,
+	"startColumn": 24,
+	"endLineNumber": 546,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 547,
+	"startColumn": 24,
+	"endLineNumber": 547,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 549,
+	"startColumn": 24,
+	"endLineNumber": 549,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 550,
+	"startColumn": 24,
+	"endLineNumber": 550,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 551,
+	"startColumn": 24,
+	"endLineNumber": 551,
+	"endColumn": 51,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 552,
+	"startColumn": 24,
+	"endLineNumber": 552,
+	"endColumn": 51,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type 'number' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 556,
+	"startColumn": 9,
+	"endLineNumber": 556,
+	"endColumn": 40,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type '\"SUCCÈS - Blob PPTX généré\"' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 2024,
+	"startColumn": 22,
+	"endLineNumber": 2024,
+	"endColumn": 49,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type '\"ÉCHEC - Le générateur n'a pas retourné de blob PPTX\"' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 2026,
+	"startColumn": 22,
+	"endLineNumber": 2026,
+	"endColumn": 75,
+	"origin": "extHost1"
+},{
+	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'string' is not assignable to parameter of type 'never'.",
+	"source": "ts",
+	"startLineNumber": 2029,
+	"startColumn": 20,
+	"endLineNumber": 2029,
+	"endColumn": 45,
+	"origin": "extHost1"
+}]
