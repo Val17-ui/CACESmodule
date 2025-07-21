@@ -141,7 +141,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         try {
           const existingQuestion = await StorageManager.getQuestionById(questionId);
           if (existingQuestion) {
-            setQuestion(existingQuestion); // This is StoredQuestion, so it has blocId
+            setQuestion(existingQuestion); // This is QuestionWithId, so it has blocId
 
             if (existingQuestion.blocId) {
               const bloc = await StorageManager.getBlocById(existingQuestion.blocId);
@@ -213,39 +213,28 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         if (imagePreview) URL.revokeObjectURL(imagePreview);
 
         if (newInitialState.image) {
-          if (typeof newInitialState.image === 'string') {
-            try {
-              const imageBase64 = await window.electron.readImageFile(newInitialState.image);
-              const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
-              setHasImage(true);
-              setImageFile(blob);
-              setImagePreview(URL.createObjectURL(blob));
-            } catch (error) {
-              logger.error("Failed to load initial image from path:", newInitialState.image, error);
-              setHasImage(false); setImageFile(null); setImagePreview(null);
+            if (typeof newInitialState.image === 'string') {
+                try {
+                    const imageBase64 = await window.electron.readImageFile(newInitialState.image);
+                    const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
+                    setHasImage(true);
+                    setImageFile(blob);
+                    setImagePreview(URL.createObjectURL(blob));
+                } catch (error) {
+                    logger.error("Failed to load initial image from path:", newInitialState.image, error);
+                    setHasImage(false);
+                    setImageFile(null);
+                    setImagePreview(null);
+                }
+            } else if (newInitialState.image instanceof Blob) {
+                setHasImage(true);
+                setImageFile(newInitialState.image);
+                setImagePreview(URL.createObjectURL(newInitialState.image));
             }
-          } else if (newInitialState.image instanceof Blob) {
-            if (newInitialState.image) {
-          if (typeof newInitialState.image === 'string') {
-            try {
-              const imageBase64 = await window.electron.readImageFile(newInitialState.image);
-              const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
-              setHasImage(true);
-              setImageFile(blob);
-              setImagePreview(URL.createObjectURL(blob));
-            } catch (error) {
-              logger.error("Failed to load initial image from path:", newInitialState.image, error);
-              setHasImage(false); setImageFile(null); setImagePreview(null);
-            }
-          } else if (newInitialState.image instanceof Blob) {
-            setHasImage(true); setImageFile(newInitialState.image); setImagePreview(URL.createObjectURL(newInitialState.image));
-          }
         } else {
-          setHasImage(false); setImageFile(null); setImagePreview(null);
-        }
-          }
-        } else {
-          setHasImage(false); setImageFile(null); setImagePreview(null);
+            setHasImage(false);
+            setImageFile(null);
+            setImagePreview(null);
         }
       }
     };
@@ -435,7 +424,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     addOption();
   };
 
-  // Define useMemo hooks at the top level of the component body
   const themeOptions = useMemo(() => {
     return themes.map(t => ({ value: t.id!.toString(), label: t.nom_complet }));
   }, [themes]);
