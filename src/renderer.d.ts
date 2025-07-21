@@ -48,6 +48,9 @@ declare global {
       generatePresentation: (sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => Promise<any>;
       getDefaultPptxTemplate: () => Promise<Buffer>;
     };
+    electron: {
+      readImageFile: (filePath: string) => Promise<Buffer>;
+    }
   }
 }
 

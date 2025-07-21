@@ -4,16 +4,16 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import { QuestionType, CACESReferential, Referential, Theme, Bloc, StoredQuestion } from '../../types';
+import { QuestionType, CACESReferential, Referential, Theme, Bloc, QuestionWithId } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
 interface QuestionFormProps {
-  onSave: (question: StoredQuestion) => void;
+  onSave: (question: QuestionWithId) => void;
   onCancel: () => void;
   questionId?: number | null;
   forcedReferential?: CACESReferential; // This represents the CACES code e.g. "R489"
-  initialData?: Partial<Omit<StoredQuestion, 'id'>>;
+  initialData?: Partial<Omit<QuestionWithId, 'id'>>;
 }
 
 const QuestionForm: React.FC<QuestionFormProps> = ({
@@ -23,8 +23,8 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   forcedReferential,
   initialData
 }) => {
-  const getInitialState = useCallback((): StoredQuestion => {
-    let baseState: Omit<StoredQuestion, 'referential' | 'theme'> & { blocId?: number | undefined } = {
+  const getInitialState = useCallback((): QuestionWithId => {
+    let baseState: Omit<QuestionWithId, 'referential' | 'theme'> & { blocId?: number | undefined } = {
       text: '',
       type: 'multiple-choice',
       options: ['', '', '', ''],
@@ -56,10 +56,10 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
       baseState = { ...baseState, ...validRestInitialData, type: mappedType, blocId: initialBlocId };
     }
-    return baseState as StoredQuestion;
+    return baseState as QuestionWithId;
   }, [initialData]);
 
-  const [question, setQuestion] = useState<StoredQuestion>(getInitialState);
+  const [question, setQuestion] = useState<QuestionWithId>(getInitialState);
   const [hasImage, setHasImage] = useState(false);
   const [imageFile, setImageFile] = useState<Blob | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -122,7 +122,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   }, [selectedThemeId]);
 
   useEffect(() => {
-    setQuestion((prev: StoredQuestion) => ({ ...prev, blocId: selectedBlocId ? parseInt(selectedBlocId, 10) : undefined }));
+    setQuestion((prev: QuestionWithId) => ({ ...prev, blocId: selectedBlocId ? parseInt(selectedBlocId, 10) : undefined }));
   }, [selectedBlocId]);
 
   useEffect(() => {
@@ -141,7 +141,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         try {
           const existingQuestion = await StorageManager.getQuestionById(questionId);
           if (existingQuestion) {
-            setQuestion(existingQuestion); // This is StoredQuestion, so it has blocId
+            setQuestion(existingQuestion); // This is QuestionWithId, so it has blocId
 
             if (existingQuestion.blocId) {
               const bloc = await StorageManager.getBlocById(existingQuestion.blocId);
@@ -159,7 +159,20 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
                 setSelectedBlocId('');
             }
 
-            if (existingQuestion.image instanceof Blob) {
+            if (typeof existingQuestion.image === 'string') {
+              // It's a file path, use IPC to read it
+              window.electron.readImageFile(existingQuestion.image).then(buffer => {
+                const blob = new Blob([buffer]);
+                if (imagePreview) URL.revokeObjectURL(imagePreview);
+                setHasImage(true);
+                setImageFile(blob);
+                setImagePreview(URL.createObjectURL(blob));
+              }).catch(err => {
+                logger.error(`Failed to read image from path: ${existingQuestion.image}`, err);
+                if (imagePreview) URL.revokeObjectURL(imagePreview);
+                setHasImage(false); setImageFile(null); setImagePreview(null);
+              });
+            } else if (existingQuestion.image instanceof Blob) {
               if (imagePreview) URL.revokeObjectURL(imagePreview);
               setHasImage(true);
               setImageFile(existingQuestion.image);
@@ -231,13 +244,13 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setQuestion((prev: StoredQuestion) => ({ ...prev, [name]: name === 'timeLimit' ? parseInt(value, 10) : value }));
+    setQuestion((prev: QuestionWithId) => ({ ...prev, [name]: name === 'timeLimit' ? parseInt(value, 10) : value }));
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
     if (name === 'isEliminatory') {
-      setQuestion((prev: StoredQuestion) => ({ ...prev, [name]: checked }));
+      setQuestion((prev: QuestionWithId) => ({ ...prev, [name]: checked }));
     } else if (name === 'hasImageToggle') {
       setHasImage(checked);
       if (!checked) {
@@ -246,7 +259,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         }
         setImageFile(null);
         setImagePreview(null);
-        setQuestion((prev: StoredQuestion) => ({ ...prev, image: undefined }));
+        setQuestion((prev: QuestionWithId) => ({ ...prev, image: undefined }));
       }
     }
   };
@@ -254,23 +267,23 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   const handleOptionChange = (index: number, value: string) => {
     const newOptions = [...(question.options || [])];
     newOptions[index] = value;
-    setQuestion((prev: StoredQuestion) => ({ ...prev, options: newOptions }));
+    setQuestion((prev: QuestionWithId) => ({ ...prev, options: newOptions }));
   };
 
   const addOption = () => {
     if ((question.options?.length || 0) < 4) {
-     setQuestion((prev: StoredQuestion) => ({ ...prev, options: [...(prev.options || []), ''] }));
+     setQuestion((prev: QuestionWithId) => ({ ...prev, options: [...(prev.options || []), ''] }));
     }
   };
 
   const removeOption = (index: number) => {
     if ((question.options?.length || 0) > 2) {
       const newOptions = (question.options || []).filter((_: string, i: number) => i !== index);
-      setQuestion((prev: StoredQuestion) => ({ ...prev, options: newOptions }));
+      setQuestion((prev: QuestionWithId) => ({ ...prev, options: newOptions }));
       if (Number(question.correctAnswer) === index) {
-        setQuestion((prev: StoredQuestion) => ({...prev, correctAnswer: '0'}));
+        setQuestion((prev: QuestionWithId) => ({...prev, correctAnswer: '0'}));
       } else if (Number(question.correctAnswer) > index) {
-         setQuestion((prev: StoredQuestion) => ({...prev, correctAnswer: (Number(prev.correctAnswer) -1).toString()}));
+         setQuestion((prev: QuestionWithId) => ({...prev, correctAnswer: (Number(prev.correctAnswer) -1).toString()}));
       }
     }
   };
@@ -329,14 +342,14 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
   const handleSave = async () => {
     if (!validateForm()) {
-      logger.warn('Validation échouée', errors);
+      logger.warning('Validation échouée', errors);
       return;
     }
 
     const finalBlocId = selectedBlocId ? parseInt(selectedBlocId, 10) : undefined;
     if (!finalBlocId) {
         setErrors(prev => ({...prev, bloc: 'Un bloc de compétences doit être sélectionné.'}));
-        logger.warn('Validation échouée: Bloc de compétences non sélectionné.');
+        logger.warning('Validation échouée: Bloc de compétences non sélectionné.');
         return;
     }
 
@@ -347,7 +360,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
     const { referential, theme, id: currentId, ...dataToSave } = question;
 
-    const questionDataForSave: Omit<StoredQuestion, 'id' | 'referential' | 'theme'> & { id?: number, blocId: number } = {
+    const questionDataForSave: Omit<QuestionWithId, 'id' | 'referential' | 'theme'> & { id?: number, blocId: number } = {
       ...dataToSave,
       blocId: finalBlocId,
       image: imageToSave,
@@ -361,7 +374,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
     try {
       setIsLoading(true);
-      let savedQuestionResult: StoredQuestion;
+      let savedQuestionResult: QuestionWithId;
 
       if (questionId) {
         logger.info(`Calling StorageManager.updateQuestion for ID ${questionId}`);
@@ -370,7 +383,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         savedQuestionResult = { ...questionDataForSave, id: questionId };
       } else {
         logger.info(`Calling StorageManager.addQuestion`);
-        const newId = await StorageManager.addQuestion(questionDataForSave as Omit<StoredQuestion, 'id'>);
+        const newId = await StorageManager.addQuestion(questionDataForSave as Omit<QuestionWithId, 'id'>);
         logger.success(`Question créée avec succès avec l'ID: ${newId}`);
         if (newId === undefined) {
           throw new Error("Failed to create question, new ID is undefined.");
@@ -392,11 +405,11 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
   // Define useMemo hooks at the top level of the component body
   const themeOptions = useMemo(() => {
-    return themes.map(t => ({ value: t.id!.toString(), label: t.name }));
+    return themes.map(t => ({ value: t.id!.toString(), label: t.nom_complet }));
   }, [themes]);
 
   const blocOptions = useMemo(() => {
-    return blocs.map(b => ({ value: b.id!.toString(), label: b.name }));
+    return blocs.map(b => ({ value: b.id!.toString(), label: b.code_bloc }));
   }, [blocs]);
 
   // Single conditional return for loading state
@@ -558,7 +571,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
                   name={`correctAnswerRadio`} // Common name for the radio group
                   value={index.toString()}
                   checked={question.correctAnswer === index.toString()}
-                  onChange={(e) => setQuestion((prev: StoredQuestion) => ({ ...prev, correctAnswer: e.target.value }))}
+                  onChange={(e) => setQuestion((prev: QuestionWithId) => ({ ...prev, correctAnswer: e.target.value }))}
                   className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
               </div>
