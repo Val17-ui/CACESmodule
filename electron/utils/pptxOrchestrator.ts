@@ -96,6 +96,8 @@ function generateOmbeaSessionXml(
   return xml;
 }
 
+import { dialog } from 'electron';
+
 // Placeholder for a more sophisticated error notification system
 // For now, this ensures alerts are shown if they reach this stage.
 function alertAlreadyShown(_error: Error): boolean {
@@ -155,7 +157,7 @@ export async function generatePresentation(
   sessionInfo: { name: string; date: string; referential: string },
   _participants: Participant[],
   storedQuestions: StoredQuestion[],
-  templateFile: File | ArrayBuffer,
+  templateFile: File | ArrayBuffer | string,
   adminSettings: AdminPPTXSettings
 ): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
 
@@ -168,6 +170,9 @@ export async function generatePresentation(
       templateBuffer = templateFile;
     } else if (templateFile instanceof ArrayBuffer) {
       templateBuffer = Buffer.from(templateFile);
+    } else if (templateFile instanceof File) {
+        const arrayBuffer = await templateFile.arrayBuffer();
+        templateBuffer = Buffer.from(arrayBuffer);
     } else {
       throw new Error('Invalid template format provided to pptx-generate IPC handler.');
     }
@@ -238,14 +243,14 @@ export async function generatePresentation(
     } else {
       console.error("Échec de la génération des données PPTX complètes.");
       if (!alertAlreadyShown(new Error("generatePPTXVal17 returned null or incomplete data."))) {
-        alert("La génération du fichier PPTX ou des données de mappage a échoué.");
+        dialog.showErrorBox("Erreur de génération PPTX", "La génération du fichier PPTX ou des données de mappage a échoué.");
       }
       return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
     }
   } catch (error) {
     console.error("Erreur dans generatePresentation:", error);
     if (!alertAlreadyShown(error as Error)) {
-      alert("Une erreur est survenue lors de la création du fichier .ors.");
+      dialog.showErrorBox("Erreur de génération", "Une erreur est survenue lors de la création du fichier .ors.");
     }
     return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
   } finally {
