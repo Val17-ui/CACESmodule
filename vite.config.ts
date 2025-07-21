@@ -2,7 +2,6 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import path from 'path';
-import copy from 'rollup-plugin-copy';
 
 export default defineConfig({
   plugins: [
@@ -16,14 +15,6 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
-              output: { format: 'es' },
-              plugins: [
-                copy({
-                  targets: [
-                    { src: 'electron/utils/*', dest: 'dist-electron/utils' }
-                  ]
-                })
-              ]
             },
           },
         },
@@ -45,7 +36,6 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
-              output: { format: 'es' }
             },
           },
         },
@@ -58,7 +48,6 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['better-sqlite3'],
-              output: { format: 'es' }
             },
           },
         },
@@ -69,14 +58,5 @@ export default defineConfig({
     // Configuration pour le processus de rendu (votre application React)
     outDir: 'dist',
     assetsDir: 'assets',
-    rollupOptions: {
-      plugins: [
-        copy({
-          targets: [
-            { src: 'src/assets/templates/*', dest: 'dist/assets/templates' }
-          ]
-        })
-      ]
-    }
   },
 });
