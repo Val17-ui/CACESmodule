@@ -98,13 +98,9 @@ function generateOmbeaSessionXml(
 
 import { dialog } from 'electron';
 
-// Placeholder for a more sophisticated error notification system
-// For now, this ensures alerts are shown if they reach this stage.
-function alertAlreadyShown(_error: Error): boolean {
-  // In a real app, this would check if a user-facing error for this operation
-  // has already been displayed.
-  return false;
-}
+let tempImageUrls: string[] = [];
+
+
 
 export interface AdminPPTXSettings extends Val17ConfigOptions {
   defaultDuration?: number;
@@ -128,9 +124,6 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
     // Assuming sq.image is now a string (file path) or undefined
     if (typeof sq.image === 'string' && sq.image.length > 0) {
       imageUrl = sq.image;
-    } else if (sq.image instanceof Blob) {
-      // This case should ideally not happen if the upstream is sending paths
-      console.warn("Received Blob for image in transformQuestionsForVal17Generator. Expected file path. Ignoring Blob.");
     }
 
     return {
@@ -234,16 +227,12 @@ export async function generatePresentation(
       };
     } else {
       console.error("Échec de la génération des données PPTX complètes.");
-      if (!alertAlreadyShown(new Error("generatePPTXVal17 returned null or incomplete data."))) {
-        dialog.showErrorBox("Erreur de génération PPTX", "La génération du fichier PPTX ou des données de mappage a échoué.");
-      }
+      dialog.showErrorBox("Erreur de génération PPTX", "La génération du fichier PPTX ou des données de mappage a échoué.");
       return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
     }
   } catch (error) {
     console.error("Erreur dans generatePresentation:", error);
-    if (!alertAlreadyShown(error as Error)) {
-      dialog.showErrorBox("Erreur de génération", "Une erreur est survenue lors de la création du fichier .ors.");
-    }
+    dialog.showErrorBox("Erreur de génération", "Une erreur est survenue lors de la création du fichier .ors.");
     return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
   } finally {
     tempImageUrls.forEach(url => {

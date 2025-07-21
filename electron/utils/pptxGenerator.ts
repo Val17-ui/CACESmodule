@@ -1363,7 +1363,7 @@ export const handleGeneratePPTX = async (templateFile: File, questions: Question
     });
   } catch (error: any) {
     console.error('Erreur:', error);
-    alert(`Erreur lors de la génération: ${error.message}`);
+    console.error(`Erreur lors de la génération: ${error.message}`);
   }
 };
 

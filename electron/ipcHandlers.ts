@@ -237,5 +237,15 @@ export function initializeIpcHandlers() {
     }
   });
 
+  ipcMain.handle('read-image-file', async (event: IpcMainInvokeEvent, filePath: string) => {
+    try {
+      const fileBuffer = await fs.readFile(filePath);
+      return fileBuffer.toString('base64');
+    } catch (error: any) {
+      console.error('Failed to read image file:', error);
+      throw new Error(`Could not read image file: ${error.message}`);
+    }
+  });
+
   console.log('[IPC Handlers] IPC handlers registration attempt finished.');
 }

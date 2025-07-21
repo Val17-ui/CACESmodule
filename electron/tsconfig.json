@@ -7,16 +7,13 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist",
-    "rootDir": "../..",
-    "typeRoots": ["../../node_modules/@types"],
-    "paths": {
-      "../../src/types/index": ["E:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/src/types/index.ts"]
-    }
+    "outDir": "../dist-electron",
+    "rootDir": "../",
+    "typeRoots": ["../../node_modules/@types"]
   },
   "include": [
-    "./**/*.ts",
-    "../../src/types/**/*.ts"
+    "**/*.ts",
+    "**/*.js"
   ],
   "exclude": [
     "node_modules",

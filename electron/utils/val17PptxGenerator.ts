@@ -1436,8 +1436,10 @@ export async function generatePPTXVal17(
     const copyPromises: Promise<void>[] = [];
     templateZip.forEach((relativePath, file) => {
       if (!file.dir) {
+        // Log the file being processed
+        console.log(`[val17PptxGenerator] Copying file: ${relativePath}`);
         const copyPromise: Promise<void> = file
-          .async("nodebuffer")
+          .async("arraybuffer")
           .then((content) => {
             outputZip.file(relativePath, content);
           });
