@@ -6,8 +6,8 @@
   "main": "dist-electron/index.js",
   "scripts": {
     "dev": "npx vite & npm run electron-watch",
-    "electron-watch": "wait-on tcp:5173 -t 30000 && xvfb-run electron .",
-    "rebuild": "@electron/rebuild -f -w better-sqlite3 --project-dir .",
+    "electron-watch": "wait-on tcp:5173 -t 30000 && electron .",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
     "build": "tsc && vite build && electron-builder",
     "electron-dev": "electron .",
     "start": "npm run build && electron ."

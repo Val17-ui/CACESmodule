@@ -1,1 +1,38 @@
-xxx
+Erreur majeure génération: Error invoking remote method 'pptx-generate': Error: Invalid template format provided to pptx-generate IPC handler.
+
+Console
+chunk-YZVM2MHU.js?v=9baac2f2:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+VM4 sandbox_bundle:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+warnAboutInsecureCSP @ VM4 sandbox_bundle:2
+logSecurityWarnings @ VM4 sandbox_bundle:2
+(anonymous) @ VM4 sandbox_bundle:2
+DashboardCards.tsx:12 Sessions dans DashboardCards : Array(8)
+DashboardCards.tsx:12 Sessions dans DashboardCards : Array(8)
+logger.ts:62 2025-07-21 12:44:06 | INFO | Navigation vers sessions
+logger.ts:62 2025-07-21 12:44:10 | INFO | Navigation vers dashboard
+DashboardCards.tsx:12 Sessions dans DashboardCards : Array(8)
+DashboardCards.tsx:12 Sessions dans DashboardCards : Array(8)
+logger.ts:62 2025-07-21 12:44:11 | INFO | Navigation vers reports
+logger.ts:62 2025-07-21 12:44:14 | INFO | Navigation vers settings
+logger.ts:62 2025-07-21 12:44:20 | INFO | Navigation vers dashboard
+DashboardCards.tsx:12 Sessions dans DashboardCards : Array(8)
+DashboardCards.tsx:12 Sessions dans DashboardCards : Array(8)
+logger.ts:62 2025-07-21 12:44:22 | INFO | Navigation vers sessions
+logger.ts:62 2025-07-21 12:44:52 | INFO | Thème: R482CG, Bloc choisi: R482CG_E, Questions: 18
+logger.ts:62 2025-07-21 12:44:52 | INFO | Thème: R482TE, Bloc choisi: R482TE_D, Questions: 16
+logger.ts:62 2025-07-21 12:44:52 | INFO | Thème: R482VA, Bloc choisi: R482VA_A, Questions: 17
+logger.ts:62 2025-07-21 12:44:52 | INFO | Thème: R482RM, Bloc choisi: R482RM_B, Questions: 16
+logger.ts:62 2025-07-21 12:44:52 | INFO | Thème: R482CS, Bloc choisi: R482CS_A, Questions: 16
+logger.ts:62 2025-07-21 12:44:52 | INFO | Thème: R482EM, Bloc choisi: R482EM_E, Questions: 17
+templateManager.ts:56 [templateManager] Utilisation du modèle PowerPoint par défaut de l'outil.
+templateManager.ts:65 [templateManager] Default tool template ('default.pptx') blob details: Size: 1260405 bytes, Type: 
+SessionForm.tsx:742 Erreur majeure génération: Error: Error invoking remote method 'pptx-generate': Error: Invalid template format provided to pptx-generate IPC handler.
+handleGenerateQuestionnaireAndOrs @ SessionForm.tsx:742
+logger.ts:62 2025-07-21 12:44:53 | ERROR | Erreur majeure lors de la génération ORS pour la session "Test nouvelle session"
