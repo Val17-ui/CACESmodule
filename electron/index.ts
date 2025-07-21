@@ -1,7 +1,7 @@
-const { app, BrowserWindow, session } = require('electron');
-const path = require('path');
-const { initializeIpcHandlers } = require('./ipcHandlers.js');
-const { initializeDatabase, getDb } = require('./db');
+import { app, BrowserWindow, session } from 'electron';
+import path from 'path';
+import { initializeIpcHandlers } from './ipcHandlers';
+import { initializeDatabase, getDb } from './db';
 
 function createWindow() {
   console.log('createWindow() called');

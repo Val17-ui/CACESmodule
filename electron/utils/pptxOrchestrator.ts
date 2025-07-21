@@ -133,7 +133,7 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
       correctAnswerIndex: correctAnswerIndex,
       imageUrl: imageUrl,
       points: sq.timeLimit, // ou sq.points si c'est le bon champ pour la durée/points
-      theme: sq.blocId.toString(), // AJOUTÉ : Passer le thème complet (ex: "securite_A")
+      theme: sq.blocId !== undefined ? sq.blocId.toString() : '', // Gérer le cas où blocId est undefined
     };
   });
 }

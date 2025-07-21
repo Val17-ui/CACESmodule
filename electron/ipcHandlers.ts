@@ -1,11 +1,13 @@
 import { IpcMainInvokeEvent, ipcMain, dialog } from 'electron';
-import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question } from '../src/types/index';
+import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question } from
+     '../src/types/index';
 import { AdminPPTXSettings } from './utils';
+import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez cette ligne ici
 
+import fs from 'fs/promises';
+import path from 'path';
 
-const fs = require('fs').promises;
-const path = require('path');
-const {
+import {
     getAllSessions, getSessionById, addSession, updateSession, addBulkSessionResults,
     getResultsForSession, getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addBulkSessionQuestions,
     deleteSessionQuestionsBySessionId, getSessionQuestionsBySessionId, addBulkSessionBoitiers,
@@ -17,8 +19,8 @@ const {
     getBlocsByThemeId, getBlocById, getAllBlocs, addQuestion, getQuestionById,
     getQuestionsByBlocId, updateQuestion, deleteQuestion, getAllQuestions, getQuestionsByIds,
     getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings,
-    getVotingDevicesForKit // Add this line
-} = require('./db');
+    getVotingDevicesForKit
+} from './db';
 
 export function initializeIpcHandlers() {
   console.log('[IPC Handlers] Initializing IPC handlers...');
@@ -51,7 +53,7 @@ export function initializeIpcHandlers() {
   ipcMain.handle('db-get-session-boitiers-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => getSessionBoitiersBySessionId(sessionId));
 
   // DeviceKits
-  ipcMain.handle('db-get-voting-devices-for-kit', async (event: IpcMainInvokeEvent, kitId: number) => require('./db').getVotingDevicesForKit(kitId));
+    ipcMain.handle('db-get-voting-devices-for-kit', async (event: IpcMainInvokeEvent, kitId: number) => getVotingDevicesForKit(kitId));
   ipcMain.handle('db-get-all-device-kits', async () => getAllDeviceKits());
   ipcMain.handle('db-get-default-device-kit', async () => getDefaultDeviceKit());
   ipcMain.handle('db-add-device-kit', async (event: IpcMainInvokeEvent, data: DeviceKit) => addDeviceKit(data));
@@ -92,7 +94,13 @@ export function initializeIpcHandlers() {
   ipcMain.handle('db-get-all-blocs', async () => getAllBlocs());
 
   // Questions
-  ipcMain.handle('db-add-question', async (event: IpcMainInvokeEvent, data: Question) => addQuestion(data));
+ ipcMain.handle('db-add-question', async (event: IpcMainInvokeEvent, data: Question) => {
+  const questionToAdd = {
+    ...data,
+    blocId: data.blocId === undefined ? null : data.blocId // Assure que blocId est number ou null
+    };
+  return addQuestion(questionToAdd as Omit<QuestionWithId, 'id'>);
+   });
   ipcMain.handle('db-get-question-by-id', async (event: IpcMainInvokeEvent, id: number) => getQuestionById(id));
   ipcMain.handle('db-get-questions-by-bloc-id', async (event: IpcMainInvokeEvent, blocId: number) => getQuestionsByBlocId(blocId));
   ipcMain.handle('db-update-question', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Question>) => updateQuestion(id, updates));
@@ -111,8 +119,26 @@ export function initializeIpcHandlers() {
   ipcMain.handle('db-import-all-data', async (event: IpcMainInvokeEvent, data: any) => importAllData(data));
 
   // PPTX Generation
-    ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referential: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
-    const { generatePresentation } = require('./utils/pptxOrchestrator');
+    
+  ipcMain.handle('db-get-question-by-id', async (event: IpcMainInvokeEvent, id: number) => getQuestionById(id));
+  ipcMain.handle('db-get-questions-by-bloc-id', async (event: IpcMainInvokeEvent, blocId: number) => getQuestionsByBlocId(blocId));
+  ipcMain.handle('db-update-question', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Question>) => updateQuestion(id, updates));
+  ipcMain.handle('db-delete-question', async (event: IpcMainInvokeEvent, id: number) => deleteQuestion(id));
+  ipcMain.handle('db-get-all-questions', async () => getAllQuestions());
+  ipcMain.handle('db-get-questions-by-ids', async (event: IpcMainInvokeEvent, ids: number[]) => getQuestionsByIds(ids));
+  ipcMain.handle('db-get-questions-for-session-blocks', async (event: IpcMainInvokeEvent, blocIds?: number[]) => getQuestionsForSessionBlocks(blocIds));
+
+  // AdminSettings
+  ipcMain.handle('db-get-admin-setting', async (event: IpcMainInvokeEvent, key: string) => getAdminSetting(key));
+  ipcMain.handle('db-set-admin-setting', async (event: IpcMainInvokeEvent, key: string, value: any) => setAdminSetting(key, value));
+  ipcMain.handle('db-get-all-admin-settings', async (event: IpcMainInvokeEvent) => getAllAdminSettings());
+
+  // Backup/Restore
+  ipcMain.handle('db-export-all-data', async (event: IpcMainInvokeEvent) => exportAllData());
+  ipcMain.handle('db-import-all-data', async (event: IpcMainInvokeEvent, data: any) => importAllData(data));
+
+  // PPTX Generation
+  ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referential: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
     let templateArrayBuffer: ArrayBuffer;
 
     if (template === 'tool_default_template') {
