@@ -20,6 +20,15 @@ export default defineConfig({
         },
       },
       {
+        // Point d'entre pour les utilitaires
+        entry: 'electron/utils/index.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron/utils',
+          },
+        },
+      },
+      {
         // Point d'entre pour le script de preload
         entry: path.join(__dirname, 'electron/preload.ts'),
         vite: {

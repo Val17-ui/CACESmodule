@@ -1,6 +1,6 @@
 import { IpcMainInvokeEvent, ipcMain, dialog } from 'electron';
 import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question } from '../src/types/index';
-import { AdminPPTXSettings } from './utils/pptxOrchestrator';
+import { AdminPPTXSettings } from './utils';
 
 
 const fs = require('fs').promises;
