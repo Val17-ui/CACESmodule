@@ -99,8 +99,6 @@ function generateOmbeaSessionXml(
 }
 
 import { dialog, app } from 'electron';
-import * as fs from 'fs';
-import * as path from 'path';
 
 export interface AdminPPTXSettings extends Val17ConfigOptions {
   defaultDuration?: number;
@@ -282,10 +280,5 @@ export async function generatePresentation(
     console.error("[ERREUR][pptxOrchestrator] Erreur dans generatePresentation:", error);
     dialog.showErrorBox("Erreur de génération", "Une erreur est survenue lors de la création du fichier .ors.");
     return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
-  } finally {
-    tempImageUrls.forEach(url => {
-      try { URL.revokeObjectURL(url); } catch (e) { console.warn("Failed to revoke URL:", url, e); }
-    });
-    tempImageUrls = [];
   }
 }
