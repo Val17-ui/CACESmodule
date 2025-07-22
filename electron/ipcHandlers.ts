@@ -106,6 +106,25 @@ export function initializeIpcHandlers() {
   ipcMain.handle('db-import-all-data', async (event: IpcMainInvokeEvent, data: any) => db.importAllData(data));
 
   // PPTX Generation
+
+  ipcMain.handle('db-get-question-by-id', async (event: IpcMainInvokeEvent, id: number) => db.getQuestionById(id));
+  ipcMain.handle('db-get-questions-by-bloc-id', async (event: IpcMainInvokeEvent, blocId: number) => db.getQuestionsByBlocId(blocId));
+  ipcMain.handle('db-update-question', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Question>) => db.updateQuestion(id, updates));
+  ipcMain.handle('db-delete-question', async (event: IpcMainInvokeEvent, id: number) => db.deleteQuestion(id));
+  ipcMain.handle('db-get-all-questions', async () => db.getAllQuestions());
+  ipcMain.handle('db-get-questions-by-ids', async (event: IpcMainInvokeEvent, ids: number[]) => db.getQuestionsByIds(ids));
+  ipcMain.handle('db-get-questions-for-session-blocks', async (event: IpcMainInvokeEvent, blocIds?: number[]) => db.getQuestionsForSessionBlocks(blocIds));
+
+  // AdminSettings
+  ipcMain.handle('db-get-admin-setting', async (event: IpcMainInvokeEvent, key: string) => db.getAdminSetting(key));
+  ipcMain.handle('db-set-admin-setting', async (event: IpcMainInvokeEvent, key: string, value: any) => db.setAdminSetting(key, value));
+  ipcMain.handle('db-get-all-admin-settings', async (event: IpcMainInvokeEvent) => db.getAllAdminSettings());
+
+  // Backup/Restore
+  ipcMain.handle('db-export-all-data', async (event: IpcMainInvokeEvent) => db.exportAllData());
+  ipcMain.handle('db-import-all-data', async (event: IpcMainInvokeEvent, data: any) => db.importAllData(data));
+
+  // PPTX Generation
   ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referential: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
     let templateArrayBuffer: ArrayBuffer;
 
