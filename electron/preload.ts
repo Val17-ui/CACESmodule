@@ -11,6 +11,11 @@ contextBridge.exposeInMainWorld('dbAPI', {
   addBulkSessionResults: (results: any) => ipcRenderer.invoke('db-add-bulk-session-results', results),
   getResultsForSession: (sessionId: number) => ipcRenderer.invoke('db-get-results-for-session', sessionId),
 
+  // SessionQuestions
+  addBulkSessionQuestions: (questions: any) => ipcRenderer.invoke('db-add-bulk-session-questions', questions),
+  deleteSessionQuestionsBySessionId: (sessionId: number) => ipcRenderer.invoke('db-delete-session-questions-by-session-id', sessionId),
+  getSessionQuestionsBySessionId: (sessionId: number) => ipcRenderer.invoke('db-get-session-questions-by-session-id', sessionId),
+
   // VotingDevices
   getAllVotingDevices: () => ipcRenderer.invoke('db-get-all-voting-devices'),
   addVotingDevice: (device: any) => ipcRenderer.invoke('db-add-voting-device', device),
@@ -92,6 +97,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   openExcelFileDialog: () => ipcRenderer.invoke('open-excel-file-dialog'),
   openDirectoryDialog: (filePath?: string) => ipcRenderer.invoke('open-directory-dialog', filePath),
   openResultsFile: () => ipcRenderer.invoke('open-results-file'),
+  openFile: (filePath: string) => ipcRenderer.invoke('open-file', filePath),
 });
 
 contextBridge.exposeInMainWorld('electron', {

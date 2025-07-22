@@ -2,12 +2,12 @@ import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 const { initializeIpcHandlers } = require('./ipcHandlers');
 const dbModule = require('./db');
-import { log, initializeLogging } from './utils/logger';
+import { initializeLogging, logger } from './utils/logger';
 
-log('[Main Process] index.ts loaded');
+logger.info('[Main Process] index.ts loaded');
 
 function createWindow() {
-  log('Creating main application window');
+  logger.info('Creating main application window');
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -36,7 +36,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   initializeLogging();
-  log('App is ready, initializing...');
+  logger.info('App is ready, initializing...');
   // Set a Content Security Policy
   session.defaultSession.webRequest.onHeadersReceived((details: any, callback: any) => {
     callback({
@@ -49,9 +49,9 @@ app.whenReady().then(async () => {
     });
   });
   try {
-    log('Initializing database...');
+    logger.info('Initializing database...');
     dbModule.initializeDatabase();
-    log('Initializing IPC handlers...');
+    logger.info('Initializing IPC handlers...');
     initializeIpcHandlers();
     createWindow();
 
@@ -61,13 +61,13 @@ app.whenReady().then(async () => {
       }
     });
   } catch (error) {
-    log(`[Main] Failed to initialize application: ${error}`);
+    logger.error(`[Main] Failed to initialize application: ${error}`);
     app.quit(); // Quit on critical error
   }
 });
 
 app.on('window-all-closed', () => {
-  log('All windows closed, quitting application...');
+  logger.info('All windows closed, quitting application...');
   if (process.platform !== 'darwin') {
     dbModule.getDb().close();
     app.quit();

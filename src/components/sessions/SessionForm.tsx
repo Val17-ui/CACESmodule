@@ -1632,6 +1632,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       >
                         Ouvrir le dossier
                       </Button>
+                      <Button
+                        variant="link"
+                        onClick={() => window.dbAPI.openFile(editingSessionData.orsFilePath)}
+                        className="mt-2 ml-2"
+                      >
+                        Ouvrir le fichier
+                      </Button>
                     </div>
                   )}
              </Card>

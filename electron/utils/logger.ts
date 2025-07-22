@@ -14,18 +14,18 @@ export function initializeLogging() {
   logFile = path.join(logDirectory, `log-${new Date().toISOString().replace(/:/g, '-')}.txt`);
 
   ipcMain.on('log', (event, message) => {
-    log(message);
+    logger.info(message);
   });
 }
 
-export function log(message: string) {
+function writeToLogFile(level: string, message: string) {
   if (!logFile) {
     return;
   }
   const timestamp = new Date().toISOString();
-  const formattedMessage = `[${timestamp}] ${message}\n`;
+  const formattedMessage = `[${timestamp}] [${level}] ${message}\n`;
 
-  console.log(formattedMessage); // Continue d'afficher dans la console pour le débogage en direct
+  console.log(formattedMessage); // Always log to console for live debugging
 
   fs.appendFile(logFile, formattedMessage, (err) => {
     if (err) {
@@ -33,3 +33,9 @@ export function log(message: string) {
     }
   });
 }
+
+export const logger = {
+  info: (message: string) => writeToLogFile('INFO', message),
+  debug: (message: string) => writeToLogFile('DEBUG', message),
+  error: (message: string) => writeToLogFile('ERROR', message),
+};

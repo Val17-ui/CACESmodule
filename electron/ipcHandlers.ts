@@ -436,5 +436,17 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers() {
     }
   });
 
+  ipcMain.handle('open-file', async (event: IpcMainInvokeEvent, filePath: string) => {
+    log(`[IPC] open-file: ${filePath}`);
+    try {
+      const { shell } = require('electron');
+      const result = shell.openPath(filePath);
+      return { success: true, result };
+    } catch (error: any) {
+      log(`Failed to open file ${filePath}: ${error}`);
+      return { success: false, error: error.message };
+    }
+  });
+
   log('[IPC Handlers] IPC handlers registration attempt finished.');
 }
