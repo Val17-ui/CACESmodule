@@ -25,6 +25,7 @@ function generateOmbeaSessionXml(
   participants: Participant[],
   _questionMappings: QuestionMapping[] // Utiliser QuestionMapping ici, même si non utilisé dans ce XML particulier
 ): string {
+  console.log('[LOG][pptxOrchestrator] Début de generateOmbeaSessionXml.');
   // console.log('[pptxOrchestrator] generateOmbeaSessionXml received participants:', JSON.stringify(participants.map(p => ({ idBoitier: p.idBoitier, nom: p.nom, prenom: p.prenom })), null, 2)); // DEBUG REMOVED
   // Using a helper for escaping XML attribute/text values
   const esc = (unsafe: string | undefined | null): string => {
@@ -93,6 +94,7 @@ function generateOmbeaSessionXml(
   xml += `    <rl:Groups/>\n`;
   xml += `  </ors:RespondentList>\n`;
   xml += `</ors:ORSession>`;
+  console.log('[LOG][pptxOrchestrator] Fin de generateOmbeaSessionXml.');
   return xml;
 }
 
@@ -100,16 +102,13 @@ import { dialog, app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
-let tempImageUrls: string[] = [];
-
-
-
 export interface AdminPPTXSettings extends Val17ConfigOptions {
   defaultDuration?: number;
 }
 
 export function transformQuestionsForVal17Generator(storedQuestions: StoredQuestion[]): Val17Question[] {
-  return storedQuestions.map((sq) => {
+  console.log('[LOG][pptxOrchestrator] Début de transformQuestionsForVal17Generator.');
+  const result = storedQuestions.map((sq) => {
     let correctAnswerIndex: number | undefined = undefined;
     if (sq.correctAnswer) {
       if (sq.type === 'multiple-choice') {
@@ -138,6 +137,8 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
       theme: sq.blocId !== undefined ? sq.blocId.toString() : '', // Gérer le cas où blocId est undefined
     };
   });
+  console.log('[LOG][pptxOrchestrator] Fin de transformQuestionsForVal17Generator.');
+  return result;
 }
 
 export async function generatePresentation(
@@ -147,28 +148,42 @@ export async function generatePresentation(
   templateFile: File | ArrayBuffer | string,
   adminSettings: AdminPPTXSettings
 ): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
+  console.log('[LOG][pptxOrchestrator] Début de generatePresentation.');
+  console.log('[LOG][pptxOrchestrator] sessionInfo:', sessionInfo);
+  console.log(`[LOG][pptxOrchestrator] Nombre de participants: ${_participants.length}`);
+  console.log(`[LOG][pptxOrchestrator] Nombre de questions: ${storedQuestions.length}`);
+  console.log('[LOG][pptxOrchestrator] adminSettings:', adminSettings);
+
 
   let templateBuffer: Buffer;
   if (templateFile) {
+    console.log('[LOG][pptxOrchestrator] Un fichier template a été fourni.');
     if (typeof templateFile === 'string') {
+      console.log(`[LOG][pptxOrchestrator] Le template est un chemin de fichier: ${templateFile}`);
       // Assuming templateFile is a path to a pptx file
       templateBuffer = fs.readFileSync(templateFile);
     } else if (templateFile instanceof Buffer) {
+      console.log('[LOG][pptxOrchestrator] Le template est un Buffer.');
       templateBuffer = templateFile;
     } else if (templateFile instanceof ArrayBuffer) {
+      console.log('[LOG][pptxOrchestrator] Le template est un ArrayBuffer.');
       templateBuffer = Buffer.from(templateFile);
     } else if (templateFile instanceof File) {
+        console.log('[LOG][pptxOrchestrator] Le template est un objet File.');
         const arrayBuffer = await templateFile.arrayBuffer();
         templateBuffer = Buffer.from(arrayBuffer);
     } else {
+      console.error('[ERREUR][pptxOrchestrator] Format de template invalide fourni.');
       throw new Error('Invalid template format provided to pptx-generate IPC handler.');
     }
   } else {
     const defaultTemplatePath = path.join(process.resourcesPath, 'assets', 'templates', 'default.pptx');
+    console.log(`[LOG][pptxOrchestrator] Aucun fichier template fourni. Utilisation du template par défaut: ${defaultTemplatePath}`);
     templateBuffer = fs.readFileSync(defaultTemplatePath);
   }
 
   const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
+  console.log('[LOG][pptxOrchestrator] Questions transformées pour le générateur Val17.');
 
   const generationOptions: Val17GenerationOptions = {
     fileName: `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}_OMBEA.pptx`,
@@ -186,6 +201,7 @@ export async function generatePresentation(
       participantsLayoutName: "Participants Slide Layout",
     }
   };
+  console.log('[LOG][pptxOrchestrator] Options de génération créées:', generationOptions);
 
   try {
     const val17SessionInfo: Val17SessionInfo = {
@@ -199,7 +215,7 @@ export async function generatePresentation(
       prenom: p.prenom,
       identificationCode: p.identificationCode
     }));
-
+    console.log('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
     const generatedData = await generatePPTXVal17(
       templateBuffer,
       transformedQuestions,
@@ -207,20 +223,25 @@ export async function generatePresentation(
       val17SessionInfo,
       participantsForGenerator
     );
+    console.log('[LOG][pptxOrchestrator] Retour de generatePPTXVal17.');
 
     if (generatedData && generatedData.pptxBlob && generatedData.questionMappings && generatedData.preExistingQuestionSlideGuids) {
+      console.log('[LOG][pptxOrchestrator] Génération du PPTX réussie. Génération du XML de session ORS.');
       const orSessionXmlContent = generateOmbeaSessionXml(
         val17SessionInfo,
         _participants,
         generatedData.questionMappings
       );
+      console.log('[LOG][pptxOrchestrator] XML de session ORS généré.');
 
       const outputOrsZip = new JSZip();
       const pptxFileNameInZip = generationOptions.fileName || `presentation.pptx`;
       outputOrsZip.file(pptxFileNameInZip, generatedData.pptxBlob);
       outputOrsZip.file("ORSession.xml", orSessionXmlContent);
+      console.log('[LOG][pptxOrchestrator] Fichiers ajoutés au ZIP ORS.');
 
       const orsBuffer = await outputOrsZip.generateAsync({ type: 'nodebuffer' });
+      console.log('[LOG][pptxOrchestrator] Buffer ORS généré.');
 
       // --- Début: Logique de sauvegarde automatique du fichier ORS (Point 12 du plan.txt) ---
       const getSavePathFromSettings = (): string => {
@@ -239,26 +260,26 @@ export async function generatePresentation(
 
       try {
         fs.writeFileSync(fullPath, orsBuffer);
-        console.log("Fichier ORS sauvegardé à :", fullPath);
+        console.log("[LOG][pptxOrchestrator] Fichier ORS sauvegardé à :", fullPath);
       } catch (error: any) {
-        console.error("Erreur lors de la sauvegarde automatique :", error);
+        console.error("[ERREUR][pptxOrchestrator] Erreur lors de la sauvegarde automatique :", error);
         dialog.showErrorBox("Erreur de sauvegarde", `Impossible de sauvegarder le fichier ORS à ${fullPath}. Veuillez vérifier les permissions ou choisir un autre dossier.`);
         // Si la sauvegarde automatique échoue, on peut quand même retourner le blob pour permettre une sauvegarde manuelle
       }
       // --- Fin: Logique de sauvegarde automatique ---
-
+      console.log('[LOG][pptxOrchestrator] Fin de generatePresentation avec succès.');
       return {
         orsBlob: new Blob([orsBuffer], { type: 'application/octet-stream' }), // Retourner un Blob si nécessaire pour d'autres usages
         questionMappings: generatedData.questionMappings,
         ignoredSlideGuids: generatedData.preExistingQuestionSlideGuids
       };
     } else {
-      console.error("Échec de la génération des données PPTX complètes.");
+      console.error("[ERREUR][pptxOrchestrator] Échec de la génération des données PPTX complètes.");
       dialog.showErrorBox("Erreur de génération PPTX", "La génération du fichier PPTX ou des données de mappage a échoué.");
       return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
     }
   } catch (error) {
-    console.error("Erreur dans generatePresentation:", error);
+    console.error("[ERREUR][pptxOrchestrator] Erreur dans generatePresentation:", error);
     dialog.showErrorBox("Erreur de génération", "Une erreur est survenue lors de la création du fichier .ors.");
     return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
   } finally {
