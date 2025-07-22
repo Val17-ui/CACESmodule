@@ -1753,4 +1753,3 @@ export { getDb, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds
      getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit,
      getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit,
      getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, };
-export {};

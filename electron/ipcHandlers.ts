@@ -1,8 +1,7 @@
 import { IpcMainInvokeEvent, ipcMain, dialog } from 'electron';
 import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question } from
      '../src/types/index';
-import { AdminPPTXSettings } from './utils';
-import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez cette ligne ici
+import { AdminPPTXSettings, generatePresentation } from './utils/index.js';
 
 import fs from 'fs/promises';
 import path from 'path';
@@ -262,4 +261,3 @@ export function initializeIpcHandlers() {
 
   console.log('[IPC Handlers] IPC handlers registration attempt finished.');
 }
-export {};
