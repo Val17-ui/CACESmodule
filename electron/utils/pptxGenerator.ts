@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { log } from './logger';
 
 // ========== INTERFACES ==========
 interface Question {
@@ -48,8 +49,6 @@ function escapeXml(unsafe: string): string {
 
   // Supprimer les caractères de contrôle interdits en XML 1.0 (sauf \n, \r, \t)
   let cleaned = unsafe.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-
-import { log } from './logger';
 
   // Journaliser si des caractères suspects sont trouvés
   if (/[:\-]|\-\-/.test(cleaned)) {
