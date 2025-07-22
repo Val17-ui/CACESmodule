@@ -7,7 +7,7 @@ import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez
 import fs from 'fs/promises';
 import path from 'path';
 
-import * as db from './db';
+import db from './db.js';
 
 export function initializeIpcHandlers() {
   console.log('[IPC Handlers] Initializing IPC handlers...');
