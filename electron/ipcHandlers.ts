@@ -68,8 +68,8 @@ export function initializeIpcHandlers() {
 
   // Themes
   ipcMain.handle('db-add-theme', async (event: IpcMainInvokeEvent, data: Theme) => db.addTheme(data));
-  ipcMain.handle('db-get-theme-by-code-and-referential-id', async (event: IpcMainInvokeEvent, code: string, refId: number) => db.getThemeByCodeAndReferentialId(code, refId));
-  ipcMain.handle('db-get-themes-by-referential-id', async (event: IpcMainInvokeEvent, refId: number) => db.getThemesByReferentialId(refId));
+  ipcMain.handle('db-get-theme-by-code-and-referential-id', async (event: IpcMainInvokeEvent, code: string, refId: number) => db.getThemeByCodeAndReferentielId(code, refId));
+  ipcMain.handle('db-get-themes-by-referential-id', async (event: IpcMainInvokeEvent, refId: number) => db.getThemesByReferentielId(refId));
   ipcMain.handle('db-get-theme-by-id', async (event: IpcMainInvokeEvent, id: number) => db.getThemeById(id));
   ipcMain.handle('db-get-all-themes', async () => db.getAllThemes());
 
@@ -88,25 +88,6 @@ export function initializeIpcHandlers() {
     };
   return db.addQuestion(questionToAdd as Omit<QuestionWithId, 'id'>);
    });
-  ipcMain.handle('db-get-question-by-id', async (event: IpcMainInvokeEvent, id: number) => db.getQuestionById(id));
-  ipcMain.handle('db-get-questions-by-bloc-id', async (event: IpcMainInvokeEvent, blocId: number) => db.getQuestionsByBlocId(blocId));
-  ipcMain.handle('db-update-question', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Question>) => db.updateQuestion(id, updates));
-  ipcMain.handle('db-delete-question', async (event: IpcMainInvokeEvent, id: number) => db.deleteQuestion(id));
-  ipcMain.handle('db-get-all-questions', async () => db.getAllQuestions());
-  ipcMain.handle('db-get-questions-by-ids', async (event: IpcMainInvokeEvent, ids: number[]) => db.getQuestionsByIds(ids));
-  ipcMain.handle('db-get-questions-for-session-blocks', async (event: IpcMainInvokeEvent, blocIds?: number[]) => db.getQuestionsForSessionBlocks(blocIds));
-
-  // AdminSettings
-  ipcMain.handle('db-get-admin-setting', async (event: IpcMainInvokeEvent, key: string) => db.getAdminSetting(key));
-  ipcMain.handle('db-set-admin-setting', async (event: IpcMainInvokeEvent, key: string, value: any) => db.setAdminSetting(key, value));
-  ipcMain.handle('db-get-all-admin-settings', async (event: IpcMainInvokeEvent) => db.getAllAdminSettings());
-
-  // Backup/Restore
-  ipcMain.handle('db-export-all-data', async (event: IpcMainInvokeEvent) => db.exportAllData());
-  ipcMain.handle('db-import-all-data', async (event: IpcMainInvokeEvent, data: any) => db.importAllData(data));
-
-  // PPTX Generation
-    
   ipcMain.handle('db-get-question-by-id', async (event: IpcMainInvokeEvent, id: number) => db.getQuestionById(id));
   ipcMain.handle('db-get-questions-by-bloc-id', async (event: IpcMainInvokeEvent, blocId: number) => db.getQuestionsByBlocId(blocId));
   ipcMain.handle('db-update-question', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Question>) => db.updateQuestion(id, updates));
@@ -164,7 +145,7 @@ export function initializeIpcHandlers() {
 
   ipcMain.handle('save-pptx-file', async (event: IpcMainInvokeEvent, fileBuffer: string, fileName: string) => {
     try {
-      const orsSavePath = await db.getAdminSetting('orsSavePath');
+      const orsSavePath = await getAdminSetting('orsSavePath');
       if (!orsSavePath) {
         throw new Error("Le chemin de sauvegarde des ORS n'est pas configuré dans les paramètres techniques.");
       }
