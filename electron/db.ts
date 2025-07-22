@@ -1744,7 +1744,7 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console logs with prefixes for easier debugging of setup and stub calls.
 
-export default { initializeDatabase, getDb, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks,
+export { getDb, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks,
      getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult,
      addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, addVotingDevice, getAllVotingDevices,
      updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer,
@@ -1753,3 +1753,4 @@ export default { initializeDatabase, getDb, addQuestion, getAllQuestions, getQue
      getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit,
      getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit,
      getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, };
+export {};

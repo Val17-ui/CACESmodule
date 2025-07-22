@@ -7,7 +7,7 @@ import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez
 import fs from 'fs/promises';
 import path from 'path';
 
-import db from './db.js';
+import * as db from './db';
 
 export function initializeIpcHandlers() {
   console.log('[IPC Handlers] Initializing IPC handlers...');
@@ -68,8 +68,8 @@ export function initializeIpcHandlers() {
 
   // Themes
   ipcMain.handle('db-add-theme', async (event: IpcMainInvokeEvent, data: Theme) => db.addTheme(data));
-  ipcMain.handle('db-get-theme-by-code-and-referential-id', async (event: IpcMainInvokeEvent, code: string, refId: number) => db.getThemeByCodeAndReferentialId(code, refId));
-  ipcMain.handle('db-get-themes-by-referential-id', async (event: IpcMainInvokeEvent, refId: number) => db.getThemesByReferentialId(refId));
+  ipcMain.handle('db-get-theme-by-code-and-referential-id', async (event: IpcMainInvokeEvent, code: string, refId: number) => db.getThemeByCodeAndReferentielId(code, refId));
+  ipcMain.handle('db-get-themes-by-referential-id', async (event: IpcMainInvokeEvent, refId: number) => db.getThemesByReferentielId(refId));
   ipcMain.handle('db-get-theme-by-id', async (event: IpcMainInvokeEvent, id: number) => db.getThemeById(id));
   ipcMain.handle('db-get-all-themes', async () => db.getAllThemes());
 
@@ -164,7 +164,7 @@ export function initializeIpcHandlers() {
 
   ipcMain.handle('save-pptx-file', async (event: IpcMainInvokeEvent, fileBuffer: string, fileName: string) => {
     try {
-      const orsSavePath = await db.getAdminSetting('orsSavePath');
+      const orsSavePath = await getAdminSetting('orsSavePath');
       if (!orsSavePath) {
         throw new Error("Le chemin de sauvegarde des ORS n'est pas configuré dans les paramètres techniques.");
       }
@@ -262,3 +262,4 @@ export function initializeIpcHandlers() {
 
   console.log('[IPC Handlers] IPC handlers registration attempt finished.');
 }
+export {};

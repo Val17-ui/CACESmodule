@@ -1841,3 +1841,4 @@ export async function generatePPTXVal17(
     throw new Error(`Erreur lors de la génération du PPTX interactif des questions OMBEA: ${error.message}`);
   }
 }
+export {};
