@@ -33,6 +33,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  initializeLogging();
   log('App is ready, initializing...');
   // Set a Content Security Policy
   session.defaultSession.webRequest.onHeadersReceived((details: any, callback: any) => {
@@ -46,7 +47,6 @@ app.whenReady().then(async () => {
     });
   });
   try {
-    initializeLogging();
     log('Initializing database...');
     initializeDatabase();
     log('Initializing IPC handlers...');
