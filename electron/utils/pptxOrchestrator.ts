@@ -96,7 +96,9 @@ function generateOmbeaSessionXml(
   return xml;
 }
 
-import { dialog } from 'electron';
+import { dialog, app } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
 
 let tempImageUrls: string[] = [];
 
@@ -218,10 +220,35 @@ export async function generatePresentation(
       outputOrsZip.file(pptxFileNameInZip, generatedData.pptxBlob);
       outputOrsZip.file("ORSession.xml", orSessionXmlContent);
 
-      const orsBlob = await outputOrsZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
+      const orsBuffer = await outputOrsZip.generateAsync({ type: 'nodebuffer' });
+
+      // --- Début: Logique de sauvegarde automatique du fichier ORS (Point 12 du plan.txt) ---
+      const getSavePathFromSettings = (): string => {
+        // TODO: Implémentez la logique pour récupérer le chemin de sauvegarde depuis les paramètres de l'application.
+        // Pour l'instant, nous utilisons le dossier Documents de l'utilisateur comme chemin par défaut.
+        return path.join(app.getPath('documents'), 'CACES_Exports');
+      };
+
+      const savePath = getSavePathFromSettings();
+      if (!fs.existsSync(savePath)) {
+        fs.mkdirSync(savePath, { recursive: true });
+      }
+
+      const fileName = `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}_OMBEA.ors`;
+      const fullPath = path.join(savePath, fileName);
+
+      try {
+        fs.writeFileSync(fullPath, orsBuffer);
+        console.log("Fichier ORS sauvegardé à :", fullPath);
+      } catch (error: any) {
+        console.error("Erreur lors de la sauvegarde automatique :", error);
+        dialog.showErrorBox("Erreur de sauvegarde", `Impossible de sauvegarder le fichier ORS à ${fullPath}. Veuillez vérifier les permissions ou choisir un autre dossier.`);
+        // Si la sauvegarde automatique échoue, on peut quand même retourner le blob pour permettre une sauvegarde manuelle
+      }
+      // --- Fin: Logique de sauvegarde automatique ---
 
       return {
-        orsBlob: orsBlob,
+        orsBlob: new Blob([orsBuffer], { type: 'application/octet-stream' }), // Retourner un Blob si nécessaire pour d'autres usages
         questionMappings: generatedData.questionMappings,
         ignoredSlideGuids: generatedData.preExistingQuestionSlideGuids
       };

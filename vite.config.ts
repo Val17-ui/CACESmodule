@@ -29,6 +29,22 @@ export default defineConfig({
         },
       },
       {
+        entry: 'electron/utils/pptxOrchestrator.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron/utils',
+          },
+        },
+      },
+      {
+        entry: 'electron/utils/val17PptxGenerator.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron/utils',
+          },
+        },
+      },
+      {
         // Point d'entre pour le script de preload
         entry: path.join(__dirname, 'electron/preload.ts'),
         vite: {

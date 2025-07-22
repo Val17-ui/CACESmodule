@@ -1,3 +1,5 @@
+import * as path from 'path';
+import * as fs from 'fs';
 import JSZip from "jszip";
 import sizeOf from 'image-size';
 
@@ -210,6 +212,28 @@ function processCloudUrl(url: string): string {
   } catch (error) {
     console.error("Erreur lors du traitement de l'URL:", error);
     return url;
+  }
+}
+
+async function loadLocalImageWithDimensions(filePath: string): Promise<{
+  data: Buffer;
+  extension: string;
+  width: number;
+  height: number;
+} | null> {
+  try {
+    const imageBuffer = fs.readFileSync(filePath);
+    const dimensions = sizeOf(imageBuffer);
+    const extension = path.extname(filePath).substring(1) || 'jpg';
+    return {
+      data: imageBuffer,
+      extension: extension,
+      width: dimensions.width || 1920,
+      height: dimensions.height || 1080,
+    };
+  } catch (error) {
+    console.error("Erreur lors du chargement de l'image locale :", error);
+    return null;
   }
 }
 
@@ -1342,7 +1366,10 @@ export async function generatePPTXVal17(
       console.warn("Aucun fichier modèle fourni.");
       throw new Error("Template file is required by generatePPTXVal17.");
     }
-    const templateZip = await JSZip.loadAsync(templateFile);
+    const resolvedTemplatePath = path.resolve(templateFile);
+    console.log("Resolved template path:", resolvedTemplatePath);
+    const templateBuffer = fs.readFileSync(resolvedTemplatePath);
+    const templateZip = await JSZip.loadAsync(templateBuffer);
 
     // ---> DÉBUT : Logique d'extraction exhaustive des GUIDs des questions préexistantes (sans logs internes excessifs) <---
     const preExistingQuestionSlideGuids: string[] = [];
@@ -1599,37 +1626,39 @@ export async function generatePPTXVal17(
     if (questions.some((q) => q.imageUrl)) {
       const imagePromises = questions.map(async (question, index) => {
         if (question.imageUrl) {
-          try {
-            const imageData = await downloadImageFromCloudWithDimensions(
-              question.imageUrl
-            );
-            if (imageData) {
-              const absoluteSlideNumberForImage =
-                effectiveExistingSlideCount + index + 1;
-              const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
-              const dimensions = calculateImageDimensions(
-                imageData.width,
-                imageData.height
-              );
-              return {
-                slideNumberContext: absoluteSlideNumberForImage,
-                image: {
-                  fileName: imgFileName,
-                  data: imageData.data,
-                  width: imageData.width,
-                  height: imageData.height,
-                  dimensions,
-                  extension: imageData.extension,
-                },
-              };
+          let imageData = null;
+          if (question.imageUrl.startsWith("http://") || question.imageUrl.startsWith("https://")) {
+            imageData = await downloadImageFromCloudWithDimensions(question.imageUrl);
+          } else {
+            // Assume local file path
+            const resolvedImagePath = path.resolve(question.imageUrl);
+            console.log(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
+            if (fs.existsSync(resolvedImagePath)) {
+              imageData = await loadLocalImageWithDimensions(resolvedImagePath);
+            } else {
+              console.warn(`[IMAGE] Fichier image local non trouvé: ${resolvedImagePath}`);
             }
-          } catch (error) {
-            console.error(
-              `Erreur téléchargement image pour question ${index + 1} (${
-                question.imageUrl
-              }):`,
-              error
+          }
+
+          if (imageData) {
+            const absoluteSlideNumberForImage =
+              effectiveExistingSlideCount + index + 1;
+            const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
+            const dimensions = calculateImageDimensions(
+              imageData.width,
+              imageData.height
             );
+            return {
+              slideNumberContext: absoluteSlideNumberForImage,
+              image: {
+                fileName: imgFileName,
+                data: imageData.data,
+                width: imageData.width,
+                height: imageData.height,
+                dimensions,
+                extension: imageData.extension,
+              },
+            };
           }
         }
         return null;
