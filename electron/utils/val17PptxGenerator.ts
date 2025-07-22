@@ -1448,10 +1448,7 @@ export async function generatePPTXVal17(
       console.warn("Aucun fichier modèle fourni.");
       throw new Error("Template file is required by generatePPTXVal17.");
     }
-    const resolvedTemplatePath = path.resolve(templateFile);
-    console.log("Resolved template path:", resolvedTemplatePath);
-    const templateBuffer = fs.readFileSync(resolvedTemplatePath);
-    const templateZip = await JSZip.loadAsync(templateBuffer);
+    const templateZip = await JSZip.loadAsync(templateFile);
 
     const preExistingQuestionSlideGuids: string[] = [];
     const slideFilesFolder = templateZip.folder("ppt/slides");

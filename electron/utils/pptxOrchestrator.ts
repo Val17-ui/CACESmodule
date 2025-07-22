@@ -234,7 +234,8 @@ export async function generatePresentation(
 
       const outputOrsZip = new JSZip();
       const pptxFileNameInZip = generationOptions.fileName || `presentation.pptx`;
-      outputOrsZip.file(pptxFileNameInZip, generatedData.pptxBlob);
+      const pptxBuffer = await generatedData.pptxBlob.arrayBuffer();
+      outputOrsZip.file(pptxFileNameInZip, pptxBuffer);
       outputOrsZip.file("ORSession.xml", orSessionXmlContent);
       console.log('[LOG][pptxOrchestrator] Fichiers ajoutés au ZIP ORS.');
 
@@ -267,7 +268,7 @@ export async function generatePresentation(
       // --- Fin: Logique de sauvegarde automatique ---
       console.log('[LOG][pptxOrchestrator] Fin de generatePresentation avec succès.');
       return {
-        orsBlob: new Blob([orsBuffer], { type: 'application/octet-stream' }), // Retourner un Blob si nécessaire pour d'autres usages
+        orsBlob: orsBuffer, // Retourner le buffer directement
         questionMappings: generatedData.questionMappings,
         ignoredSlideGuids: generatedData.preExistingQuestionSlideGuids
       };

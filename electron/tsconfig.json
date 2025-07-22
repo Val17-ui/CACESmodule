@@ -1,19 +1,18 @@
 {
   "compilerOptions": {
     "target": "es6",
-    "module": "NodeNext",
-    "moduleResolution": "nodenext",
+    "module": "commonjs",
+    "moduleResolution": "node",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "../dist-electron",
-    "rootDir": "../",
-    "typeRoots": ["../../node_modules/@types"]
+    "rootDir": "..",
+    "typeRoots": ["./node_modules/@types"]
   },
   "include": [
-    "**/*.ts",
-    "**/*.js"
+    "./**/*.ts"
   ],
   "exclude": [
     "node_modules",

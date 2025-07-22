@@ -2,9 +2,10 @@ import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 import { initializeIpcHandlers } from './ipcHandlers';
 import { initializeDatabase, getDb } from './db';
+import { log } from './utils/logger';
 
 function createWindow() {
-  console.log('createWindow() called');
+  log('createWindow() called');
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -54,7 +55,7 @@ app.whenReady().then(async () => {
       }
     });
   } catch (error) {
-    console.error('[Main] Failed to initialize application:', error);
+    log(`[Main] Failed to initialize application: ${error}`);
     app.quit(); // Quit on critical error
   }
 });

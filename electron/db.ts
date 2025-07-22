@@ -1726,6 +1726,15 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
   });
 };
 
+// Backup and Restore
+const exportAllData = async () => {
+    // Implementation for exporting data
+};
+
+const importAllData = async (data: any) => {
+    // Implementation for importing data
+};
+
 // General Notes for this file:
 // 1. Path Resolution: The database path is now more robust for typical application user data directories.
 //    This is important for packaged Electron applications.
