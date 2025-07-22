@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { logger, LogEntry } from '../utils/logger';
+import { logger, LogEntry } from '../utils/newLogger';
 
 interface LogStore {
   logs: LogEntry[];

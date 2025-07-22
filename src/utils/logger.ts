@@ -1,5 +1,5 @@
+// src/utils/newLogger.ts
 import { format } from 'date-fns';
-import { useLogStore } from '../stores/logStore';
 
 export type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS';
 
@@ -53,13 +53,14 @@ class Logger {
     }
 
     this.logs.push(entry);
-    useLogStore.getState().fetchLogs();
+    // This will be handled by the store
+    // useLogStore.getState().fetchLogs();
     this.persistLog(entry);
   }
 
   private persistLog(entry: LogEntry): void {
     // In a real implementation, this would write to a file
-    console.log(`${entry.timestamp} | ${entry.level} | ${entry.message}`);
+    window.electron.log(entry.message);
   }
 
   public info(message: string, details?: unknown): void {
