@@ -1,13 +1,13 @@
 import { IpcMainInvokeEvent, ipcMain, dialog } from 'electron';
 import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question } from
      '../src/types/index';
-import { AdminPPTXSettings } from './utils';
-import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez cette ligne ici
+import { AdminPPTXSettings } from './utils/index.js';
+import { generatePresentation } from './utils/pptxOrchestrator.js'; // <--- Ajoutez cette ligne ici
 
 import fs from 'fs/promises';
 import path from 'path';
 
-import * as db from './db';
+import * as db from './db.js';
 
 export function initializeIpcHandlers() {
   console.log('[IPC Handlers] Initializing IPC handlers...');

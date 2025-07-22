@@ -14,7 +14,7 @@ import {
   generatePPTXVal17,
   QuestionMapping, // Importer directement
   SessionInfo as Val17SessionInfo
-} from './val17PptxGenerator';
+} from './val17PptxGenerator.js';
 
 // Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
 export type { QuestionMapping };
