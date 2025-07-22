@@ -60,7 +60,7 @@ class Logger {
 
   private persistLog(entry: LogEntry): void {
     // In a real implementation, this would write to a file
-    window.electron.log(entry.message);
+    window.electron.log(`${entry.level}: ${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
   }
 
   public info(message: string, details?: unknown): void {

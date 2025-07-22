@@ -94,6 +94,10 @@ contextBridge.exposeInMainWorld('dbAPI', {
   openResultsFile: () => ipcRenderer.invoke('open-results-file'),
 });
 
+contextBridge.exposeInMainWorld('electron', {
+  log: (message: string) => ipcRenderer.send('log', message),
+});
+
 contextBridge.exposeInMainWorld('electronAPI', {
   Buffer_from: Buffer.from // Expose Buffer.from directly
 });

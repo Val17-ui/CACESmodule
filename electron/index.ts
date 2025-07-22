@@ -2,7 +2,7 @@ import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 import { initializeIpcHandlers } from './ipcHandlers';
 import { initializeDatabase, getDb } from './db';
-import { log } from './utils/logger';
+import { log, initializeLogging } from './utils/logger';
 
 function createWindow() {
   log('Creating main application window');
@@ -46,6 +46,7 @@ app.whenReady().then(async () => {
     });
   });
   try {
+    initializeLogging();
     log('Initializing database...');
     initializeDatabase();
     log('Initializing IPC handlers...');
