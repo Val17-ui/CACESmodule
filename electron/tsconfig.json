@@ -3,13 +3,14 @@
     "target": "es6",
     "module": "commonjs",
     "moduleResolution": "node",
+    "types": ["node"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "../dist-electron",
     "rootDir": "..",
-    "typeRoots": ["./node_modules/@types"]
+    "typeRoots": ["../node_modules/@types"]
   },
   "include": [
     "./**/*.ts"

@@ -9,7 +9,21 @@ export default defineConfig({
     electron([
       {
         // Point d'entre pour le processus principal d'Electron
-        entry: 'dist-electron/electron/index.js',
+        entry: 'electron/index.ts', // Changement ici: fichier source
+        vite: {
+          build: {
+            outDir: 'dist-electron/electron', // Répertoire de sortie pour le processus principal
+            lib: {
+              entry: 'electron/index.ts', // Fichier source pour le processus principal
+              formats: ['cjs'], // Sortie en CommonJS
+              fileName: () => 'index.js', // Nom du fichier de sortie
+            },
+            rollupOptions: {
+              // Externaliser les modules Node.js et autres dépendances
+              external: ['electron', 'better-sqlite3', 'path', 'fs', 'jszip', 'image-size'],
+            },
+          },
+        },
       },
       {
         // Point d'entre pour le script de preload

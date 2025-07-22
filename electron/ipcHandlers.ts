@@ -352,7 +352,7 @@ export function initializeIpcHandlers() {
       }
 
       const filePath = path.join(orsSavePath, fileName);
-      await fs.writeFile(filePath, Buffer.from(fileBuffer, 'base64'));
+      await fs.writeFile(filePath, Buffer.from(fileBuffer));
       return { success: true, filePath };
     } catch (error: any) {
       log(`Failed to save PPTX file: ${error}`);

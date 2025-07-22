@@ -145,7 +145,7 @@ export async function generatePresentation(
   storedQuestions: StoredQuestion[],
   templateFile: File | ArrayBuffer | string,
   adminSettings: AdminPPTXSettings
-): Promise<{ orsBlob: Blob | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
+): Promise<{ orsBlob: ArrayBuffer | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
   console.log('[LOG][pptxOrchestrator] Début de generatePresentation.');
   console.log('[LOG][pptxOrchestrator] sessionInfo:', sessionInfo);
   console.log(`[LOG][pptxOrchestrator] Nombre de participants: ${_participants.length}`);
@@ -268,7 +268,7 @@ export async function generatePresentation(
       // --- Fin: Logique de sauvegarde automatique ---
       console.log('[LOG][pptxOrchestrator] Fin de generatePresentation avec succès.');
       return {
-        orsBlob: orsBuffer, // Retourner le buffer directement
+        orsBlob: orsBuffer.buffer, // Convertir le Buffer en ArrayBuffer
         questionMappings: generatedData.questionMappings,
         ignoredSlideGuids: generatedData.preExistingQuestionSlideGuids
       };

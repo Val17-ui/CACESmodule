@@ -16,7 +16,7 @@ export interface Session {
   participants: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
   // selectionBlocs: SelectedBlock[]; // Remplacé par selectedBlocIds
   selectedBlocIds?: number[]; // Liste des IDs des blocs sélectionnés pour cette session
-  donneesOrs?: Blob | null; // Stockage du fichier .ors généré
+  donneesOrs?: ArrayBuffer | Buffer | null; // Stockage du fichier .ors généré
   status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
   questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>;
