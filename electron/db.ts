@@ -8,6 +8,8 @@ import type {
   } from '../src/types/index';
 import { log } from './utils/logger';
 
+log('[Main Process] db.ts loaded');
+
 // Déterminer le chemin de la base de données de manière plus robuste
 const appName = 'easycertif'; // Nom de votre application
 let userDataPath;
@@ -28,7 +30,7 @@ log(`[DB SETUP] Database path determined as: ${dbPath}`);
 
 let db: import('better-sqlite3').Database;
 
-export function initializeDatabase() {
+function initializeDatabase() {
   if (db) {
     log('[DB SETUP] Database already initialized.');
     return;
@@ -56,6 +58,8 @@ export function initializeDatabase() {
 
   log("[DB SETUP] SQLite database module loaded and initialized.");
 }
+
+module.exports.initializeDatabase = initializeDatabase;
 
 
 // Schéma de la base de données
@@ -1754,7 +1758,7 @@ const importAllData = async (data: any) => {
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console logs with prefixes for easier debugging of setup and stub calls.
 
-export { getDb, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks,
+Object.assign(module.exports, { getDb, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks,
      getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult,
      addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, addVotingDevice, getAllVotingDevices,
      updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer,
@@ -1762,4 +1766,4 @@ export { getDb, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds
      getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes,
      getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit,
      getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit,
-     getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, };
+     getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, });

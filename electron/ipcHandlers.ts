@@ -8,23 +8,13 @@ import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez
 import fs from 'fs/promises';
 import path from 'path';
 
-import {
-    initializeDatabase, getDb, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks,
-    getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult,
-    addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, addVotingDevice, getAllVotingDevices,
-    updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer,
-    addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers,
-    getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes,
-    getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit,
-    getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit,
-    getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData
-} from './db';
+const dbModule = require('./db');
 
 import { log } from './utils/logger';
 
 let handlerInitialized = false;
 
-export function initializeIpcHandlers() {
+module.exports.initializeIpcHandlers = function initializeIpcHandlers() {
   if (handlerInitialized) {
     log('[IPC Handlers] Already initialized. Skipping.');
     return;
@@ -35,210 +25,210 @@ export function initializeIpcHandlers() {
   // Sessions
   ipcMain.handle('db-get-all-sessions', async () => {
     log('[IPC] db-get-all-sessions');
-    return getAllSessions();
+    return dbModule.getAllSessions();
   });
   ipcMain.handle('db-get-session-by-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
     log(`[IPC] db-get-session-by-id: ${sessionId}`);
-    return getSessionById(sessionId);
+    return dbModule.getSessionById(sessionId);
   });
   ipcMain.handle('db-add-session', async (event: IpcMainInvokeEvent, data: Session) => {
     log('[IPC] db-add-session');
-    return addSession(data);
+    return dbModule.addSession(data);
   });
   ipcMain.handle('db-update-session', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Session>) => {
     log(`[IPC] db-update-session: ${id}`);
-    return updateSession(id, updates);
+    return dbModule.updateSession(id, updates);
   });
 
   // SessionResults
   ipcMain.handle('db-add-bulk-session-results', async (event: IpcMainInvokeEvent, results: SessionResult[]) => {
     log(`[IPC] db-add-bulk-session-results: adding ${results.length} results`);
-    return addBulkSessionResults(results);
+    return dbModule.addBulkSessionResults(results);
   });
   ipcMain.handle('db-get-results-for-session', async (event: IpcMainInvokeEvent, sessionId: number) => {
     log(`[IPC] db-get-results-for-session: ${sessionId}`);
-    return getResultsForSession(sessionId);
+    return dbModule.getResultsForSession(sessionId);
   });
 
   // VotingDevices
   ipcMain.handle('db-get-all-voting-devices', async () => {
     log('[IPC] db-get-all-voting-devices');
-    return getAllVotingDevices();
+    return dbModule.getAllVotingDevices();
   });
   ipcMain.handle('db-add-voting-device', async (event: IpcMainInvokeEvent, device: VotingDevice) => {
     log('[IPC] db-add-voting-device');
-    return addVotingDevice(device);
+    return dbModule.addVotingDevice(device);
   });
   ipcMain.handle('db-update-voting-device', async (event: IpcMainInvokeEvent, id: number, updates: Partial<VotingDevice>) => {
     log(`[IPC] db-update-voting-device: ${id}`);
-    return updateVotingDevice(id, updates);
+    return dbModule.updateVotingDevice(id, updates);
   });
   ipcMain.handle('db-delete-voting-device', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-delete-voting-device: ${id}`);
-    return deleteVotingDevice(id);
+    return dbModule.deleteVotingDevice(id);
   });
   ipcMain.handle('db-bulk-add-voting-devices', async (event: IpcMainInvokeEvent, devices: VotingDevice[]) => {
     log(`[IPC] db-bulk-add-voting-devices: adding ${devices.length} devices`);
-    return bulkAddVotingDevices(devices);
+    return dbModule.bulkAddVotingDevices(devices);
   });
 
   // SessionQuestions
   ipcMain.handle('db-add-bulk-session-questions', async (event: IpcMainInvokeEvent, questions: SessionQuestion[]) => {
     log(`[IPC] db-add-bulk-session-questions: adding ${questions.length} questions`);
-    return addBulkSessionQuestions(questions);
+    return dbModule.addBulkSessionQuestions(questions);
   });
   ipcMain.handle('db-delete-session-questions-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
     log(`[IPC] db-delete-session-questions-by-session-id: ${sessionId}`);
-    return deleteSessionQuestionsBySessionId(sessionId);
+    return dbModule.deleteSessionQuestionsBySessionId(sessionId);
   });
   ipcMain.handle('db-get-session-questions-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
     log(`[IPC] db-get-session-questions-by-session-id: ${sessionId}`);
-    return getSessionQuestionsBySessionId(sessionId);
+    return dbModule.getSessionQuestionsBySessionId(sessionId);
   });
 
   // SessionBoitiers
   ipcMain.handle('db-add-bulk-session-boitiers', async (event: IpcMainInvokeEvent, boitiers: SessionBoitier[]) => {
     log(`[IPC] db-add-bulk-session-boitiers: adding ${boitiers.length} boitiers`);
-    return addBulkSessionBoitiers(boitiers);
+    return dbModule.addBulkSessionBoitiers(boitiers);
   });
   ipcMain.handle('db-delete-session-boitiers-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
     log(`[IPC] db-delete-session-boitiers-by-session-id: ${sessionId}`);
-    return deleteSessionBoitiersBySessionId(sessionId);
+    return dbModule.deleteSessionBoitiersBySessionId(sessionId);
   });
   ipcMain.handle('db-get-session-boitiers-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
     log(`[IPC] db-get-session-boitiers-by-session-id: ${sessionId}`);
-    return getSessionBoitiersBySessionId(sessionId);
+    return dbModule.getSessionBoitiersBySessionId(sessionId);
   });
 
   // DeviceKits
   ipcMain.handle('db-get-voting-devices-for-kit', async (event: IpcMainInvokeEvent, kitId: number) => {
     log(`[IPC] db-get-voting-devices-for-kit: ${kitId}`);
-    return getVotingDevicesForKit(kitId);
+    return dbModule.getVotingDevicesForKit(kitId);
   });
   ipcMain.handle('db-get-all-device-kits', async () => {
     log('[IPC] db-get-all-device-kits');
-    return getAllDeviceKits();
+    return dbModule.getAllDeviceKits();
   });
   ipcMain.handle('db-get-default-device-kit', async () => {
     log('[IPC] db-get-default-device-kit');
-    return getDefaultDeviceKit();
+    return dbModule.getDefaultDeviceKit();
   });
   ipcMain.handle('db-add-device-kit', async (event: IpcMainInvokeEvent, data: DeviceKit) => {
     log('[IPC] db-add-device-kit');
-    return addDeviceKit(data);
+    return dbModule.addDeviceKit(data);
   });
   ipcMain.handle('db-update-device-kit', async (event: IpcMainInvokeEvent, id: number, updates: Partial<DeviceKit>) => {
     log(`[IPC] db-update-device-kit: ${id}`);
-    return updateDeviceKit(id, updates);
+    return dbModule.updateDeviceKit(id, updates);
   });
   ipcMain.handle('db-delete-device-kit', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-delete-device-kit: ${id}`);
-    return deleteDeviceKit(id);
+    return dbModule.deleteDeviceKit(id);
   });
   ipcMain.handle('db-set-default-device-kit', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-set-default-device-kit: ${id}`);
-    return setDefaultDeviceKit(id);
+    return dbModule.setDefaultDeviceKit(id);
   });
   ipcMain.handle('db-assign-device-to-kit', async (event: IpcMainInvokeEvent, kitId: number, votingDeviceId: number) => {
     log(`[IPC] db-assign-device-to-kit: kitId=${kitId}, deviceId=${votingDeviceId}`);
-    return assignDeviceToKit(kitId, votingDeviceId);
+    return dbModule.assignDeviceToKit(kitId, votingDeviceId);
   });
   ipcMain.handle('db-remove-device-from-kit', async (event: IpcMainInvokeEvent, kitId: number, votingDeviceId: number) => {
     log(`[IPC] db-remove-device-from-kit: kitId=${kitId}, deviceId=${votingDeviceId}`);
-    return removeDeviceFromKit(kitId, votingDeviceId);
+    return dbModule.removeDeviceFromKit(kitId, votingDeviceId);
   });
   
   ipcMain.handle('db-get-kits-for-voting-device', async (event: IpcMainInvokeEvent, votingDeviceId: number) => {
     log(`[IPC] db-get-kits-for-voting-device: ${votingDeviceId}`);
-    return getKitsForVotingDevice(votingDeviceId);
+    return dbModule.getKitsForVotingDevice(votingDeviceId);
   });
   ipcMain.handle('db-remove-assignments-by-voting-device-id', async (event: IpcMainInvokeEvent, votingDeviceId: number) => {
     log(`[IPC] db-remove-assignments-by-voting-device-id: ${votingDeviceId}`);
-    return removeAssignmentsByVotingDeviceId(votingDeviceId);
+    return dbModule.removeAssignmentsByVotingDeviceId(votingDeviceId);
   });
 
   // Referentiels
   ipcMain.handle('db-add-referential', async (event: IpcMainInvokeEvent, data: Referential) => {
     log('[IPC] db-add-referential');
-    return addReferential(data);
+    return dbModule.addReferential(data);
   });
   ipcMain.handle('db-get-all-referentiels', async () => {
     log('[IPC] db-get-all-referentiels');
-    return getAllReferentiels();
+    return dbModule.getAllReferentiels();
   });
   ipcMain.handle('db-get-referential-by-code', async (event: IpcMainInvokeEvent, code: string) => {
     log(`[IPC] db-get-referential-by-code: ${code}`);
-    return getReferentialByCode(code);
+    return dbModule.getReferentialByCode(code);
   });
   ipcMain.handle('db-get-referential-by-id', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-get-referential-by-id: ${id}`);
-    return getReferentialById(id);
+    return dbModule.getReferentialById(id);
   });
 
   // Trainers
   ipcMain.handle('db-get-all-trainers', async () => {
     log('[IPC] db-get-all-trainers');
-    return getAllTrainers();
+    return dbModule.getAllTrainers();
   });
   ipcMain.handle('db-add-trainer', async (event: IpcMainInvokeEvent, data: Trainer) => {
     log('[IPC] db-add-trainer');
-    return addTrainer(data);
+    return dbModule.addTrainer(data);
   });
   ipcMain.handle('db-delete-trainer', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-delete-trainer: ${id}`);
-    return deleteTrainer(id);
+    return dbModule.deleteTrainer(id);
   });
   ipcMain.handle('db-set-default-trainer', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-set-default-trainer: ${id}`);
-    return setDefaultTrainer(id);
+    return dbModule.setDefaultTrainer(id);
   });
   ipcMain.handle('db-update-trainer', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Trainer>) => {
     log(`[IPC] db-update-trainer: ${id}`);
-    return updateTrainer(id, updates);
+    return dbModule.updateTrainer(id, updates);
   });
 
   // Themes
   ipcMain.handle('db-add-theme', async (event: IpcMainInvokeEvent, data: Theme) => {
     log('[IPC] db-add-theme');
-    return addTheme(data);
+    return dbModule.addTheme(data);
   });
   ipcMain.handle('db-get-theme-by-code-and-referential-id', async (event: IpcMainInvokeEvent, code: string, refId: number) => {
     log(`[IPC] db-get-theme-by-code-and-referential-id: code=${code}, refId=${refId}`);
-    return getThemeByCodeAndReferentialId(code, refId);
+    return dbModule.getThemeByCodeAndReferentialId(code, refId);
   });
   ipcMain.handle('db-get-themes-by-referential-id', async (event: IpcMainInvokeEvent, refId: number) => {
     log(`[IPC] db-get-themes-by-referential-id: ${refId}`);
-    return getThemesByReferentialId(refId);
+    return dbModule.getThemesByReferentialId(refId);
   });
   ipcMain.handle('db-get-theme-by-id', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-get-theme-by-id: ${id}`);
-    return getThemeById(id);
+    return dbModule.getThemeById(id);
   });
   ipcMain.handle('db-get-all-themes', async () => {
     log('[IPC] db-get-all-themes');
-    return getAllThemes();
+    return dbModule.getAllThemes();
   });
 
   // Blocs
   ipcMain.handle('db-add-bloc', async (event: IpcMainInvokeEvent, data: Bloc) => {
     log('[IPC] db-add-bloc');
-    return addBloc(data);
+    return dbModule.addBloc(data);
   });
   ipcMain.handle('db-get-bloc-by-code-and-theme-id', async (event: IpcMainInvokeEvent, code: string, themeId: number) => {
     log(`[IPC] db-get-bloc-by-code-and-theme-id: code=${code}, themeId=${themeId}`);
-    return getBlocByCodeAndThemeId(code, themeId);
+    return dbModule.getBlocByCodeAndThemeId(code, themeId);
   });
   ipcMain.handle('db-get-blocs-by-theme-id', async (event: IpcMainInvokeEvent, themeId: number) => {
     log(`[IPC] db-get-blocs-by-theme-id: ${themeId}`);
-    return getBlocsByThemeId(themeId);
+    return dbModule.getBlocsByThemeId(themeId);
   });
   ipcMain.handle('db-get-bloc-by-id', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-get-bloc-by-id: ${id}`);
-    return getBlocById(id);
+    return dbModule.getBlocById(id);
   });
   ipcMain.handle('db-get-all-blocs', async () => {
     log('[IPC] db-get-all-blocs');
-    return getAllBlocs();
+    return dbModule.getAllBlocs();
   });
 
   // Questions
@@ -248,59 +238,59 @@ export function initializeIpcHandlers() {
       ...data,
       blocId: data.blocId === undefined ? null : data.blocId // Assure que blocId est number ou null
     };
-    return addQuestion(questionToAdd as Omit<QuestionWithId, 'id'>);
+    return dbModule.addQuestion(questionToAdd as Omit<QuestionWithId, 'id'>);
   });
   ipcMain.handle('db-get-question-by-id', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-get-question-by-id: ${id}`);
-    return getQuestionById(id);
+    return dbModule.getQuestionById(id);
   });
   ipcMain.handle('db-get-questions-by-bloc-id', async (event: IpcMainInvokeEvent, blocId: number) => {
     log(`[IPC] db-get-questions-by-bloc-id: ${blocId}`);
-    return getQuestionsByBlocId(blocId);
+    return dbModule.getQuestionsByBlocId(blocId);
   });
   ipcMain.handle('db-update-question', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Question>) => {
     log(`[IPC] db-update-question: ${id}`);
-    return updateQuestion(id, updates);
+    return dbModule.updateQuestion(id, updates);
   });
   ipcMain.handle('db-delete-question', async (event: IpcMainInvokeEvent, id: number) => {
     log(`[IPC] db-delete-question: ${id}`);
-    return deleteQuestion(id);
+    return dbModule.deleteQuestion(id);
   });
   ipcMain.handle('db-get-all-questions', async () => {
     log('[IPC] db-get-all-questions');
-    return getAllQuestions();
+    return dbModule.getAllQuestions();
   });
   ipcMain.handle('db-get-questions-by-ids', async (event: IpcMainInvokeEvent, ids: number[]) => {
     log(`[IPC] db-get-questions-by-ids: ${ids.length} ids`);
-    return getQuestionsByIds(ids);
+    return dbModule.getQuestionsByIds(ids);
   });
   ipcMain.handle('db-get-questions-for-session-blocks', async (event: IpcMainInvokeEvent, blocIds?: number[]) => {
     log(`[IPC] db-get-questions-for-session-blocks: ${blocIds?.length || 0} blocIds`);
-    return getQuestionsForSessionBlocks(blocIds);
+    return dbModule.getQuestionsForSessionBlocks(blocIds);
   });
 
   // AdminSettings
   ipcMain.handle('db-get-admin-setting', async (event: IpcMainInvokeEvent, key: string) => {
     log(`[IPC] db-get-admin-setting: ${key}`);
-    return getAdminSetting(key);
+    return dbModule.getAdminSetting(key);
   });
   ipcMain.handle('db-set-admin-setting', async (event: IpcMainInvokeEvent, key: string, value: any) => {
     log(`[IPC] db-set-admin-setting: ${key}`);
-    return setAdminSetting(key, value);
+    return dbModule.setAdminSetting(key, value);
   });
   ipcMain.handle('db-get-all-admin-settings', async () => {
     log('[IPC] db-get-all-admin-settings');
-    return getAllAdminSettings();
+    return dbModule.getAllAdminSettings();
   });
 
   // Backup/Restore
   ipcMain.handle('db-export-all-data', async () => {
     log('[IPC] db-export-all-data');
-    return exportAllData();
+    return dbModule.exportAllData();
   });
   ipcMain.handle('db-import-all-data', async (event: IpcMainInvokeEvent, data: any) => {
     log('[IPC] db-import-all-data');
-    return importAllData(data);
+    return dbModule.importAllData(data);
   });
 
   // PPTX Generation
@@ -346,7 +336,7 @@ export function initializeIpcHandlers() {
   ipcMain.handle('save-pptx-file', async (event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
     log(`[IPC] save-pptx-file: ${fileName}`);
     try {
-      const orsSavePath = await getAdminSetting('orsSavePath');
+      const orsSavePath = await dbModule.getAdminSetting('orsSavePath');
       if (!orsSavePath) {
         throw new Error("Le chemin de sauvegarde des ORS n'est pas configuré dans les paramètres techniques.");
       }

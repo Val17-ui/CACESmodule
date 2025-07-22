@@ -1,8 +1,10 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
-import { initializeIpcHandlers } from './ipcHandlers';
-import { initializeDatabase, getDb } from './db';
+const { initializeIpcHandlers } = require('./ipcHandlers');
+const dbModule = require('./db');
 import { log, initializeLogging } from './utils/logger';
+
+log('[Main Process] index.ts loaded');
 
 function createWindow() {
   log('Creating main application window');
@@ -48,7 +50,7 @@ app.whenReady().then(async () => {
   });
   try {
     log('Initializing database...');
-    initializeDatabase();
+    dbModule.initializeDatabase();
     log('Initializing IPC handlers...');
     initializeIpcHandlers();
     createWindow();
@@ -67,7 +69,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   log('All windows closed, quitting application...');
   if (process.platform !== 'darwin') {
-    getDb().close();
+    dbModule.getDb().close();
     app.quit();
   }
 });
