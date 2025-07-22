@@ -103,13 +103,11 @@ interface ImageDimensions {
 }
 
 function generateGUID(): string {
-  const guid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16).toUpperCase();
   });
-  console.log(`[LOG][val17PptxGenerator] Generated GUID: ${guid}`);
-  return guid;
 }
 
 function escapeXml(unsafe: string): string {
@@ -129,7 +127,6 @@ function escapeXml(unsafe: string): string {
 }
 
 function countExistingSlides(zip: JSZip): number {
-  console.log('[LOG][val17PptxGenerator] Counting existing slides.');
   let count = 0;
   zip.folder("ppt/slides")?.forEach((relativePath) => {
     if (
@@ -139,12 +136,10 @@ function countExistingSlides(zip: JSZip): number {
       count++;
     }
   });
-  console.log(`[LOG][val17PptxGenerator] Found ${count} existing slides.`);
   return count;
 }
 
 function validateQuestions(questions: Val17Question[]): void {
-  console.log('[LOG][val17PptxGenerator] Validating questions.');
   if (!Array.isArray(questions) || questions.length === 0) {
     throw new Error("Au moins une question est requise");
   }
@@ -175,7 +170,6 @@ function validateQuestions(questions: Val17Question[]): void {
       throw new Error(`Question ${index + 1}: correctAnswerIndex invalide`);
     }
   });
-  console.log('[LOG][val17PptxGenerator] Questions validated successfully.');
 }
 
 function calculateImageDimensions(
@@ -201,27 +195,22 @@ function calculateImageDimensions(
   const offsetX = Math.round((imageAreaWidth - finalWidth) / 2);
   const offsetY = Math.round((imageAreaHeight - finalHeight) / 2);
 
-  const dimensions = {
+  return {
     x: imageAreaX + offsetX,
     y: imageAreaY + offsetY,
     width: finalWidth,
     height: finalHeight,
   };
-  console.log('[LOG][val17PptxGenerator] Calculated image dimensions:', dimensions);
-  return dimensions;
 }
 
 function processCloudUrl(url: string): string {
-  console.log(`[LOG][val17PptxGenerator] Processing cloud URL: ${url}`);
   try {
     if (url.includes("dropbox.com")) {
-      const newUrl = url.replace("?dl=0", "?dl=1");
-      console.log(`[LOG][val17PptxGenerator] Dropbox URL transformed to: ${newUrl}`);
-      return newUrl;
+      return url.replace("?dl=0", "?dl=1");
     }
     return url;
   } catch (error) {
-    console.error("[ERREUR][val17PptxGenerator] Erreur lors du traitement de l'URL:", error);
+    console.error("Erreur lors du traitement de l'URL:", error);
     return url;
   }
 }
@@ -232,21 +221,18 @@ async function loadLocalImageWithDimensions(filePath: string): Promise<{
   width: number;
   height: number;
 } | null> {
-  console.log(`[LOG][val17PptxGenerator] Loading local image from: ${filePath}`);
   try {
     const imageBuffer = fs.readFileSync(filePath);
     const dimensions = sizeOf(imageBuffer);
     const extension = path.extname(filePath).substring(1) || 'jpg';
-    const result = {
+    return {
       data: imageBuffer,
       extension: extension,
       width: dimensions.width || 1920,
       height: dimensions.height || 1080,
     };
-    console.log(`[LOG][val17PptxGenerator] Local image loaded successfully. Dimensions: ${result.width}x${result.height}`);
-    return result;
   } catch (error) {
-    console.error("[ERREUR][val17PptxGenerator] Erreur lors du chargement de l'image locale :", error);
+    console.error("Erreur lors du chargement de l'image locale :", error);
     return null;
   }
 }
@@ -257,7 +243,6 @@ async function downloadImageFromCloudWithDimensions(url: string): Promise<{
   width: number;
   height: number;
 } | null> {
-  console.log(`[LOG][val17PptxGenerator] Downloading image from cloud: ${url}`);
   try {
     let finalUrl = url;
     if (url.includes("dropbox.com")) {
@@ -274,16 +259,14 @@ async function downloadImageFromCloudWithDimensions(url: string): Promise<{
     const dimensions = sizeOf(imageBuffer);
     const extension = dimensions.type || 'jpg';
 
-    const result = {
+    return {
       data: imageBuffer,
       extension,
       width: dimensions.width || 1920,
       height: dimensions.height || 1080,
     };
-    console.log(`[LOG][val17PptxGenerator] Image downloaded successfully. Dimensions: ${result.width}x${result.height}`);
-    return result;
   } catch (error) {
-    console.error(`[ERREUR][val17PptxGenerator] [IMAGE] ✗ Échec pour ${url}:`, error);
+    console.error(`[IMAGE] ✗ Échec pour ${url}:`, error);
     return null;
   }
 }
@@ -292,11 +275,9 @@ function updateContentTypesForImages(
   content: string,
   imageExtensions: Set<string>
 ): string {
-  console.log('[LOG][val17PptxGenerator] Updating content types for images:', imageExtensions);
   let updated = content;
   imageExtensions.forEach((ext) => {
     if (!updated.includes(`Extension="${ext}"`)) {
-      console.log(`[LOG][val17PptxGenerator] Adding content type for extension: ${ext}`);
       let contentType = "image/jpeg"; // Default
       if (ext === "png") contentType = "image/png";
       else if (ext === "gif") contentType = "image/gif";
@@ -327,7 +308,6 @@ function updateContentTypesForImages(
 async function findNextAvailableSlideLayoutId(
   zip: JSZip
 ): Promise<{ layoutId: number; layoutFileName: string; rId: string }> {
-  console.log('[LOG][val17PptxGenerator] Finding next available slide layout ID.');
   const masterRelsFile = zip.file(
     "ppt/slideMasters/_rels/slideMaster1.xml.rels"
   );
@@ -345,19 +325,16 @@ async function findNextAvailableSlideLayoutId(
   const allRIds = extractExistingRIds(masterRelsContent);
   const existingRIds = allRIds.map((m) => m.rId); 
   const nextRId = getNextAvailableRId(existingRIds);
-  const result = {
+  return {
     layoutId: nextLayoutNum,
     layoutFileName: `slideLayout${nextLayoutNum}.xml`,
     rId: nextRId,
   };
-  console.log('[LOG][val17PptxGenerator] Next available slide layout ID found:', result);
-  return result;
 }
 
 async function ensureOmbeaSlideLayoutExists(
   zip: JSZip
 ): Promise<{ layoutFileName: string; layoutRId: string }> {
-  console.log('[LOG][val17PptxGenerator] Ensuring OMBEA slide layout exists.');
   const { layoutId, layoutFileName, rId } =
     await findNextAvailableSlideLayoutId(zip);
   const slideLayoutContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="tx" preserve="1"><p:cSld name="Titre et texte"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Titre 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez le style du titre</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Espace réservé du texte 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="0"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez les styles du texte du masque</a:t></a:r></a:p><a:p><a:pPr lvl="1"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Deuxième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="2"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Troisième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="3"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Quatrième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="4"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Cinquième niveau</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Espace réservé de la date 3"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="dt" sz="half" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{ABB4FD2C-0372-488A-B992-EB1BD753A34A}" type="datetimeFigureOut"><a:rPr lang="fr-FR" smtClean=... [truncated]
@@ -372,7 +349,6 @@ async function ensureOmbeaSlideLayoutExists(
   await updateSlideMasterRelsForNewLayout(zip, layoutFileName, rId);
   await updateSlideMasterForNewLayout(zip, layoutId, rId);
   await updateContentTypesForNewLayout(zip, layoutFileName);
-  console.log(`[LOG][val17PptxGenerator] OMBEA slide layout ensured. FileName: ${layoutFileName}, rId: ${rId}`);
   return { layoutFileName: layoutFileName, layoutRId: rId };
 }
 
@@ -381,7 +357,6 @@ async function updateSlideMasterRelsForNewLayout(
   layoutFileName: string,
   rId: string
 ): Promise<void> {
-  console.log(`[LOG][val17PptxGenerator] Updating slide master rels for new layout: ${layoutFileName}`);
   const masterRelsFile = zip.file(
     "ppt/slideMasters/_rels/slideMaster1.xml.rels"
   );
@@ -403,7 +378,6 @@ async function updateSlideMasterForNewLayout(
   layoutId: number,
   rId: string
 ): Promise<void> {
-  console.log(`[LOG][val17PptxGenerator] Updating slide master for new layout ID: ${layoutId}`);
   const masterFile = zip.file("ppt/slideMasters/slideMaster1.xml");
   if (masterFile) {
     let content = await masterFile.async("string");
@@ -425,7 +399,6 @@ async function updateContentTypesForNewLayout(
   zip: JSZip,
   layoutFileName: string
 ): Promise<void> {
-  console.log(`[LOG][val17PptxGenerator] Updating content types for new layout: ${layoutFileName}`);
   const contentTypesFile = zip.file("[Content_Types].xml");
   if (contentTypesFile) {
     let content = await contentTypesFile.async("string");
@@ -452,7 +425,6 @@ function createIntroTitleSlideXml(
   sessionInfo: SessionInfo,
   slideNumber: number
 ): string {
-  console.log(`[LOG][val17PptxGenerator] Creating intro title slide XML for slide number: ${slideNumber}`);
   const slideComment = `<!-- Intro Slide ${slideNumber}: Title -->`;
   const baseId = slideNumber * 1000;
   const titlePlaceholder = `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="title"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
@@ -472,7 +444,6 @@ function generateTableRowsXml(
   participants: ParticipantForGenerator[],
   rowHeightEMU: number = 370840
 ): string {
-  console.log(`[LOG][val17PptxGenerator] Generating table rows XML for ${participants.length} participants.`);
   let tableRowsXml = "";
   const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
 
@@ -503,7 +474,6 @@ function generateTableRowsXml(
 }
 
 function generateTableGraphicFrame(participants: ParticipantForGenerator[], baseSpId: number): string {
-    console.log('[LOG][val17PptxGenerator] Generating table graphic frame.');
     const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
 
     const slideWidthEMU = 12192000;
@@ -558,14 +528,13 @@ function createIntroParticipantsSlideXml(
   layoutTblPr: string | null,
   layoutTblGrid: string | null
 ): string {
-  console.log(`[LOG][val17PptxGenerator] Creating intro participants slide XML for slide number: ${slideNumber}`);
   const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
   const titleTextToSet = "Participants";
 
   let finalSlideXml = "";
 
   if (layoutXmlAsSlideBase && layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
-    console.log("[LOG][val17PptxGenerator] Using provided layout for participants slide.");
+    console.log("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
     const tableRows = generateTableRowsXml(participants);
     const newTblContent = `${layoutTblPr}${layoutTblGrid}${tableRows}`;
     const newFullTblXml = `<a:tbl>${newTblContent}</a:tbl>`;
@@ -578,7 +547,7 @@ function createIntroParticipantsSlideXml(
     finalSlideXml = baseSlideStructure;
 
   } else {
-    console.log("[LOG][val17PptxGenerator] Fallback: Dynamically generating full participants table.");
+    console.log("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
     const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2);
 
     finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
@@ -623,7 +592,6 @@ function createSlideXml(
   imageDimensions?: ImageDimensions,
   ombeaConfig?: ConfigOptions
 ): string {
-  console.log(`[LOG][val17PptxGenerator] Creating slide XML for question slide number: ${slideNumber}`);
   const slideComment = `<!-- Slide ${slideNumber} -->`;
   // slideNumber est le numéro de la diapositive dans le lot de questions (1ère q, 2ème q)
   // et non le numéro absolu de la diapositive dans la présentation finale.
@@ -688,7 +656,6 @@ function calculateBaseTagNumber(
 }
 
 function findHighestExistingTagNumber(zip: JSZip): number {
-  console.log('[LOG][val17PptxGenerator] Finding highest existing tag number.');
   let maxTagNumber = 0;
   const tagsFolder = zip.folder("ppt/tags");
   if (tagsFolder) {
@@ -700,7 +667,6 @@ function findHighestExistingTagNumber(zip: JSZip): number {
       }
     });
   }
-  console.log(`[LOG][val17PptxGenerator] Highest existing tag number is: ${maxTagNumber}`);
   return maxTagNumber;
 }
 
@@ -709,10 +675,8 @@ async function findLayoutByCSldName(
   targetName: string,
   layoutType: "title" | "participants"
 ): Promise<string | null> {
-  console.log(`[LOG][val17PptxGenerator] Finding layout by cSld name. Target: "${targetName}", Type: ${layoutType}`);
   const layoutsFolder = zip.folder("ppt/slideLayouts");
   if (!layoutsFolder) {
-    console.warn('[WARN][val17PptxGenerator] ppt/slideLayouts folder not found.');
     return null;
   }
 
@@ -746,7 +710,6 @@ async function findLayoutByCSldName(
           const normalizedCSldNameAttr = cSldNameAttr.toLowerCase().replace(/\s+/g, "");
 
           if (normalizedCSldNameAttr === normalizedTargetName) {
-            console.log(`[LOG][val17PptxGenerator] Found exact layout match: ${fileEntry.name}`);
             return fileEntry.name;
           }
 
@@ -765,18 +728,16 @@ async function findLayoutByCSldName(
               }
 
               if (targetMatchesAliasOrType) {
-                console.log(`[LOG][val17PptxGenerator] Found aliased layout match: ${fileEntry.name}`);
                 return fileEntry.name;
               }
             }
           }
         }
        } catch (_error) { 
-        console.warn(`[WARN][val17PptxGenerator] Error reading layout file ${fileEntry.name}`, _error);
+
       }
     }
   }
-  console.warn(`[WARN][val17PptxGenerator] No layout found for target: "${targetName}"`);
   return null;
 }
 
@@ -785,7 +746,6 @@ function ensureTagContinuity(
   startingTag: number,
   endingTag: number
 ): string[] {
-  console.log(`[LOG][val17PptxGenerator] Ensuring tag continuity from ${startingTag} to ${endingTag}.`);
   const warnings: string[] = [];
   for (let i = startingTag; i <= endingTag; i++) {
     if (!zip.file(`ppt/tags/tag${i}.xml`)) {
@@ -803,7 +763,6 @@ function createSlideTagFiles(
   ombeaConfig?: ConfigOptions,
   tagOffset: number = 0
 ): TagInfo[] {
-  console.log(`[LOG][val17PptxGenerator] Creating slide tag files for question index in batch: ${questionIndexInBatch}`);
   const baseTagNumber = calculateBaseTagNumber(questionIndexInBatch, tagOffset);
   const slideGuid = generateGUID();
   const points = options 
@@ -902,7 +861,6 @@ function updatePresentationRelsWithMappings(
   slideRIdMappings: { slideNumber: number; rId: string }[];
   oldToNewRIdMap: { [oldRId: string]: string };
 } {
-  console.log('[LOG][val17PptxGenerator] Updating presentation rels with mappings.');
   const existingRels = extractExistingRIds(originalContent);
   const finalRelsOutput: RIdMapping[] = [];
   const slideRIdMappings: { slideNumber: number; rId: string }[] = [];
@@ -917,7 +875,7 @@ function updatePresentationRelsWithMappings(
     finalRelsOutput.push({ ...originalSlideMaster, rId: "rId1" });
     oldToNewRIdMap[originalSlideMaster.rId] = "rId1";
   } else {
-    console.warn("[WARN][val17PptxGenerator] No Slide Master found. Adding a default as rId1.");
+    console.warn("No Slide Master found. Adding a default as rId1.");
     finalRelsOutput.push({ rId: "rId1", type: slideMasterType, target: "slideMasters/slideMaster1.xml", originalRId: "rId1_placeholder" });
   }
   rIdCounter = 2;
@@ -986,7 +944,6 @@ function updatePresentationRelsWithMappings(
   updatedContent += "\n</Relationships>";
 
   slideRIdMappings.sort((a, b) => a.slideNumber - b.slideNumber);
-  console.log('[LOG][val17PptxGenerator] Presentation rels updated.');
   return { updatedContent, slideRIdMappings, oldToNewRIdMap };
 }
 
@@ -996,10 +953,9 @@ async function rebuildPresentationXml(
   slideSizeAttrs: SlideSizeAttributes | null,
   oldToNewRIdMap: { [oldRId: string]: string }
 ): Promise<void> {
-  console.log('[LOG][val17PptxGenerator] Rebuilding presentation.xml.');
   const presentationFile = zip.file("ppt/presentation.xml");
   if (!presentationFile) {
-    console.error("[ERREUR][val17PptxGenerator] ppt/presentation.xml not found in template ZIP.");
+    console.error("ppt/presentation.xml not found in template ZIP.");
     return;
   }
   let content = await presentationFile.async("string");
@@ -1010,7 +966,7 @@ async function rebuildPresentationXml(
       return `r:id="${newRId}"`;
     }
     console.warn(
-      `[WARN][val17PptxGenerator] presentation.xml: No new r:id mapping found for old r:id="${oldRId}". Keeping original. Match: ${match}`
+      `presentation.xml: No new r:id mapping found for old r:id="${oldRId}". Keeping original. Match: ${match}`
     );
     return match;
   });
@@ -1058,7 +1014,7 @@ async function rebuildPresentationXml(
             )}${newSldSzTag}\n  ${content.slice(insertPoint)}`;
           } else {
             console.warn(
-              "[WARN][val17PptxGenerator] Could not find a suitable place to insert <p:sldSz> in presentation.xml."
+              "Could not find a suitable place to insert <p:sldSz> in presentation.xml."
             );
           }
         }
@@ -1066,7 +1022,6 @@ async function rebuildPresentationXml(
     }
   }
   zip.file("ppt/presentation.xml", content);
-  console.log('[LOG][val17PptxGenerator] presentation.xml rebuilt.');
 }
 
 function updateContentTypesComplete(
@@ -1077,7 +1032,6 @@ function updateContentTypesComplete(
   ombeaQuestionLayoutFileName: string,
   totalTagsUsed: number
 ): string {
-  console.log('[LOG][val17PptxGenerator] Performing complete update of [Content_Types].xml.');
   let updatedContent = originalContent;
   let newOverrides = "";
 
@@ -1135,7 +1089,6 @@ function calculateAppXmlMetadata(
   totalFinalSlides: number,
   newOmbeaQuestions: Val17Question[]
 ): AppXmlMetadata {
-  console.log('[LOG][val17PptxGenerator] Calculating app.xml metadata.');
   let totalWords = 0;
   let totalParagraphs = 0;
   const newSlideTitles: string[] = [];
@@ -1148,24 +1101,21 @@ function calculateAppXmlMetadata(
     totalParagraphs += 1 + q.options.length + 1;
     newSlideTitles.push(q.question);
   });
-  const metadata = {
+  return {
     totalSlides: totalFinalSlides,
     totalWords,
     totalParagraphs,
     slideTitles: newSlideTitles,
   };
-  console.log('[LOG][val17PptxGenerator] App.xml metadata calculated:', metadata);
-  return metadata;
 }
 
 async function updateAppXml(
   zip: JSZip,
   metadata: AppXmlMetadata
 ): Promise<void> {
-  console.log('[LOG][val17PptxGenerator] Updating app.xml.');
   const appFile = zip.file("docProps/app.xml");
   if (!appFile) {
-    console.warn("[WARN][val17PptxGenerator] app.xml not found, creating a new file.");
+    console.warn("app.xml non trouvé, création d'un nouveau fichier");
     createNewAppXml(zip, metadata);
     return;
   }
@@ -1173,7 +1123,6 @@ async function updateAppXml(
   content = updateSimpleFields(content, metadata);
   content = updateHeadingPairsAndTitles(content, metadata.slideTitles);
   zip.file("docProps/app.xml", content);
-  console.log('[LOG][val17PptxGenerator] app.xml updated.');
 }
 
 function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
@@ -1332,7 +1281,6 @@ function buildTitlesOfParts(
 }
 
 function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata): void {
-  console.log('[LOG][val17PptxGenerator] Creating new app.xml.');
   const defaultFonts = ["Arial", "Calibri"];
   const defaultThemes = ["Thème Office"];
   const headingPairs = buildHeadingPairs(
@@ -1354,7 +1302,6 @@ async function updateCoreXml(
   zip: JSZip,
   newQuestionCount: number
 ): Promise<void> {
-  console.log('[LOG][val17PptxGenerator] Updating core.xml.');
   const coreFile = zip.file("docProps/core.xml");
   if (coreFile) {
     let content = await coreFile.async("string");
@@ -1391,7 +1338,6 @@ async function updateCoreXml(
       }
     }
     zip.file("docProps/core.xml", content);
-    console.log('[LOG][val17PptxGenerator] core.xml updated.');
   }
 }
 
@@ -1401,48 +1347,31 @@ async function getLayoutXml(zip: JSZip, layoutFileName: string): Promise<string 
   if (layoutFile) {
     return layoutFile.async("string");
   }
-  console.warn(`[WARN][val17PptxGenerator] [getLayoutXml] Fichier layout non trouvé: ${layoutFileName}`);
+  console.warn(`[getLayoutXml] Fichier layout non trouvé: ${layoutFileName}`);
   return null;
 }
 
 // Fonction principale exportée
 export async function generatePPTXVal17(
-  templateFile: string | Buffer,
+  templateFile: any,
   questions: Val17Question[],
   options: GenerationOptions = {},
   sessionInfo?: SessionInfo,
   participants?: ParticipantForGenerator[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
-  console.log('--- [LOG][val17PptxGenerator] DÉBUT DE LA GÉNÉRATION PPTX VAL17 ---');
   try {
     // const executionId = Date.now(); 
     validateQuestions(questions);
     if (!templateFile) {
-      console.warn("[WARN][val17PptxGenerator] Aucun fichier modèle fourni.");
+      console.warn("Aucun fichier modèle fourni.");
       throw new Error("Template file is required by generatePPTXVal17.");
     }
-
-    // Gérer le cas où templateFile est un chemin de fichier (string)
-    let templateBuffer: Buffer;
-    if (typeof templateFile === 'string') {
-        console.log(`[LOG][val17PptxGenerator] Loading template from file path: ${templateFile}`);
-        if (!fs.existsSync(templateFile)) {
-            console.error(`[ERREUR][val17PptxGenerator] Le fichier template n'existe pas à l'emplacement: ${templateFile}`);
-            throw new Error(`Template file not found at: ${templateFile}`);
-        }
-        templateBuffer = fs.readFileSync(templateFile);
-    } else {
-        // Gérer les autres types (Buffer, etc.)
-        console.log('[LOG][val17PptxGenerator] Loading template from buffer/object.');
-        templateBuffer = templateFile; // Assumer que c'est déjà un Buffer
-    }
-
-    console.log('[LOG][val17PptxGenerator] Chargement du template ZIP.');
+    const resolvedTemplatePath = path.resolve(templateFile);
+    console.log("Resolved template path:", resolvedTemplatePath);
+    const templateBuffer = fs.readFileSync(resolvedTemplatePath);
     const templateZip = await JSZip.loadAsync(templateBuffer);
-    console.log('[LOG][val17PptxGenerator] Template ZIP chargé.');
 
     // ---> DÉBUT : Logique d'extraction exhaustive des GUIDs des questions préexistantes (sans logs internes excessifs) <---
-    console.log('[LOG][val17PptxGenerator] Début de l\'extraction des GUIDs des questions préexistantes.');
     const preExistingQuestionSlideGuids: string[] = [];
     const slideFilesFolder = templateZip.folder("ppt/slides");
 
@@ -1493,12 +1422,12 @@ export async function generatePPTXVal17(
       await Promise.all(slideProcessingPromises);
 
       if (preExistingQuestionSlideGuids.length > 0) {
-        console.log("[LOG][val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle:", preExistingQuestionSlideGuids);
+        console.log("[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle:", preExistingQuestionSlideGuids);
       } else {
-        console.log("[LOG][val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID) trouvée dans le modèle.");
+        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID) trouvée dans le modèle.");
       }
     } else {
-        console.log("[LOG][val17PptxGenerator] Dossier ppt/slides non trouvé dans le templateZip.");
+        console.log("[val17PptxGenerator] Dossier ppt/slides non trouvé dans le templateZip.");
     }
     // ---> FIN : Logique d'extraction exhaustive des GUIDs des questions préexistantes <---
 
@@ -1518,14 +1447,13 @@ export async function generatePPTXVal17(
         if (sldSzMatch[3]) {
           slideSizeAttrs.type = sldSzMatch[3];
         }
-        console.log('[LOG][val17PptxGenerator] Slide size attributes found:', slideSizeAttrs);
       } else {
         console.warn(
-          "[WARN][val17PptxGenerator] <p:sldSz> non trouvé dans le presentation.xml du modèle."
+          "<p:sldSz> non trouvé dans le presentation.xml du modèle."
         );
       }
     } else {
-      console.warn("[WARN][val17PptxGenerator] ppt/presentation.xml non trouvé dans le ZIP du modèle.");
+      console.warn("ppt/presentation.xml non trouvé dans le ZIP du modèle.");
     }
 
     const existingTagsCount = findHighestExistingTagNumber(templateZip);
@@ -1533,11 +1461,10 @@ export async function generatePPTXVal17(
 
     const outputZip = new JSZip();
     const copyPromises: Promise<void>[] = [];
-    console.log('[LOG][val17PptxGenerator] Copying all files from template to output zip.');
     templateZip.forEach((relativePath, file) => {
       if (!file.dir) {
         // Log the file being processed
-        // console.log(`[val17PptxGenerator] Copying file: ${relativePath}`); // This is too verbose
+        console.log(`[val17PptxGenerator] Copying file: ${relativePath}`);
         const copyPromise: Promise<void> = file
           .async("arraybuffer")
           .then((content) => {
@@ -1549,7 +1476,6 @@ export async function generatePPTXVal17(
       }
     });
     await Promise.all(copyPromises);
-    console.log('[LOG][val17PptxGenerator] All files copied.');
 
     const initialExistingSlideCount = countExistingSlides(outputZip);
     let introSlidesAddedCount = 0;
@@ -1561,7 +1487,6 @@ export async function generatePPTXVal17(
 
     // Gestion de la diapositive de titre
     if (sessionInfo && options.introSlideLayouts?.titleLayoutName) {
-      console.log('[LOG][val17PptxGenerator] Adding intro title slide.');
       const targetTitleLayoutName = options.introSlideLayouts.titleLayoutName;
       const actualTitleLayoutPath = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title");
       if (actualTitleLayoutPath) {
@@ -1578,15 +1503,13 @@ export async function generatePPTXVal17(
           layoutFileName: actualTitleLayoutPath,
         });
         introSlidesAddedCount++;
-        console.log(`[LOG][val17PptxGenerator] Intro title slide added as slide${currentIntroSlideNumber}.xml`);
       } else {
-        console.warn(`[WARN][val17PptxGenerator] Layout de titre avec nom approchant "${targetTitleLayoutName}" non trouvé. Slide de titre non ajoutée.`);
+        console.warn(`Layout de titre avec nom approchant "${targetTitleLayoutName}" non trouvé. Slide de titre non ajoutée.`);
       }
     }
 
     // Gestion de la diapositive des participants
     if (participants && participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
-      console.log('[LOG][val17PptxGenerator] Adding participants slide.');
       const targetParticipantsLayoutName = options.introSlideLayouts.participantsLayoutName;
       const actualParticipantsLayoutPath = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants");
 
@@ -1605,20 +1528,20 @@ export async function generatePPTXVal17(
             layoutGraphicFrameXml = graphicFrameMatch[0];
             // Log plus complet de layoutGraphicFrameXml pour inspection
             if (layoutGraphicFrameXml.length < 2000) { // Limiter la taille du log si trop grand
-                 console.log("[LOG][val17PptxGenerator] Full layoutGraphicFrameXml:", layoutGraphicFrameXml);
+                 console.log("[DEBUG_TABLE_LAYOUT] Full layoutGraphicFrameXml:", layoutGraphicFrameXml);
             } else {
-                 console.log("[LOG][val17PptxGenerator] Found graphicFrame (snippet):", layoutGraphicFrameXml.substring(0, 1000) + "...");
+                 console.log("[DEBUG_TABLE_LAYOUT] Found graphicFrame (snippet):", layoutGraphicFrameXml.substring(0, 1000) + "...");
             }
-            console.log(`[LOG][val17PptxGenerator] Index of '<a:tblPr' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblPr')}`);
-            console.log(`[LOG][val17PptxGenerator] Index of '<a:tblGrid' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblGrid')}`);
+            console.log(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblPr' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblPr')}`);
+            console.log(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblGrid' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblGrid')}`);
 
             // Tentative avec une regex très simple pour tblPr
             const simpleTblPrRegex = /<a:tblPr/;
             const simpleTblPrMatch = layoutGraphicFrameXml.match(simpleTblPrRegex);
             if (simpleTblPrMatch) {
-              console.log("[LOG][val17PptxGenerator] Found '<a:tblPr' using simple regex. Match object:", simpleTblPrMatch);
+              console.log("[DEBUG_TABLE_LAYOUT] Found '<a:tblPr' using simple regex. Match object:", simpleTblPrMatch);
             } else {
-              console.warn("[WARN][val17PptxGenerator] Did NOT find '<a:tblPr' using simple regex.");
+              console.warn("[DEBUG_TABLE_LAYOUT] Did NOT find '<a:tblPr' using simple regex.");
             }
 
             // Regex pour tblPr:
@@ -1626,9 +1549,9 @@ export async function generatePPTXVal17(
             const tblPrMatch = layoutGraphicFrameXml.match(tblPrRegex);
             if (tblPrMatch && tblPrMatch[0]) { // tblPrMatch[0] est la balise complète, tblPrMatch[1] les attributs, tblPrMatch[2] le contenu interne
               layoutTblPrXml = tblPrMatch[0];
-              console.log("[LOG][val17PptxGenerator] Extracted tblPr from layout (v2):", layoutTblPrXml);
+              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblPr from layout (v2):", layoutTblPrXml);
             } else {
-              console.warn("[WARN][val17PptxGenerator] Could not extract tblPr from layout's table within graphicFrame (v2).");
+              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblPr from layout's table within graphicFrame (v2).");
             }
 
             // Regex pour tblGrid:
@@ -1636,18 +1559,18 @@ export async function generatePPTXVal17(
             const tblGridMatch = layoutGraphicFrameXml.match(tblGridRegex);
             if (tblGridMatch && tblGridMatch[0]) {
               layoutTblGridXml = tblGridMatch[0];
-              console.log("[LOG][val17PptxGenerator] Extracted tblGrid from layout (v2):", layoutTblGridXml);
+              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblGrid from layout (v2):", layoutTblGridXml);
             } else {
-              console.warn("[WARN][val17PptxGenerator] Could not extract tblGrid from layout's table within graphicFrame (v2).");
+              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table within graphicFrame (v2).");
             }
           } else {
-            console.warn("[WARN][val17PptxGenerator] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
+            console.warn("[DEBUG_TABLE_LAYOUT] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
           }
         } else {
-          console.warn(`[WARN][val17PptxGenerator] Could not read content of layout file: ${actualParticipantsLayoutPath}`);
+          console.warn(`[DEBUG_TABLE_LAYOUT] Could not read content of layout file: ${actualParticipantsLayoutPath}`);
         }
 
-        console.log(`[LOG][val17PptxGenerator] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
+        console.log(`[TEST_PPTX_GEN] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
         const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
 
         const participantsSlideXml = createIntroParticipantsSlideXml(
@@ -1673,9 +1596,8 @@ export async function generatePPTXVal17(
           layoutFileName: actualParticipantsLayoutPath,
         });
         introSlidesAddedCount++;
-        console.log(`[LOG][val17PptxGenerator] Participants slide added as slide${currentIntroSlideNumber}.xml`);
       } else {
-        console.warn(`[WARN][val17PptxGenerator] Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé.`);
+        console.warn(`Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé.`);
       }
     }
 
@@ -1702,7 +1624,6 @@ export async function generatePPTXVal17(
     const questionMappingsInternal: QuestionMapping[] = [];
 
     if (questions.some((q) => q.imageUrl)) {
-      console.log('[LOG][val17PptxGenerator] Processing images for questions.');
       const imagePromises = questions.map(async (question, index) => {
         if (question.imageUrl) {
           let imageData = null;
@@ -1711,11 +1632,11 @@ export async function generatePPTXVal17(
           } else {
             // Assume local file path
             const resolvedImagePath = path.resolve(question.imageUrl);
-            console.log(`[LOG][val17PptxGenerator] [IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
+            console.log(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
             if (fs.existsSync(resolvedImagePath)) {
               imageData = await loadLocalImageWithDimensions(resolvedImagePath);
             } else {
-              console.warn(`[WARN][val17PptxGenerator] [IMAGE] Fichier image local non trouvé: ${resolvedImagePath}`);
+              console.warn(`[IMAGE] Fichier image local non trouvé: ${resolvedImagePath}`);
             }
           }
 
@@ -1752,13 +1673,10 @@ export async function generatePPTXVal17(
             ?.file(result.image.fileName, result.image.data);
         }
       });
-      console.log('[LOG][val17PptxGenerator] Image processing complete.');
     }
 
-    console.log(`[LOG][val17PptxGenerator] Starting loop to create ${questions.length} question slides.`);
     for (let i = 0; i < questions.length; i++) {
       const absoluteSlideNumber = effectiveExistingSlideCount + i + 1;
-      console.log(`[LOG][val17PptxGenerator] Processing question ${i + 1}/${questions.length}, absolute slide number ${absoluteSlideNumber}.`);
       const questionData = questions[i];
       const duration =
         questionData.points ||
@@ -1829,7 +1747,7 @@ export async function generatePPTXVal17(
         if (parts.length > 1) {
           blockIdentifier = parts[1];
         } else {
-          console.warn(`[WARN][val17PptxGenerator] Question avec dbQuestionId ${questionData.dbQuestionId} a un thème "${questionData.theme}" sans suffixe de bloc identifiable (_X).`);
+          console.warn(`[val17PptxGenerator] Question avec dbQuestionId ${questionData.dbQuestionId} a un thème "${questionData.theme}" sans suffixe de bloc identifiable (_X).`);
         }
       }
 
@@ -1841,12 +1759,10 @@ export async function generatePPTXVal17(
         blockId: blockIdentifier
       });
     }
-    console.log('[LOG][val17PptxGenerator] Question slide creation loop finished.');
-
     if (existingTagsCount > 0 && questions.length > 0) {
       const warnings = ensureTagContinuity(outputZip, 1, maxTagNumberUsed);
       if (warnings.length > 0)
-        console.warn("[WARN][val17PptxGenerator] ⚠️ Problèmes de continuité des tags détectés:", warnings);
+        console.warn("⚠️ Problèmes de continuité des tags détectés:", warnings);
     }
 
     const totalFinalSlideCount = effectiveExistingSlideCount + questions.length;
@@ -1909,7 +1825,6 @@ export async function generatePPTXVal17(
     );
     await updateAppXml(outputZip, appMetadata);
 
-    console.log('[LOG][val17PptxGenerator] Generating final PPTX blob.');
     const outputBlob = await outputZip.generateAsync({
       type: "blob",
       mimeType:
@@ -1918,13 +1833,11 @@ export async function generatePPTXVal17(
       compressionOptions: { level: 3 },
     });
 
-    console.log(`[LOG][val17PptxGenerator] PPTX Blob et mappings de questions générés avec succès.`);
-    console.log('--- [LOG][val17PptxGenerator] FIN DE LA GÉNÉRATION PPTX VAL17 ---');
+    console.log(`PPTX Blob et mappings de questions générés.`);
     return { pptxBlob: outputBlob, questionMappings: questionMappingsInternal, preExistingQuestionSlideGuids };
   } catch (error: any) {
-    console.error(`=== [ERREUR][val17PptxGenerator] ERREUR GÉNÉRATION VAL17 ===`);
+    console.error(`=== ERREUR GÉNÉRATION VAL17 ===`);
     console.error(error.message);
-    console.error(error.stack);
     throw new Error(`Erreur lors de la génération du PPTX interactif des questions OMBEA: ${error.message}`);
   }
 }

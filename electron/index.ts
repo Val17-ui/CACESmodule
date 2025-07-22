@@ -1,7 +1,7 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
-import { initializeIpcHandlers } from './ipcHandlers.js';
-import { initializeDatabase, getDb } from './db.js';
+import { initializeIpcHandlers } from './ipcHandlers';
+import { initializeDatabase, getDb } from './db';
 
 function createWindow() {
   console.log('createWindow() called');
