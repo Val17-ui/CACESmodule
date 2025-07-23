@@ -639,7 +639,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         participantsForGenerator as DBParticipantType[],
         allSelectedQuestionsForPptx,
         templateFile,
-        adminSettings
+        adminSettings,
+        hardwareDevices
       );
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
         const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;

@@ -150,7 +150,8 @@ export async function generatePresentation(
   storedQuestions: StoredQuestion[],
   templateFile: File | ArrayBuffer | string,
   adminSettings: AdminPPTXSettings,
-  logger: ILogger
+  logger: ILogger,
+  hardwareDevices: VotingDevice[]
 ): Promise<{ orsBlob: ArrayBuffer | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
   logger.info('[LOG][pptxOrchestrator] === Début de generatePresentation ===');
   logger.info(`[LOG][pptxOrchestrator] sessionInfo: ${JSON.stringify(sessionInfo)}`);
@@ -213,12 +214,16 @@ export async function generatePresentation(
       date: sessionInfo.date,
     };
 
-    const participantsForGenerator: ParticipantForGenerator[] = _participants.map(p => ({
-      idBoitier: p.assignedGlobalDeviceId?.toString() || 'N/A',
-      nom: p.nom,
-      prenom: p.prenom,
-      identificationCode: p.identificationCode
-    }));
+    const participantsForGenerator: ParticipantForGenerator[] = _participants.map(p => {
+      // Find the corresponding hardware device to get the serial number
+      const assignedDevice = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
+      return {
+        idBoitier: assignedDevice ? assignedDevice.serialNumber : 'N/A',
+        nom: p.nom,
+        prenom: p.prenom,
+        identificationCode: p.identificationCode,
+      };
+    });
     
     logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
     const generatedData = await generatePPTXVal17(
