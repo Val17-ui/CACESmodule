@@ -634,6 +634,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setIsGeneratingOrs(false); return;
       }
       const templateFile = await getActivePptxTemplateFile();
+      logger.info(`[SessionForm] hardwareDevices before calling generatePresentation: ${JSON.stringify(hardwareDevices)}`);
       const generationOutput = await window.dbAPI.generatePresentation(
         sessionInfoForPptx,
         participantsForGenerator as DBParticipantType[],
