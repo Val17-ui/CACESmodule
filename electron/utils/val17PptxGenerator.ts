@@ -1514,10 +1514,10 @@ async function getLayoutXml(zip: JSZip, layoutFileName: string, logger: ILogger)
 export async function generatePPTXVal17(
   templateFile: any,
   questions: Val17Question[],
+  participants: ParticipantForGenerator[],
   options: GenerationOptions = {},
   logger: ILogger,
-  sessionInfo?: SessionInfo,
-  participants: ParticipantForGenerator[],
+  sessionInfo?: SessionInfo
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
   logger.debug(`[LOG][val17PptxGenerator] Final participants for generator: ${JSON.stringify(participants)}`);
   logger.debug(`  - Nombre de questions: ${questions.length}`);

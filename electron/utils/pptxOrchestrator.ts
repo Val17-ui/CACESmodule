@@ -217,11 +217,10 @@ export async function generatePresentation(
     const generatedData = await generatePPTXVal17(
       templateBuffer,
       transformedQuestions,
+      participantsForGenerator,
       generationOptions,
       logger,
-      val17SessionInfo,
-      participantsForGenerator,
-      []
+      val17SessionInfo
     );
     logger.debug('[LOG][pptxOrchestrator] generatePPTXVal17 a terminé son exécution.');
     logger.info('[LOG][pptxOrchestrator] generatePPTXVal17 call completed.');
