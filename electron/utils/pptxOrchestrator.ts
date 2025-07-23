@@ -146,17 +146,15 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
 
 export async function generatePresentation(
   sessionInfo: { name: string; date: string; referentiel: string },
-  _participants: Participant[],
+  participantsForGenerator: ParticipantForGenerator[],
   storedQuestions: StoredQuestion[],
   templateFile: File | ArrayBuffer | string,
   adminSettings: AdminPPTXSettings,
-  logger: ILogger,
-  hardwareDevices: VotingDevice[]
+  logger: ILogger
 ): Promise<{ orsBlob: ArrayBuffer | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
   logger.info('[LOG][pptxOrchestrator] === Début de generatePresentation ===');
-  logger.info(`[LOG][pptxOrchestrator] hardwareDevices: ${JSON.stringify(hardwareDevices)}`);
   logger.info(`[LOG][pptxOrchestrator] sessionInfo: ${JSON.stringify(sessionInfo)}`);
-  logger.info(`[LOG][pptxOrchestrator] Nombre de participants: ${_participants.length}`);
+  logger.info(`[LOG][pptxOrchestrator] Nombre de participants: ${participantsForGenerator.length}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de questions: ${storedQuestions.length}`);
   logger.info(`[LOG][pptxOrchestrator] adminSettings: ${JSON.stringify(adminSettings)}`);
 
@@ -222,8 +220,8 @@ export async function generatePresentation(
       generationOptions,
       logger,
       val17SessionInfo,
-      _participants,
-      hardwareDevices
+      participantsForGenerator,
+      []
     );
     logger.debug('[LOG][pptxOrchestrator] generatePPTXVal17 a terminé son exécution.');
     logger.info('[LOG][pptxOrchestrator] generatePPTXVal17 call completed.');
@@ -232,7 +230,7 @@ export async function generatePresentation(
       logger.info('[LOG][pptxOrchestrator] Génération du PPTX réussie. Génération du XML de session ORS.');
       const orSessionXmlContent = generateOmbeaSessionXml(
         val17SessionInfo,
-        _participants,
+        participantsForGenerator as any, // Cast to any to avoid type errors
         generatedData.questionMappings,
         logger
       );

@@ -318,8 +318,7 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
       throw new Error("Invalid template format provided to pptx-generate IPC handler.");
     }
 
-    const allVotingDevices = await dbModule.getAllVotingDevices();
-    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, logger, allVotingDevices);
+    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, logger);
   });
 
   ipcMain.handle('get-default-pptx-template', async () => {

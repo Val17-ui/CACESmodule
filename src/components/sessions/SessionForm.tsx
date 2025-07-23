@@ -643,7 +643,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       const templateFile = await getActivePptxTemplateFile();
       const generationOutput = await window.dbAPI.generatePresentation(
         sessionInfoForPptx,
-        participantsForGenerator as DBParticipantType[],
+        participantsForGenerator,
         allSelectedQuestionsForPptx,
         templateFile,
         adminSettings
