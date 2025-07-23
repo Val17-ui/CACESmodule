@@ -580,7 +580,7 @@ function createIntroParticipantsSlideXml(
   participants: ParticipantForGenerator[],
   slideNumber: number,
   layoutPptxFilePath: string | null,
-  layoutXmlAsSlideBase: string | null,
+  _layoutXmlAsSlideBase: string | null, // Marqué comme non utilisé
   layoutGraphicFrameTarget: string | null,
   layoutTblPr: string | null,
   layoutTblGrid: string | null,
@@ -592,25 +592,57 @@ function createIntroParticipantsSlideXml(
 
   let finalSlideXml = "";
 
-  if (layoutXmlAsSlideBase && layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
+  if (layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
     logger.debug("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
     const tableRows = generateTableRowsXml(participants, undefined, logger);
+
+    // Re-créer le contenu de <a:tbl>
     const newTblContent = `${layoutTblPr}${layoutTblGrid}${tableRows}`;
-    const newFullTblXml = `<a:tbl>${newTblContent}</a:tbl>`;
+
+    // Remplacer l'ancien <a:tbl> par le nouveau
     const graphicFrameWithNewTable = layoutGraphicFrameTarget.replace(
-      /<a:tbl>[\s\S]*?<\/a:tbl>/,
-      newFullTblXml
+        /<a:tbl>[\s\S]*?<\/a:tbl>/,
+        `<a:tbl>${newTblContent}</a:tbl>`
     );
 
-    const baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000 + 0}" name="Group Shape"/> <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet, logger)}</a:t></a:r></a:p></a:txBody>
-          </p:sp>\n          ${graphicFrameWithNewTable}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
-    finalSlideXml = baseSlideStructure;
+    // Construire une structure de diapositive propre
+    const spTreeContent = `
+        <p:nvGrpSpPr>
+          <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>
+          <p:cNvGrpSpPr/><p:nvPr/>
+        </p:nvGrpSpPr>
+        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+        <p:sp>
+          <p:nvSpPr>
+            <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>
+            <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+            <p:nvPr><p:ph type="title"/></p:nvPr>
+          </p:nvSpPr>
+          <p:spPr/>
+          <p:txBody>
+            <a:bodyPr/><a:lstStyle/>
+            <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet, logger)}</a:t></a:r></a:p>
+          </p:txBody>
+        </p:sp>
+        ${graphicFrameWithNewTable}
+    `;
+
+    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    ${slideComment}
+    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+      <p:cSld name="${layoutPptxFilePath ? path.basename(layoutPptxFilePath, '.xml') : 'ParticipantsLayout'}">
+        <p:spTree>${spTreeContent}</p:spTree>
+      </p:cSld>
+      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+    </p:sld>`;
+
+    logger.debug(`[DEBUG_PART_SLIDE_XML] Final generated XML for participants slide (v3): ${finalSlideXml.substring(0, 1500)}...`);
 
   } else {
     logger.debug("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
     const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2, logger);
 
-    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet, logger)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
+    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? path.basename(layoutPptxFilePath, '.xml') : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet, logger)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
   }
   logger.info('[LOG][val17PptxGenerator] Fin de createIntroParticipantsSlideXml.');
   return finalSlideXml;

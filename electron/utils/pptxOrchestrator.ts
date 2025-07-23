@@ -213,11 +213,12 @@ export async function generatePresentation(
       date: sessionInfo.date,
     };
 
-    const participantsForGenerator = _participants.map(p => ({
-      idBoitier: p.assignedGlobalDeviceId?.toString(),
+    const participantsForGenerator: ParticipantForGenerator[] = _participants.map(p => ({
+      idBoitier: p.assignedGlobalDeviceId?.toString() || 'N/A',
       nom: p.nom,
       prenom: p.prenom,
-      identificationCode: p.identificationCode
+      organization: p.organization,
+      identificationCode: p.identificationCode,
     }));
     
     logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
