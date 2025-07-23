@@ -17,6 +17,7 @@ export interface Session {
   // selectionBlocs: SelectedBlock[]; // Remplacé par selectedBlocIds
   selectedBlocIds?: number[]; // Liste des IDs des blocs sélectionnés pour cette session
   donneesOrs?: ArrayBuffer | Buffer | null; // Stockage du fichier .ors généré
+  orsFilePath?: string; // Chemin d'accès au fichier .ors
   status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
   questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>;
@@ -127,6 +128,10 @@ export interface Participant {
   reussite?: boolean; // Statut de réussite du participant pour cette session
   assignedGlobalDeviceId?: number | null; // Référence à GlobalDevice.id (VotingDevice.id)
   statusInSession?: 'present' | 'absent'; // Statut du participant pour cette session spécifique
+}
+
+export interface FormParticipant extends Participant {
+  organization?: string;
 }
 
 // L'interface SelectedBlock n'est plus nécessaire car nous stockons selectedBlocIds directement.
