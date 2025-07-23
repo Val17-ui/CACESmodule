@@ -9,7 +9,6 @@ import {
   CACESReferential,
   Session as DBSession,
   Participant as DBParticipantType,
-  FormParticipant,
   SessionResult,
   Trainer,
   SessionQuestion,
@@ -30,6 +29,15 @@ import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import AnomalyResolutionModal, { DetectedAnomalies } from './AnomalyResolutionModal';
 import { ExpectedIssueResolution, UnknownDeviceResolution } from '../../types';
+
+interface FormParticipant extends DBParticipantType {
+  id: string;
+  firstName: string;
+  lastName: string;
+  organization?: string;
+  deviceId: number | null;
+  hasSigned?: boolean;
+}
 
 interface SessionFormProps {
   sessionIdToLoad?: number;
@@ -188,9 +196,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
               ...p_db,
               id: `loaded-${loopIndex}-${Date.now()}`,
-              prenom: p_db.prenom,
-              nom: p_db.nom,
+              firstName: p_db.prenom,
+              lastName: p_db.nom,
               deviceId: loopIndex + 1,
+              organization: (p_db as any).organization || '',
               hasSigned: (p_db as any).hasSigned || false,
             }));
             setParticipants(formParticipants);
@@ -236,7 +245,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }));
 
   const handleAddParticipant = () => {
-    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+    if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     if (!selectedKitIdState) {
       alert("Veuillez d'abord sélectionner un kit de boîtiers dans l'onglet 'Participants'.");
       setActiveTab('participants');
@@ -272,6 +281,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       assignedGlobalDeviceId: nextAvailableDevice.id!,
       statusInSession: 'present',
       id: Date.now().toString(),
+      firstName: '',
+      lastName: '',
+      organization: '',
       deviceId: nextVisualDeviceId,
       hasSigned: false,
     };
@@ -279,44 +291,44 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const handleRemoveParticipant = (id: string) => {
-    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+    if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     const updatedParticipants = participants.filter(p => p.id !== id);
     setParticipants(updatedParticipants);
   };
 
   const handleParticipantChange = (id: string, field: keyof FormParticipant, value: string | number | boolean | null) => {
-    if (editingSessionData?.donneesOrs && field !== 'deviceId' && editingSessionData.status !== 'completed') {
+    if (editingSessionData?.orsFilePath && field !== 'deviceId' && editingSessionData.status !== 'completed') {
       setModifiedAfterOrsGeneration(true);
     }
     setParticipants(participants.map((p: FormParticipant) => {
       if (p.id === id) {
         const updatedP = { ...p, [field]: value };
+        if (field === 'firstName') updatedP.prenom = value as string;
+        if (field === 'lastName') updatedP.nom = value as string;
         return updatedP;
       }
       return p;
     }));
   };
 
-  const parseCsvParticipants = (fileContent: string): Array<Partial<FormParticipant>> => {
-    const parsed: Array<Partial<FormParticipant>> = [];
+  const parseCsvParticipants = (fileContent: string): Array<Partial<DBParticipantType>> => {
+    const parsed: Array<Partial<DBParticipantType>> = [];
     const lines = fileContent.split(/\r\n|\n/);
     lines.forEach(line => {
       if (line.trim() === '') return;
       const values = line.split(',');
       if (values.length >= 2) {
         parsed.push({
-          prenom: values[0]?.trim() || '',
-          nom: values[1]?.trim() || '',
-          organization: values[2]?.trim() || '',
-          identificationCode: values[3]?.trim() || '',
-        });
+          prenom: values[0]?.trim() || '', nom: values[1]?.trim() || '',
+          organization: values[2]?.trim() || '', identificationCode: values[3]?.trim() || '',
+        } as Partial<DBParticipantType>);
       }
     });
     return parsed;
   };
 
-  const parseExcelParticipants = (data: Uint8Array): Array<Partial<FormParticipant>> => {
-    const parsed: Array<Partial<FormParticipant>> = [];
+  const parseExcelParticipants = (data: Uint8Array): Array<Partial<DBParticipantType>> => {
+    const parsed: Array<Partial<DBParticipantType>> = [];
     const workbook = XLSX.read(data, { type: 'array' });
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
@@ -328,14 +340,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     const hasPrenom = potentialHeaders.includes('prénom') || potentialHeaders.includes('prenom');
     const hasNom = potentialHeaders.includes('nom');
     if (hasPrenom && hasNom) {
-      headers = potentialHeaders;
-      dataStartIndex = 1;
+      headers = potentialHeaders; dataStartIndex = 1;
     } else {
-      headers = ['prénom', 'nom', 'organisation', 'code identification'];
-      dataStartIndex = 0;
+      headers = ['prénom', 'nom', 'organisation', 'code identification']; dataStartIndex = 0;
     }
     const prenomIndex = headers.findIndex(h => h === 'prénom' || h === 'prenom');
     const nomIndex = headers.findIndex(h => h === 'nom');
+    const orgIndex = headers.findIndex(h => h === 'organisation');
     const codeIndex = headers.findIndex(h => h === 'code identification' || h === 'code');
     for (let i = dataStartIndex; i < jsonData.length; i++) {
       const row = jsonData[i];
@@ -343,12 +354,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const prenom = prenomIndex !== -1 ? row[prenomIndex]?.toString().trim() || '' : row[0]?.toString().trim() || '';
         const nom = nomIndex !== -1 ? row[nomIndex]?.toString().trim() || '' : row[1]?.toString().trim() || '';
         if (prenom || nom) {
-          parsed.push({
-            prenom,
-            nom,
+            parsed.push({
+            prenom, nom,
             organization: orgIndex !== -1 ? row[orgIndex]?.toString().trim() || '' : row[2]?.toString().trim() || '',
             identificationCode: codeIndex !== -1 ? row[codeIndex]?.toString().trim() || '' : row[3]?.toString().trim() || '',
-          });
+            } as Partial<DBParticipantType>);
         }
       }
     }
@@ -356,21 +366,23 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const addImportedParticipants = (
-    parsedData: Array<Partial<FormParticipant>>,
+    parsedData: Array<Partial<DBParticipantType>>,
     fileName: string
   ) => {
-    if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
+    if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     if (parsedData.length > 0) {
       const newFormParticipants: FormParticipant[] = parsedData.map((p, index) => ({
         nom: p.nom || '',
         prenom: p.prenom || '',
-        organization: p.organization || '',
         identificationCode: p.identificationCode || '',
         score: undefined,
         reussite: undefined,
         assignedGlobalDeviceId: null,
         statusInSession: 'present',
         id: `imported-${Date.now()}-${index}`,
+        firstName: p.prenom || '',
+        lastName: p.nom || '',
+        organization: (p as any).organization || '',
         deviceId: null,
         hasSigned: false,
       }));
@@ -417,10 +429,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
-  const prepareSessionDataForDb = async (includeOrsData?: ArrayBuffer | Buffer | null): Promise<DBSession | null> => {
+  const prepareSessionDataForDb = async (includeOrsBlob?: string | Blob | ArrayBuffer | null): Promise<DBSession | null> => {
     const dbParticipants: DBParticipantType[] = participants.map((p_form: FormParticipant) => ({
-      nom: p_form.nom,
-      prenom: p_form.prenom,
+      nom: p_form.lastName,
+      prenom: p_form.firstName,
       identificationCode: p_form.identificationCode,
       score: p_form.score,
       reussite: p_form.reussite,
@@ -450,7 +462,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       participants: dbParticipants,
       selectedBlocIds: editingSessionData?.selectedBlocIds || [],
       selectedKitId: selectedKitIdState,
-      donneesOrs: includeOrsData !== undefined ? includeOrsData : editingSessionData?.donneesOrs,
+      orsFilePath: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.orsFilePath,
       status: editingSessionData?.status || 'planned',
       location: location,
       questionMappings: editingSessionData?.questionMappings,
@@ -460,7 +472,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       updatedAt: new Date().toISOString(),
       ignoredSlideGuids: editingSessionData?.ignoredSlideGuids,
       resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
+      resultsImportedAt: null,
     };
+    logger.info(`[LOG][SessionForm] Session data to save: ${JSON.stringify(sessionToSave.participants.map(p => ({ nom: p.nom, prenom: p.prenom, assignedGlobalDeviceId: p.assignedGlobalDeviceId })))}`);
     return sessionToSave;
   };
 
@@ -485,9 +499,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               const visualDeviceId = index + 1;
               const currentParticipantState = participants.find(p => p.nom === p_db.nom && p.prenom === p_db.prenom && p.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId) || participants[index];
               return {
-                ...p_db,
+                nom: p_db.nom,
+                prenom: p_db.prenom,
+                identificationCode: p_db.identificationCode,
+                score: p_db.score,
+                reussite: p_db.reussite,
+                assignedGlobalDeviceId: p_db.assignedGlobalDeviceId,
+                statusInSession: p_db.statusInSession,
                 id: currentParticipantState?.id || `form-reloaded-${index}-${Date.now()}`,
+                firstName: p_db.prenom,
+                lastName: p_db.nom,
                 deviceId: currentParticipantState?.deviceId ?? visualDeviceId,
+                organization: currentParticipantState?.organization || '',
                 hasSigned: currentParticipantState?.hasSigned || false,
               };
             });
@@ -503,7 +526,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const handleSaveDraft = async () => {
-    const sessionData = await prepareSessionDataForDb(editingSessionData?.donneesOrs);
+    const sessionData = await prepareSessionDataForDb(editingSessionData?.orsFilePath);
     if (sessionData) {
       const savedId = await handleSaveSession(sessionData);
       if (savedId) { setImportSummary(`Session (ID: ${savedId}) sauvegardée avec succès !`); }
@@ -618,19 +641,17 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           setIsGeneratingOrs(false); return;
       }
       const templateFile = await getActivePptxTemplateFile();
-      logger.info(`[SessionForm] hardwareDevices before calling generatePresentation: ${JSON.stringify(hardwareDevices)}`);
       const generationOutput = await window.dbAPI.generatePresentation(
         sessionInfoForPptx,
-        participantsForGenerator as FormParticipant[],
+        participantsForGenerator as DBParticipantType[],
         allSelectedQuestionsForPptx,
         templateFile,
-        adminSettings,
-        hardwareDevices
+        adminSettings
       );
       if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
         const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;
         const fileName = `${sessionDataWithSelectedBlocs.nomSession}.ors`; // Use .ors extension
-        const saveResult = await window.dbAPI.saveFile(orsBlob, fileName);
+        const saveResult = await window.dbAPI.savePptxFile(orsBlob, fileName);
 
         if (!saveResult.success) {
           throw new Error(`Échec de la sauvegarde du fichier ORS: ${saveResult.error}`);
@@ -638,7 +659,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
         try {
           await StorageManager.updateSession(currentSavedId, {
-            donneesOrs: saveResult.filePath, // Store the file path
+            orsFilePath: saveResult.filePath, // Store the file path
             questionMappings: questionMappings,
             ignoredSlideGuids: newlyIgnoredSlideGuids || [],
             updatedAt: new Date().toISOString(),
@@ -733,26 +754,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     };
 
     const handleImportResults = async () => {
-        if (!resultsFile && !editingSessionData?.donneesOrs) { setImportSummary("Veuillez sélectionner un fichier de résultats ou enregistrer un chemin ORS."); return; }
+        if (!resultsFile && !editingSessionData?.orsFilePath) { setImportSummary("Veuillez sélectionner un fichier de résultats ou enregistrer un chemin ORS."); return; }
         if (!currentSessionDbId || !editingSessionData) { setImportSummary("Aucune session active."); return; }
-        if (!editingSessionData.donneesOrs) { setImportSummary("Veuillez d'abord générer un fichier .ors pour cette session."); return; }
+        if (!editingSessionData.orsFilePath) { setImportSummary("Veuillez d'abord générer un fichier .ors pour cette session."); return; }
     setImportSummary("Lecture .ors...");
     try {
       let arrayBuffer;
       if (resultsFile) {
         arrayBuffer = await resultsFile.arrayBuffer();
-      } else if (typeof editingSessionData.donneesOrs === 'string') {
-        const fileData = await window.dbAPI.readFile(editingSessionData.donneesOrs);
-        if (!fileData) {
-          setImportSummary("Impossible de lire le fichier ORS.");
+      } else {
+        const fileData = await window.dbAPI.openResultsFile();
+        if (fileData.canceled || !fileData.fileBuffer) {
+          setImportSummary("Aucun fichier sélectionné.");
           return;
         }
-        arrayBuffer = fileData;
-      } else if (editingSessionData.donneesOrs) {
-        arrayBuffer = editingSessionData.donneesOrs;
-      } else {
-        setImportSummary("Aucun fichier de résultats sélectionné ou chemin ORS enregistré.");
-        return;
+        arrayBuffer = Buffer.from(fileData.fileBuffer);
       }
 
       const zip = await JSZip.loadAsync(arrayBuffer);
@@ -941,10 +957,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         const visualDeviceId = index + 1;
                         const currentFormParticipantState = participants[index];
                         return {
-                        ...p_db_updated,
-                        id: currentFormParticipantState?.id || `updated-${index}-${Date.now()}`,
-                        deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
-                        hasSigned: currentFormParticipantState?.hasSigned || false,
+                          nom: p_db_updated.nom,
+                          prenom: p_db_updated.prenom,
+                          identificationCode: p_db_updated.identificationCode,
+                          score: p_db_updated.score,
+                          reussite: p_db_updated.reussite,
+                          assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
+                          statusInSession: p_db_updated.statusInSession,
+                          id: currentFormParticipantState?.id || `updated-${index}-${Date.now()}`,
+                          firstName: p_db_updated.prenom,
+                          lastName: p_db_updated.nom,
+                          deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
+                          organization: currentFormParticipantState?.organization || '',
+                          hasSigned: currentFormParticipantState?.hasSigned || false,
                         };
                       });
                       setParticipants(formParticipantsToUpdate);
@@ -959,16 +984,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             logger.info(`Résultats importés pour la session ID ${currentSessionDbId}`, {
               eventType: 'RESULTS_IMPORTED',
               sessionId: currentSessionDbId,
-              fileName: resultsFile?.name,
+              fileName: resultsFile.name,
               resultsCount: savedResultIds.length
             });
           } else {
             setImportSummary("Echec sauvegarde résultats.");
-            logger.warning(`Échec de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FAILED_DB_SAVE', sessionId: currentSessionDbId, fileName: resultsFile?.name });
+            logger.warning(`Échec de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FAILED_DB_SAVE', sessionId: currentSessionDbId, fileName: resultsFile.name });
           }
         } catch (dbError: any) {
           setImportSummary(`Erreur DB sauvegarde résultats: ${dbError.message}`);
-          logger.error(`Erreur DB lors de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_ERROR_DB_SAVE', sessionId: currentSessionDbId, error: dbError, fileName: resultsFile?.name });
+          logger.error(`Erreur DB lors de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_ERROR_DB_SAVE', sessionId: currentSessionDbId, error: dbError, fileName: resultsFile.name });
         }
       } else {
         setImportSummary("Aucun résultat transformé.");
@@ -1112,9 +1137,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     const visualDeviceId = index + 1;
                     const currentFormParticipantState = participants[index];
                     return {
-                      ...p_db_updated,
+                      nom: p_db_updated.nom,
+                      prenom: p_db_updated.prenom,
+                      identificationCode: p_db_updated.identificationCode,
+                      score: p_db_updated.score,
+                      reussite: p_db_updated.reussite,
+                      assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
+                      statusInSession: p_db_updated.statusInSession,
                       id: currentFormParticipantState?.id || `updated-${index}-${Date.now()}`,
+                      firstName: p_db_updated.prenom,
+                      lastName: p_db_updated.nom,
                       deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
+                      organization: currentFormParticipantState?.organization || '',
                       hasSigned: currentFormParticipantState?.hasSigned || false,
                     };
                 });
@@ -1184,10 +1218,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         const visualDeviceId = index + 1;
                         const currentFormParticipantState = participants[index];
                         return {
-                            ...p_db_updated,
-                            id: currentFormParticipantState?.id || `final-updated-${index}-${Date.now()}`,
-                            deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
-                            hasSigned: currentFormParticipantState?.hasSigned || false,
+                          nom: p_db_updated.nom,
+                          prenom: p_db_updated.prenom,
+                          identificationCode: p_db_updated.identificationCode,
+                          score: p_db_updated.score,
+                          reussite: p_db_updated.reussite,
+                          assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
+                          statusInSession: p_db_updated.statusInSession,
+                          id: currentFormParticipantState?.id || `final-updated-${index}-${Date.now()}`,
+                          firstName: p_db_updated.prenom,
+                          lastName: p_db_updated.nom,
+                          deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
+                          organization: currentFormParticipantState?.organization || '',
+                          hasSigned: currentFormParticipantState?.hasSigned || false,
                         };
                     });
                     setParticipants(formParticipantsToUpdate);
@@ -1246,7 +1289,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const renderTabContent = () => {
     const isReadOnly = editingSessionData?.status === 'completed';
-    const isOrsGeneratedAndNotEditable = !!editingSessionData?.donneesOrs && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
+    const isOrsGeneratedAndNotEditable = !!editingSessionData?.orsFilePath && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
 
     switch (activeTab) {
       case 'details':
@@ -1351,7 +1394,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       if (window.confirm("Changer de kit réinitialisera les assignations de boîtiers pour tous les participants de cette session et videra la liste des participants actuels. Voulez-vous continuer ?")) {
                         setParticipants([]); // Vider les participants car les assignations de boîtiers ne sont plus valides
                         setSelectedKitIdState(newKitId);
-                        if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
+                        if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') {
                           setModifiedAfterOrsGeneration(true);
                         }
                       } else {
@@ -1360,7 +1403,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       }
                     } else {
                       setSelectedKitIdState(newKitId);
-                      if (editingSessionData?.donneesOrs && editingSessionData.status !== 'completed') {
+                      if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') {
                         setModifiedAfterOrsGeneration(true);
                       }
                     }
@@ -1414,6 +1457,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Assigné (Nom et S/N)</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Ident.</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Réussite</th>
@@ -1427,16 +1471,26 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       <tr key={participant.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{participant.deviceId || index + 1}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                          {assignedDevice
-                            ? `${assignedDevice.name} (S/N: ${assignedDevice.serialNumber})`
-                            : <span className="text-xs text-red-500 italic">Non assigné / Kit changé</span>
-                          }
+                          <Select
+                            options={[
+                              { value: '', label: '-- Non assigné --' },
+                              ...votingDevicesInSelectedKit.map(d => ({
+                                value: d.id!.toString(),
+                                label: `${d.name} (S/N: ${d.serialNumber})`,
+                                disabled: participants.some(p => p.assignedGlobalDeviceId === d.id && p.id !== participant.id)
+                              }))
+                            ]}
+                            value={participant.assignedGlobalDeviceId?.toString() || ''}
+                            onChange={(e) => handleParticipantChange(participant.id, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                            className="w-full"
+                          />
                         </td>
                         <td className="px-4 py-3">
                           <Input
                             type="text"
-                            value={participant.prenom}
-                            onChange={(e) => handleParticipantChange(participant.id, 'prenom', e.target.value)}
+                            value={participant.firstName}
+                            onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)}
                             className="mt-1 block w-full sm:text-sm"
                             disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                           />
@@ -1444,8 +1498,17 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         <td className="px-4 py-3">
                           <Input
                             type="text"
-                            value={participant.nom}
-                            onChange={(e) => handleParticipantChange(participant.id, 'nom', e.target.value)}
+                            value={participant.lastName}
+                            onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)}
+                            className="mt-1 block w-full sm:text-sm"
+                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Input
+                            type="text"
+                            value={participant.organization || ''}
+                            onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)}
                             className="mt-1 block w-full sm:text-sm"
                             disabled={isOrsGeneratedAndNotEditable || isReadOnly}
                           />
@@ -1482,7 +1545,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   })}
                   {participants.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="text-center py-10 text-sm text-gray-500 italic">
+                      <td colSpan={9} className="text-center py-10 text-sm text-gray-500 italic">
                         Aucun participant ajouté à cette session.
                       </td>
                     </tr>
@@ -1514,7 +1577,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 accept=".ors"
                 onChange={handleResultsFileSelect}
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                disabled={!editingSessionData?.donneesOrs || isReadOnly}
+                disabled={!editingSessionData?.orsFilePath || isReadOnly}
               />
               {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
             </div>
@@ -1522,11 +1585,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               variant="secondary"
               icon={<FileUp size={16} />}
               onClick={handleImportResults}
-              disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.donneesOrs}
+              disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
             >
               Importer les Résultats
             </Button>
-            {!editingSessionData?.donneesOrs && !isReadOnly && (
+            {!editingSessionData?.orsFilePath && !isReadOnly && (
                <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
             )}
             {isReadOnly && (
@@ -1549,10 +1612,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
                     title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
                            isReadOnly ? "La session est terminée, regénération bloquée." :
-                           (!!editingSessionData?.donneesOrs) ? "Régénérer .ors & PPTX (Attention : ceci écrasera l'ORS existant)" :
+                           (!!editingSessionData?.orsFilePath) ? "Régénérer .ors & PPTX (Attention : ceci écrasera l'ORS existant)" :
                            "Générer .ors & PPTX"}
                   >
-                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.donneesOrs ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
+                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
                   </Button>
                   {isReadOnly && (
                      <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération de l'ORS est bloquée.</p>
@@ -1560,7 +1623,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                    {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
                      <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
                   )}
-                  {modifiedAfterOrsGeneration && !!editingSessionData?.donneesOrs && !isReadOnly && (
+                  {modifiedAfterOrsGeneration && !!editingSessionData?.orsFilePath && !isReadOnly && (
                     <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
                       <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
                       <span>
@@ -1569,20 +1632,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       </span>
                     </p>
                   )}
-                  {editingSessionData?.donneesOrs && (
+                  {editingSessionData?.orsFilePath && (
                     <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
                       <h4 className="text-md font-semibold text-gray-700 mb-2">Fichier ORS généré :</h4>
-                      <p className="text-sm text-gray-600 font-mono">{editingSessionData.donneesOrs.toString()}</p>
+                      <p className="text-sm text-gray-600 font-mono">{typeof editingSessionData.orsFilePath === 'string' ? editingSessionData.orsFilePath : 'N/A'}</p>
                       <Button
-                        variant="outline"
-                        onClick={() => window.electronAPI.openDirectory(editingSessionData.donneesOrs.toString())}
+                        variant="ghost"
+                        onClick={() => { if (typeof editingSessionData?.orsFilePath === 'string') window.dbAPI.openDirectoryDialog(editingSessionData.orsFilePath); }}
                         className="mt-2"
                       >
                         Ouvrir le dossier
                       </Button>
                       <Button
-                        variant="outline"
-                        onClick={() => window.electronAPI.openFile(editingSessionData.donneesOrs.toString())}
+                        variant="ghost"
+                        onClick={() => { if (typeof editingSessionData?.orsFilePath === 'string') window.dbAPI.openFile(editingSessionData.orsFilePath); }}
                         className="mt-2 ml-2"
                       >
                         Ouvrir le fichier

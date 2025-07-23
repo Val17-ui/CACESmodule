@@ -215,17 +215,6 @@ export async function generatePresentation(
       date: sessionInfo.date,
     };
 
-    const participantsForGenerator: ParticipantForGenerator[] = _participants.map(p => {
-      // Find the corresponding hardware device to get the serial number
-      const assignedDevice = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
-      return {
-        idBoitier: assignedDevice ? assignedDevice.serialNumber : 'N/A',
-        nom: p.nom,
-        prenom: p.prenom,
-        identificationCode: p.identificationCode,
-      };
-    });
-    
     logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
     const generatedData = await generatePPTXVal17(
       templateBuffer,
@@ -233,7 +222,8 @@ export async function generatePresentation(
       generationOptions,
       logger,
       val17SessionInfo,
-      participantsForGenerator
+      _participants,
+      hardwareDevices
     );
     logger.debug('[LOG][pptxOrchestrator] generatePPTXVal17 a terminé son exécution.');
     logger.info('[LOG][pptxOrchestrator] generatePPTXVal17 call completed.');

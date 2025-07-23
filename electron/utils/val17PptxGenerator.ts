@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import JSZip from "jszip";
 import sizeOf from 'image-size';
 import { ILogger } from './logger';
+import { Participant, VotingDevice } from '../../src/types/index';
 
 // Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.
 // These should ideally come from a './val17PptxTypes' import if that file is created with your type definitions.
@@ -1516,9 +1517,20 @@ export async function generatePPTXVal17(
   options: GenerationOptions = {},
   logger: ILogger,
   sessionInfo?: SessionInfo,
-  participantsInput?: ParticipantForGenerator[]
+  participantsInput?: Participant[],
+  hardwareDevices?: VotingDevice[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
-  const participants: ParticipantForGenerator[] = participantsInput || [];
+ const participants: ParticipantForGenerator[] = (participantsInput || []).map(p => {
+const assignedDevice = hardwareDevices?.find(hd => hd.id === p.assignedGlobalDeviceId);
+ return {
+  idBoitier: assignedDevice ? assignedDevice.serialNumber : 'N/A',
+  nom: p.nom,
+  prenom: p.prenom,
+  organization: p.organization || '', // Cette ligne est maintenant correcte car Participant a 'organization'
+  identificationCode: p.identificationCode,
+ };
+});
+  logger.debug(`[LOG][val17PptxGenerator] Final participants for generator: ${JSON.stringify(participants)}`);
   logger.debug(`  - Nombre de questions: ${questions.length}`);
   logger.debug(`  - Options: ${JSON.stringify(options)}`);
   logger.debug(`  - Session Info: ${JSON.stringify(sessionInfo)}`);

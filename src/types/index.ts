@@ -17,7 +17,7 @@ export interface Session {
   // selectionBlocs: SelectedBlock[]; // Remplacé par selectedBlocIds
   selectedBlocIds?: number[]; // Liste des IDs des blocs sélectionnés pour cette session
   donneesOrs?: ArrayBuffer | Buffer | null; // Stockage du fichier .ors généré
-  orsFilePath?: string; // Chemin d'accès au fichier .ors
+  orsFilePath?: string | Blob | ArrayBuffer | null; // Chemin d'accès au fichier .ors
   status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
   questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>;
@@ -32,6 +32,7 @@ export interface Session {
     resolvedAt: string;
   } | null;
   selectedKitId?: number | null; // ID du kit de boîtiers sélectionné pour la session
+  resultsImportedAt?: string | null; // Date/heure de l'importation des résultats
 }
 
 // --- Nouveaux types pour la gestion des Kits de Boîtiers ---
@@ -123,6 +124,7 @@ export interface Participant {
   // idBoitier: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
   nom: string;
   prenom: string;
+  organization?: string;
   identificationCode?: string; // Code d'identification optionnel
   score?: number; // Score total du participant pour cette session
   reussite?: boolean; // Statut de réussite du participant pour cette session

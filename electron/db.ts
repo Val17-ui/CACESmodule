@@ -560,6 +560,9 @@ const rowToSession = (row: any): Session => {
   if (!row) return undefined as any;
   const session: any = { ...row };
   for (const field of JSON_SESSION_FIELDS) {
+    if (field === 'participants') { // Add this check
+      _logger.debug(`[DB Sessions] rowToSession: Raw participants for session ${row.id}: ${session[field]}`);
+    }
     if (session[field] && typeof session[field] === 'string') {
       try {
         session[field] = JSON.parse(session[field]);
@@ -584,6 +587,9 @@ const sessionToRow = (session: Partial<Omit<Session, 'id'> | Session>) => {
   const rowData: any = { ...session };
   for (const field of JSON_SESSION_FIELDS) {
     if (rowData[field] !== undefined) {
+      if (field === 'participants') {
+        _logger.debug(`[DB Sessions] sessionToRow: Serializing participants for session: ${JSON.stringify(rowData[field])}`);
+      }
       rowData[field] = JSON.stringify(rowData[field]);
     }
   }
@@ -636,6 +642,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
     try {
       const stmt = getDb().prepare("SELECT * FROM sessions WHERE id = ?");
       const row = stmt.get(id) as any;
+      _logger.debug(`[DB Sessions] getSessionById: Raw row for session ${id}: ${JSON.stringify(row)}`);
       return row ? rowToSession(row) : undefined;
     } catch (error) {
       _logger.debug(`[DB Sessions] Error getting session by id ${id}: ${error}`);

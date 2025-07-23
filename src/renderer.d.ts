@@ -48,6 +48,11 @@ declare global {
       generatePresentation: (sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => Promise<any>;
       getDefaultPptxTemplate: () => Promise<Buffer>;
       readImageFile: (filePath: string) => Promise<string>;
+      savePptxFile: (fileBuffer: ArrayBuffer, fileName: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+      openExcelFileDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
+      openDirectoryDialog: (filePath?: string) => Promise<void>;
+      openResultsFile: () => Promise<{ canceled: boolean; fileBuffer?: ArrayBuffer }>;
+      openFile: (filePath: string) => Promise<void>;
     };
   }
 }
