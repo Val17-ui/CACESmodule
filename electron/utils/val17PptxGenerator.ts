@@ -1775,57 +1775,57 @@ export async function generatePPTXVal17(
     const downloadedImages = new Map<number, DownloadedImage>();
     const questionMappingsInternal: QuestionMapping[] = [];
 
-    if (questions.some((q) => q.imageUrl)) {
-      const imagePromises = questions.map(async (question, index) => {
-        if (question.imageUrl) {
-          let imageData = null;
-          if (question.imageUrl.startsWith("http://") || question.imageUrl.startsWith("https://")) {
-            imageData = await downloadImageFromCloudWithDimensions(question.imageUrl, logger);
-          } else {
-            const resolvedImagePath = path.resolve(question.imageUrl);
-            logger.info(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
-            if (fs.existsSync(resolvedImagePath)) {
-              imageData = await loadLocalImageWithDimensions(resolvedImagePath, logger);
-            } else {
-              logger.warn(`[IMAGE] Fichier image local non trouvé: ${resolvedImagePath}`);
-            }
-          }
+    // if (questions.some((q) => q.imageUrl)) {
+    //   const imagePromises = questions.map(async (question, index) => {
+    //     if (question.imageUrl) {
+    //       let imageData = null;
+    //       if (question.imageUrl.startsWith("http://") || question.imageUrl.startsWith("https://")) {
+    //         imageData = await downloadImageFromCloudWithDimensions(question.imageUrl, logger);
+    //       } else {
+    //         const resolvedImagePath = path.resolve(question.imageUrl);
+    //         logger.info(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
+    //         if (fs.existsSync(resolvedImagePath)) {
+    //           imageData = await loadLocalImageWithDimensions(resolvedImagePath, logger);
+    //         } else {
+    //           logger.warn(`[IMAGE] Fichier image local non trouvé: ${resolvedImagePath}`);
+    //         }
+    //       }
 
-          if (imageData) {
-            const absoluteSlideNumberForImage =
-              effectiveExistingSlideCount + index + 1;
-            const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
-            const dimensions = calculateImageDimensions(
-              imageData.width,
-              imageData.height,
-              logger
-            );
-            return {
-              slideNumberContext: absoluteSlideNumberForImage,
-              image: {
-                fileName: imgFileName,
-                data: imageData.data,
-                width: imageData.width,
-                height: imageData.height,
-                dimensions,
-                extension: imageData.extension,
-              },
-            };
-          }
-        }
-        return null;
-      });
-      const imageResults = await Promise.all(imagePromises);
-      imageResults.forEach((result) => {
-        if (result && result.image) {
-          downloadedImages.set(result.slideNumberContext, result.image);
-          imageExtensions.add(result.image.extension);
-          outputZip
-            .folder("ppt/media")
-            ?.file(result.image.fileName, result.image.data);
-        }
-      });
-    }
+    //       if (imageData) {
+    //         const absoluteSlideNumberForImage =
+    //           effectiveExistingSlideCount + index + 1;
+    //         const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
+    //         const dimensions = calculateImageDimensions(
+    //           imageData.width,
+    //           imageData.height,
+    //           logger
+    //         );
+    //         return {
+    //           slideNumberContext: absoluteSlideNumberForImage,
+    //           image: {
+    //             fileName: imgFileName,
+    //             data: imageData.data,
+    //             width: imageData.width,
+    //             height: imageData.height,
+    //             dimensions,
+    //             extension: imageData.extension,
+    //           },
+    //         };
+    //       }
+    //     }
+    //     return null;
+    //   });
+    //   const imageResults = await Promise.all(imagePromises);
+    //   imageResults.forEach((result) => {
+    //     if (result && result.image) {
+    //       downloadedImages.set(result.slideNumberContext, result.image);
+    //       imageExtensions.add(result.image.extension);
+    //       outputZip
+    //         .folder("ppt/media")
+    //         ?.file(result.image.fileName, result.image.data);
+    //     }
+    //   });
+    // }
 
     for (let i = 0; i < questions.length; i++) {
       const absoluteSlideNumber = effectiveExistingSlideCount + i + 1;
