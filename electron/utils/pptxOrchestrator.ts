@@ -93,7 +93,7 @@ function generateOmbeaSessionXml(
 
 
 import { ILogger } from './logger';
-import { Participant, QuestionWithId as StoredQuestion } from '../../src/types/index';
+import { Participant, QuestionWithId as StoredQuestion, VotingDevice } from '../../src/types/index';
 import {
 Val17Question,
 GenerationOptions as Val17GenerationOptions,
