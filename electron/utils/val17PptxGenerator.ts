@@ -1521,15 +1521,15 @@ export async function generatePPTXVal17(
   hardwareDevices?: VotingDevice[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
  const participants: ParticipantForGenerator[] = (participantsInput || []).map(p => {
-    const assignedDevice = hardwareDevices?.find(hd => hd.id === p.assignedGlobalDeviceId);
-    return {
-      idBoitier: assignedDevice ? assignedDevice.serialNumber : 'N/A',
-      nom: p.nom,
-      prenom: p.prenom,
-      organization: p.organization || '',
-      identificationCode: p.identificationCode,
-    };
-  });
+const assignedDevice = hardwareDevices?.find(hd => hd.id === Number(p.assignedGlobalDeviceId));
+ return {
+  idBoitier: assignedDevice ? assignedDevice.serialNumber : 'N/A',
+  nom: p.nom,
+  prenom: p.prenom,
+  organization: p.organization || '', // Cette ligne est maintenant correcte car Participant a 'organization'
+  identificationCode: p.identificationCode,
+ };
+});
   logger.debug(`[LOG][val17PptxGenerator] Final participants for generator: ${JSON.stringify(participants)}`);
   logger.debug(`  - Nombre de questions: ${questions.length}`);
   logger.debug(`  - Options: ${JSON.stringify(options)}`);
