@@ -34,7 +34,6 @@ interface FormParticipant extends DBParticipantType {
   id: string;
   firstName: string;
   lastName: string;
-  organization?: string;
   deviceId: number | null;
   hasSigned?: boolean;
 }
@@ -199,7 +198,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               firstName: p_db.prenom,
               lastName: p_db.nom,
               deviceId: loopIndex + 1,
-              organization: (p_db as any).organization || '',
               hasSigned: (p_db as any).hasSigned || false,
             }));
             setParticipants(formParticipants);
@@ -283,7 +281,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       id: Date.now().toString(),
       firstName: '',
       lastName: '',
-      organization: '',
       deviceId: nextVisualDeviceId,
       hasSigned: false,
     };
@@ -320,7 +317,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       if (values.length >= 2) {
         parsed.push({
           prenom: values[0]?.trim() || '', nom: values[1]?.trim() || '',
-          organization: values[2]?.trim() || '', identificationCode: values[3]?.trim() || '',
+          identificationCode: values[3]?.trim() || '',
         } as Partial<DBParticipantType>);
       }
     });
@@ -346,7 +343,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
     const prenomIndex = headers.findIndex(h => h === 'prénom' || h === 'prenom');
     const nomIndex = headers.findIndex(h => h === 'nom');
-    const orgIndex = headers.findIndex(h => h === 'organisation');
+    const orgIndex = -1;
     const codeIndex = headers.findIndex(h => h === 'code identification' || h === 'code');
     for (let i = dataStartIndex; i < jsonData.length; i++) {
       const row = jsonData[i];
@@ -356,7 +353,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         if (prenom || nom) {
             parsed.push({
             prenom, nom,
-            organization: orgIndex !== -1 ? row[orgIndex]?.toString().trim() || '' : row[2]?.toString().trim() || '',
             identificationCode: codeIndex !== -1 ? row[codeIndex]?.toString().trim() || '' : row[3]?.toString().trim() || '',
             } as Partial<DBParticipantType>);
         }
@@ -382,7 +378,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         id: `imported-${Date.now()}-${index}`,
         firstName: p.prenom || '',
         lastName: p.nom || '',
-        organization: (p as any).organization || '',
         deviceId: null,
         hasSigned: false,
       }));
@@ -509,7 +504,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 firstName: p_db.prenom,
                 lastName: p_db.nom,
                 deviceId: currentParticipantState?.deviceId ?? visualDeviceId,
-                organization: currentParticipantState?.organization || '',
                 hasSigned: currentParticipantState?.hasSigned || false,
               };
             });
@@ -967,7 +961,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                           firstName: p_db_updated.prenom,
                           lastName: p_db_updated.nom,
                           deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
-                          organization: currentFormParticipantState?.organization || '',
                           hasSigned: currentFormParticipantState?.hasSigned || false,
                         };
                       });
@@ -1147,7 +1140,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       firstName: p_db_updated.prenom,
                       lastName: p_db_updated.nom,
                       deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
-                      organization: currentFormParticipantState?.organization || '',
                       hasSigned: currentFormParticipantState?.hasSigned || false,
                     };
                 });
@@ -1456,7 +1448,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Assigné (Nom et S/N)</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Ident.</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Réussite</th>
@@ -1496,15 +1487,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         <td className="px-4 py-3">
                           <Input
                             type="text"
-                            value={participant.organization || ''}
-                            onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)}
-                            className="mt-1 block w-full sm:text-sm"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <Input
-                            type="text"
                             value={participant.identificationCode || ''}
                             onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)}
                             className="mt-1 block w-full sm:text-sm"
@@ -1534,7 +1516,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   })}
                   {participants.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="text-center py-10 text-sm text-gray-500 italic">
+                      <td colSpan={8} className="text-center py-10 text-sm text-gray-500 italic">
                         Aucun participant ajouté à cette session.
                       </td>
                     </tr>

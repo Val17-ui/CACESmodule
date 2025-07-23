@@ -217,8 +217,7 @@ export async function generatePresentation(
       idBoitier: p.assignedGlobalDeviceId?.toString() || 'N/A',
       nom: p.nom,
       prenom: p.prenom,
-      organization: p.organization,
-      identificationCode: p.identificationCode,
+      identificationCode: p.identificationCode
     }));
     
     logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
