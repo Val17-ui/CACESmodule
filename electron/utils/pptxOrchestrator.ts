@@ -154,6 +154,7 @@ export async function generatePresentation(
   hardwareDevices: VotingDevice[]
 ): Promise<{ orsBlob: ArrayBuffer | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
   logger.info('[LOG][pptxOrchestrator] === Début de generatePresentation ===');
+  logger.info(`[LOG][pptxOrchestrator] hardwareDevices: ${JSON.stringify(hardwareDevices)}`);
   logger.info(`[LOG][pptxOrchestrator] sessionInfo: ${JSON.stringify(sessionInfo)}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de participants: ${_participants.length}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de questions: ${storedQuestions.length}`);
