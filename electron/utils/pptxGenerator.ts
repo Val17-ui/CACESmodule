@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { logger } from './logger';
+import { getLogger } from './logger';
+const logger = getLogger();
 
 // ========== INTERFACES ==========
 interface Question {

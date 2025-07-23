@@ -101,7 +101,11 @@ contextBridge.exposeInMainWorld('dbAPI', {
 });
 
 contextBridge.exposeInMainWorld('electron', {
-  log: (message: string) => ipcRenderer.send('log', message),
+  log: (message: string) => ipcRenderer.send('log', message), // Keep for backward compatibility
+  info: (message: string) => ipcRenderer.send('log:info', message),
+  debug: (message: string) => ipcRenderer.send('log:debug', message),
+  warn: (message: string) => ipcRenderer.send('log:warn', message),
+  error: (message: string) => ipcRenderer.send('log:error', message),
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {

@@ -2,11 +2,13 @@ import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 const { initializeIpcHandlers } = require('./ipcHandlers');
 const dbModule = require('./db');
-import { initializeLogging, logger } from './utils/logger';
+import { initializeLogger, getLogger, ILogger } from './utils/logger';
 
-logger.info('[Main Process] index.ts loaded');
 
-function createWindow() {
+
+
+
+function createWindow(logger: ILogger) {
   logger.info('Creating main application window');
   const win = new BrowserWindow({
     width: 1200,
@@ -35,7 +37,9 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  initializeLogging();
+  initializeLogger(); // Initialize the logger here
+  const logger = getLogger(); // Get the initialized logger instance
+  
   logger.info('App is ready, initializing...');
   // Set a Content Security Policy
   session.defaultSession.webRequest.onHeadersReceived((details: any, callback: any) => {
@@ -50,14 +54,14 @@ app.whenReady().then(async () => {
   });
   try {
     logger.info('Initializing database...');
-    dbModule.initializeDatabase();
+    dbModule.initializeDatabase(logger);
     logger.info('Initializing IPC handlers...');
-    initializeIpcHandlers();
-    createWindow();
+    initializeIpcHandlers(logger);
+    createWindow(logger);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
+        createWindow(logger);
       }
     });
   } catch (error) {
@@ -67,6 +71,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  const logger = getLogger();
   logger.info('All windows closed, quitting application...');
   if (process.platform !== 'darwin') {
     dbModule.getDb().close();

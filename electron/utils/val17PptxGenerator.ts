@@ -2,7 +2,9 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSZip from "jszip";
 import sizeOf from 'image-size';
-import { logger } from './logger';
+import { getLogger, ILogger } from './logger';
+
+const logger = getLogger();
 
 // Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.
 // These should ideally come from a './val17PptxTypes' import if that file is created with your type definitions.
@@ -102,6 +104,12 @@ interface ImageDimensions {
   width: number;
   height: number;
 }
+
+
+
+// Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
+
+
 
 function generateGUID(): string {
   logger.info('[LOG][val17PptxGenerator] Début de generateGUID.');
@@ -1440,9 +1448,15 @@ export async function generatePPTXVal17(
   questions: Val17Question[],
   options: GenerationOptions = {},
   sessionInfo?: SessionInfo,
-  participants?: ParticipantForGenerator[]
+  participantsInput?: ParticipantForGenerator[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
-  logger.info('[LOG][val17PptxGenerator] Début de generatePPTXVal17.');
+  const participants: ParticipantForGenerator[] = participantsInput || [];
+  logger.debug('[LOG][val17PptxGenerator] Début de generatePPTXVal17 avec les paramètres suivants:');
+  logger.debug(`  - Nombre de questions: ${questions.length}`);
+  logger.debug(`  - Options: ${JSON.stringify(options)}`);
+  logger.debug(`  - Session Info: ${JSON.stringify(sessionInfo)}`);
+  logger.debug(`  - Nombre de participants: ${participants.length}`);
+  logger.info('[LOG][val17PptxGenerator] === Début de generatePPTXVal17 ===');
   try {
     validateQuestions(questions);
     if (!templateFile) {
@@ -1582,7 +1596,7 @@ export async function generatePPTXVal17(
       }
     }
 
-    if (participants && participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
+    if (participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
       const targetParticipantsLayoutName = options.introSlideLayouts.participantsLayoutName;
       const actualParticipantsLayoutPath = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants");
 
@@ -1700,7 +1714,7 @@ export async function generatePPTXVal17(
             imageData = await downloadImageFromCloudWithDimensions(question.imageUrl);
           } else {
             const resolvedImagePath = path.resolve(question.imageUrl);
-            console.log(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
+            logger.info(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
             if (fs.existsSync(resolvedImagePath)) {
               imageData = await loadLocalImageWithDimensions(resolvedImagePath);
             } else {

@@ -10,11 +10,12 @@ import path from 'path';
 
 const dbModule = require('./db');
 
-import { logger } from './utils/logger';
+import { getLogger, ILogger } from './utils/logger';
 
 let handlerInitialized = false;
 
-module.exports.initializeIpcHandlers = function initializeIpcHandlers() {
+module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInstance: ILogger) {
+  const logger = loggerInstance;
   if (handlerInitialized) {
     logger.debug('[IPC Handlers] Already initialized. Skipping.');
     return;
@@ -294,7 +295,8 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers() {
   });
 
   // PPTX Generation
-  ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referential: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
+  ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referentiel: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
+    logger.info('[IPC] pptx-generate handler triggered.');
     logger.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
     let templateArrayBuffer: ArrayBuffer;
 
@@ -379,7 +381,7 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers() {
   });
 
   ipcMain.handle('open-directory-dialogger.debug', async (event: IpcMainInvokeEvent, filePath?: string) => {
-    logger.debug(`[IPC] open-directory-dialogger.debug: ${filePath || ''}`);
+    logger.debug(`[IPC] open-directory-dialog: ${filePath || ''}`);
     if (filePath) {
       const { shell } = require('electron');
       shell.showItemInFolder(filePath);
