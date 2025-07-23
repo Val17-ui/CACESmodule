@@ -318,7 +318,7 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
       throw new Error("Invalid template format provided to pptx-generate IPC handler.");
     }
 
-    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings);
+    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, logger);
   });
 
   ipcMain.handle('get-default-pptx-template', async () => {

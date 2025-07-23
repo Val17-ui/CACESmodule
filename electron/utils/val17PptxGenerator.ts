@@ -2,9 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSZip from "jszip";
 import sizeOf from 'image-size';
-import { getLogger, ILogger } from './logger';
-
-const logger = getLogger();
+import { ILogger } from './logger';
 
 // Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.
 // These should ideally come from a './val17PptxTypes' import if that file is created with your type definitions.
@@ -111,7 +109,7 @@ interface ImageDimensions {
 
 
 
-function generateGUID(): string {
+function generateGUID(logger: ILogger): string {
   logger.info('[LOG][val17PptxGenerator] Début de generateGUID.');
   const result = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
     const r = (Math.random() * 16) | 0;
@@ -122,7 +120,7 @@ function generateGUID(): string {
   return result;
 }
 
-function escapeXml(unsafe: string): string {
+function escapeXml(unsafe: string, logger: ILogger): string {
   logger.info('[LOG][val17PptxGenerator] Début de escapeXml.');
   if (typeof unsafe !== "string") {
     if (unsafe === null || unsafe === undefined) return "";
@@ -140,7 +138,7 @@ function escapeXml(unsafe: string): string {
   return result;
 }
 
-function countExistingSlides(zip: JSZip): number {
+function countExistingSlides(zip: JSZip, logger: ILogger): number {
   logger.info('[LOG][val17PptxGenerator] Début de countExistingSlides.');
   let count = 0;
   zip.folder("ppt/slides")?.forEach((relativePath) => {
@@ -155,7 +153,7 @@ function countExistingSlides(zip: JSZip): number {
   return count;
 }
 
-function validateQuestions(questions: Val17Question[]): void {
+function validateQuestions(questions: Val17Question[], logger: ILogger): void {
   logger.info('[LOG][val17PptxGenerator] Début de validateQuestions.');
   if (!Array.isArray(questions) || questions.length === 0) {
     throw new Error("Au moins une question est requise");
@@ -192,7 +190,8 @@ function validateQuestions(questions: Val17Question[]): void {
 
 function calculateImageDimensions(
   originalWidth: number,
-  originalHeight: number
+  originalHeight: number,
+  logger: ILogger
 ): ImageDimensions {
   logger.info('[LOG][val17PptxGenerator] Début de calculateImageDimensions.');
   const imageAreaX = 5486400;
@@ -224,7 +223,7 @@ function calculateImageDimensions(
   return result;
 }
 
-function processCloudUrl(url: string): string {
+function processCloudUrl(url: string, logger: ILogger): string {
   logger.info('[LOG][val17PptxGenerator] Début de processCloudUrl.');
   try {
     if (url.includes("dropbox.com")) {
@@ -239,7 +238,7 @@ function processCloudUrl(url: string): string {
   }
 }
 
-async function loadLocalImageWithDimensions(filePath: string): Promise<{
+async function loadLocalImageWithDimensions(filePath: string, logger: ILogger): Promise<{
   data: Buffer;
   extension: string;
   width: number;
@@ -264,7 +263,7 @@ async function loadLocalImageWithDimensions(filePath: string): Promise<{
   }
 }
 
-async function downloadImageFromCloudWithDimensions(url: string): Promise<{
+async function downloadImageFromCloudWithDimensions(url: string, logger: ILogger): Promise<{
   data: Buffer;
   extension: string;
   width: number;
@@ -274,7 +273,7 @@ async function downloadImageFromCloudWithDimensions(url: string): Promise<{
   try {
     let finalUrl = url;
     if (url.includes("dropbox.com")) {
-      finalUrl = processCloudUrl(url);
+      finalUrl = processCloudUrl(url, logger);
     }
     const response = await fetch(finalUrl);
     if (!response.ok) {
@@ -303,7 +302,8 @@ async function downloadImageFromCloudWithDimensions(url: string): Promise<{
 
 function updateContentTypesForImages(
   content: string,
-  imageExtensions: Set<string>
+  imageExtensions: Set<string>,
+  logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de updateContentTypesForImages.');
   let updated = content;
@@ -338,7 +338,8 @@ function updateContentTypesForImages(
 }
 
 async function findNextAvailableSlideLayoutId(
-  zip: JSZip
+  zip: JSZip,
+  logger: ILogger
 ): Promise<{ layoutId: number; layoutFileName: string; rId: string }> {
   logger.info('[LOG][val17PptxGenerator] Début de findNextAvailableSlideLayoutId.');
   const masterRelsFile = zip.file(
@@ -355,9 +356,9 @@ async function findNextAvailableSlideLayoutId(
     if (num > maxLayoutNum) maxLayoutNum = num;
   });
   const nextLayoutNum = maxLayoutNum + 1;
-  const allRIds = extractExistingRIds(masterRelsContent);
+  const allRIds = extractExistingRIds(masterRelsContent, logger);
   const existingRIds = allRIds.map((m) => m.rId);
-  const nextRId = getNextAvailableRId(existingRIds);
+  const nextRId = getNextAvailableRId(existingRIds, logger);
   logger.info('[LOG][val17PptxGenerator] Fin de findNextAvailableSlideLayoutId.');
   return {
     layoutId: nextLayoutNum,
@@ -367,11 +368,12 @@ async function findNextAvailableSlideLayoutId(
 }
 
 async function ensureOmbeaSlideLayoutExists(
-  zip: JSZip
+  zip: JSZip,
+  logger: ILogger
 ): Promise<{ layoutFileName: string; layoutRId: string }> {
   logger.info('[LOG][val17PptxGenerator] Début de ensureOmbeaSlideLayoutExists.');
   const { layoutId, layoutFileName, rId } =
-    await findNextAvailableSlideLayoutId(zip);
+    await findNextAvailableSlideLayoutId(zip, logger);
   const slideLayoutContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="tx" preserve="1"><p:cSld name="Titre et texte"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Titre 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez le style du titre</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Espace réservé du texte 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="0"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez les styles du texte du masque</a:t></a:r></a:p><a:p><a:pPr lvl="1"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Deuxième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="2"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Troisième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="3"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Quatrième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="4"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Cinquième niveau</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Espace réservé de la date 3"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="dt" sz="half" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{ABB4FD2C-0372-488A-B992-EB1BD753A34A}" type="datetimeFigureOut"><a:rPr lang="fr-FR" smtClean=... [truncated]
     Math.floor(Math.random() * 2147483647) + 1
   }"/></p:ext></p:extLst></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
@@ -381,9 +383,9 @@ async function ensureOmbeaSlideLayoutExists(
     `ppt/slideLayouts/_rels/${layoutFileName}.rels`,
     slideLayoutRelsContent
   );
-  await updateSlideMasterRelsForNewLayout(zip, layoutFileName, rId);
-  await updateSlideMasterForNewLayout(zip, layoutId, rId);
-  await updateContentTypesForNewLayout(zip, layoutFileName);
+  await updateSlideMasterRelsForNewLayout(zip, layoutFileName, rId, logger);
+  await updateSlideMasterForNewLayout(zip, layoutId, rId, logger);
+  await updateContentTypesForNewLayout(zip, layoutFileName, logger);
   logger.info('[LOG][val17PptxGenerator] Fin de ensureOmbeaSlideLayoutExists.');
   return { layoutFileName: layoutFileName, layoutRId: rId };
 }
@@ -391,7 +393,8 @@ async function ensureOmbeaSlideLayoutExists(
 async function updateSlideMasterRelsForNewLayout(
   zip: JSZip,
   layoutFileName: string,
-  rId: string
+  rId: string,
+  logger: ILogger
 ): Promise<void> {
   logger.info('[LOG][val17PptxGenerator] Début de updateSlideMasterRelsForNewLayout.');
   const masterRelsFile = zip.file(
@@ -414,7 +417,8 @@ async function updateSlideMasterRelsForNewLayout(
 async function updateSlideMasterForNewLayout(
   zip: JSZip,
   layoutId: number,
-  rId: string
+  rId: string,
+  logger: ILogger
 ): Promise<void> {
   logger.info('[LOG][val17PptxGenerator] Début de updateSlideMasterForNewLayout.');
   const masterFile = zip.file("ppt/slideMasters/slideMaster1.xml");
@@ -437,7 +441,8 @@ async function updateSlideMasterForNewLayout(
 
 async function updateContentTypesForNewLayout(
   zip: JSZip,
-  layoutFileName: string
+  layoutFileName: string,
+  logger: ILogger
 ): Promise<void> {
   logger.info('[LOG][val17PptxGenerator] Début de updateContentTypesForNewLayout.');
   const contentTypesFile = zip.file("[Content_Types].xml");
@@ -465,18 +470,21 @@ async function updateContentTypesForNewLayout(
 
 function createIntroTitleSlideXml(
   sessionInfo: SessionInfo,
-  slideNumber: number
+  slideNumber: number,
+  logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de createIntroTitleSlideXml.');
   const slideComment = `<!-- Intro Slide ${slideNumber}: Title -->`;
   const baseId = slideNumber * 1000;
   const titlePlaceholder = `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="title"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-    sessionInfo.title
+    sessionInfo.title,
+    logger
   )}</a:t></a:r></a:p>\n    </p:txBody>\n  </p:sp>`;
 
   const datePlaceholder = sessionInfo.date
     ? `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 2}" name="Subtitle Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-        sessionInfo.date
+        sessionInfo.date,
+        logger
       )}</a:t></a:r></a:p>\n    </p:txBody>\n  </p:sp>`
     : "";
 
@@ -487,7 +495,8 @@ function createIntroTitleSlideXml(
 
 function generateTableRowsXml(
   participants: ParticipantForGenerator[],
-  rowHeightEMU: number = 370840
+  rowHeightEMU: number = 370840,
+  logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de generateTableRowsXml.');
   let tableRowsXml = "";
@@ -500,18 +509,18 @@ function generateTableRowsXml(
   }
 
   headers.forEach(headerText => {
-    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText, logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
   });
   tableRowsXml += `</a:tr>`;
 
   participants.forEach((participant, index) => {
     tableRowsXml += `<a:tr h="${rowHeightEMU}">`;
     tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     if (hasOrganizationData) {
-      tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     }
     tableRowsXml += `</a:tr>`;
   });
@@ -519,7 +528,7 @@ function generateTableRowsXml(
   return tableRowsXml;
 }
 
-function generateTableGraphicFrame(participants: ParticipantForGenerator[], baseSpId: number): string {
+function generateTableGraphicFrame(participants: ParticipantForGenerator[], baseSpId: number, logger: ILogger): string {
     logger.info('[LOG][val17PptxGenerator] Début de generateTableGraphicFrame.');
     const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
 
@@ -558,7 +567,7 @@ function generateTableGraphicFrame(participants: ParticipantForGenerator[], base
         colWidths[colWidths.length - 1] += (tableCx - sumWidths);
     }
 
-    const tableRows = generateTableRowsXml(participants, rowHeightEMU);
+    const tableRows = generateTableRowsXml(participants, rowHeightEMU, logger);
 
     let tableXml = `<p:graphicFrame>\n      <p:nvGraphicFramePr>\n        <p:cNvPr id="${baseSpId}" name="Tableau Participants"/>\n        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>\n        <p:nvPr/>\n      </p:nvGraphicFramePr>\n      <p:xfrm>\n        <a:off x="${tableX}" y="${tableY}"/>\n        <a:ext cx="${tableCx}" cy="${tableCy}"/>\n      </p:xfrm>\n      <a:graphic>\n        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">\n          <a:tbl>\n            <a:tblPr firstRow="1" bandRow="1">\n              <a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>\n            </a:tblPr>\n            <a:tblGrid>`;
     colWidths.forEach(w => { tableXml += `<a:gridCol w="${w}"/>`; });
@@ -574,7 +583,8 @@ function createIntroParticipantsSlideXml(
   layoutXmlAsSlideBase: string | null,
   layoutGraphicFrameTarget: string | null,
   layoutTblPr: string | null,
-  layoutTblGrid: string | null
+  layoutTblGrid: string | null,
+  logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de createIntroParticipantsSlideXml.');
   const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
@@ -584,7 +594,7 @@ function createIntroParticipantsSlideXml(
 
   if (layoutXmlAsSlideBase && layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
     logger.debug("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
-    const tableRows = generateTableRowsXml(participants);
+    const tableRows = generateTableRowsXml(participants, undefined, logger);
     const newTblContent = `${layoutTblPr}${layoutTblGrid}${tableRows}`;
     const newFullTblXml = `<a:tbl>${newTblContent}</a:tbl>`;
     const graphicFrameWithNewTable = layoutGraphicFrameTarget.replace(
@@ -592,14 +602,15 @@ function createIntroParticipantsSlideXml(
       newFullTblXml
     );
 
-    const baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000 + 0}" name="Group Shape"/> <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p></a:txBody>\n          </p:sp>\n          ${graphicFrameWithNewTable}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
+    const baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000 + 0}" name="Group Shape"/> <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet, logger)}</a:t></a:r></a:p></a:txBody>
+          </p:sp>\n          ${graphicFrameWithNewTable}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
     finalSlideXml = baseSlideStructure;
 
   } else {
     logger.debug("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
-    const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2);
+    const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2, logger);
 
-    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
+    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet, logger)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
   }
   logger.info('[LOG][val17PptxGenerator] Fin de createIntroParticipantsSlideXml.');
   return finalSlideXml;
@@ -639,6 +650,7 @@ function createSlideXml(
   options: string[],
   slideNumber: number,
   duration: number = 30,
+  logger: ILogger,
   imageDimensions?: ImageDimensions,
   ombeaConfig?: ConfigOptions
 ): string {
@@ -668,7 +680,7 @@ function createSlideXml(
   }
   const listStyleXml = `<a:lstStyle><a:lvl1pPr marL="514350" indent="-514350" algn="l"><a:buFontTx/><a:buClrTx/><a:buSzTx/><a:buAutoNum type="${bulletTypeForXml}"/></a:lvl1pPr></a:lstStyle>`;
   let xmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>${slideComment}<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="${grpId}" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="${titleId}" name="Titre ${slideNumber}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/><p:custDataLst><p:tags r:id="rId2"/></p:custDataLst></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" dirty="0"/><a:t>${escapeXml(
-    question
+    question, logger
   )}</a:t></a:r><a:endParaRPr lang="fr-FR" dirty="0"/></a:p></p:txBody></p:sp>`;
   if (imageDimensions) {
     xmlContent += `<p:pic><p:nvPicPr><p:cNvPr id="${imageId}" name="Image ${slideNumber}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rId6"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="${imageDimensions.x}" y="${imageDimensions.y}"/><a:ext cx="${imageDimensions.width}" cy="${imageDimensions.height}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
@@ -676,11 +688,11 @@ function createSlideXml(
   xmlContent += `<p:sp><p:nvSpPr><p:cNvPr id="${bodyId}" name="Espace réservé du texte ${slideNumber}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/><p:custDataLst><p:tags r:id="rId3"/></p:custDataLst></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1600200"/><a:ext cx="4572000" cy="4525963"/></a:xfrm></p:spPr><p:txBody><a:bodyPr/>${listStyleXml}${options
     .map(
       (option) =>
-        `<a:p><a:pPr><a:buFont typeface="+mj-lt"/><a:buAutoNum type="${bulletTypeForXml}"/></a:pPr><a:r><a:rPr lang="fr-FR" dirty="0"/><a:t>${escapeXml(
-          option
+        `<a:p><a:pPr><a:buFont typeface="+mj-lt"/><a:buAutoNum type="${bulletTypeForXml}"/></a:pPr><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
+          option, logger
         )}</a:t></a:r></a:p>`
     )
-    .join("")}</p:txBody></p:sp>`;
+    .join("")}</p:txBody></p:sp>`;;
   if (Number(countdownDisplayText) > 0) {
     xmlContent += `<p:sp><p:nvSpPr><p:cNvPr id="${countdownId}" name="OMBEA Countdown ${slideNumber}"/><p:cNvSpPr txBox="1"/><p:nvPr><p:custDataLst><p:tags r:id="rId4"/></p:custDataLst></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="7380000" y="3722400"/><a:ext cx="1524000" cy="769441"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr vert="horz" rtlCol="0" anchor="ctr" anchorCtr="1"><a:spAutoFit/></a:bodyPr><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" sz="4400" smtClean="0"/><a:t>${String(
       countdownDisplayText
@@ -695,7 +707,8 @@ function createSlideXml(
 
 function calculateBaseTagNumber(
   slideNumberInBatch: number,
-  tagOffset: number = 0
+  tagOffset: number = 0,
+  logger: ILogger
 ): number {
   logger.info('[LOG][val17PptxGenerator] Début de calculateBaseTagNumber.');
   const result = tagOffset + 1 + (slideNumberInBatch - 1) * 4;
@@ -703,7 +716,7 @@ function calculateBaseTagNumber(
   return result;
 }
 
-function findHighestExistingTagNumber(zip: JSZip): number {
+function findHighestExistingTagNumber(zip: JSZip, logger: ILogger): number {
   logger.info('[LOG][val17PptxGenerator] Début de findHighestExistingTagNumber.');
   let maxTagNumber = 0;
   const tagsFolder = zip.folder("ppt/tags");
@@ -723,7 +736,8 @@ function findHighestExistingTagNumber(zip: JSZip): number {
 async function findLayoutByCSldName(
   zip: JSZip,
   targetName: string,
-  layoutType: "title" | "participants"
+  layoutType: "title" | "participants",
+  logger: ILogger
 ): Promise<string | null> {
   logger.info(`[LOG][val17PptxGenerator] Début de findLayoutByCSldName pour ${targetName}.`);
   const layoutsFolder = zip.folder("ppt/slideLayouts");
@@ -798,7 +812,8 @@ async function findLayoutByCSldName(
 function ensureTagContinuity(
   zip: JSZip,
   startingTag: number,
-  endingTag: number
+  endingTag: number,
+  logger: ILogger
 ): string[] {
   logger.info('[LOG][val17PptxGenerator] Début de ensureTagContinuity.');
   const warnings: string[] = [];
@@ -816,12 +831,13 @@ function createSlideTagFiles(
   options: string[],
   correctAnswerIndex: number | undefined,
   duration: number,
-  ombeaConfig?: ConfigOptions,
+  ombeaConfig: ConfigOptions | undefined,
+  logger: ILogger,
   tagOffset: number = 0
 ): TagInfo[] {
   logger.info(`[LOG][val17PptxGenerator] Début de createSlideTagFiles pour la question ${questionIndexInBatch}.`);
-  const baseTagNumber = calculateBaseTagNumber(questionIndexInBatch, tagOffset);
-  const slideGuid = generateGUID();
+  const baseTagNumber = calculateBaseTagNumber(questionIndexInBatch, tagOffset, logger);
+    const slideGuid = generateGUID(logger);
   const points = options
     .map((_, index) =>
       correctAnswerIndex !== undefined && index === correctAnswerIndex
@@ -861,7 +877,7 @@ function createSlideTagFiles(
     tagNumber: baseTagNumber + 2,
     fileName: `tag${baseTagNumber + 2}.xml`,
     content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tag name="OR_SHAPE_TYPE" val="OR_ANSWERS"/><p:tag name="OR_ANSWER_POINTS" val="${points}"/><p:tag name="OR_ANSWERS_TEXT" val="${options
-      .map(escapeXml)
+      .map(option => escapeXml(option, logger))
       .join("&#13;")}"/></p:tagLst>`,
   });
   tags.push({
@@ -873,7 +889,7 @@ function createSlideTagFiles(
   return tags;
 }
 
-function extractExistingRIds(relsContent: string): RIdMapping[] {
+function extractExistingRIds(relsContent: string, logger: ILogger): RIdMapping[] {
   logger.info('[LOG][val17PptxGenerator] Début de extractExistingRIds.');
   const mappings: RIdMapping[] = [];
   const relationshipRegex = /<Relationship\s+([^>]+)>/g;
@@ -895,7 +911,7 @@ function extractExistingRIds(relsContent: string): RIdMapping[] {
   return mappings;
 }
 
-function getNextAvailableRId(existingRIds: string[]): string {
+function getNextAvailableRId(existingRIds: string[], logger: ILogger): string {
   logger.info('[LOG][val17PptxGenerator] Début de getNextAvailableRId.');
   let maxId = 0;
   existingRIds.forEach((rId) => {
@@ -918,14 +934,15 @@ function updatePresentationRelsWithMappings(
     layoutRIdInSlide: string;
     layoutFileName: string;
   }[],
-  newOmbeaQuestionCount: number
+  newOmbeaQuestionCount: number,
+  logger: ILogger
 ): {
   updatedContent: string;
   slideRIdMappings: { slideNumber: number; rId: string }[];
   oldToNewRIdMap: { [oldRId: string]: string };
 } {
   logger.info('[LOG][val17PptxGenerator] Début de updatePresentationRelsWithMappings.');
-  const existingRels = extractExistingRIds(originalContent);
+  const existingRels = extractExistingRIds(originalContent, logger);
   const finalRelsOutput: RIdMapping[] = [];
   const slideRIdMappings: { slideNumber: number; rId: string }[] = [];
   const oldToNewRIdMap: { [oldRId: string]: string } = {};
@@ -1016,7 +1033,8 @@ async function rebuildPresentationXml(
   zip: JSZip,
   slideRIdMappings: { slideNumber: number; rId: string }[],
   slideSizeAttrs: SlideSizeAttributes | null,
-  oldToNewRIdMap: { [oldRId: string]: string }
+  oldToNewRIdMap: { [oldRId: string]: string },
+  logger: ILogger
 ): Promise<void> {
   logger.info('[LOG][val17PptxGenerator] Début de rebuildPresentationXml.');
   const presentationFile = zip.file("ppt/presentation.xml");
@@ -1097,7 +1115,8 @@ function updateContentTypesComplete(
   newOmbeaQuestionCount: number,
   totalSlidesInFinalPptx: number,
   ombeaQuestionLayoutFileName: string,
-  totalTagsUsed: number
+  totalTagsUsed: number,
+  logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de updateContentTypesComplete.');
   let updatedContent = originalContent;
@@ -1156,7 +1175,8 @@ function updateContentTypesComplete(
 
 function calculateAppXmlMetadata(
   totalFinalSlides: number,
-  newOmbeaQuestions: Val17Question[]
+  newOmbeaQuestions: Val17Question[],
+  logger: ILogger
 ): AppXmlMetadata {
   logger.info('[LOG][val17PptxGenerator] Début de calculateAppXmlMetadata.');
   let totalWords = 0;
@@ -1183,23 +1203,24 @@ function calculateAppXmlMetadata(
 
 async function updateAppXml(
   zip: JSZip,
-  metadata: AppXmlMetadata
+  metadata: AppXmlMetadata,
+  logger: ILogger
 ): Promise<void> {
   logger.info('[LOG][val17PptxGenerator] Début de updateAppXml.');
   const appFile = zip.file("docProps/app.xml");
   if (!appFile) {
     logger.warn("app.xml non trouvé, création d'un nouveau fichier");
-    createNewAppXml(zip, metadata);
+    createNewAppXml(zip, metadata, logger);
     return;
   }
   let content = await appFile.async("string");
-  content = updateSimpleFields(content, metadata);
-  content = updateHeadingPairsAndTitles(content, metadata.slideTitles);
+  content = updateSimpleFields(content, metadata, logger);
+    content = updateHeadingPairsAndTitles(content, metadata.slideTitles, logger);
   zip.file("docProps/app.xml", content);
   logger.info('[LOG][val17PptxGenerator] Fin de updateAppXml.');
 }
 
-function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
+function updateSimpleFields(content: string, metadata: AppXmlMetadata, logger: ILogger): string {
   logger.info('[LOG][val17PptxGenerator] Début de updateSimpleFields.');
   let updated = content;
   updated = updated.replace(
@@ -1253,7 +1274,8 @@ function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
 
 function updateHeadingPairsAndTitles(
   content: string,
-  newOmbeaSlideTitles: string[]
+  newOmbeaSlideTitles: string[],
+  logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de updateHeadingPairsAndTitles.');
   let updated = content;
@@ -1275,8 +1297,10 @@ function updateHeadingPairsAndTitles(
   if (titlesOfPartsEndIndex !== -1) {
     let titlesXmlToAdd = "";
     newOmbeaSlideTitles.forEach((title) => {
-      titlesXmlToAdd += `\n      <vt:lpstr>${escapeXml(
-        title.substring(0, 250)
+      titlesXmlToAdd += `
+      <vt:lpstr>${escapeXml(
+        title.substring(0, 250),
+        logger
       )}<\/vt:lpstr>`;
     });
     updated =
@@ -1300,7 +1324,8 @@ function updateHeadingPairsAndTitles(
 
 function buildHeadingPairs(
   nonSlideTitles: string[],
-  allSlideTitles: string[]
+  allSlideTitles: string[],
+  logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de buildHeadingPairs.');
   const pairs: string[] = [];
@@ -1344,17 +1369,18 @@ function buildTitlesOfParts(
   fonts: string[],
   themes: string[],
   existingSlideTitles: string[],
-  newSlideTitles: string[]
+  newSlideTitles: string[],
+  logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de buildTitlesOfParts.');
   const allTitles: string[] = [];
-  fonts.forEach((font) => allTitles.push(escapeXml(font)));
-  themes.forEach((theme) => allTitles.push(escapeXml(theme)));
-  existingSlideTitles.forEach((title) => allTitles.push(escapeXml(title)));
+  fonts.forEach((font) => allTitles.push(escapeXml(font, logger)));
+  themes.forEach((theme) => allTitles.push(escapeXml(theme, logger)));
+  existingSlideTitles.forEach((title) => allTitles.push(escapeXml(title, logger)));
   newSlideTitles.forEach((title) => {
     const truncatedTitle =
       title.length > 250 ? title.substring(0, 247) + "..." : title;
-    allTitles.push(escapeXml(truncatedTitle));
+    allTitles.push(escapeXml(truncatedTitle, logger));
   });
   const vectorContent = allTitles
     .map((title) => `\n      <vt:lpstr>${title}<\/vt:lpstr>`)
@@ -1364,29 +1390,38 @@ function buildTitlesOfParts(
   return result;
 }
 
-function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata): void {
+function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata, logger: ILogger): void {
   logger.info('[LOG][val17PptxGenerator] Début de createNewAppXml.');
   const defaultFonts = ["Arial", "Calibri"];
   const defaultThemes = ["Thème Office"];
   const headingPairs = buildHeadingPairs(
     [...defaultFonts, ...defaultThemes],
-    metadata.slideTitles
+    metadata.slideTitles,
+    logger
   );
   const titlesOfParts = buildTitlesOfParts(
     defaultFonts,
     defaultThemes,
     [],
-    metadata.slideTitles
+    metadata.slideTitles,
+    logger
   );
 
-  const appXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">\n  <TotalTime>2<\/TotalTime><Words>${metadata.totalWords}<\/Words><Application>Microsoft Office PowerPoint<\/Application>\n  <PresentationFormat>Affichage à l'écran (4:3)<\/PresentationFormat><Paragraphs>${metadata.totalParagraphs}<\/Paragraphs>\n  <Slides>${metadata.totalSlides}<\/Slides><Notes>0<\/Notes><HiddenSlides>0<\/HiddenSlides><MMClips>0<\/MMClips>\n  <ScaleCrop>false<\/ScaleCrop>${headingPairs}${titlesOfParts}<Company/><LinksUpToDate>false<\/LinksUpToDate>\n  <SharedDoc>false<\/SharedDoc><HyperlinksChanged>false<\/HyperlinksChanged><AppVersion>14.0000<\/AppVersion><\/Properties>`;
+  const appXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <TotalTime>2<\/TotalTime><Words>${metadata.totalWords}<\/Words><Application>Microsoft Office PowerPoint<\/Application>
+  <PresentationFormat>Affichage à l'écran (4:3)<\/PresentationFormat><Paragraphs>${metadata.totalParagraphs}<\/Paragraphs>
+  <Slides>${metadata.totalSlides}<\/Slides><Notes>0<\/Notes><HiddenSlides>0<\/HiddenSlides><MMClips>0<\/MMClips>
+  <ScaleCrop>false<\/ScaleCrop>${headingPairs}${titlesOfParts}<Company/><LinksUpToDate>false<\/LinksUpToDate>
+  <SharedDoc>false<\/SharedDoc><HyperlinksChanged>false<\/HyperlinksChanged><AppVersion>14.0000<\/AppVersion><\/Properties>`;
   zip.file("docProps/app.xml", appXmlContent);
   logger.info('[LOG][val17PptxGenerator] Fin de createNewAppXml.');
 }
 
 async function updateCoreXml(
   zip: JSZip,
-  newQuestionCount: number
+  newQuestionCount: number,
+  logger: ILogger
 ): Promise<void> {
   logger.info('[LOG][val17PptxGenerator] Début de updateCoreXml.');
   const coreFile = zip.file("docProps/core.xml");
@@ -1397,7 +1432,7 @@ async function updateCoreXml(
     }`;
     content = content.replace(
       /<dc:title>.*?<\/dc:title>/,
-      `<dc:title>${escapeXml(title)}<\/dc:title>`
+      `<dc:title>${escapeXml(title, logger)}<\/dc:title>`
     );
     const now = new Date().toISOString();
     content = content.replace(
@@ -1430,7 +1465,7 @@ async function updateCoreXml(
 }
 
 // Helper function to get XML content of a layout file
-async function getLayoutXml(zip: JSZip, layoutFileName: string): Promise<string | null> {
+async function getLayoutXml(zip: JSZip, layoutFileName: string, logger: ILogger): Promise<string | null> {
   logger.info(`[LOG][val17PptxGenerator] Début de getLayoutXml pour ${layoutFileName}.`);
   const layoutFile = zip.file(layoutFileName);
   if (layoutFile) {
@@ -1447,18 +1482,18 @@ export async function generatePPTXVal17(
   templateFile: any,
   questions: Val17Question[],
   options: GenerationOptions = {},
+  logger: ILogger,
   sessionInfo?: SessionInfo,
   participantsInput?: ParticipantForGenerator[]
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
   const participants: ParticipantForGenerator[] = participantsInput || [];
-  logger.debug('[LOG][val17PptxGenerator] Début de generatePPTXVal17 avec les paramètres suivants:');
   logger.debug(`  - Nombre de questions: ${questions.length}`);
   logger.debug(`  - Options: ${JSON.stringify(options)}`);
   logger.debug(`  - Session Info: ${JSON.stringify(sessionInfo)}`);
   logger.debug(`  - Nombre de participants: ${participants.length}`);
   logger.info('[LOG][val17PptxGenerator] === Début de generatePPTXVal17 ===');
   try {
-    validateQuestions(questions);
+    validateQuestions(questions, logger);
     if (!templateFile) {
       logger.warn("Aucun fichier modèle fourni.");
       throw new Error("Template file is required by generatePPTXVal17.");
@@ -1546,7 +1581,7 @@ export async function generatePPTXVal17(
       logger.warn("ppt/presentation.xml non trouvé dans le ZIP du modèle.");
     }
 
-    const existingTagsCount = findHighestExistingTagNumber(templateZip);
+    const existingTagsCount = findHighestExistingTagNumber(templateZip, logger);
     let maxTagNumberUsed = existingTagsCount;
 
     const outputZip = new JSZip();
@@ -1566,7 +1601,7 @@ export async function generatePPTXVal17(
     });
     await Promise.all(copyPromises);
 
-    const initialExistingSlideCount = countExistingSlides(outputZip);
+    const initialExistingSlideCount = countExistingSlides(outputZip, logger);
     let introSlidesAddedCount = 0;
     const newIntroSlideDetails: {
       slideNumber: number;
@@ -1576,10 +1611,10 @@ export async function generatePPTXVal17(
 
     if (sessionInfo && options.introSlideLayouts?.titleLayoutName) {
       const targetTitleLayoutName = options.introSlideLayouts.titleLayoutName;
-      const actualTitleLayoutPath = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title");
+      const actualTitleLayoutPath = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title", logger);
       if (actualTitleLayoutPath) {
         const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
-        const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber);
+        const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber, logger);
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
         const layoutRIdInSlide = "rId1";
         const titleLayoutBaseName = actualTitleLayoutPath.substring(actualTitleLayoutPath.lastIndexOf('/') + 1);
@@ -1598,14 +1633,14 @@ export async function generatePPTXVal17(
 
     if (participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
       const targetParticipantsLayoutName = options.introSlideLayouts.participantsLayoutName;
-      const actualParticipantsLayoutPath = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants");
+      const actualParticipantsLayoutPath = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants", logger);
 
       if (actualParticipantsLayoutPath) {
         let layoutTblPrXml: string | null = null;
         let layoutTblGridXml: string | null = null;
         let layoutGraphicFrameXml: string | null = null;
 
-        const layoutFileXmlContent = await getLayoutXml(outputZip, actualParticipantsLayoutPath);
+        const layoutFileXmlContent = await getLayoutXml(outputZip, actualParticipantsLayoutPath, logger);
 
         if (layoutFileXmlContent) {
           const graphicFrameRegex = /<p:graphicFrame>([\s\S]*?<a:tbl>[\s\S]*?<\/a:tbl>[\s\S]*?)<\/p:graphicFrame>/;
@@ -1663,7 +1698,8 @@ export async function generatePPTXVal17(
           layoutFileXmlContent,
           layoutGraphicFrameXml,
           layoutTblPrXml,
-          layoutTblGridXml
+          layoutTblGridXml,
+          logger
         );
 
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, participantsSlideXml);
@@ -1686,7 +1722,7 @@ export async function generatePPTXVal17(
 
     const effectiveExistingSlideCount =
       initialExistingSlideCount + introSlidesAddedCount;
-    const ombeaLayout = await ensureOmbeaSlideLayoutExists(outputZip);
+    const ombeaLayout = await ensureOmbeaSlideLayoutExists(outputZip, logger);
     const ombeaLayoutFileName = ombeaLayout.layoutFileName;
 
     outputZip.folder("ppt/tags");
@@ -1711,12 +1747,12 @@ export async function generatePPTXVal17(
         if (question.imageUrl) {
           let imageData = null;
           if (question.imageUrl.startsWith("http://") || question.imageUrl.startsWith("https://")) {
-            imageData = await downloadImageFromCloudWithDimensions(question.imageUrl);
+            imageData = await downloadImageFromCloudWithDimensions(question.imageUrl, logger);
           } else {
             const resolvedImagePath = path.resolve(question.imageUrl);
             logger.info(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
             if (fs.existsSync(resolvedImagePath)) {
-              imageData = await loadLocalImageWithDimensions(resolvedImagePath);
+              imageData = await loadLocalImageWithDimensions(resolvedImagePath, logger);
             } else {
               logger.warn(`[IMAGE] Fichier image local non trouvé: ${resolvedImagePath}`);
             }
@@ -1728,7 +1764,8 @@ export async function generatePPTXVal17(
             const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
             const dimensions = calculateImageDimensions(
               imageData.width,
-              imageData.height
+              imageData.height,
+              logger
             );
             return {
               slideNumberContext: absoluteSlideNumberForImage,
@@ -1771,6 +1808,7 @@ export async function generatePPTXVal17(
         questionData.options,
         absoluteSlideNumber,
         duration,
+        logger,
         downloadedImage?.dimensions,
         options.ombeaConfig
       );
@@ -1778,7 +1816,8 @@ export async function generatePPTXVal17(
 
       const baseTagNumberForSlide = calculateBaseTagNumber(
         i + 1,
-        existingTagsCount
+        existingTagsCount,
+        logger
       );
       let slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
       slideRelsXml += `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide + 2}.xml"/>`;
@@ -1802,6 +1841,7 @@ export async function generatePPTXVal17(
         questionData.correctAnswerIndex,
         duration,
         options.ombeaConfig,
+        logger,
         existingTagsCount
       );
       tags.forEach((tag) => {
@@ -1842,7 +1882,7 @@ export async function generatePPTXVal17(
       });
     }
     if (existingTagsCount > 0 && questions.length > 0) {
-      const warnings = ensureTagContinuity(outputZip, 1, maxTagNumberUsed);
+      const warnings = ensureTagContinuity(outputZip, 1, maxTagNumberUsed, logger);
       if (warnings.length > 0)
         logger.warn(`⚠️ Problèmes de continuité des tags détectés: ${JSON.stringify(warnings)}`);
     }
@@ -1855,7 +1895,8 @@ export async function generatePPTXVal17(
       if (imageExtensions.size > 0)
         contentTypesContent = updateContentTypesForImages(
           contentTypesContent,
-          imageExtensions
+          imageExtensions,
+          logger
         );
       contentTypesContent = updateContentTypesComplete(
         contentTypesContent,
@@ -1866,7 +1907,8 @@ export async function generatePPTXVal17(
         questions.length,
         totalFinalSlideCount,
         ombeaLayoutFileName,
-        maxTagNumberUsed
+        maxTagNumberUsed,
+        logger
       );
       outputZip.file("[Content_Types].xml", contentTypesContent);
     }
@@ -1886,7 +1928,8 @@ export async function generatePPTXVal17(
         presentationRelsContent,
         initialExistingSlideCount,
         newIntroSlideDetails,
-        questions.length
+        questions.length,
+        logger
       );
       outputZip.file(
         "ppt/_rels/presentation.xml.rels",
@@ -1896,16 +1939,18 @@ export async function generatePPTXVal17(
         outputZip,
         slideRIdMappings,
         slideSizeAttrs,
-        oldToNewRIdMap
+        oldToNewRIdMap,
+        logger
       );
     }
 
-    await updateCoreXml(outputZip, questions.length);
+    await updateCoreXml(outputZip, questions.length, logger);
     const appMetadata = calculateAppXmlMetadata(
       totalFinalSlideCount,
-      questions
+      questions,
+      logger
     );
-    await updateAppXml(outputZip, appMetadata);
+    await updateAppXml(outputZip, appMetadata, logger);
 
     const outputBlob = await outputZip.generateAsync({
       type: "blob",

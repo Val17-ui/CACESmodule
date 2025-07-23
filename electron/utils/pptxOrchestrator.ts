@@ -2,28 +2,19 @@
 // import PptxGenJS from 'pptxgenjs'; // Not directly used now
 import JSZip from 'jszip';
 import fs from 'fs';
+import { dialog, app } from 'electron';
 import path from 'path';
-// import { saveAs } from 'file-saver'; // saveAs n'est plus utilisé ici directement
-// import { QuestionWithId as StoredQuestion } from '../db'; // Supprimé
-import { Participant, QuestionWithId as StoredQuestion } from '../../src/types/index';
-// Importer QuestionMapping et ajuster les autres imports si FinalQuestionData a été supprimé
-import {
-  Val17Question,
-  GenerationOptions as Val17GenerationOptions,
-  ConfigOptions as Val17ConfigOptions,
-  generatePPTXVal17,
-  QuestionMapping, // Importer directement
-  SessionInfo as Val17SessionInfo
-} from './val17PptxGenerator';
+
 
 // Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
-export type { QuestionMapping };
+
 
 
 function generateOmbeaSessionXml(
   sessionInfo: Val17SessionInfo,
   participants: Participant[],
-  _questionMappings: QuestionMapping[] // Utiliser QuestionMapping ici, même si non utilisé dans ce XML particulier
+  _questionMappings: QuestionMapping[], // Utiliser QuestionMapping ici, même si non utilisé dans ce XML particulier
+  logger: ILogger
 ): string {
   logger.info('[LOG][pptxOrchestrator] Début de generateOmbeaSessionXml.');
   logger.info(`[LOG][pptxOrchestrator] sessionInfo pour XML: ${JSON.stringify(sessionInfo)}`);
@@ -100,14 +91,25 @@ function generateOmbeaSessionXml(
   return xml;
 }
 
-import { dialog, app } from 'electron';
-import { logger } from './logger';
+
+import { ILogger } from './logger';
+import { Participant, QuestionWithId as StoredQuestion } from '../../src/types/index';
+import {
+Val17Question,
+GenerationOptions as Val17GenerationOptions,
+ConfigOptions as Val17ConfigOptions,
+generatePPTXVal17,
+QuestionMapping,
+SessionInfo as Val17SessionInfo,
+ParticipantForGenerator
+} from './val17PptxGenerator';
+
 
 export interface AdminPPTXSettings extends Val17ConfigOptions {
   defaultDuration?: number;
 }
 
-export function transformQuestionsForVal17Generator(storedQuestions: StoredQuestion[]): Val17Question[] {
+export function transformQuestionsForVal17Generator(storedQuestions: StoredQuestion[], logger: ILogger): Val17Question[] {
   logger.info('[LOG][pptxOrchestrator] Début de transformQuestionsForVal17Generator.');
   const result = storedQuestions.map((sq) => {
     let correctAnswerIndex: number | undefined = undefined;
@@ -143,13 +145,14 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
 }
 
 export async function generatePresentation(
-  sessionInfo: { name: string; date: string; referential: string },
+  sessionInfo: { name: string; date: string; referentiel: string },
   _participants: Participant[],
   storedQuestions: StoredQuestion[],
   templateFile: File | ArrayBuffer | string,
-  adminSettings: AdminPPTXSettings
+  adminSettings: AdminPPTXSettings,
+  logger: ILogger
 ): Promise<{ orsBlob: ArrayBuffer | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
-  logger.info('[LOG][pptxOrchestrator] Début de generatePresentation.');
+  logger.info('[LOG][pptxOrchestrator] === Début de generatePresentation ===');
   logger.info(`[LOG][pptxOrchestrator] sessionInfo: ${JSON.stringify(sessionInfo)}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de participants: ${_participants.length}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de questions: ${storedQuestions.length}`);
@@ -183,7 +186,7 @@ export async function generatePresentation(
     templateBuffer = fs.readFileSync(defaultTemplatePath);
   }
 
-  const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions);
+  const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions, logger);
   logger.info('[LOG][pptxOrchestrator] Questions transformées pour le générateur Val17.');
 
   const generationOptions: Val17GenerationOptions = {
@@ -217,21 +220,25 @@ export async function generatePresentation(
       identificationCode: p.identificationCode
     }));
     
+    logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
     const generatedData = await generatePPTXVal17(
       templateBuffer,
       transformedQuestions,
       generationOptions,
+      logger,
       val17SessionInfo,
       participantsForGenerator
     );
-    logger.info('[LOG][pptxOrchestrator] Retour de generatePPTXVal17.');
+    logger.debug('[LOG][pptxOrchestrator] generatePPTXVal17 a terminé son exécution.');
+    logger.info('[LOG][pptxOrchestrator] generatePPTXVal17 call completed.');
 
     if (generatedData && generatedData.pptxBlob && generatedData.questionMappings && generatedData.preExistingQuestionSlideGuids) {
       logger.info('[LOG][pptxOrchestrator] Génération du PPTX réussie. Génération du XML de session ORS.');
       const orSessionXmlContent = generateOmbeaSessionXml(
         val17SessionInfo,
         _participants,
-        generatedData.questionMappings
+        generatedData.questionMappings,
+        logger
       );
       logger.info('[LOG][pptxOrchestrator] XML de session ORS généré.');
 
