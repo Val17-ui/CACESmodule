@@ -37,5 +37,6 @@ function writeToLogFile(level: string, message: string) {
 export const logger = {
   info: (message: string) => writeToLogFile('INFO', message),
   debug: (message: string) => writeToLogFile('DEBUG', message),
+  warn: (message: string) => writeToLogFile('WARN', message),
   error: (message: string) => writeToLogFile('ERROR', message),
 };

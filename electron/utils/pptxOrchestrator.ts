@@ -216,7 +216,7 @@ export async function generatePresentation(
       prenom: p.prenom,
       identificationCode: p.identificationCode
     }));
-    log('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
+    
     const generatedData = await generatePPTXVal17(
       templateBuffer,
       transformedQuestions,

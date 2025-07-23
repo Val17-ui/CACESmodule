@@ -575,7 +575,7 @@ function createIntroParticipantsSlideXml(
   let finalSlideXml = "";
 
   if (layoutXmlAsSlideBase && layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
-    log("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
+    logger.debug("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
     const tableRows = generateTableRowsXml(participants);
     const newTblContent = `${layoutTblPr}${layoutTblGrid}${tableRows}`;
     const newFullTblXml = `<a:tbl>${newTblContent}</a:tbl>`;
@@ -588,7 +588,7 @@ function createIntroParticipantsSlideXml(
     finalSlideXml = baseSlideStructure;
 
   } else {
-    log("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
+    logger.debug("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
     const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2);
 
     finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
@@ -1500,12 +1500,11 @@ export async function generatePPTXVal17(
       await Promise.all(slideProcessingPromises);
 
       if (preExistingQuestionSlideGuids.length > 0) {
-        if (preExistingQuestionSlideGuids.length > 0) {
         logger.info(`[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle: ${JSON.stringify(preExistingQuestionSlideGuids)}`);
       } else {
         logger.info(`[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID) trouvée dans le modèle.`);
       }
-      } else {
+    } else {
         logger.info(`[val17PptxGenerator] Dossier ppt/slides non trouvé dans le templateZip.`);
     }
 
@@ -1525,7 +1524,6 @@ export async function generatePPTXVal17(
           slideSizeAttrs.type = sldSzMatch[3];
         }
       } else {
-        } else {
         logger.warn(
           "<p:sldSz> non trouvé dans le presentation.xml du modèle."
         );
@@ -1602,46 +1600,46 @@ export async function generatePPTXVal17(
           if (graphicFrameMatch && graphicFrameMatch[0]) {
             layoutGraphicFrameXml = graphicFrameMatch[0];
             if (layoutGraphicFrameXml.length < 2000) {
-                 log(`[DEBUG_TABLE_LAYOUT] Full layoutGraphicFrameXml: ${layoutGraphicFrameXml}`);
+                 logger.debug(`[DEBUG_TABLE_LAYOUT] Full layoutGraphicFrameXml: ${layoutGraphicFrameXml}`);
             } else {
-                 log(`[DEBUG_TABLE_LAYOUT] Found graphicFrame (snippet): ${layoutGraphicFrameXml.substring(0, 1000)}...`);
+                 logger.debug(`[DEBUG_TABLE_LAYOUT] Found graphicFrame (snippet): ${layoutGraphicFrameXml.substring(0, 1000)}...`);
             }
-            log(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblPr' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblPr')}`);
-            log(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblGrid' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblGrid')}`);
+            logger.debug(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblPr' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblPr')}`);
+            logger.debug(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblGrid' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblGrid')}`);
 
             const simpleTblPrRegex = /<a:tblPr/;
             const simpleTblPrMatch = layoutGraphicFrameXml.match(simpleTblPrRegex);
             if (simpleTblPrMatch) {
-              log(`[DEBUG_TABLE_LAYOUT] Found '<a:tblPr' using simple regex. Match object: ${JSON.stringify(simpleTblPrMatch)}`);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Found '<a:tblPr' using simple regex. Match object: ${JSON.stringify(simpleTblPrMatch)}`);
             } else {
-              log(`[DEBUG_TABLE_LAYOUT] Did NOT find '<a:tblPr' using simple regex.`);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Did NOT find '<a:tblPr' using simple regex.`);
             }
 
             const tblPrRegex = /<a:tblPr([^>]*)>([\s\S]*?)<\/a:tblPr>/;
             const tblPrMatch = layoutGraphicFrameXml.match(tblPrRegex);
             if (tblPrMatch && tblPrMatch[0]) {
               layoutTblPrXml = tblPrMatch[0];
-              log(`[DEBUG_TABLE_LAYOUT] Extracted tblPr from layout (v2): ${layoutTblPrXml}`);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Extracted tblPr from layout (v2): ${layoutTblPrXml}`);
             } else {
-              log(`[DEBUG_TABLE_LAYOUT] Could not extract tblPr from layout's table within graphicFrame (v2).`);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Could not extract tblPr from layout's table within graphicFrame (v2).`);
             }
 
             const tblGridRegex = /<a:tblGrid([^>]*)>([\s\S]*?)<\/a:tblGrid>/;
             const tblGridMatch = layoutGraphicFrameXml.match(tblGridRegex);
             if (tblGridMatch && tblGridMatch[0]) {
               layoutTblGridXml = tblGridMatch[0];
-              log(`[DEBUG_TABLE_LAYOUT] Extracted tblGrid from layout (v2): ${layoutTblGridXml}`);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Extracted tblGrid from layout (v2): ${layoutTblGridXml}`);
             } else {
-              log(`[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table within graphicFrame (v2).`);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table within graphicFrame (v2).`);
             }
           } else {
-            log("[DEBUG_TABLE_LAYOUT] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
+            logger.debug("[DEBUG_TABLE_LAYOUT] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
           }
         } else {
-          log(`[DEBUG_TABLE_LAYOUT] Could not read content of layout file: ${actualParticipantsLayoutPath}`);
+          logger.debug(`[DEBUG_TABLE_LAYOUT] Could not read content of layout file: ${actualParticipantsLayoutPath}`);
         }
 
-        log(`[TEST_PPTX_GEN] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
+        logger.debug(`[TEST_PPTX_GEN] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
         const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
 
         const participantsSlideXml = createIntroParticipantsSlideXml(
