@@ -1005,14 +1005,14 @@ async function updatePresentationRelsWithMappings(
   }
   rIdCounter = 2;
 
-  const orderedSlides: { rId: string, target: string }[] = [];
+  const orderedSlides: { rId: string, target: string, slideNumber: number }[] = [];
 
   // 1. Intro slides
   introSlideDetails.forEach((detail, index) => {
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = index + 1;
     const target = `slides/slide${detail.slideNumber}.xml`;
-    orderedSlides.push({ rId: newRId, target });
+    orderedSlides.push({ rId: newRId, target, slideNumber: detail.slideNumber });
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
@@ -1030,7 +1030,7 @@ async function updatePresentationRelsWithMappings(
     );
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = introSlideDetails.length + 1 + i;
-    orderedSlides.push({ rId: newRId, target: slideTarget });
+    orderedSlides.push({ rId: newRId, target: slideTarget, slideNumber: templateSlideFileNumber });
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
@@ -1047,7 +1047,7 @@ async function updatePresentationRelsWithMappings(
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = introSlideDetails.length + initialExistingSlideCount + 1 + i;
     const target = `slides/slide${questionSlideFileNumber}.xml`;
-    orderedSlides.push({ rId: newRId, target });
+    orderedSlides.push({ rId: newRId, target, slideNumber: questionSlideFileNumber });
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
@@ -1055,6 +1055,8 @@ async function updatePresentationRelsWithMappings(
     });
     slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   }
+
+  orderedSlides.sort((a,b) => a.slideNumber - b.slideNumber);
 
   // 4. Other relationships
   existingRels.forEach((origRel) => {
