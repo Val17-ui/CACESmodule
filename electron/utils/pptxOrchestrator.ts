@@ -12,13 +12,13 @@ import path from 'path';
 
 function generateOmbeaSessionXml(
   sessionInfo: Val17SessionInfo,
-  participants: Participant[],
+  participants: ParticipantForGenerator[],
   _questionMappings: QuestionMapping[], // Utiliser QuestionMapping ici, même si non utilisé dans ce XML particulier
   logger: ILogger
 ): string {
   logger.info('[LOG][pptxOrchestrator] Début de generateOmbeaSessionXml.');
   logger.info(`[LOG][pptxOrchestrator] sessionInfo pour XML: ${JSON.stringify(sessionInfo)}`);
-  logger.info(`[LOG][pptxOrchestrator] Participants pour XML: ${JSON.stringify(participants.map(p => ({ nom: p.nom, prenom: p.prenom, assignedGlobalDeviceId: p.assignedGlobalDeviceId })))}`);
+  logger.info(`[LOG][pptxOrchestrator] Participants pour XML: ${JSON.stringify(participants.map(p => ({ nom: p.nom, prenom: p.prenom, idBoitier: p.idBoitier })))}`);
   // console.log('[pptxOrchestrator] generateOmbeaSessionXml received participants:', JSON.stringify(participants.map(p => ({ idBoitier: p.idBoitier, nom: p.nom, prenom: p.prenom })), null, 2)); // DEBUG REMOVED
   // Using a helper for escaping XML attribute/text values
   const esc = (unsafe: string | undefined | null): string => {
@@ -65,7 +65,7 @@ function generateOmbeaSessionXml(
     xml += `      <rl:Respondent ID="${index + 1}">\n`; // Sequential 1-based ID for Respondent, not device
     xml += `        <rl:Devices>\n`;
     // Use the actual idBoitier from the participant data
-    xml += `          <rl:Device>${esc(p.assignedGlobalDeviceId?.toString())}</rl:Device>\n`;
+    xml += `          <rl:Device>${esc(p.idBoitier?.toString())}</rl:Device>\n`;
     xml += `        </rl:Devices>\n`;
 
     // Ajouter FirstName comme CustomProperty

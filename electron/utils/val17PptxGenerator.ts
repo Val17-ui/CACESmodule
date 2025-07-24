@@ -1460,7 +1460,6 @@ async function updateCoreXml(
   const coreFile = zip.file("docProps/core.xml");
   if (coreFile) {
     let content = await coreFile.async("string");
-    logger.info(`[LOG][val17PptxGenerator] core.xml content: ${content}`);
     const title = `Quiz OMBEA ${newQuestionCount} question${
       newQuestionCount > 1 ? "s" : ""
     }`;
