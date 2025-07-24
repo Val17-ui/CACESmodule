@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import sizeOf from 'image-size';
 import { ILogger } from './logger';
 import { Participant, VotingDevice } from '../../src/types/index';
+import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.
 // These should ideally come from a './val17PptxTypes' import if that file is created with your type definitions.
@@ -581,7 +582,6 @@ function createIntroParticipantsSlideXml(
   participants: ParticipantForGenerator[],
   slideNumber: number,
   layoutPptxFilePath: string | null,
-  _layoutXmlAsSlideBase: string | null, // Marqué comme non utilisé
   layoutGraphicFrameTarget: string | null,
   layoutTblPr: string | null,
   layoutTblGrid: string | null,
@@ -1501,8 +1501,6 @@ function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata, logger: ILogger):
   logger.info('[LOG][val17PptxGenerator] Fin de createNewAppXml.');
 }
 
-import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-
 async function updateCoreXml(
   zip: JSZip,
   newQuestionCount: number,
@@ -1816,7 +1814,6 @@ export async function generatePPTXVal17(
           participants,
           currentIntroSlideNumber,
           actualParticipantsLayoutPath,
-          layoutFileXmlContent,
           layoutGraphicFrameXml,
           layoutTblPrXml,
           layoutTblGridXml,
@@ -2068,6 +2065,9 @@ export async function generatePPTXVal17(
     }
 
     await updateCoreXml(outputZip, questions.length, logger);
+    if (!presentationRelsFile) {
+        throw new Error("ppt/_rels/presentation.xml.rels not found");
+    }
     const relsContent = await presentationRelsFile.async("string");
     const {
         updatedContent: updatedPresentationRels,
