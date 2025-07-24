@@ -137,6 +137,7 @@ function escapeXml(unsafe: string, logger: ILogger): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;")
+    .replace(/:/g, "&#58;")
     .replace(/--/g, "—");
   logger.info('[LOG][val17PptxGenerator] Fin de escapeXml.');
   return result;
