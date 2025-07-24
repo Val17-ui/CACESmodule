@@ -75,6 +75,7 @@ function generateOmbeaSessionXml(
     xml += `        </rl:CustomProperty>\n`;
 
     // Ajouter LastName comme CustomProperty
+    xml += `        <rl:CustomProperty>\n`;
     xml += `          <rl:ID>LastName</rl:ID>\n`;
     xml += `          <rl:Text>${esc(p.nom)}</rl:Text>\n`; // Utiliser p.nom
     xml += `        </rl:CustomProperty>\n`;

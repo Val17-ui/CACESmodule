@@ -428,7 +428,7 @@ async function updateSlideMasterForNewLayout(
     const layoutIdLstEnd = content.indexOf("</p:sldLayoutIdLst>");
     if (layoutIdLstEnd > -1) {
       const layoutIdValue = 2147483648 + layoutId;
-      const newLayoutId = `\n    <p:sldId id="${layoutIdValue}" r:id="${rId}"/>`;
+      const newLayoutId = `\n    <p:sldLayoutId id="${layoutIdValue}" r:id="${rId}"/>`;
       content =
         content.slice(0, layoutIdLstEnd) +
         newLayoutId +
@@ -1460,6 +1460,7 @@ async function updateCoreXml(
   const coreFile = zip.file("docProps/core.xml");
   if (coreFile) {
     let content = await coreFile.async("string");
+    logger.info(`[LOG][val17PptxGenerator] core.xml content: ${content}`);
     const title = `Quiz OMBEA ${newQuestionCount} question${
       newQuestionCount > 1 ? "s" : ""
     }`;
