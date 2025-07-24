@@ -1458,46 +1458,81 @@ async function updateCoreXml(
   newQuestionCount: number,
   logger: ILogger
 ): Promise<void> {
-  logger.info('[LOG][val17PptxGenerator] Début de updateCoreXml.');
+  logger.info("[LOG][val17PptxGenerator] Début de updateCoreXml.");
   const coreFile = zip.file("docProps/core.xml");
   if (coreFile) {
-    let content = await coreFile.async("string");
-    logger.info(`[LOG][val17PptxGenerator] core.xml content: ${content}`);
-    const title = `Quiz OMBEA ${newQuestionCount} question${
-      newQuestionCount > 1 ? "s" : ""
-    }`;
-    content = content.replace(
-      /<dc:title>.*?<\/dc:title>/,
-      `<dc:title>${escapeXml(title, logger)}<\/dc:title>`
-    );
-    const now = new Date().toISOString();
-    content = content.replace(
-      /<dcterms:modified.*?>.*?<\/dcterms:modified>/,
-      `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}<\/dcterms:W3CDTF>`
-    );
-    if (!content.includes("<dcterms:created>")) {
-      const lastModifiedEnd =
-        content.indexOf("</dcterms:modified>") + "</dcterms:modified>".length;
-      const createdTag = `\n  <dcterms:created xsi:type="dcterms:W3CDTF">${now}<\/dcterms:W3CDTF>`;
-      if (lastModifiedEnd > -1 && lastModifiedEnd <= content.length) {
-        content =
-          content.slice(0, lastModifiedEnd) +
-          createdTag +
-          content.slice(lastModifiedEnd);
-      } else {
-        const corePropsEnd = content.lastIndexOf("</cp:coreProperties>");
-        if (corePropsEnd > -1) {
-          content =
-            content.slice(0, corePropsEnd) +
-            createdTag +
-            "\n" +
-            content.slice(corePropsEnd);
+    try {
+      const content = await coreFile.async("string");
+      // Supprimer la déclaration XML si elle existe pour éviter les doublons
+      const contentWithoutXmlDecl = content.replace(
+        /<\?xml[^>]*\?>\s*/,
+        ""
+      );
+
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+        textNodeName: "#text",
+        allowBooleanAttributes: true,
+        parseTagValue: false, // Important pour préserver la structure exacte
+        trimValues: false,
+      });
+      const jsonObj = parser.parse(contentWithoutXmlDecl);
+
+      const coreProperties = jsonObj["cp:coreProperties"];
+      if (coreProperties) {
+        // Mettre à jour le titre
+        const title = `Quiz OMBEA ${newQuestionCount} question${
+          newQuestionCount > 1 ? "s" : ""
+        }`;
+        coreProperties["dc:title"] = title;
+
+        const now = new Date().toISOString();
+
+        // Mettre à jour la date de modification
+        coreProperties["dcterms:modified"] = {
+          "#text": now,
+          "@_xsi:type": "dcterms:W3CDTF",
+        };
+
+        // Ajouter la date de création si elle n'existe pas
+        if (!coreProperties["dcterms:created"]) {
+          coreProperties["dcterms:created"] = {
+            "#text": now,
+            "@_xsi:type": "dcterms:W3CDTF",
+          };
         }
       }
+
+      const builder = new XMLBuilder({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+        textNodeName: "#text",
+        format: true, // Pour un XML bien indenté
+        suppressBooleanAttributes: false,
+        suppressEmptyNode: true, // Ne pas générer de balises auto-fermantes vides
+      });
+
+      const xmlContent = builder.build(jsonObj);
+      const finalXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${xmlContent}`;
+
+      zip.file("docProps/core.xml", finalXml);
+      logger.info(
+        "[LOG][val17PptxGenerator] core.xml mis à jour avec succès via fast-xml-parser."
+      );
+    } catch (error) {
+      logger.error(
+        `[ERREUR][val17PptxGenerator] Erreur lors de la mise à jour de core.xml avec fast-xml-parser: ${error}`
+      );
+      // Fallback vers l'ancienne méthode si le parsing échoue
+      // (vous pouvez choisir de supprimer ce fallback si vous êtes sûr de la nouvelle méthode)
+      const content = await coreFile.async("string");
+      zip.file("docProps/core.xml", content); // Rétablit le contenu original en cas d'erreur
     }
-    zip.file("docProps/core.xml", content);
+  } else {
+    logger.warn("[LOG][val17PptxGenerator] docProps/core.xml non trouvé.");
   }
-  logger.info('[LOG][val17PptxGenerator] Fin de updateCoreXml.');
+  logger.info("[LOG][val17PptxGenerator] Fin de updateCoreXml.");
 }
 
 // Helper function to get XML content of a layout file
