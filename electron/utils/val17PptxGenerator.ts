@@ -1290,11 +1290,13 @@ async function calculateAppXmlMetadata(
       totalWords += slideText.trim().split(/\s+/).filter(Boolean).length;
       totalParagraphs += (content.match(/<a:p>/g) || []).length;
 
-      const titleMatch = content.match(/<p:ph type="title"/);
-      if (titleMatch) {
-        const titleTextMatch = content.match(/<a:t>(.*?)<\/a:t>/);
-        if (titleTextMatch && titleTextMatch[1]) {
-          slideTitles.push(titleTextMatch[1]);
+      const titleShapeMatch = content.match(/<p:sp>\s*<p:nvSpPr>\s*<p:cNvPr id="\d+" name="Titre \d+"\/>\s*<p:cNvSpPr>\s*<a:spLocks noGrp="1"\/>\s*<\/p:cNvSpPr>\s*<p:nvPr>\s*<p:ph type="title"\/>/);
+      if (titleShapeMatch) {
+        const titleBodyMatch = content.match(/<p:txBody>([\s\S]*?)<\/p:txBody>/);
+        if (titleBodyMatch) {
+          const textRuns = titleBodyMatch[1].match(/<a:t>.*?<\/a:t>/g) || [];
+          const title = textRuns.map(run => run.replace(/<a:t>(.*?)<\/a:t>/, "$1")).join('');
+          slideTitles.push(title);
         }
       }
     }
