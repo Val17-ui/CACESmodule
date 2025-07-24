@@ -2068,11 +2068,7 @@ export async function generatePPTXVal17(
     }
 
     await updateCoreXml(outputZip, questions.length, logger);
-    const {
-        updatedContent: updatedPresentationRels,
-        slideRIdMappings,
-        oldToNewRIdMap,
-        orderedSlides
+    const relsContent = await presentationRelsFile.async("string");
     const {
         updatedContent: updatedPresentationRels,
         slideRIdMappings,
@@ -2080,7 +2076,7 @@ export async function generatePPTXVal17(
         orderedSlides
       } = await updatePresentationRelsWithMappings(
         outputZip,
-        await presentationRelsFile.async("string"),
+        relsContent,
         initialExistingSlideCount,
         newIntroSlideDetails,
         questions.length,
