@@ -1213,8 +1213,7 @@ function updateContentTypesComplete(
 
 async function calculateAppXmlMetadata(
   zip: JSZip,
-  totalFinalSlides: number,
-  newOmbeaQuestions: Val17Question[],
+  questions: Val17Question[],
   sessionInfo: SessionInfo | undefined,
   participants: ParticipantForGenerator[],
   logger: ILogger
@@ -1223,42 +1222,51 @@ async function calculateAppXmlMetadata(
   let totalWords = 0;
   let totalParagraphs = 0;
   const slideTitles: string[] = [];
-
-  const slidesFolder = zip.folder("ppt/slides");
-  if (slidesFolder) {
-    const slidePromises: Promise<void>[] = [];
-    slidesFolder.forEach((relativePath, file) => {
-      if (relativePath.match(/^slide\d+\.xml$/) && !file.dir) {
-        slidePromises.push(
-          file.async("string").then((content) => {
-            const textNodes = content.match(/<a:t>.*?<\/a:t>/g) || [];
-            let slideText = "";
-            textNodes.forEach((node) => {
-              slideText += node.replace(/<a:t>(.*?)<\/a:t>/, "$1 ");
-            });
-            totalWords += slideText.trim().split(/\s+/).filter(Boolean).length;
-            totalParagraphs += (content.match(/<a:p>/g) || []).length;
-
-            const titleMatch = content.match(/<p:ph type="title"/);
-            if (titleMatch) {
-                const titleTextMatch = content.match(/<a:t>(.*?)<\/a:t>/);
-                if (titleTextMatch && titleTextMatch[1]) {
-                    slideTitles.push(titleTextMatch[1]);
-                }
-            }
-          })
-        );
+  const slideRelsFile = zip.file("ppt/_rels/presentation.xml.rels");
+  if (!slideRelsFile) {
+    throw new Error("presentation.xml.rels not found");
+  }
+  const relsContent = await slideRelsFile.async("string");
+  const slideRels = extractExistingRIds(relsContent, logger);
+  const slidePromises = slideRels
+    .filter(
+      (rel) =>
+        rel.type ===
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+    )
+    .map(async (rel) => {
+      const slideFile = zip.file(`ppt/${rel.target}`);
+      if (slideFile) {
+        const content = await slideFile.async("string");
+        const textNodes = content.match(/<a:t>.*?<\/a:t>/g) || [];
+        let slideText = "";
+        textNodes.forEach((node) => {
+          slideText += node.replace(/<a:t>(.*?)<\/a:t>/, "$1 ");
+        });
+        totalWords += slideText.trim().split(/\s+/).filter(Boolean).length;
+        totalParagraphs += (content.match(/<a:p>/g) || []).length;
+        const titleMatch = content.match(/<p:ph type="title"/);
+        if (titleMatch) {
+          const titleTextMatch = content.match(/<a:t>(.*?)<\/a:t>/);
+          if (titleTextMatch && titleTextMatch[1]) {
+            slideTitles.push(titleTextMatch[1]);
+          }
+        }
       }
     });
-    await Promise.all(slidePromises);
-  }
+  await Promise.all(slidePromises);
 
+  const totalSlides = slideRels.filter(
+    (rel) =>
+      rel.type ===
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+  ).length;
 
   const result = {
-    totalSlides: totalFinalSlides,
+    totalSlides,
     totalWords,
     totalParagraphs,
-    slideTitles: slideTitles,
+    slideTitles,
   };
   logger.info(`[LOG][val17PptxGenerator] Fin de calculateAppXmlMetadata: ${JSON.stringify(result)}`);
   return result;
@@ -1276,10 +1284,50 @@ async function updateAppXml(
     createNewAppXml(zip, metadata, logger);
     return;
   }
-  let content = await appFile.async("string");
-  content = updateSimpleFields(content, metadata, logger);
-    content = updateHeadingPairsAndTitles(content, metadata.slideTitles, logger);
-  zip.file("docProps/app.xml", content);
+
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    textNodeName: "#text",
+    allowBooleanAttributes: true,
+    parseTagValue: false,
+    trimValues: false,
+  });
+  const content = await appFile.async("string");
+  const jsonObj = parser.parse(content);
+
+  jsonObj.Properties.Slides = metadata.totalSlides;
+  jsonObj.Properties.Words = metadata.totalWords;
+  jsonObj.Properties.Paragraphs = metadata.totalParagraphs;
+
+  const headingPairs = jsonObj.Properties.HeadingPairs["vt:vector"]["vt:variant"];
+  const slideTitlesPair = headingPairs.find(
+    (p: any) => p["vt:lpstr"] === "Titres des diapositives"
+  );
+  if (slideTitlesPair) {
+    const slideTitlesPairIndex = headingPairs.indexOf(slideTitlesPair);
+    headingPairs[slideTitlesPairIndex + 1]["vt:i4"] = metadata.slideTitles.length;
+  }
+
+  jsonObj.Properties.TitlesOfParts["vt:vector"]["vt:lpstr"] = metadata.slideTitles.map(
+    (title) => escapeXml(title.substring(0, 250), logger)
+  );
+  jsonObj.Properties.TitlesOfParts["vt:vector"]["@_size"] = metadata.slideTitles.length;
+
+  const builder = new XMLBuilder({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    textNodeName: "#text",
+    format: true,
+    suppressBooleanAttributes: false,
+    suppressEmptyNode: true,
+  });
+
+  const xmlContent = builder.build(jsonObj);
+  const finalXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${xmlContent}`;
+
+  zip.file("docProps/app.xml", finalXml);
+
   logger.info('[LOG][val17PptxGenerator] Fin de updateAppXml.');
 }
 
@@ -2031,7 +2079,6 @@ export async function generatePPTXVal17(
     await updateCoreXml(outputZip, questions.length, logger);
     const appMetadata = await calculateAppXmlMetadata(
       outputZip,
-      totalFinalSlideCount,
       questions,
       sessionInfo,
       participants,
