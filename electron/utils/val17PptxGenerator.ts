@@ -2073,9 +2073,14 @@ export async function generatePPTXVal17(
         slideRIdMappings,
         oldToNewRIdMap,
         orderedSlides
+    const {
+        updatedContent: updatedPresentationRels,
+        slideRIdMappings,
+        oldToNewRIdMap,
+        orderedSlides
       } = await updatePresentationRelsWithMappings(
         outputZip,
-        presentationRelsContent,
+        await presentationRelsFile.async("string"),
         initialExistingSlideCount,
         newIntroSlideDetails,
         questions.length,
