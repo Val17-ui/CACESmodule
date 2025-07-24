@@ -981,6 +981,7 @@ function updatePresentationRelsWithMappings(
   const oldToNewRIdMap: { [oldRId: string]: string } = {};
   let rIdCounter = 1;
 
+  const slideType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
   const slideMasterType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 
   const originalSlideMaster = existingRels.find(r => r.type === slideMasterType);
@@ -992,9 +993,6 @@ function updatePresentationRelsWithMappings(
     finalRelsOutput.push({ rId: "rId1", type: slideMasterType, target: "slideMasters/slideMaster1.xml", originalRId: "rId1_placeholder" });
   }
   rIdCounter = 2;
-
-  const slideType =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 
   // 1. Intro slides
   introSlideDetails.forEach((detail, index) => {
@@ -1028,6 +1026,7 @@ function updatePresentationRelsWithMappings(
     if (originalRel) oldToNewRIdMap[originalRel.rId] = newRId;
   }
 
+  // 3. New question slides
   for (let i = 0; i < newOmbeaQuestionCount; i++) {
     const questionSlideFileNumber = initialExistingSlideCount + introSlideDetails.length + 1 + i;
     const newRId = `rId${rIdCounter++}`;
@@ -1041,6 +1040,7 @@ function updatePresentationRelsWithMappings(
     slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   }
 
+  // 4. Other relationships
   existingRels.forEach((origRel) => {
     if (origRel.type !== slideMasterType && origRel.type !== slideType) {
       if (!oldToNewRIdMap[origRel.rId]) {
@@ -1063,7 +1063,6 @@ function updatePresentationRelsWithMappings(
     });
   updatedContent += "\n</Relationships>";
 
-  slideRIdMappings.sort((a, b) => a.slideNumber - b.slideNumber);
   logger.info('[LOG][val17PptxGenerator] Fin de updatePresentationRelsWithMappings.');
   return { updatedContent, slideRIdMappings, oldToNewRIdMap };
 }
@@ -1225,44 +1224,6 @@ async function calculateAppXmlMetadata(
   let totalParagraphs = 0;
   const slideTitles: string[] = [];
 
-  // Compter les mots et les paragraphes pour la diapositive de titre
-  if (sessionInfo) {
-    slideTitles.push(sessionInfo.title);
-    totalWords += sessionInfo.title.trim().split(/\s+/).filter(Boolean).length;
-    totalParagraphs += 1;
-    if (sessionInfo.date) {
-      totalWords += sessionInfo.date.trim().split(/\s+/).filter(Boolean).length;
-      totalParagraphs += 1;
-    }
-  }
-
-  // Compter les mots et les paragraphes pour la diapositive des participants
-  if (participants.length > 0) {
-    slideTitles.push("Participants");
-    totalWords += 1; // For the title "Participants"
-    totalParagraphs += 1; // For the title "Participants"
-    totalParagraphs += participants.length; // 1 paragraph per participant row
-    participants.forEach(p => {
-      totalWords += p.nom.trim().split(/\s+/).filter(Boolean).length;
-      totalWords += p.prenom.trim().split(/\s+/).filter(Boolean).length;
-      if (p.organization) {
-        totalWords += p.organization.trim().split(/\s+/).filter(Boolean).length;
-      }
-    });
-  }
-
-  // Compter les mots et les paragraphes pour les diapositives de questions
-  newOmbeaQuestions.forEach((q) => {
-    const questionWords = q.question.trim().split(/\s+/).filter(Boolean).length;
-    const optionsWords = q.options
-      .map((opt) => opt.trim().split(/\s+/).filter(Boolean).length)
-      .reduce((a, b) => a + b, 0);
-    totalWords += questionWords + optionsWords;
-    totalParagraphs += 1 + q.options.length;
-    slideTitles.push(q.question);
-  });
-
-  // Compter les mots et les paragraphes pour les diapositives existantes
   const slidesFolder = zip.folder("ppt/slides");
   if (slidesFolder) {
     const slidePromises: Promise<void>[] = [];
@@ -1291,6 +1252,7 @@ async function calculateAppXmlMetadata(
     });
     await Promise.all(slidePromises);
   }
+
 
   const result = {
     totalSlides: totalFinalSlides,
@@ -1375,23 +1337,20 @@ function updateSimpleFields(content: string, metadata: AppXmlMetadata, logger: I
 
 function updateHeadingPairsAndTitles(
   content: string,
-  newOmbeaSlideTitles: string[],
+  allSlideTitles: string[],
   logger: ILogger
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de updateHeadingPairsAndTitles.');
   let updated = content;
-  const titlesToAddCount = newOmbeaSlideTitles.length;
+  const titlesToAddCount = allSlideTitles.length;
 
   const headingPairsRegex =
     /<vt:lpstr>Titres des diapositives<\/vt:lpstr>\s*<\/vt:variant>\s*<vt:variant>\s*<vt:i4>(\d+)<\/vt:i4>/;
   updated = updated.replace(headingPairsRegex, (_match, p1) => {
-    const existingCount = parseInt(p1, 10);
-    return `<vt:lpstr>Titres des diapositives<\/vt:lpstr><\/vt:variant><vt:variant><vt:i4>${
-      existingCount + titlesToAddCount
-    }<\/vt:i4>`;
+    return `<vt:lpstr>Titres des diapositives<\/vt:lpstr><\/vt:variant><vt:variant><vt:i4>${titlesToAddCount}<\/vt:i4>`;
   });
 
-  const titlesVector = `<vt:vector size="${newOmbeaSlideTitles.length}" baseType="lpstr">${newOmbeaSlideTitles
+  const titlesVector = `<vt:vector size="${titlesToAddCount}" baseType="lpstr">${allSlideTitles
     .map(
       (title) =>
         `\n      <vt:lpstr>${escapeXml(
