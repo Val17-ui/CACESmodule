@@ -1298,6 +1298,26 @@ async function calculateAppXmlMetadata(
           const title = textRuns.map(run => run.replace(/<a:t>(.*?)<\/a:t>/, "$1")).join('');
           slideTitles.push(title);
         }
+      } else {
+        const introTitleMatch = content.match(/<p:sp>\s*<p:nvSpPr>\s*<p:cNvPr id="\d+" name="Title Placeholder"\/>\s*<p:cNvSpPr>\s*<a:spLocks noGrp="1"\/>\s*<\/p:cNvSpPr>\s*<p:nvPr>\s*<p:ph type="title"\/>/);
+        if(introTitleMatch) {
+          const titleBodyMatch = content.match(/<p:txBody>([\s\S]*?)<\/p:txBody>/);
+          if (titleBodyMatch) {
+            const textRuns = titleBodyMatch[1].match(/<a:t>.*?<\/a:t>/g) || [];
+            const title = textRuns.map(run => run.replace(/<a:t>(.*?)<\/a:t>/, "$1")).join('');
+            slideTitles.push(title);
+          }
+        } else {
+          const participantsTitleMatch = content.match(/<p:sp>\s*<p:nvSpPr>\s*<p:cNvPr id="\d+" name="Title"\/>\s*<p:cNvSpPr>\s*<a:spLocks noGrp="1"\/>\s*<\/p:cNvSpPr>\s*<p:nvPr>\s*<p:ph type="title"\/>/);
+          if(participantsTitleMatch) {
+            const titleBodyMatch = content.match(/<p:txBody>([\s\S]*?)<\/p:txBody>/);
+            if (titleBodyMatch) {
+              const textRuns = titleBodyMatch[1].match(/<a:t>.*?<\/a:t>/g) || [];
+              const title = textRuns.map(run => run.replace(/<a:t>(.*?)<\/a:t>/, "$1")).join('');
+              slideTitles.push(title);
+            }
+          }
+        }
       }
     }
   }
