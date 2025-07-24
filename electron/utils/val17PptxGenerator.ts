@@ -994,44 +994,40 @@ function updatePresentationRelsWithMappings(
   }
   rIdCounter = 2;
 
-  const introSlides = introSlideDetails.map((detail, index) => {
+  const slideType =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+
+  // 1. Intro slides
+  introSlideDetails.forEach((detail, index) => {
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = index + 1;
-    return {
+    finalRelsOutput.push({
       rId: newRId,
       type: slideType,
       target: `slides/slide${detail.slideNumber}.xml`,
-      slideNumber: finalSlideOrderIndex,
-    };
+    });
+    slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   });
 
-  const existingSlides = [];
+  // 2. Existing slides
   for (let i = 0; i < initialExistingSlideCount; i++) {
     const templateSlideFileNumber = i + 1;
     const slideTarget = `slides/slide${templateSlideFileNumber}.xml`;
-    const originalRel = existingRels.find(m => m.target === slideTarget && m.type === slideType);
+    const originalRel = existingRels.find(
+      (m) => m.target === slideTarget && m.type === slideType
+    );
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = introSlideDetails.length + 1 + i;
-    existingSlides.push({
+
+    finalRelsOutput.push({
       rId: newRId,
       type: slideType,
       target: slideTarget,
       originalRId: originalRel?.rId,
-      slideNumber: finalSlideOrderIndex,
     });
+    slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
     if (originalRel) oldToNewRIdMap[originalRel.rId] = newRId;
   }
-
-  const newSlides = [...introSlides, ...existingSlides];
-  newSlides.forEach(slide => {
-    finalRelsOutput.push({
-      rId: slide.rId,
-      type: slide.type,
-      target: slide.target,
-      originalRId: (slide as any).originalRId,
-    });
-    slideRIdMappings.push({ slideNumber: slide.slideNumber, rId: slide.rId });
-  });
 
   for (let i = 0; i < newOmbeaQuestionCount; i++) {
     const questionSlideFileNumber = initialExistingSlideCount + introSlideDetails.length + 1 + i;
@@ -1396,34 +1392,20 @@ function updateHeadingPairsAndTitles(
     }<\/vt:i4>`;
   });
 
-  const titlesOfPartsEndIndex = updated.indexOf(
-    "</vt:vector>",
-    updated.indexOf("<TitlesOfParts>")
-  );
-  if (titlesOfPartsEndIndex !== -1) {
-    let titlesXmlToAdd = "";
-    newOmbeaSlideTitles.forEach((title) => {
-      titlesXmlToAdd += `
-      <vt:lpstr>${escapeXml(
-        title.substring(0, 250),
-        logger
-      )}<\/vt:lpstr>`;
-    });
-    updated =
-      updated.slice(0, titlesOfPartsEndIndex) +
-      titlesXmlToAdd +
-      updated.slice(titlesOfPartsEndIndex);
+  const titlesVector = `<vt:vector size="${newOmbeaSlideTitles.length}" baseType="lpstr">${newOmbeaSlideTitles
+    .map(
+      (title) =>
+        `\n      <vt:lpstr>${escapeXml(
+          title.substring(0, 250),
+          logger
+        )}<\/vt:lpstr>`
+    )
+    .join("")}\n    </vt:vector>`;
 
-    updated = updated.replace(
-      /<TitlesOfParts>\s*<vt:vector size="(\d+)"/,
-      (_match, p1) => {
-        const existingSize = parseInt(p1, 10);
-        return `<TitlesOfParts><vt:vector size="${
-          existingSize + titlesToAddCount
-        }"`;
-      }
-    );
-  }
+  updated = updated.replace(
+    /<TitlesOfParts>[\s\S]*?<\/TitlesOfParts>/,
+    `<TitlesOfParts>${titlesVector}</TitlesOfParts>`
+  );
   logger.info('[LOG][val17PptxGenerator] Fin de updateHeadingPairsAndTitles.');
   return updated;
 }
