@@ -2068,21 +2068,23 @@ export async function generatePPTXVal17(
     }
 
     await updateCoreXml(outputZip, questions.length, logger);
-    const { orderedSlides } = await updatePresentationRelsWithMappings(
-      outputZip,
-      presentationRelsContent,
-      initialExistingSlideCount,
-      newIntroSlideDetails,
-      questions.length,
-      logger
-    );
+    const {
+        updatedContent: updatedPresentationRels,
+        slideRIdMappings,
+        oldToNewRIdMap,
+        orderedSlides
+      } = await updatePresentationRelsWithMappings(
+        outputZip,
+        presentationRelsContent,
+        initialExistingSlideCount,
+        newIntroSlideDetails,
+        questions.length,
+        logger
+      );
     const appMetadata = await calculateAppXmlMetadata(
-      outputZip,
-      orderedSlides,
-      questions,
-      sessionInfo,
-      participants,
-      logger
+        outputZip,
+        orderedSlides,
+        logger
     );
     await updateAppXml(outputZip, appMetadata, logger);
 
