@@ -2045,7 +2045,9 @@ export async function generatePPTXVal17(
         updatedContent: updatedPresentationRels,
         slideRIdMappings,
         oldToNewRIdMap,
-      } = updatePresentationRelsWithMappings(
+        orderedSlides,
+      } = await updatePresentationRelsWithMappings(
+        outputZip,
         presentationRelsContent,
         initialExistingSlideCount,
         newIntroSlideDetails,
@@ -2077,6 +2079,9 @@ export async function generatePPTXVal17(
     const appMetadata = await calculateAppXmlMetadata(
       outputZip,
       orderedSlides,
+      questions,
+      sessionInfo,
+      participants,
       logger
     );
     await updateAppXml(outputZip, appMetadata, logger);
