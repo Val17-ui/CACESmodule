@@ -981,7 +981,6 @@ function updatePresentationRelsWithMappings(
   const oldToNewRIdMap: { [oldRId: string]: string } = {};
   let rIdCounter = 1;
 
-  const slideType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
   const slideMasterType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 
   const originalSlideMaster = existingRels.find(r => r.type === slideMasterType);
