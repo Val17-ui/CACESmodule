@@ -90,6 +90,8 @@ interface AppXmlMetadata {
   totalWords: number;
   totalParagraphs: number;
   slideTitles: string[];
+  fonts: string[];
+  themes: string[];
 }
 
 interface SlideSizeAttributes {
@@ -1227,6 +1229,45 @@ async function calculateAppXmlMetadata(
   let totalWords = 0;
   let totalParagraphs = 0;
   const slideTitles: string[] = [];
+  const fonts: string[] = [];
+  const themes: string[] = [];
+
+  const appFile = zip.file("docProps/app.xml");
+  if (appFile) {
+    const content = await appFile.async("string");
+    const contentWithoutXmlDecl = content.replace(/<\?xml[^>]*\?>\s*/, "");
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: "@_",
+      textNodeName: "#text",
+      allowBooleanAttributes: true,
+      parseTagValue: false,
+      trimValues: false,
+    });
+    const jsonObj = parser.parse(contentWithoutXmlDecl);
+
+    const titlesOfParts = jsonObj.Properties.TitlesOfParts["vt:vector"]["vt:lpstr"];
+    if (titlesOfParts) {
+      const headingPairs = jsonObj.Properties.HeadingPairs["vt:vector"]["vt:variant"];
+      const fontPair = headingPairs.find(
+        (p: any) => p["vt:lpstr"] === "Polices utilisées"
+      );
+      const themePair = headingPairs.find(
+        (p: any) => p["vt:lpstr"] === "Thème"
+      );
+
+      const fontCount = fontPair ? parseInt(headingPairs[headingPairs.indexOf(fontPair) + 1]["vt:i4"]) : 0;
+      const themeCount = themePair ? parseInt(headingPairs[headingPairs.indexOf(themePair) + 1]["vt:i4"]) : 0;
+
+      for (let i = 0; i < fontCount; i++) {
+        fonts.push(titlesOfParts[i]);
+      }
+      for (let i = 0; i < themeCount; i++) {
+        themes.push(titlesOfParts[fontCount + i]);
+      }
+    }
+  }
+
 
   for (const slide of orderedSlides) {
     const slideFile = zip.file(`ppt/${slide.target}`);
@@ -1255,6 +1296,8 @@ async function calculateAppXmlMetadata(
     totalWords,
     totalParagraphs,
     slideTitles,
+    fonts,
+    themes
   };
   logger.info(`[LOG][val17PptxGenerator] Fin de calculateAppXmlMetadata: ${JSON.stringify(result)}`);
   return result;
@@ -1288,8 +1331,27 @@ async function updateAppXml(
   jsonObj.Properties.Slides = metadata.totalSlides;
   jsonObj.Properties.Words = metadata.totalWords;
   jsonObj.Properties.Paragraphs = metadata.totalParagraphs;
+  jsonObj.Properties.TotalTime = 41;
+
+  const allTitles = [...metadata.fonts, ...metadata.themes, ...metadata.slideTitles];
 
   const headingPairs = jsonObj.Properties.HeadingPairs["vt:vector"]["vt:variant"];
+  const fontPair = headingPairs.find(
+    (p: any) => p["vt:lpstr"] === "Polices utilisées"
+  );
+  if(fontPair) {
+    const fontPairIndex = headingPairs.indexOf(fontPair);
+    headingPairs[fontPairIndex + 1]["vt:i4"] = metadata.fonts.length;
+  }
+
+  const themePair = headingPairs.find(
+    (p: any) => p["vt:lpstr"] === "Thème"
+  );
+  if(themePair) {
+    const themePairIndex = headingPairs.indexOf(themePair);
+    headingPairs[themePairIndex + 1]["vt:i4"] = metadata.themes.length;
+  }
+
   const slideTitlesPair = headingPairs.find(
     (p: any) => p["vt:lpstr"] === "Titres des diapositives"
   );
@@ -1298,10 +1360,10 @@ async function updateAppXml(
     headingPairs[slideTitlesPairIndex + 1]["vt:i4"] = metadata.slideTitles.length;
   }
 
-  jsonObj.Properties.TitlesOfParts["vt:vector"]["vt:lpstr"] = metadata.slideTitles.map(
-    (title) => escapeXml(title.substring(0, 250), logger)
+  jsonObj.Properties.TitlesOfParts["vt:vector"]["vt:lpstr"] = allTitles.map(
+    (title) => escapeXml(title, logger)
   );
-  jsonObj.Properties.TitlesOfParts["vt:vector"]["@_size"] = metadata.slideTitles.length;
+  jsonObj.Properties.TitlesOfParts["vt:vector"]["@_size"] = allTitles.length;
 
   const builder = new XMLBuilder({
     ignoreAttributes: false,
