@@ -1022,15 +1022,17 @@ async function updatePresentationRelsWithMappings(
   });
 
   // 2. Existing slides
+  const introSlidesCount = introSlideDetails.length;
   for (let i = 0; i < initialExistingSlideCount; i++) {
     const templateSlideFileNumber = i + 1;
-    const slideTarget = `slides/slide${templateSlideFileNumber}.xml`;
+    const newSlideFileNumber = templateSlideFileNumber + introSlidesCount;
+    const slideTarget = `slides/slide${newSlideFileNumber}.xml`;
     const originalRel = existingRels.find(
-      (m) => m.target === slideTarget && m.type === slideType
+      (m) => m.target === `slides/slide${templateSlideFileNumber}.xml` && m.type === slideType
     );
     const newRId = `rId${rIdCounter++}`;
-    const finalSlideOrderIndex = introSlideDetails.length + 1 + i;
-    orderedSlides.push({ rId: newRId, target: slideTarget, slideNumber: templateSlideFileNumber });
+    const finalSlideOrderIndex = introSlidesCount + 1 + i;
+    orderedSlides.push({ rId: newRId, target: slideTarget, slideNumber: newSlideFileNumber });
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
@@ -1798,13 +1800,42 @@ export async function generatePPTXVal17(
 
     const outputZip = new JSZip();
     const copyPromises: Promise<void>[] = [];
+
+    // START of modification
+    const introSlidesCount = (sessionInfo && options.introSlideLayouts?.titleLayoutName ? 1 : 0) +
+                             (participants.length > 0 && options.introSlideLayouts?.participantsLayoutName ? 1 : 0);
+
     templateZip.forEach((relativePath, file) => {
       if (!file.dir) {
-        logger.info(`[val17PptxGenerator] Copying file: ${relativePath}`);
+        let newPath = relativePath;
+        const slideMatch = relativePath.match(/ppt\/slides\/slide(\d+)\.xml/);
+        const slideRelsMatch = relativePath.match(/ppt\/slides\/_rels\/slide(\d+)\.xml\.rels/);
+
+        if (slideMatch) {
+          const slideNum = parseInt(slideMatch[1], 10);
+          newPath = `ppt/slides/slide${slideNum + introSlidesCount}.xml`;
+          logger.info(`[val17PptxGenerator] Renaming ${relativePath} to ${newPath}`);
+        } else if (slideRelsMatch) {
+          const slideNum = parseInt(slideRelsMatch[1], 10);
+          newPath = `ppt/slides/_rels/slide${slideNum + introSlidesCount}.xml.rels`;
+          logger.info(`[val17PptxGenerator] Renaming ${relativePath} to ${newPath}`);
+        } else {
+           logger.info(`[val17PptxGenerator] Copying file: ${relativePath}`);
+        }
+
         const copyPromise: Promise<void> = file
           .async("arraybuffer")
           .then((content) => {
-            outputZip.file(relativePath, content);
+             if (slideRelsMatch) {
+                let contentStr = new TextDecoder().decode(content);
+                // We might need to update the target file name inside the rels file if it contains references to other slides.
+                // For now, we assume it does not, but this is a point of attention.
+                // Example: Relationship Target="../slides/slide2.xml" would need to be updated.
+                // This is not the case for slide relationships to slide layouts, notes, etc.
+                // Let's log to be sure
+                logger.debug(`[val17PptxGenerator] Content of ${newPath}: ${contentStr}`);
+             }
+            outputZip.file(newPath, content);
           });
         copyPromises.push(copyPromise);
       } else {
@@ -1812,8 +1843,9 @@ export async function generatePPTXVal17(
       }
     });
     await Promise.all(copyPromises);
+    // END of modification
 
-    const initialExistingSlideCount = countExistingSlides(outputZip, logger);
+    const initialExistingSlideCount = countExistingSlides(templateZip, logger);
     let introSlidesAddedCount = 0;
     const newIntroSlideDetails: {
       slideNumber: number;
@@ -1825,7 +1857,7 @@ export async function generatePPTXVal17(
       const targetTitleLayoutName = options.introSlideLayouts.titleLayoutName;
       const actualTitleLayoutPath = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title", logger);
       if (actualTitleLayoutPath) {
-        const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
+        const currentIntroSlideNumber = introSlidesAddedCount + 1;
         const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber, logger);
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
         const layoutRIdInSlide = "rId1";
@@ -1901,7 +1933,7 @@ export async function generatePPTXVal17(
         }
 
         logger.debug(`[TEST_PPTX_GEN] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
-        const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
+        const currentIntroSlideNumber = introSlidesAddedCount + 1;
 
         const participantsSlideXml = createIntroParticipantsSlideXml(
           participants,
@@ -1932,7 +1964,7 @@ export async function generatePPTXVal17(
     }
 
     const effectiveExistingSlideCount =
-      initialExistingSlideCount + introSlidesAddedCount;
+      initialExistingSlideCount;
     const ombeaLayout = await ensureOmbeaSlideLayoutExists(outputZip, logger);
     const ombeaLayoutFileName = ombeaLayout.layoutFileName;
 
@@ -2006,7 +2038,7 @@ export async function generatePPTXVal17(
     // }
 
     for (let i = 0; i < questions.length; i++) {
-      const absoluteSlideNumber = effectiveExistingSlideCount + i + 1;
+      const absoluteSlideNumber = effectiveExistingSlideCount + introSlidesAddedCount + i + 1;
       const questionData = questions[i];
       const duration =
         questionData.points ||
