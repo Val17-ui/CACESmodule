@@ -994,33 +994,44 @@ function updatePresentationRelsWithMappings(
   }
   rIdCounter = 2;
 
-  introSlideDetails.forEach((detail, index) => {
+  const introSlides = introSlideDetails.map((detail, index) => {
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = index + 1;
-    finalRelsOutput.push({
+    return {
       rId: newRId,
       type: slideType,
       target: `slides/slide${detail.slideNumber}.xml`,
-    });
-    slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
+      slideNumber: finalSlideOrderIndex,
+    };
   });
 
+  const existingSlides = [];
   for (let i = 0; i < initialExistingSlideCount; i++) {
     const templateSlideFileNumber = i + 1;
     const slideTarget = `slides/slide${templateSlideFileNumber}.xml`;
     const originalRel = existingRels.find(m => m.target === slideTarget && m.type === slideType);
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = introSlideDetails.length + 1 + i;
-
-    finalRelsOutput.push({
+    existingSlides.push({
       rId: newRId,
       type: slideType,
       target: slideTarget,
       originalRId: originalRel?.rId,
+      slideNumber: finalSlideOrderIndex,
     });
-    slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
     if (originalRel) oldToNewRIdMap[originalRel.rId] = newRId;
   }
+
+  const newSlides = [...introSlides, ...existingSlides];
+  newSlides.forEach(slide => {
+    finalRelsOutput.push({
+      rId: slide.rId,
+      type: slide.type,
+      target: slide.target,
+      originalRId: (slide as any).originalRId,
+    });
+    slideRIdMappings.push({ slideNumber: slide.slideNumber, rId: slide.rId });
+  });
 
   for (let i = 0; i < newOmbeaQuestionCount; i++) {
     const questionSlideFileNumber = initialExistingSlideCount + introSlideDetails.length + 1 + i;
@@ -1206,13 +1217,14 @@ function updateContentTypesComplete(
   return updatedContent;
 }
 
-function calculateAppXmlMetadata(
+async function calculateAppXmlMetadata(
+  zip: JSZip,
   totalFinalSlides: number,
   newOmbeaQuestions: Val17Question[],
   sessionInfo: SessionInfo | undefined,
   participants: ParticipantForGenerator[],
   logger: ILogger
-): AppXmlMetadata {
+): Promise<AppXmlMetadata> {
   logger.info('[LOG][val17PptxGenerator] Début de calculateAppXmlMetadata.');
   let totalWords = 0;
   let totalParagraphs = 0;
@@ -1254,6 +1266,36 @@ function calculateAppXmlMetadata(
     totalParagraphs += 1 + q.options.length;
     slideTitles.push(q.question);
   });
+
+  // Compter les mots et les paragraphes pour les diapositives existantes
+  const slidesFolder = zip.folder("ppt/slides");
+  if (slidesFolder) {
+    const slidePromises: Promise<void>[] = [];
+    slidesFolder.forEach((relativePath, file) => {
+      if (relativePath.match(/^slide\d+\.xml$/) && !file.dir) {
+        slidePromises.push(
+          file.async("string").then((content) => {
+            const textNodes = content.match(/<a:t>.*?<\/a:t>/g) || [];
+            let slideText = "";
+            textNodes.forEach((node) => {
+              slideText += node.replace(/<a:t>(.*?)<\/a:t>/, "$1 ");
+            });
+            totalWords += slideText.trim().split(/\s+/).filter(Boolean).length;
+            totalParagraphs += (content.match(/<a:p>/g) || []).length;
+
+            const titleMatch = content.match(/<p:ph type="title"/);
+            if (titleMatch) {
+                const titleTextMatch = content.match(/<a:t>(.*?)<\/a:t>/);
+                if (titleTextMatch && titleTextMatch[1]) {
+                    slideTitles.push(titleTextMatch[1]);
+                }
+            }
+          })
+        );
+      }
+    });
+    await Promise.all(slidePromises);
+  }
 
   const result = {
     totalSlides: totalFinalSlides,
@@ -2047,7 +2089,8 @@ export async function generatePPTXVal17(
     }
 
     await updateCoreXml(outputZip, questions.length, logger);
-    const appMetadata = calculateAppXmlMetadata(
+    const appMetadata = await calculateAppXmlMetadata(
+      outputZip,
       totalFinalSlideCount,
       questions,
       sessionInfo,
