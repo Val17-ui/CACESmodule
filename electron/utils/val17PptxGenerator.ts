@@ -1169,10 +1169,8 @@ async function rebuildPresentationXml(
 
 function updateContentTypesComplete(
   originalContent: string,
-  introSlideDetails: { slideNumber: number; layoutFileName: string }[],
-  newOmbeaQuestionCount: number,
-  totalSlidesInFinalPptx: number,
-  ombeaQuestionLayoutFileName: string,
+  allSlideNumbers: number[],
+  newLayouts: string[],
   totalTagsUsed: number,
   logger: ILogger
 ): string {
@@ -1180,38 +1178,19 @@ function updateContentTypesComplete(
   let updatedContent = originalContent;
   let newOverrides = "";
 
-  introSlideDetails.forEach((detail) => {
-    const slidePartName = `/ppt/slides/slide${detail.slideNumber}.xml`;
+  allSlideNumbers.forEach((slideNumber) => {
+    const slidePartName = `/ppt/slides/slide${slideNumber}.xml`;
     if (!updatedContent.includes(`PartName="${slidePartName}"`)) {
       newOverrides += `\n  <Override PartName="${slidePartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
     }
   });
 
-  const ombeaLayoutPartName = `/ppt/slideLayouts/${ombeaQuestionLayoutFileName}`;
-  if (!updatedContent.includes(`PartName="${ombeaLayoutPartName}"`)) {
-    const lastLayoutIdx = updatedContent.lastIndexOf("slideLayout");
-    let insertPt = -1;
-    if (lastLayoutIdx > -1)
-      insertPt = updatedContent.indexOf("/>", lastLayoutIdx) + 2;
-    else insertPt = updatedContent.lastIndexOf("</Types>");
-    if (insertPt > -1) {
-      const newLayoutOverride = `\n  <Override PartName="${ombeaLayoutPartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>`;
-      updatedContent =
-        updatedContent.slice(0, insertPt) +
-        newLayoutOverride +
-        updatedContent.slice(insertPt);
+  newLayouts.forEach((layoutFileName) => {
+    const layoutPartName = `/ppt/slideLayouts/${layoutFileName}`;
+    if (!updatedContent.includes(`PartName="${layoutPartName}"`)) {
+        newOverrides += `\n  <Override PartName="${layoutPartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>`;
     }
-  }
-
-  const slidesBeforeOmbeaQuestions =
-    totalSlidesInFinalPptx - newOmbeaQuestionCount;
-  for (let i = 0; i < newOmbeaQuestionCount; i++) {
-    const slideNum = slidesBeforeOmbeaQuestions + 1 + i;
-    const slidePartName = `/ppt/slides/slide${slideNum}.xml`;
-    if (!updatedContent.includes(`PartName="${slidePartName}"`)) {
-      newOverrides += `\n  <Override PartName="${slidePartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
-    }
-  }
+  });
 
   for (let i = 1; i <= totalTagsUsed; i++) {
     const tagPath = `/ppt/tags/tag${i}.xml`;
@@ -2130,7 +2109,16 @@ export async function generatePPTXVal17(
         logger.warn(`⚠️ Problèmes de continuité des tags détectés: ${JSON.stringify(warnings)}`);
     }
 
-    const totalFinalSlideCount = effectiveExistingSlideCount + questions.length;
+    const allSlideNumbers: number[] = [];
+    newIntroSlideDetails.forEach(d => allSlideNumbers.push(d.slideNumber));
+    for (let i = 0; i < initialExistingSlideCount; i++) {
+        allSlideNumbers.push(i + 1 + introSlidesAddedCount);
+    }
+    for (let i = 0; i < questions.length; i++) {
+        allSlideNumbers.push(initialExistingSlideCount + introSlidesAddedCount + i + 1);
+    }
+
+    const newLayouts = [ombeaLayoutFileName];
 
     const contentTypesFile = outputZip.file("[Content_Types].xml");
     if (contentTypesFile) {
@@ -2143,13 +2131,8 @@ export async function generatePPTXVal17(
         );
       contentTypesContent = updateContentTypesComplete(
         contentTypesContent,
-        newIntroSlideDetails.map((d) => ({
-          slideNumber: d.slideNumber,
-          layoutFileName: d.layoutFileName,
-        })),
-        questions.length,
-        totalFinalSlideCount,
-        ombeaLayoutFileName,
+        allSlideNumbers,
+        newLayouts,
         maxTagNumberUsed,
         logger
       );
