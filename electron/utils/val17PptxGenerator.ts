@@ -1209,28 +1209,59 @@ function updateContentTypesComplete(
 function calculateAppXmlMetadata(
   totalFinalSlides: number,
   newOmbeaQuestions: Val17Question[],
+  sessionInfo: SessionInfo | undefined,
+  participants: ParticipantForGenerator[],
   logger: ILogger
 ): AppXmlMetadata {
   logger.info('[LOG][val17PptxGenerator] Début de calculateAppXmlMetadata.');
   let totalWords = 0;
   let totalParagraphs = 0;
-  const newSlideTitles: string[] = [];
+  const slideTitles: string[] = [];
+
+  // Compter les mots et les paragraphes pour la diapositive de titre
+  if (sessionInfo) {
+    slideTitles.push(sessionInfo.title);
+    totalWords += sessionInfo.title.trim().split(/\s+/).filter(Boolean).length;
+    totalParagraphs += 1;
+    if (sessionInfo.date) {
+      totalWords += sessionInfo.date.trim().split(/\s+/).filter(Boolean).length;
+      totalParagraphs += 1;
+    }
+  }
+
+  // Compter les mots et les paragraphes pour la diapositive des participants
+  if (participants.length > 0) {
+    slideTitles.push("Participants");
+    totalWords += 1; // For the title "Participants"
+    totalParagraphs += 1; // For the title "Participants"
+    totalParagraphs += participants.length; // 1 paragraph per participant row
+    participants.forEach(p => {
+      totalWords += p.nom.trim().split(/\s+/).filter(Boolean).length;
+      totalWords += p.prenom.trim().split(/\s+/).filter(Boolean).length;
+      if (p.organization) {
+        totalWords += p.organization.trim().split(/\s+/).filter(Boolean).length;
+      }
+    });
+  }
+
+  // Compter les mots et les paragraphes pour les diapositives de questions
   newOmbeaQuestions.forEach((q) => {
     const questionWords = q.question.trim().split(/\s+/).filter(Boolean).length;
     const optionsWords = q.options
       .map((opt) => opt.trim().split(/\s+/).filter(Boolean).length)
       .reduce((a, b) => a + b, 0);
-    totalWords += questionWords + optionsWords + 1;
-    totalParagraphs += 1 + q.options.length + 1;
-    newSlideTitles.push(q.question);
+    totalWords += questionWords + optionsWords;
+    totalParagraphs += 1 + q.options.length;
+    slideTitles.push(q.question);
   });
+
   const result = {
     totalSlides: totalFinalSlides,
     totalWords,
     totalParagraphs,
-    slideTitles: newSlideTitles,
+    slideTitles: slideTitles,
   };
-  logger.info('[LOG][val17PptxGenerator] Fin de calculateAppXmlMetadata.');
+  logger.info(`[LOG][val17PptxGenerator] Fin de calculateAppXmlMetadata: ${JSON.stringify(result)}`);
   return result;
 }
 
@@ -2019,6 +2050,8 @@ export async function generatePPTXVal17(
     const appMetadata = calculateAppXmlMetadata(
       totalFinalSlideCount,
       questions,
+      sessionInfo,
+      participants,
       logger
     );
     await updateAppXml(outputZip, appMetadata, logger);
