@@ -43,7 +43,7 @@ interface SessionFormProps {
   sessionIdToLoad?: number;
 }
 
-type TabKey = 'details' | 'participants' | 'resultsOrs';
+type TabKey = 'details' | 'participants' | 'generateQuestionnaire' | 'importResults';
 
 interface AdminPPTXSettings {
     defaultDuration: number;
@@ -59,6 +59,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [currentSessionDbId, setCurrentSessionDbId] = useState<number | null>(sessionIdToLoad || null);
   const [sessionName, setSessionName] = useState('');
   const [sessionDate, setSessionDate] = useState('');
+  const [numSession, setNumSession] = useState('');
+  const [numStage, setNumStage] = useState('');
   const [selectedReferential, setSelectedReferential] = useState<CACESReferential | ''>('');
   const [selectedReferentialId, setSelectedReferentialId] = useState<number | null>(null);
   const [location, setLocation] = useState('');
@@ -172,6 +174,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setCurrentSessionDbId(sessionData.id ?? null);
             setSessionName(sessionData.nomSession);
             setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
+              setNumSession(sessionData.num_session || '');
+              setNumStage(sessionData.num_stage || '');
             if (sessionData.referentielId) {
               const refObj = referentielsData.find(r => r.id === sessionData.referentielId);
               if (refObj) {
@@ -458,6 +462,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       id: currentSessionDbId || undefined,
       nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
       dateSession: sessionDate || new Date().toISOString().split('T')[0],
+      num_session: numSession,
+      num_stage: numStage,
       referentielId: currentReferentielId,
       participants: dbParticipants,
       selectedBlocIds: editingSessionData?.selectedBlocIds || [],
@@ -1261,11 +1267,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const renderTabNavigation = () => (
     <div className="mb-6 border-b border-gray-200">
       <nav className="-mb-px flex space-x-4 sm:space-x-8" aria-label="Tabs">
-        {(Object.keys({ details: 'Détails Session', participants: 'Participants', resultsOrs: 'Résultats & ORS' }) as TabKey[]).map((tabKey) => {
+        {(Object.keys({ details: 'Détails Session', participants: 'Participants', generateQuestionnaire: 'Générer le questionnaire', importResults: 'Importer les résultats' }) as TabKey[]).map((tabKey) => {
           const tabLabels: Record<TabKey, string> = {
             details: 'Détails Session',
             participants: 'Participants',
-            resultsOrs: 'Résultats & ORS',
+            generateQuestionnaire: 'Générer le questionnaire',
+            importResults: 'Importer les résultats',
           };
           return (
             <button
@@ -1310,6 +1317,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 value={sessionDate}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)}
                 required
+                disabled={isReadOnly}
+              />
+              <Input
+                label="Numéro de session"
+                placeholder="Ex: 2024-001"
+                value={numSession}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumSession(e.target.value)}
+                disabled={isReadOnly}
+              />
+              <Input
+                label="Numéro de stage"
+                placeholder="Ex: CACES-2024-A"
+                value={numStage}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
                 disabled={isReadOnly}
               />
             </div>
@@ -1458,7 +1479,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Ident.</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID participant</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Réussite</th>
                     <th className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
@@ -1563,98 +1584,95 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             )}
           </Card>
         );
-      case 'resultsOrs':
+      case 'generateQuestionnaire':
         return (
-          <>
-            {currentSessionDbId && (
-          <Card title="Résultats de la Session (Import)" className="mb-6">
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
-              <Input
-                id="resultsFileInput"
-                type="file"
-                accept=".ors"
-                onChange={handleResultsFileSelect}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                disabled={!editingSessionData?.orsFilePath || isReadOnly}
-              />
-              {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
-            </div>
+               <Card title="Générer le questionnaire" className="mb-6">
             <Button
-              variant="secondary"
-              icon={<FileUp size={16} />}
-              onClick={handleImportResults}
-              disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
-            >
-              Importer les Résultats
-            </Button>
-            {!editingSessionData?.orsFilePath && !isReadOnly && (
-               <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
-            )}
-            {isReadOnly && (
-                 <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
-            )}
-            <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
-            {importSummary && (
-              <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
-              </div>
-            )}
-          </div>
-        </Card>
-            )}
-               <Card title="Génération .ORS & PPTX" className="mb-6">
-                <Button
-                    variant="primary"
-                    icon={<PackagePlus size={16} />}
-                    onClick={handleGenerateQuestionnaireAndOrs}
-                    disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
-                    title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
-                           isReadOnly ? "La session est terminée, regénération bloquée." :
-                           (!!editingSessionData?.orsFilePath) ? "Régénérer .ors & PPTX (Attention : ceci écrasera l'ORS existant)" :
-                           "Générer .ors & PPTX"}
+                variant="primary"
+                icon={<PackagePlus size={16} />}
+                onClick={handleGenerateQuestionnaireAndOrs}
+                disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
+                    className={editingSessionData?.orsFilePath ? 'opacity-70' : ''}
+                title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
+                       isReadOnly ? "La session est terminée, regénération bloquée." :
+                           (!!editingSessionData?.orsFilePath) ? "Régénérer le questionnaire (Attention : ceci écrasera l'existant)" :
+                           "Générer le questionnaire"}
+              >
+                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer le questionnaire" : "Générer le questionnaire")}
+              </Button>
+              {isReadOnly && (
+                     <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération est bloquée.</p>
+              )}
+               {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
+                 <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
+              )}
+              {modifiedAfterOrsGeneration && !!editingSessionData?.orsFilePath && !isReadOnly && (
+                <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
+                  <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+                  <span>
+                        <strong className="font-semibold">Attention :</strong> Les informations des participants ont été modifiées après la dernière génération.
+                        Veuillez regénérer le questionnaire pour inclure ces changements.
+                  </span>
+                </p>
+              )}
+              {editingSessionData?.orsFilePath && (
+                <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <h4 className="text-md font-semibold text-gray-700 mb-2">Fichier du questionnaire généré :</h4>
+                  <p className="text-sm text-gray-600 font-mono">{typeof editingSessionData.orsFilePath === 'string' ? editingSessionData.orsFilePath : 'N/A'}</p>
+                  <Button
+                    variant="ghost"
+                    onClick={() => { if (typeof editingSessionData?.orsFilePath === 'string') window.dbAPI.openFile(editingSessionData.orsFilePath); }}
+                    className="mt-2 ml-2"
                   >
-                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
+                    Ouvrir le fichier
                   </Button>
-                  {isReadOnly && (
-                     <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération de l'ORS est bloquée.</p>
-                  )}
-                   {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
-                     <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
-                  )}
-                  {modifiedAfterOrsGeneration && !!editingSessionData?.orsFilePath && !isReadOnly && (
-                    <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
-                      <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
-                      <span>
-                        <strong className="font-semibold">Attention :</strong> Les informations des participants ont été modifiées après la dernière génération de l'ORS.
-                        Veuillez regénérer le fichier .ors et PPTX pour inclure ces changements.
-                      </span>
-                    </p>
-                  )}
-                  {editingSessionData?.orsFilePath && (
-                    <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
-                      <h4 className="text-md font-semibold text-gray-700 mb-2">Fichier ORS généré :</h4>
-                      <p className="text-sm text-gray-600 font-mono">{typeof editingSessionData.orsFilePath === 'string' ? editingSessionData.orsFilePath : 'N/A'}</p>
-                      <Button
-                        variant="ghost"
-                        onClick={() => { if (typeof editingSessionData?.orsFilePath === 'string') window.dbAPI.openDirectoryDialog(editingSessionData.orsFilePath); }}
-                        className="mt-2"
-                      >
-                        Ouvrir le dossier
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => { if (typeof editingSessionData?.orsFilePath === 'string') window.dbAPI.openFile(editingSessionData.orsFilePath); }}
-                        className="mt-2 ml-2"
-                      >
-                        Ouvrir le fichier
-                      </Button>
-                    </div>
-                  )}
-             </Card>
-          </>
+                </div>
+              )}
+         </Card>
         );
+      case 'importResults':
+        return (
+            <>
+            {currentSessionDbId && (
+                <Card title="Résultats de la Session (Import)" className="mb-6">
+                    <div className="space-y-4">
+                        <div>
+                            <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
+                            <Input
+                                id="resultsFileInput"
+                                type="file"
+                                accept=".ors"
+                                onChange={handleResultsFileSelect}
+                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                                disabled={!editingSessionData?.orsFilePath || isReadOnly}
+                            />
+                            {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
+                        </div>
+                        <Button
+                            variant="secondary"
+                            icon={<FileUp size={16} />}
+                            onClick={handleImportResults}
+                            disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
+                        >
+                            Importer les Résultats
+                        </Button>
+                        {!editingSessionData?.orsFilePath && !isReadOnly && (
+                            <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
+                        )}
+                        {isReadOnly && (
+                            <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
+                        )}
+                        <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
+                        {importSummary && (
+                            <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
+                            </div>
+                        )}
+                    </div>
+                </Card>
+            )}
+            </>
+        )
       default:
         return null;
     }

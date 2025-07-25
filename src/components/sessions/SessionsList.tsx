@@ -164,7 +164,8 @@ const SessionsList: React.FC<SessionsListProps> = ({
            (session.status === 'planned' || session.status === 'ready');
   });
 
-  const sessionsTerminees = sessions.filter(session => session.status === 'completed');
+  const sessionsTerminees = sessions.filter(session => session.status === 'completed' && !session.archived_at);
+  const sessionsArchivees = sessions.filter(session => session.archived_at);
 
   // Optionnel: sessions restantes (ex: annulées ou autres)
   // const sessionsAutres = sessions.filter(session =>
@@ -194,6 +195,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
       {renderSessionTable(sessionsDuJour, "Sessions du jour")}
       {renderSessionTable(sessionsPlanifiees, "Sessions planifiées")}
       {renderSessionTable(sessionsTerminees, "Sessions terminées")}
+      {renderSessionTable(sessionsArchivees, "Archives")}
       {/* Si vous voulez afficher les autres sessions (ex: annulées)
       {renderSessionTable(sessionsAutres, "Autres sessions")}
       */}
