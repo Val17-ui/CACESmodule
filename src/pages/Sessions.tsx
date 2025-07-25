@@ -114,6 +114,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [activeList, setActiveList] = useState<'sessions' | 'archives'>('sessions');
 
   useEffect(() => {
     if (sessionId !== undefined) {
@@ -263,13 +264,20 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
       const term = searchTerm.toLowerCase();
       sessionsToProcess = sessionsToProcess.filter(session =>
         session.nomSession.toLowerCase().includes(term) ||
-        (session.referentiel as string).toLowerCase().includes(term)
+        (session.referentielId && referentielsData.find(r => r.id === session.referentielId)?.code.toLowerCase().includes(term))
       );
     }
 
-    setProcessedSessions(sessionsToProcess);
+    const unarchivedSessions = sessionsToProcess.filter(session => !session.archived_at);
+    const archivedSessions = sessionsToProcess.filter(session => session.archived_at);
 
-  }, [rawSessions, searchTerm, selectedPeriod]);
+    if (activeList === 'sessions') {
+      setProcessedSessions(unarchivedSessions);
+    } else {
+      setProcessedSessions(archivedSessions);
+    }
+
+  }, [rawSessions, searchTerm, selectedPeriod, activeList]);
 
   const handleCreateNew = () => {
     setIsCreating(true);
@@ -354,6 +362,30 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     >
       {!isCreating && !managingSessionId ? (
         <>
+            <div className="border-b border-gray-200 mb-4">
+              <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                <button
+                  onClick={() => setActiveList('sessions')}
+                  className={`${
+                    activeList === 'sessions'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                >
+                  Sessions
+                </button>
+                <button
+                  onClick={() => setActiveList('archives')}
+                  className={`${
+                    activeList === 'archives'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                >
+                  Archives
+                </button>
+              </nav>
+            </div>
           <div className="flex flex-wrap gap-4 mb-4">
             <Input
               type="text"
