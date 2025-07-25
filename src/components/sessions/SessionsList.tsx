@@ -163,6 +163,13 @@ const SessionsList: React.FC<SessionsListProps> = ({
            (session.status === 'planned' || session.status === 'ready');
   });
 
+  const sessionsEnAttente = sessions.filter(session => {
+    const sessionDate = new Date(session.dateSession);
+    sessionDate.setHours(0, 0, 0, 0);
+    return sessionDate.getTime() < today.getTime() &&
+           (session.status === 'planned' || session.status === 'ready');
+  });
+
   const sessionsTerminees = sessions.filter(session => session.status === 'completed' && !session.archived_at);
   const sessionsArchivees = sessions.filter(session =>  session.archived_at);
 
@@ -186,6 +193,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
     <Card>
       {renderSessionTable(sessionsDuJour, "Sessions du jour")}
       {renderSessionTable(sessionsPlanifiees, "Sessions planifiées")}
+      {renderSessionTable(sessionsEnAttente, "Sessions en attente")}
       {renderSessionTable(sessionsTerminees, "Sessions terminées")}
     </Card>
   );
