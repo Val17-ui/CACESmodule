@@ -3,7 +3,7 @@
     "target": "es6",
     "module": "commonjs",
     "moduleResolution": "node",
-    "types": ["node"],
+    "types": ["node", "node-cron"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
