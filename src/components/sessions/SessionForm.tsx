@@ -539,6 +539,27 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
+  const handleCancelSession = async () => {
+    if (window.confirm("Êtes-vous sûr de vouloir annuler cette session ? Cette action est irréversible.")) {
+      if (currentSessionDbId) {
+        try {
+          await StorageManager.updateSession(currentSessionDbId, {
+            status: 'cancelled',
+            archived_at: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          setImportSummary("Session annulée et archivée.");
+          // Optionnel: rediriger l'utilisateur ou rafraîchir l'état
+        } catch (error) {
+          console.error("Erreur lors de l'annulation de la session:", error);
+          setImportSummary("Erreur lors de l'annulation de la session.");
+        }
+      } else {
+        setImportSummary("Impossible d'annuler une session non sauvegardée.");
+      }
+    }
+  };
+
   const handleGenerateQuestionnaireAndOrs = async () => {
     const refCodeToUse = selectedReferential || (editingSessionData?.referentielId ? referentielsData.find(r => r.id === editingSessionData.referentielId)?.code : null);
     if (!refCodeToUse) {
@@ -1687,7 +1708,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     <div>
       {renderTabNavigation()}
       {renderTabContent()}
-      <div className="flex justify-end items-center mt-8 py-4 border-t border-gray-200">
+      <div className="flex justify-between items-center mt-8 py-4 border-t border-gray-200">
+        <div>
+          <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleCancelSession} disabled={editingSessionData?.status === 'completed' || editingSessionData?.status === 'cancelled'}>
+            Annuler la Session
+          </Button>
+        </div>
         <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
           Enregistrer Brouillon
         </Button>
