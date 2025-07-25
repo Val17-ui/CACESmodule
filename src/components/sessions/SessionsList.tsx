@@ -18,6 +18,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
   onStartExam,
 }) => {
   const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
+  const [activeTab, setActiveTab] = useState<'en_cours' | 'planifiees' | 'terminees' | 'archives'>('en_cours');
 
   useEffect(() => {
     const loadReferentiels = async () => {
@@ -72,77 +73,69 @@ const SessionsList: React.FC<SessionsListProps> = ({
     }
   };
 
-  const renderSessionTable = (filteredSessions: DBSession[], title: string) => {
+  const renderSessionTable = (filteredSessions: DBSession[]) => {
     if (filteredSessions.length === 0) {
       return (
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-3 text-gray-700">{title}</h2>
           <p className="text-sm text-gray-500">Aucune session dans cette catégorie.</p>
         </div>
       );
     }
 
     return (
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-3 text-gray-700">{title}</h2>
-        <div className="overflow-x-auto border rounded-lg">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référentiel</th>
-                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Nb. Part.</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">.ORS</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+      <div className="overflow-x-auto border rounded-lg">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référentiel</th>
+              <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Nb. Part.</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+              <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">.ORS</th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredSessions.map((session) => (
+              <tr key={session.id} className="hover:bg-gray-50 transition-colors duration-150 ease-in-out">
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 p-2 rounded-lg bg-accent-neutre/10 text-accent-neutre"><CalendarClock size={20} /></div>
+                    <div className="ml-4">
+                      <div className="text-sm font-semibold text-gray-900">{session.nomSession || 'Session sans nom'}</div>
+                      <div className="text-xs text-gray-500">ID: {session.id}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{formatDate(session.dateSession)}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {(() => {
+                    if (session.referentielId && referentielsData.length > 0) {
+                      const refObj = referentielsData.find(r => r.id === session.referentielId);
+                      return <Badge variant="primary">{refObj ? refObj.code : `ID: ${session.referentielId}`}</Badge>;
+                    }
+                    if ((session as any).referentiel) { return <Badge variant="default">{(session as any).referentiel}</Badge>; }
+                    return <Badge variant="default">N/A</Badge>;
+                  })()}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">{session.participants?.length ?? 0}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(session.status)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-center">
+                  {session.donneesOrs instanceof Blob ? <Badge variant="success">Oui</Badge> : <Badge variant="default">Non</Badge>}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <div className="flex justify-end space-x-2">
+                    <Button variant="outline" size="sm" icon={<ClipboardList size={16} />} onClick={() => session.id && onManageSession(session.id)} title="Gérer la session">Gérer</Button>
+                    {session.donneesOrs instanceof Blob && (
+                      <Button variant="primary" size="sm" icon={<Download size={16} />} onClick={() => handleDownloadOrs(session)} title="Télécharger .ors">.ORS</Button>
+                    )}
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredSessions.map((session) => (
-                <tr key={session.id} className="hover:bg-gray-50 transition-colors duration-150 ease-in-out">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 p-2 rounded-lg bg-accent-neutre/10 text-accent-neutre"><CalendarClock size={20} /></div>
-                      <div className="ml-4">
-                        <div className="text-sm font-semibold text-gray-900">{session.nomSession || 'Session sans nom'}</div>
-                        <div className="text-xs text-gray-500">ID: {session.id}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{formatDate(session.dateSession)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {(() => {
-                      if (session.referentielId && referentielsData.length > 0) {
-                        const refObj = referentielsData.find(r => r.id === session.referentielId);
-                        return <Badge variant="primary">{refObj ? refObj.code : `ID: ${session.referentielId}`}</Badge>;
-                      }
-                      if ((session as any).referentiel) { return <Badge variant="default">{(session as any).referentiel}</Badge>; }
-                      return <Badge variant="default">N/A</Badge>;
-                    })()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">{session.participants?.length ?? 0}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(session.status)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    {session.donneesOrs instanceof Blob ? <Badge variant="success">Oui</Badge> : <Badge variant="default">Non</Badge>}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      <Button variant="outline" size="sm" icon={<ClipboardList size={16} />} onClick={() => session.id && onManageSession(session.id)} title="Gérer la session">Gérer</Button>
-                      {session.donneesOrs instanceof Blob && (
-                        <Button variant="primary" size="sm" icon={<Download size={16} />} onClick={() => handleDownloadOrs(session)} title="Télécharger .ors">.ORS</Button>
-                      )}
-                      {/* Le statut est déjà normalisé, donc !session.status n'est plus nécessaire pour 'planned' */}
-                      {/* {(session.status === 'planned' || session.status === 'ready') && session.donneesOrs instanceof Blob && (
-                        <Button variant="primary" size="sm" icon={<Play size={16} />} onClick={() => session.id && onStartExam(session.id)} title="Démarrer l'examen">Démarrer Examen</Button>
-                      )} */}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   };
@@ -165,14 +158,8 @@ const SessionsList: React.FC<SessionsListProps> = ({
   });
 
   const sessionsTerminees = sessions.filter(session => session.status === 'completed' && !session.archived_at);
-  const sessionsArchivees = sessions.filter(session => session.archived_at);
+  const sessionsArchivees = sessions.filter(session =>  session.archived_at);
 
-  // Optionnel: sessions restantes (ex: annulées ou autres)
-  // const sessionsAutres = sessions.filter(session =>
-  //   !sessionsDuJour.includes(session) &&
-  //   !sessionsPlanifiees.includes(session) &&
-  //   !sessionsTerminees.includes(session)
-  // );
 
   if (sessions.length === 0) {
     return (
@@ -189,16 +176,35 @@ const SessionsList: React.FC<SessionsListProps> = ({
     );
   }
 
+  const tabs = [
+    { key: 'en_cours', label: 'En cours', data: sessionsDuJour },
+    { key: 'planifiees', label: 'Planifiées', data: sessionsPlanifiees },
+    { key: 'terminees', label: 'Terminées', data: sessionsTerminees },
+    { key: 'archives', label: 'Archives', data: sessionsArchivees },
+  ];
+
   return (
-    // Le Card title est maintenant plus générique, les titres spécifiques sont dans renderSessionTable
     <Card title="Aperçu des Sessions">
-      {renderSessionTable(sessionsDuJour, "Sessions du jour")}
-      {renderSessionTable(sessionsPlanifiees, "Sessions planifiées")}
-      {renderSessionTable(sessionsTerminees, "Sessions terminées")}
-      {renderSessionTable(sessionsArchivees, "Archives")}
-      {/* Si vous voulez afficher les autres sessions (ex: annulées)
-      {renderSessionTable(sessionsAutres, "Autres sessions")}
-      */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`${
+                activeTab === tab.key
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+            >
+              {tab.label} ({tab.data.length})
+            </button>
+          ))}
+        </nav>
+      </div>
+      <div className="mt-8">
+        {renderSessionTable(tabs.find(tab => tab.key === activeTab)?.data || [])}
+      </div>
     </Card>
   );
 };

@@ -1319,24 +1319,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 required
                 disabled={isReadOnly}
               />
-              <Input
-                label="Numéro de session"
-                placeholder="Ex: 2024-001"
-                value={numSession}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumSession(e.target.value)}
-                disabled={isReadOnly}
-              />
-              <Input
-                label="Numéro de stage"
-                placeholder="Ex: CACES-2024-A"
-                value={numStage}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
-                disabled={isReadOnly}
-              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <Select
-                label="Référentiel CACES"
+                label="Référentiel"
                 options={referentialOptionsFromData}
                 value={selectedReferential}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1361,7 +1347,22 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 placeholder="Sélectionner un formateur"
                 disabled={isReadOnly}
               />
-              {/* Le Select "Kit de Boîtiers" est déplacé vers l'onglet Participants */}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              <Input
+                label="Numéro de session"
+                placeholder="Ex: 2024-001"
+                value={numSession}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumSession(e.target.value)}
+                disabled={isReadOnly}
+              />
+              <Input
+                label="Numéro de stage"
+                placeholder="Ex: CACES-2024-A"
+                value={numStage}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
+                disabled={isReadOnly}
+              />
             </div>
             <div className="mt-4">
               <Input
@@ -1588,11 +1589,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         return (
                <Card title="Générer le questionnaire" className="mb-6">
             <Button
-                variant="primary"
+                    variant={editingSessionData?.orsFilePath ? "secondary" : "primary"}
                 icon={<PackagePlus size={16} />}
                 onClick={handleGenerateQuestionnaireAndOrs}
                 disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
-                    className={editingSessionData?.orsFilePath ? 'opacity-70' : ''}
                 title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
                        isReadOnly ? "La session est terminée, regénération bloquée." :
                            (!!editingSessionData?.orsFilePath) ? "Régénérer le questionnaire (Attention : ceci écrasera l'existant)" :
@@ -1615,12 +1615,17 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   </span>
                 </p>
               )}
+                  {importSummary && activeTab === 'generateQuestionnaire' && (
+                    <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                        <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
+                    </div>
+                  )}
               {editingSessionData?.orsFilePath && (
                 <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
                       <h4 className="text-md font-semibold text-gray-700 mb-2">Fichier du questionnaire généré :</h4>
                   <p className="text-sm text-gray-600 font-mono">{typeof editingSessionData.orsFilePath === 'string' ? editingSessionData.orsFilePath : 'N/A'}</p>
                   <Button
-                    variant="ghost"
+                        variant="primary"
                     onClick={() => { if (typeof editingSessionData?.orsFilePath === 'string') window.dbAPI.openFile(editingSessionData.orsFilePath); }}
                     className="mt-2 ml-2"
                   >
@@ -1663,7 +1668,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                             <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
                         )}
                         <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
-                        {importSummary && (
+                        {importSummary && activeTab === 'importResults' && (
                             <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
                                 <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
                             </div>
