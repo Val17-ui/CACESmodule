@@ -4,7 +4,8 @@ import fs from 'fs';
 import type {
     QuestionWithId, Session, SessionResult, Trainer,
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-    VotingDevice, DeviceKit, DeviceKitAssignment
+    VotingDevice, DeviceKit, DeviceKitAssignment,
+    SessionIteration, Participant, ParticipantAssignment
   } from '../src/types/index';
 import { getLogger, ILogger } from './utils/logger';
 
@@ -374,8 +375,7 @@ const createSchema = () => {
 export type {
     QuestionWithId, Session, SessionResult, Trainer,
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-    VotingDevice, DeviceKit, DeviceKitAssignment,
-    SessionIteration, Participant, ParticipantAssignment
+    VotingDevice, DeviceKit, DeviceKitAssignment
   };
 
 // SessionIterations
