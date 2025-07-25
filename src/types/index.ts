@@ -33,6 +33,9 @@ export interface Session {
   } | null;
   selectedKitId?: number | null; // ID du kit de boîtiers sélectionné pour la session
   resultsImportedAt?: string | null; // Date/heure de l'importation des résultats
+  num_session?: string;
+  num_stage?: string;
+  archived_at?: string;
 }
 
 // --- Nouveaux types pour la gestion des Kits de Boîtiers ---
@@ -40,6 +43,7 @@ export interface DeviceKit {
   id?: number; // Auto-incremented primary key
   name: string; // Nom du kit, ex: "Salle A"
   isDefault?: 0 | 1; // 0 pour false, 1 pour true (un seul kit par défaut)
+  is_global?: 0 | 1; // 0 pour false, 1 for true
 }
 
 export interface DeviceKitAssignment {
@@ -319,6 +323,8 @@ export interface QuestionWithId {
   correctResponseRate?: number;
   slideGuid?: string;
   imageName?: string;
+  version_questionnaire?: number;
+  updated_at?: string;
 }
 
 // Déplacé depuis db.ts
@@ -347,4 +353,17 @@ export interface OverallThemeStats {
   totalQuestionsAnswered: number;
   totalCorrectAnswers: number;
   successRate: number;
+}
+
+export interface Questionnaire {
+  id?: number;
+  session_id: number;
+  iteration_index: number;
+  created_at: string;
+}
+
+export interface ParticipantQuestionnaire {
+  id?: number;
+  questionnaire_id: number;
+  session_boitier_id: number;
 }

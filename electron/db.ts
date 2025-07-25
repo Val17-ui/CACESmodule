@@ -55,6 +55,11 @@ function initializeDatabase(loggerInstance: ILogger) {
     // process.exit(1);
   }
 
+  // Create or update the global kit
+  createOrUpdateGlobalKit().catch(err => {
+    _logger.error(`[DB SETUP] Failed to create/update global kit: ${err}`);
+  });
+
   _logger.debug("[DB SETUP] SQLite database module loaded and initialized.");
 }
 
@@ -108,6 +113,8 @@ const createSchema = () => {
       correctResponseRate REAL DEFAULT 0,
       slideGuid TEXT,
       options TEXT, /* JSON array of strings */
+      version_questionnaire INTEGER,
+      updated_at TEXT,
       FOREIGN KEY (blocId) REFERENCES blocs(id) ON DELETE SET NULL
     );`,
     `CREATE INDEX IF NOT EXISTS idx_questions_blocId ON questions(blocId);`,
@@ -122,7 +129,8 @@ const createSchema = () => {
     `CREATE TABLE IF NOT EXISTS deviceKits (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE NOT NULL,
-      isDefault INTEGER DEFAULT 0 /* 0 for false, 1 for true */
+      isDefault INTEGER DEFAULT 0, /* 0 for false, 1 for true */
+      is_global INTEGER DEFAULT 0 /* 0 for false, 1 for true */
     );`,
     `CREATE INDEX IF NOT EXISTS idx_deviceKits_isDefault ON deviceKits(isDefault);`,
 
@@ -144,6 +152,9 @@ const createSchema = () => {
       participants TEXT, /* JSON array of participant info, structure TBD */
       orsFilePath TEXT, /* path to the generated ORS file */
       resultsImportedAt TEXT, /* ISO8601 string for when results were imported */
+      num_session TEXT,
+      num_stage TEXT,
+      archived_at TEXT,
       FOREIGN KEY (referentielId) REFERENCES referentiels(id) ON DELETE SET NULL,
       FOREIGN KEY (selectedKitId) REFERENCES deviceKits(id) ON DELETE SET NULL,
       FOREIGN KEY (trainerId) REFERENCES trainers(id) ON DELETE SET NULL
@@ -215,7 +226,26 @@ const createSchema = () => {
       UNIQUE (kitId, votingDeviceId)
     );`,
     `CREATE INDEX IF NOT EXISTS idx_deviceKitAssignments_kitId ON deviceKitAssignments(kitId);`,
-    `CREATE INDEX IF NOT EXISTS idx_deviceKitAssignments_votingDeviceId ON deviceKitAssignments(votingDeviceId);`
+    `CREATE INDEX IF NOT EXISTS idx_deviceKitAssignments_votingDeviceId ON deviceKitAssignments(votingDeviceId);`,
+
+    `CREATE TABLE IF NOT EXISTS questionnaires (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL,
+      iteration_index INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      UNIQUE (session_id, iteration_index)
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_questionnaires_session_id ON questionnaires(session_id);`,
+
+    `CREATE TABLE IF NOT EXISTS participants_questionnaires (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      questionnaire_id INTEGER NOT NULL,
+      session_boitier_id INTEGER NOT NULL,
+      FOREIGN KEY (questionnaire_id) REFERENCES questionnaires(id) ON DELETE CASCADE,
+      FOREIGN KEY (session_boitier_id) REFERENCES sessionBoitiers(id) ON DELETE CASCADE,
+      UNIQUE (questionnaire_id, session_boitier_id)
+    );`
   ];
 
   const transaction = getDb().transaction(() => {
@@ -258,7 +288,10 @@ const createSchema = () => {
     const columnsToAdd = [
         { name: 'orsFilePath', type: 'TEXT' },
         { name: 'resultsImportedAt', type: 'TEXT' },
-        { name: 'updatedAt', type: 'TEXT' }
+        { name: 'updatedAt', type: 'TEXT' },
+        { name: 'num_session', type: 'TEXT' },
+        { name: 'num_stage', type: 'TEXT' },
+        { name: 'archived_at', type: 'TEXT' }
     ];
 
     const existingColumns = (db.pragma('table_info(sessions)') as TableInfo[]).map(col => col.name);
@@ -271,6 +304,43 @@ const createSchema = () => {
             } catch (error: any) {
                 // Catching errors here just in case, though the check should prevent duplicates.
                 _logger.debug(`[DB MIGRATION] Error adding '${column.name}' column: ${error}`);
+            }
+        }
+    }
+
+    // --- Migrations for 'questions' table ---
+    const questionsColumnsToAdd = [
+        { name: 'version_questionnaire', type: 'INTEGER' },
+        { name: 'updated_at', type: 'TEXT' }
+    ];
+
+    const existingQuestionsColumns = (db.pragma('table_info(questions)') as TableInfo[]).map(col => col.name);
+
+    for (const column of questionsColumnsToAdd) {
+        if (!existingQuestionsColumns.includes(column.name)) {
+            try {
+                db.prepare(`ALTER TABLE questions ADD COLUMN ${column.name} ${column.type}`).run();
+                _logger.debug(`[DB MIGRATION] Added '${column.name}' column to 'questions' table.`);
+            } catch (error: any) {
+                _logger.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'questions': ${error}`);
+            }
+        }
+    }
+
+    // --- Migrations for 'deviceKits' table ---
+    const deviceKitsColumnsToAdd = [
+        { name: 'is_global', type: 'INTEGER' }
+    ];
+
+    const existingDeviceKitsColumns = (db.pragma('table_info(deviceKits)') as TableInfo[]).map(col => col.name);
+
+    for (const column of deviceKitsColumnsToAdd) {
+        if (!existingDeviceKitsColumns.includes(column.name)) {
+            try {
+                db.prepare(`ALTER TABLE deviceKits ADD COLUMN ${column.name} ${column.type}`).run();
+                _logger.debug(`[DB MIGRATION] Added '${column.name}' column to 'deviceKits' table.`);
+            } catch (error: any) {
+                _logger.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'deviceKits': ${error}`);
             }
         }
     }
@@ -337,10 +407,10 @@ const questionToRow = (question: Partial<Omit<QuestionWithId, 'id'> | QuestionWi
 const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options } = question;
+      const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version_questionnaire, updated_at } = question;
       const stmt = getDb().prepare(`
-        INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options)
-        VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options)
+        INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version_questionnaire, updated_at)
+        VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version_questionnaire, @updated_at)
       `);
       const rowData = questionToRow({
         blocId, text, type, correctAnswer, timeLimit,
@@ -349,7 +419,9 @@ const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number
         usageCount: usageCount ?? 0,
         correctResponseRate: correctResponseRate ?? 0,
         slideGuid,
-        options // Sera stringifié par questionToRow
+        options, // Sera stringifié par questionToRow
+        version_questionnaire,
+        updated_at
       });
       const result = stmt.run(rowData);
       return result.lastInsertRowid as number;
@@ -607,11 +679,13 @@ const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefi
         INSERT INTO sessions (
           nomSession, dateSession, referentielId, selectedBlocIds, selectedKitId,
           createdAt, location, status, questionMappings, notes, trainerId,
-          ignoredSlideGuids, resolvedImportAnomalies, participants, orsFilePath, resultsImportedAt
+          ignoredSlideGuids, resolvedImportAnomalies, participants, orsFilePath, resultsImportedAt,
+          num_session, num_stage
         ) VALUES (
           @nomSession, @dateSession, @referentielId, @selectedBlocIds, @selectedKitId,
           @createdAt, @location, @status, @questionMappings, @notes, @trainerId,
-          @ignoredSlideGuids, @resolvedImportAnomalies, @participants, @orsFilePath, @resultsImportedAt
+          @ignoredSlideGuids, @resolvedImportAnomalies, @participants, @orsFilePath, @resultsImportedAt,
+          @num_session, @num_stage
         )
       `);
       const rowData = sessionToRow(session);
@@ -852,7 +926,7 @@ const deleteResultsForSession = async (sessionId: number): Promise<void> => {
 
 // VotingDevices
 const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
-  return asyncDbRun(() => {
+  const result = await asyncDbRun(() => {
     try {
       const stmt = getDb().prepare("INSERT INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
       const result = stmt.run(device);
@@ -865,6 +939,8 @@ const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number
       throw error;
     }
   });
+  await createOrUpdateGlobalKit();
+  return result;
 };
 
 const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
@@ -908,7 +984,7 @@ const updateVotingDevice = async (id: number, updates: Partial<Omit<VotingDevice
 };
 
 const deleteVotingDevice = async (id: number): Promise<void> => {
-  return asyncDbRun(() => {
+  await asyncDbRun(() => {
     try {
       // ON DELETE CASCADE sur deviceKitAssignments.votingDeviceId devrait gérer les affectations.
       const stmt = getDb().prepare("DELETE FROM votingDevices WHERE id = ?");
@@ -918,12 +994,13 @@ const deleteVotingDevice = async (id: number): Promise<void> => {
       throw error;
     }
   });
+  await createOrUpdateGlobalKit();
 };
 
 const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promise<void> => {
   if (!devices || devices.length === 0) return Promise.resolve();
 
-  return asyncDbRun(() => {
+  await asyncDbRun(() => {
     const insertStmt = getDb().prepare("INSERT OR IGNORE INTO votingDevices (name, serialNumber) VALUES (@name, @serialNumber)");
     // Utilisation de "INSERT OR IGNORE" pour éviter les erreurs si un serialNumber existe déjà.
     // Cela signifie que les doublons basés sur serialNumber seront ignorés silencieusement.
@@ -951,6 +1028,7 @@ const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promis
       throw error;
     }
   });
+  await createOrUpdateGlobalKit();
 };
 
 // Trainers
@@ -1431,6 +1509,7 @@ const rowToDeviceKit = (row: any): DeviceKit => {
   return {
     ...row,
     isDefault: row.isDefault === 1,
+    is_global: row.is_global === 1,
   };
 };
 
@@ -1438,9 +1517,10 @@ const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefi
   return asyncDbRun(() => {
     try {
       _logger.debug(`[DB DeviceKits] Attempting to add device kit: ${kit}`);
-      const stmt = getDb().prepare("INSERT INTO deviceKits (name, isDefault) VALUES (@name, @isDefault)");
+      const stmt = getDb().prepare("INSERT INTO deviceKits (name, isDefault, is_global) VALUES (@name, @isDefault, @is_global)");
       const isDefault = kit.isDefault ? 1 : 0;
-      const result = stmt.run({ ...kit, isDefault });
+      const is_global = kit.is_global ? 1 : 0;
+      const result = stmt.run({ ...kit, isDefault, is_global });
       _logger.debug(`[DB DeviceKits] Successfully added device kit with ID: ${result.lastInsertRowid}`);
       return result.lastInsertRowid as number;
     } catch (error) {
@@ -1555,6 +1635,51 @@ const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
     transaction();
   });
 };
+
+const createOrUpdateGlobalKit = async (): Promise<void> => {
+  return asyncDbRun(() => {
+    const db = getDb();
+    const transaction = db.transaction(() => {
+      try {
+        // Find or create the global kit
+        let globalKit = db.prepare("SELECT * FROM deviceKits WHERE is_global = 1").get();
+        if (!globalKit) {
+          const result = db.prepare("INSERT INTO deviceKits (name, is_global) VALUES (?, 1)").run("Tous les boîtiers");
+          globalKit = { id: result.lastInsertRowid, name: "Tous les boîtiers", is_global: 1, isDefault: 0 };
+        }
+
+        // Get all voting devices
+        const allDevices = db.prepare("SELECT id FROM votingDevices").all();
+
+        // Get all current assignments for the global kit
+        const currentAssignments = db.prepare("SELECT votingDeviceId FROM deviceKitAssignments WHERE kitId = ?").all(globalKit.id).map((row: any) => row.votingDeviceId);
+
+        // Determine which devices to add and remove
+        const allDeviceIds = allDevices.map((row: any) => row.id);
+        const devicesToAdd = allDeviceIds.filter(id => !currentAssignments.includes(id));
+        const devicesToRemove = currentAssignments.filter((id: number) => !allDeviceIds.includes(id));
+
+        // Add new devices
+        const addStmt = db.prepare("INSERT INTO deviceKitAssignments (kitId, votingDeviceId) VALUES (?, ?)");
+        for (const deviceId of devicesToAdd) {
+          addStmt.run(globalKit.id, deviceId);
+        }
+
+        // Remove old devices
+        if (devicesToRemove.length > 0) {
+          const removeStmt = db.prepare(`DELETE FROM deviceKitAssignments WHERE kitId = ? AND votingDeviceId IN (${devicesToRemove.map(() => '?').join(',')})`);
+          removeStmt.run(globalKit.id, ...devicesToRemove);
+        }
+
+        _logger.info(`[DB DeviceKits] Global kit updated. Added ${devicesToAdd.length}, removed ${devicesToRemove.length} devices.`);
+      } catch (error) {
+        _logger.error(`[DB DeviceKits] Error creating/updating global kit: ${error}`);
+        throw error;
+      }
+    });
+    transaction();
+  });
+}
 
 // DeviceKitAssignments
 const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise<number | undefined> => {

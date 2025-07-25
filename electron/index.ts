@@ -3,6 +3,7 @@ import path from 'path';
 const { initializeIpcHandlers } = require('./ipcHandlers');
 const dbModule = require('./db');
 import { initializeLogger, getLogger, ILogger } from './utils/logger';
+import { setupCronJobs } from './cron';
 
 
 
@@ -57,6 +58,8 @@ app.whenReady().then(async () => {
     dbModule.initializeDatabase(logger);
     logger.info('Initializing IPC handlers...');
     initializeIpcHandlers(logger);
+    logger.info('Setting up CRON jobs...');
+    setupCronJobs(logger);
     createWindow(logger);
 
     app.on('activate', () => {
