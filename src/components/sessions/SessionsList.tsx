@@ -10,12 +10,14 @@ type SessionsListProps = {
   sessions: DBSession[];
   onManageSession: (id: number) => void;
   onStartExam: (id: number) => void;
+  isArchive?: boolean;
 };
 
 const SessionsList: React.FC<SessionsListProps> = ({
   sessions,
   onManageSession,
   onStartExam,
+  isArchive = false,
 }) => {
   const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
   useEffect(() => {
@@ -187,6 +189,10 @@ const SessionsList: React.FC<SessionsListProps> = ({
         </div>
       </Card>
     );
+  }
+
+  if (isArchive) {
+    return renderSessionTable(sessions, "Toutes les archives");
   }
 
   return (

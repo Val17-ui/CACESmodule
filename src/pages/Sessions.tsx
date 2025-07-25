@@ -269,7 +269,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     }
 
     const unarchivedSessions = sessionsToProcess.filter(session => !session.archived_at);
-    const archivedSessions = sessionsToProcess.filter(session => session.archived_at);
+    const archivedSessions = sessionsToProcess.filter(session => session.archived_at).sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime());
 
     if (activeList === 'sessions') {
       setProcessedSessions(unarchivedSessions);
@@ -413,6 +413,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
             sessions={processedSessions}
             onManageSession={handleManageSession}
             onStartExam={handleStartExam}
+            isArchive={activeList === 'archives'}
           />
         </>
       ) : (
