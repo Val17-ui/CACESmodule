@@ -169,7 +169,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
 
   if (sessions.length === 0) {
     return (
-      <Card title="Sessions de formation">
+      <Card>
         <div className="px-6 py-12 text-center text-sm text-gray-500">
           <div className="flex flex-col items-center">
             <AlertTriangle size={48} className="text-gray-400 mb-3" />
@@ -183,8 +183,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
   }
 
   return (
-    // Le Card title est maintenant plus générique, les titres spécifiques sont dans renderSessionTable
-    <Card title="Aperçu des Sessions">
+    <Card>
       {renderSessionTable(sessionsDuJour, "Sessions du jour")}
       {renderSessionTable(sessionsPlanifiees, "Sessions planifiées")}
       {renderSessionTable(sessionsTerminees, "Sessions terminées")}
