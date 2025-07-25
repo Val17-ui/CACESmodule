@@ -355,15 +355,24 @@ export interface OverallThemeStats {
   successRate: number;
 }
 
-export interface Questionnaire {
-  id?: number;
-  session_id: number;
-  iteration_index: number;
-  created_at: string;
+// src/types/index.ts
+export interface SessionIteration {
+    id?: number;
+    session_id: number;
+    iteration_index: number;
+    name: string;
+    ors_file_path?: string;
+    status?: 'planned' | 'ready' | 'completed';
+    participants?: Participant[];
+    question_mappings?: QuestionMapping[];
+    created_at: string;
+    updated_at?: string;
 }
 
-export interface ParticipantQuestionnaire {
-  id?: number;
-  questionnaire_id: number;
-  session_boitier_id: number;
+export interface ParticipantAssignment {
+    id?: number;
+    session_iteration_id: number;
+    participant_id: number;
+    voting_device_id: number;
+    kit_id: number;
 }

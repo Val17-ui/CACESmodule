@@ -228,23 +228,42 @@ const createSchema = () => {
     `CREATE INDEX IF NOT EXISTS idx_deviceKitAssignments_kitId ON deviceKitAssignments(kitId);`,
     `CREATE INDEX IF NOT EXISTS idx_deviceKitAssignments_votingDeviceId ON deviceKitAssignments(votingDeviceId);`,
 
-    `CREATE TABLE IF NOT EXISTS questionnaires (
+    `CREATE TABLE IF NOT EXISTS session_iterations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id INTEGER NOT NULL,
       iteration_index INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      ors_file_path TEXT,
+      status TEXT,
+      participants TEXT,
+      question_mappings TEXT,
       created_at TEXT NOT NULL,
+      updated_at TEXT,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
       UNIQUE (session_id, iteration_index)
     );`,
-    `CREATE INDEX IF NOT EXISTS idx_questionnaires_session_id ON questionnaires(session_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_session_iterations_session_id ON session_iterations(session_id);`,
 
-    `CREATE TABLE IF NOT EXISTS participants_questionnaires (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      questionnaire_id INTEGER NOT NULL,
-      session_boitier_id INTEGER NOT NULL,
-      FOREIGN KEY (questionnaire_id) REFERENCES questionnaires(id) ON DELETE CASCADE,
-      FOREIGN KEY (session_boitier_id) REFERENCES sessionBoitiers(id) ON DELETE CASCADE,
-      UNIQUE (questionnaire_id, session_boitier_id)
+    `CREATE TABLE IF NOT EXISTS participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name TEXT,
+        last_name TEXT,
+        organization TEXT,
+        identification_code TEXT UNIQUE
+    );`,
+
+    `CREATE TABLE IF NOT EXISTS participant_assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_iteration_id INTEGER NOT NULL,
+        participant_id INTEGER NOT NULL,
+        voting_device_id INTEGER NOT NULL,
+        kit_id INTEGER NOT NULL,
+        FOREIGN KEY (session_iteration_id) REFERENCES session_iterations(id) ON DELETE CASCADE,
+        FOREIGN KEY (participant_id) REFERENCES participants(id) ON DELETE CASCADE,
+        FOREIGN KEY (voting_device_id) REFERENCES votingDevices(id) ON DELETE CASCADE,
+        FOREIGN KEY (kit_id) REFERENCES deviceKits(id) ON DELETE CASCADE,
+        UNIQUE (session_iteration_id, participant_id),
+        UNIQUE (session_iteration_id, voting_device_id)
     );`
   ];
 
@@ -291,7 +310,8 @@ const createSchema = () => {
         { name: 'updatedAt', type: 'TEXT' },
         { name: 'num_session', type: 'TEXT' },
         { name: 'num_stage', type: 'TEXT' },
-        { name: 'archived_at', type: 'TEXT' }
+        { name: 'archived_at', type: 'TEXT' },
+        { name: 'iteration_count', type: 'INTEGER' }
     ];
 
     const existingColumns = (db.pragma('table_info(sessions)') as TableInfo[]).map(col => col.name);
@@ -354,8 +374,102 @@ const createSchema = () => {
 export type {
     QuestionWithId, Session, SessionResult, Trainer,
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-    VotingDevice, DeviceKit, DeviceKitAssignment
+    VotingDevice, DeviceKit, DeviceKitAssignment,
+    SessionIteration, Participant, ParticipantAssignment
   };
+
+// SessionIterations
+const addSessionIteration = async (iteration: Omit<SessionIteration, 'id'>): Promise<number | undefined> => {
+    return asyncDbRun(() => {
+        try {
+            const stmt = getDb().prepare(`
+                INSERT INTO session_iterations (session_id, iteration_index, name, ors_file_path, status, participants, question_mappings, created_at, updated_at)
+                VALUES (@session_id, @iteration_index, @name, @ors_file_path, @status, @participants, @question_mappings, @created_at, @updated_at)
+            `);
+            const result = stmt.run(iteration);
+            return result.lastInsertRowid as number;
+        } catch (error) {
+            _logger.debug(`[DB SessionIterations] Error adding session iteration: ${error}`);
+            throw error;
+        }
+    });
+};
+
+const getSessionIterationsBySessionId = async (sessionId: number): Promise<SessionIteration[]> => {
+    return asyncDbRun(() => {
+        try {
+            const stmt = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ?");
+            return stmt.all(sessionId) as SessionIteration[];
+        } catch (error) {
+            _logger.debug(`[DB SessionIterations] Error getting session iterations for session ${sessionId}: ${error}`);
+            throw error;
+        }
+    });
+};
+
+const updateSessionIteration = async (id: number, updates: Partial<Omit<SessionIteration, 'id'>>): Promise<number | undefined> => {
+    return asyncDbRun(() => {
+        try {
+            const fields = Object.keys(updates).filter(key => key !== 'id');
+            if (fields.length === 0) return 0;
+
+            const setClause = fields.map(field => `${field} = @${field}`).join(', ');
+            const stmt = getDb().prepare(`UPDATE session_iterations SET ${setClause} WHERE id = @id`);
+
+            const result = stmt.run({ ...updates, id });
+            return result.changes;
+        } catch (error) {
+            _logger.debug(`[DB SessionIterations] Error updating session iteration ${id}: ${error}`);
+            throw error;
+        }
+    });
+};
+
+// Participants
+const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<number | undefined> => {
+    return asyncDbRun(() => {
+        try {
+            const stmt = getDb().prepare(`
+                INSERT INTO participants (first_name, last_name, organization, identification_code)
+                VALUES (@first_name, @last_name, @organization, @identification_code)
+            `);
+            const result = stmt.run(participant);
+            return result.lastInsertRowid as number;
+        } catch (error) {
+            _logger.debug(`[DB Participants] Error adding participant: ${error}`);
+            throw error;
+        }
+    });
+}
+
+// ParticipantAssignments
+const addParticipantAssignment = async (assignment: Omit<ParticipantAssignment, 'id'>): Promise<number | undefined> => {
+    return asyncDbRun(() => {
+        try {
+            const stmt = getDb().prepare(`
+                INSERT INTO participant_assignments (session_iteration_id, participant_id, voting_device_id, kit_id)
+                VALUES (@session_iteration_id, @participant_id, @voting_device_id, @kit_id)
+            `);
+            const result = stmt.run(assignment);
+            return result.lastInsertRowid as number;
+        } catch (error) {
+            _logger.debug(`[DB ParticipantAssignments] Error adding participant assignment: ${error}`);
+            throw error;
+        }
+    });
+};
+
+const getParticipantAssignmentsByIterationId = async (iterationId: number): Promise<ParticipantAssignment[]> => {
+    return asyncDbRun(() => {
+        try {
+            const stmt = getDb().prepare("SELECT * FROM participant_assignments WHERE session_iteration_id = ?");
+            return stmt.all(iterationId) as ParticipantAssignment[];
+        } catch (error) {
+            _logger.debug(`[DB ParticipantAssignments] Error getting participant assignments for iteration ${iterationId}: ${error}`);
+            throw error;
+        }
+    });
+};
 
 // --- Helper function to wrap sync better-sqlite3 calls in Promises ---
 // This helps maintain an async API similar to Dexie, minimizing changes in consuming code.
@@ -1900,4 +2014,5 @@ Object.assign(module.exports, { getDb, addQuestion, getAllQuestions, getQuestion
      getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes,
      getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit,
      getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit,
-     getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, });
+     getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData,
+     addSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId });
