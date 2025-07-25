@@ -29,6 +29,6 @@ async function archiveOldSessions() {
     const result = stmt.run(new Date().toISOString(), sevenDaysAgo.toISOString().split('T')[0]);
     logger.info(`[CRON] Archived ${result.changes} sessions.`);
   } catch (error) {
-    logger.error('[CRON] Error archiving old sessions:', error);
+    logger.error(`[CRON] Error archiving old sessions: ${error}`);
   }
 }

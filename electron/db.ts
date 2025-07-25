@@ -67,7 +67,7 @@ module.exports.initializeDatabase = initializeDatabase;
 
 
 // Schéma de la base de données
-const getDb = () => {
+export const getDb = () => {
     if (!db) {
         throw new Error("Database not initialized. Please call initializeDatabase first.");
     }
@@ -1642,15 +1642,18 @@ const createOrUpdateGlobalKit = async (): Promise<void> => {
     const transaction = db.transaction(() => {
       try {
         // Find or create the global kit
-        let globalKit = db.prepare("SELECT * FROM deviceKits WHERE is_global = 1").get();
+        let globalKit: DeviceKit | undefined = db.prepare("SELECT * FROM deviceKits WHERE is_global = 1").get() as DeviceKit | undefined;
         if (!globalKit) {
           const result = db.prepare("INSERT INTO deviceKits (name, is_global) VALUES (?, 1)").run("Tous les boîtiers");
-          globalKit = { id: result.lastInsertRowid, name: "Tous les boîtiers", is_global: 1, isDefault: 0 };
+          globalKit = { id: result.lastInsertRowid as number, name: "Tous les boîtiers", is_global: 1, isDefault: 0 };
         }
 
         // Get all voting devices
         const allDevices = db.prepare("SELECT id FROM votingDevices").all();
 
+        if (!globalKit || globalKit.id === undefined) {
+            throw new Error("Could not create or find global kit.");
+        }
         // Get all current assignments for the global kit
         const currentAssignments = db.prepare("SELECT votingDeviceId FROM deviceKitAssignments WHERE kitId = ?").all(globalKit.id).map((row: any) => row.votingDeviceId);
 
