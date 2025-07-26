@@ -868,7 +868,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         setImportSummary("Aucune réponse valide à importer après filtrage et déduplication.");
         return;
       }
-      const sessionQuestionsFromDb = await StorageManager.getSessionQuestionsBySessionId(currentSessionDbId);
+      const sessionQuestionsFromDb = await StorageManager.getQuestionsForSessionBlocks(editingSessionData.selectedBlocIds);
       const sessionBoitiers = await StorageManager.getSessionBoitiersBySessionId(currentSessionDbId);
       if (!sessionQuestionsFromDb || sessionQuestionsFromDb.length === 0) {
         setImportSummary("Erreur: Impossible de charger les questions de référence pour cette session.");
