@@ -156,6 +156,7 @@ const createSchema = () => {
       num_session TEXT,
       num_stage TEXT,
       archived_at TEXT,
+      iteration_count INTEGER,
       FOREIGN KEY (referentielId) REFERENCES referentiels(id) ON DELETE SET NULL,
       FOREIGN KEY (selectedKitId) REFERENCES deviceKits(id) ON DELETE SET NULL,
       FOREIGN KEY (trainerId) REFERENCES trainers(id) ON DELETE SET NULL
@@ -815,6 +816,7 @@ const sessionToRow = (session: Partial<Omit<Session, 'id'> | Session>) => {
 };
 
 const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
+  _logger.info(`[DB] Adding new session:`, session);
   return asyncDbRun(() => {
     try {
       const stmt = getDb().prepare(`
@@ -822,16 +824,17 @@ const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefi
           nomSession, dateSession, referentielId, selectedBlocIds, selectedKitId,
           createdAt, location, status, questionMappings, notes, trainerId,
           ignoredSlideGuids, resolvedImportAnomalies, participants, orsFilePath, resultsImportedAt,
-          num_session, num_stage
+          num_session, num_stage, iteration_count
         ) VALUES (
           @nomSession, @dateSession, @referentielId, @selectedBlocIds, @selectedKitId,
           @createdAt, @location, @status, @questionMappings, @notes, @trainerId,
           @ignoredSlideGuids, @resolvedImportAnomalies, @participants, @orsFilePath, @resultsImportedAt,
-          @num_session, @num_stage
+          @num_session, @num_stage, @iteration_count
         )
       `);
       const rowData = sessionToRow(session);
       const result = stmt.run(rowData);
+      _logger.info(`[DB] New session added with ID: ${result.lastInsertRowid}`);
       return result.lastInsertRowid as number;
     } catch (error) {
       _logger.debug(`[DB Sessions] Error adding session: ${error}`);
@@ -880,6 +883,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 };
 
 const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>): Promise<number | undefined> => {
+  _logger.info(`[DB] Updating session ${id} with:`, updates);
   return asyncDbRun(() => {
     try {
       const rowUpdates = sessionToRow(updates);
@@ -890,6 +894,7 @@ const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>):
       const stmt = getDb().prepare(`UPDATE sessions SET ${setClause} WHERE id = @id`);
 
       const result = stmt.run({ ...rowUpdates, id });
+      _logger.info(`[DB] Session ${id} update result:`, result);
       return result.changes;
     } catch (error) {
       _logger.debug(`[DB Sessions] Error updating session ${id}: ${error}`);
