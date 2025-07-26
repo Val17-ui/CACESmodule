@@ -822,7 +822,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 setImportSummary("Importation annulée ou fichier non trouvé.");
                 return;
             }
-            const arrayBuffer = Buffer.from(fileData.fileBuffer, 'base64');
+            const arrayBuffer = Uint8Array.from(atob(fileData.fileBuffer), c => c.charCodeAt(0));
 
       const zip = await JSZip.loadAsync(arrayBuffer);
       const orSessionXmlFile = zip.file("ORSession.xml");
@@ -1464,7 +1464,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 readOnly={isReadOnly}
               />
             </div>
-            {currentSessionDbId && displayedBlockDetails.length > 0 && (
+            {currentSessionDbId && editingSessionData?.selectedBlocIds && editingSessionData.selectedBlocIds.length > 0 && (
               <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50 mb-6">
                 <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés:</h4>
                 <ul className="list-disc list-inside pl-2 space-y-1">

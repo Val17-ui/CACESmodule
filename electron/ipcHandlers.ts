@@ -429,15 +429,17 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
     }
 
     try {
+      // Always read the file in the main process to get a Buffer
       const fileBuffer = await fs.readFile(finalFilePath);
+      // Return the buffer as a base64 string to the renderer process
       return {
         canceled: false,
-        fileName: finalFilePath.split(/[\\/]/).pop(),
+        fileName: path.basename(finalFilePath),
         fileBuffer: fileBuffer.toString('base64')
       };
     } catch (error: any) {
-      logger.debug(`Failed to read file: ${error}`);
-      return { canceled: false, error: error.message };
+      logger.error(`Failed to read file: ${finalFilePath}`, error);
+      return { canceled: true, error: error.message };
     }
   });
 
