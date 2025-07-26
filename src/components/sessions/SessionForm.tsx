@@ -90,7 +90,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
   const [participantAssignments, setParticipantAssignments] = useState<Record<number, string[]>>({});
-  const [showGlobalView, setShowGlobalView] = useState(false);
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -231,18 +230,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             if (sessionData.iterations && sessionData.iterations.length > 0) {
               const newAssignments: Record<number, string[]> = {};
               sessionData.iterations.forEach(iter => {
-                const participantIdsForIter: string[] = [];
-                if (iter.participants) {
-                  iter.participants.forEach((p_iter: DBParticipantType) => {
-                    const matchingFormParticipant = formParticipants.find(
-                      fp => fp.identificationCode === p_iter.identificationCode
-                    );
-                    if (matchingFormParticipant) {
-                      participantIdsForIter.push(matchingFormParticipant.id);
-                    }
-                  });
-                }
-                newAssignments[iter.iteration_index] = participantIdsForIter;
+                  const participantIdsForIter: string[] = [];
+                  if (iter.participants) {
+                      iter.participants.forEach((p_iter: DBParticipantType) => {
+                          const matchingFormParticipantIndex = formParticipants.findIndex(
+                              fp => fp.identificationCode === p_iter.identificationCode && fp.nom === p_iter.nom && fp.prenom === p_iter.prenom
+                          );
+                          if (matchingFormParticipantIndex !== -1) {
+                              // Use the stable index as the identifier
+                              participantIdsForIter.push(formParticipants[matchingFormParticipantIndex].id);
+                          }
+                      });
+                  }
+                  newAssignments[iter.iteration_index] = participantIdsForIter;
               });
               setParticipantAssignments(newAssignments);
             }
@@ -672,11 +672,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
-  const handleGenerateQuestionnaireAndOrs = async () => {
+  const handleGenerateQuestionnaireAndOrs = async (iterationIndex?: number) => {
     const refCodeToUse = selectedReferential || (editingSessionData?.referentielId ? referentielsData.find(r => r.id === editingSessionData.referentielId)?.code : null);
     if (!refCodeToUse) {
       setImportSummary("Veuillez sélectionner un référentiel pour générer l'ORS.");
-      setIsGeneratingOrs(false); return;
+      return;
     }
     setIsGeneratingOrs(true);
     setImportSummary("Préparation des données et vérification des boîtiers...");
@@ -684,8 +684,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (!sessionDataPreORS) { setImportSummary("Erreur préparation données session."); setIsGeneratingOrs(false); return; }
     const currentSavedId = await handleSaveSession(sessionDataPreORS);
     if (!currentSavedId) {
-        setImportSummary("Erreur lors de la sauvegarde de la session avant génération ORS.");
-        setIsGeneratingOrs(false); return;
+      setImportSummary("Erreur lors de la sauvegarde de la session avant génération ORS.");
+      setIsGeneratingOrs(false); return;
     }
     const upToDateSessionData = await StorageManager.getSessionById(currentSavedId);
     if (!upToDateSessionData) { setImportSummary("Erreur rechargement session après sauvegarde."); setIsGeneratingOrs(false); return; }
@@ -693,104 +693,99 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
     // Generate questions once for the whole session
     let allSelectedQuestionsForPptx: StoredQuestion[] = [];
-    let selectedBlocIdsForSession: number[] = [];
     try {
-        const referentielObject = await StorageManager.getReferentialByCode(refCodeToUse as string);
-        if (!referentielObject || !referentielObject.id) {
-            setImportSummary(`Référentiel avec code "${refCodeToUse}" non trouvé.`);
-            setIsGeneratingOrs(false); return;
+      const referentielObject = await StorageManager.getReferentialByCode(refCodeToUse as string);
+      if (!referentielObject || !referentielObject.id) {
+        setImportSummary(`Référentiel avec code "${refCodeToUse}" non trouvé.`);
+        setIsGeneratingOrs(false); return;
+      }
+      const themesForReferential = await StorageManager.getThemesByReferentialId(referentielObject.id);
+      if (!themesForReferential || themesForReferential.length === 0) {
+        setImportSummary(`Aucun thème trouvé pour le référentiel "${refCodeToUse}".`);
+        setIsGeneratingOrs(false); return;
+      }
+      for (const theme of themesForReferential) {
+        if (!theme.id) continue;
+        const blocsForTheme = await StorageManager.getBlocsByThemeId(theme.id);
+        if (!blocsForTheme || blocsForTheme.length === 0) {
+          console.warn(`Aucun bloc trouvé pour le thème "${theme.code_theme}" (ID: ${theme.id}).`);
+          continue;
         }
-        const themesForReferential = await StorageManager.getThemesByReferentialId(referentielObject.id);
-        if (!themesForReferential || themesForReferential.length === 0) {
-            setImportSummary(`Aucun thème trouvé pour le référentiel "${refCodeToUse}".`);
-            setIsGeneratingOrs(false); return;
+        const filteredBlocs = blocsForTheme.filter((bloc: Bloc) => bloc.code_bloc.match(/_([A-E])$/i));
+        if (filteredBlocs.length === 0) {
+          console.warn(`Aucun bloc de type _A à _E trouvé pour le thème "${theme.code_theme}".`);
+          continue;
         }
-        for (const theme of themesForReferential) {
-            if (!theme.id) continue;
-            const blocsForTheme = await StorageManager.getBlocsByThemeId(theme.id);
-            if (!blocsForTheme || blocsForTheme.length === 0) {
-                console.warn(`Aucun bloc trouvé pour le thème "${theme.code_theme}" (ID: ${theme.id}).`);
-                continue;
-            }
-            const filteredBlocs = blocsForTheme.filter((bloc: Bloc) =>
-                bloc.code_bloc.match(/_([A-E])$/i)
-            );
-            if (filteredBlocs.length === 0) {
-                console.warn(`Aucun bloc de type _A à _E trouvé pour le thème "${theme.code_theme}".`);
-                continue;
-            }
-            const chosenBloc = filteredBlocs[Math.floor(Math.random() * filteredBlocs.length)];
-            if (chosenBloc && chosenBloc.id) {
-                selectedBlocIdsForSession.push(chosenBloc.id);
-                const questionsFromBloc = await StorageManager.getQuestionsForBloc(chosenBloc.id);
-                allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBloc);
-                logger.info(`Thème: ${theme.code_theme}, Bloc choisi: ${chosenBloc.code_bloc}, Questions: ${questionsFromBloc.length}`);
-            }
+        const chosenBloc = filteredBlocs[Math.floor(Math.random() * filteredBlocs.length)];
+        if (chosenBloc && chosenBloc.id) {
+          const questionsFromBloc = await StorageManager.getQuestionsForBloc(chosenBloc.id);
+          allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBloc);
         }
-        if (allSelectedQuestionsForPptx.length === 0) {
-            setImportSummary("Aucune question sélectionnée après le processus de choix aléatoire des blocs.");
-            setIsGeneratingOrs(false); return;
-        }
+      }
+      if (allSelectedQuestionsForPptx.length === 0) {
+        setImportSummary("Aucune question sélectionnée après le processus de choix aléatoire des blocs.");
+        setIsGeneratingOrs(false); return;
+      }
 
-        for (let i = 0; i < iterationCount; i++) {
-            const iterationName = iterationNames[i];
-            const assignedParticipantIds = participantAssignments[i] || [];
-            const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.id));
+      const iterationsToGenerate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: iterationCount }, (_, i) => i);
 
-            const participantsForGenerator = participantsForIteration.map((p_db: DBParticipantType) => {
-                const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
-                return {
-                  idBoitier: assignedDevice ? assignedDevice.serialNumber : '',
-                  nom: p_db.nom,
-                  prenom: p_db.prenom,
-                  identificationCode: p_db.identificationCode,
-                };
-            });
+      for (const i of iterationsToGenerate) {
+        const iterationName = iterationNames[i];
+        const assignedParticipantIds = participantAssignments[i] || [];
+        const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.id));
 
-            const templateFile = await getActivePptxTemplateFile();
-            const generationOutput = await window.dbAPI.generatePresentation(
-                { name: `${sessionName} - ${iterationName}`, date: sessionDate, referential: refCodeToUse as CACESReferential },
-                participantsForGenerator,
-                allSelectedQuestionsForPptx,
-                templateFile,
-                {} as AdminPPTXSettings
-            );
+        const participantsForGenerator = participantsForIteration.map((p_db: DBParticipantType) => {
+          const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
+          return {
+            idBoitier: assignedDevice ? assignedDevice.serialNumber : '',
+            nom: p_db.nom,
+            prenom: p_db.prenom,
+            identificationCode: p_db.identificationCode,
+          };
+        });
 
-            if (generationOutput && generationOutput.orsBlob) {
-                const { orsBlob, questionMappings } = generationOutput;
-                const fileName = `${sessionName}_${iterationName}.ors`;
-                const saveResult = await window.dbAPI.savePptxFile(orsBlob, fileName);
-                if (saveResult.success && currentSavedId) {
-                    const iterationToSave = {
-                        session_id: currentSavedId,
-                        iteration_index: i,
-                        name: iterationName,
-                        ors_file_path: saveResult.filePath,
-                        status: 'ready',
-                        participants: participantsForIteration, // Save participants for this iteration
-                        question_mappings: questionMappings,
-                        created_at: new Date().toISOString(),
-                    };
-                    await StorageManager.addOrUpdateSessionIteration(iterationToSave);
-                    setImportSummary(`Itération ${iterationName} générée avec succès.`);
-                } else {
-                    setImportSummary(`Erreur lors de la sauvegarde du fichier pour l'itération ${iterationName}: ${saveResult.error}`);
-                    // Stop further generation if one fails
-                    break;
-                }
-            }
+        const templateFile = await getActivePptxTemplateFile();
+        const generationOutput = await window.dbAPI.generatePresentation(
+          { name: `${sessionName} - ${iterationName}`, date: sessionDate, referential: refCodeToUse as CACESReferential },
+          participantsForGenerator,
+          allSelectedQuestionsForPptx,
+          templateFile,
+          {} as AdminPPTXSettings
+        );
+
+        if (generationOutput && generationOutput.orsBlob) {
+          const { orsBlob, questionMappings } = generationOutput;
+          const fileName = `${sessionName}_${iterationName}.ors`;
+          const saveResult = await window.dbAPI.savePptxFile(orsBlob, fileName);
+          if (saveResult.success && currentSavedId) {
+            const iterationToSave = {
+              session_id: currentSavedId,
+              iteration_index: i,
+              name: iterationName,
+              ors_file_path: saveResult.filePath,
+              status: 'ready',
+              participants: participantsForIteration,
+              question_mappings: questionMappings,
+              created_at: new Date().toISOString(),
+            };
+            await StorageManager.addOrUpdateSessionIteration(iterationToSave);
+            setImportSummary(`Itération ${iterationName} générée avec succès.`);
+          } else {
+            setImportSummary(`Erreur lors de la sauvegarde du fichier pour l'itération ${iterationName}: ${saveResult.error}`);
+            break;
+          }
         }
+      }
 
-        // After all iterations are processed, reload the session data to refresh the UI
-        if (currentSavedId) {
-            const finalSessionData = await StorageManager.getSessionById(currentSavedId);
-            setEditingSessionData(finalSessionData || null);
-        }
+      if (currentSavedId) {
+        const finalSessionData = await StorageManager.getSessionById(currentSavedId);
+        setEditingSessionData(finalSessionData || null);
+      }
 
     } catch (error: any) {
-        setImportSummary(`Erreur majeure génération: ${error.message}`);
+      setImportSummary(`Erreur majeure génération: ${error.message}`);
     } finally {
-        setIsGeneratingOrs(false);
+      setIsGeneratingOrs(false);
     }
   };
 
@@ -801,31 +796,33 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if(file) console.log("Fichier résultats sélectionné:", file.name);
     };
 
-    const handleImportResults = async () => {
-        if (!resultsFile && !editingSessionData?.orsFilePath) { setImportSummary("Veuillez sélectionner un fichier de résultats ou enregistrer un chemin ORS."); return; }
+    const handleImportResults = async (iterationIndex: number) => {
         if (!currentSessionDbId || !editingSessionData) { setImportSummary("Aucune session active."); return; }
 
-        const iterationId = activeIteration;
-        const iteration = editingSessionData.iterations[iterationId];
+        const iteration = editingSessionData.iterations?.find(it => it.iteration_index === iterationIndex);
+        if (!iteration) {
+            setImportSummary("Itération non trouvée.");
+            return;
+        }
+
         if (iteration.status === 'completed') {
             setImportSummary("Les résultats pour cette itération ont déjà été importés.");
             return;
         }
-        if (!iteration.ors_file_path) { setImportSummary("Veuillez d'abord générer un fichier .ors pour cette itération."); return; }
 
-    setImportSummary("Lecture .ors...");
-    try {
-      let arrayBuffer;
-      if (resultsFile) {
-        arrayBuffer = await resultsFile.arrayBuffer();
-      } else {
-        const fileData = await window.dbAPI.openResultsFile();
-        if (fileData.canceled || !fileData.fileBuffer) {
-          setImportSummary("Aucun fichier sélectionné.");
-          return;
+        if (!iteration.ors_file_path) {
+            setImportSummary("Veuillez d'abord générer un fichier .ors pour cette itération.");
+            return;
         }
-        arrayBuffer = Buffer.from(fileData.fileBuffer);
-      }
+
+        setImportSummary(`Lecture du fichier pour l'itération ${iteration.name}...`);
+        try {
+            const fileData = await window.dbAPI.openResultsFile(iteration.ors_file_path);
+            if (fileData.canceled || !fileData.fileBuffer) {
+                setImportSummary("Importation annulée ou fichier non trouvé.");
+                return;
+            }
+            const arrayBuffer = Buffer.from(fileData.fileBuffer, 'base64');
 
       const zip = await JSZip.loadAsync(arrayBuffer);
       const orSessionXmlFile = zip.file("ORSession.xml");
@@ -1559,145 +1556,122 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           </Card>
         );
       case 'generateQuestionnaire':
+        const generatedIterations = editingSessionData?.iterations?.filter(iter => iter.ors_file_path).length || 0;
+        const hasNewIterations = iterationCount > generatedIterations;
+
         return (
-               <Card title="Générer le questionnaire" className="mb-6">
-            <Button
-                    variant={editingSessionData?.orsFilePath ? "secondary" : "primary"}
+          <Card title="Générer le questionnaire" className="mb-6">
+            {(!editingSessionData?.iterations || editingSessionData.iterations.length === 0) && (
+              <Button
                 icon={<PackagePlus size={16} />}
-                onClick={handleGenerateQuestionnaireAndOrs}
-                disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
-                title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
-                       isReadOnly ? "La session est terminée, regénération bloquée." :
-                           (!!editingSessionData?.orsFilePath) ? "Régénérer le questionnaire (Attention : ceci écrasera l'existant)" :
-                           "Générer le questionnaire"}
+                onClick={() => handleGenerateQuestionnaireAndOrs()}
+                disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId)}
+                title={!selectedReferential && !currentSessionDbId ? "Veuillez d'abord sélectionner un référentiel" : ""}
               >
-                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer le questionnaire" : "Générer le questionnaire")}
+                {isGeneratingOrs ? "Génération..." : "Générer le questionnaire pour toutes les itérations"}
               </Button>
-              {isReadOnly && (
-                     <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération est bloquée.</p>
-              )}
-               {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
-                 <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
-              )}
-              {modifiedAfterOrsGeneration && !!editingSessionData?.orsFilePath && !isReadOnly && (
-                <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
-                  <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
-                  <span>
-                        <strong className="font-semibold">Attention :</strong> Les informations des participants ont été modifiées après la dernière génération.
-                        Veuillez regénérer le questionnaire pour inclure ces changements.
-                  </span>
-                </p>
-              )}
-                  {importSummary && activeTab === 'generateQuestionnaire' && (
-                    <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                        <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
+            )}
+
+            {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && (
+              <div className="space-y-4">
+                {iterationNames.map((name, index) => {
+                  const iteration = editingSessionData.iterations.find(it => it.iteration_index === index);
+                  return (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{name}</p>
+                        {iteration?.ors_file_path ? (
+                          <Button variant="link" onClick={() => window.dbAPI.openFile(iteration.ors_file_path!)} className="text-xs p-0 h-auto">
+                            {iteration.ors_file_path}
+                          </Button>
+                        ) : (
+                          <p className="text-xs text-gray-500">Non généré</p>
+                        )}
+                      </div>
+                      <Button
+                        onClick={() => handleGenerateQuestionnaireAndOrs(index)}
+                        disabled={isGeneratingOrs || isReadOnly}
+                        variant={iteration?.ors_file_path ? 'secondary' : 'primary'}
+                      >
+                        {iteration?.ors_file_path ? "Regénérer" : "Générer"}
+                      </Button>
                     </div>
-                  )}
-              {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && (
-                <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
-                  <h4 className="text-md font-semibold text-gray-700 mb-2">Fichiers de questionnaire générés :</h4>
-                  <ul className="list-disc list-inside pl-2 space-y-1">
-                    {editingSessionData.iterations.map((iter, index) => (
-                      <li key={index} className="text-sm text-gray-600">
-                        <span className="font-medium">{iter.name}:</span>
-                        <Button
-                          variant="link"
-                          onClick={() => { if (iter.ors_file_path) window.dbAPI.openFile(iter.ors_file_path); }}
-                          className="ml-2"
-                        >
-                          {iter.ors_file_path}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-         </Card>
+                  );
+                })}
+
+                {hasNewIterations && (
+                  <div className="mt-4 pt-4 border-t">
+                    <Button
+                      onClick={() => {
+                        const newIterations = Array.from({ length: iterationCount }, (_, i) => i).filter(i => !editingSessionData.iterations.find(it => it.iteration_index === i));
+                        newIterations.forEach(index => handleGenerateQuestionnaireAndOrs(index));
+                      }}
+                      disabled={isGeneratingOrs || isReadOnly}
+                    >
+                      Générer les nouvelles itérations
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {importSummary && activeTab === 'generateQuestionnaire' && (
+              <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
+              </div>
+            )}
+          </Card>
         );
       case 'importResults':
         return (
-            <>
-            {currentSessionDbId && (
-                <Card title="Résultats de la Session (Import)" className="mb-6">
-                    <div className="space-y-4">
-                        <div>
-                            <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
-                            <Input
-                                id="resultsFileInput"
-                                type="file"
-                                accept=".ors"
-                                onChange={handleResultsFileSelect}
-                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                                disabled={!editingSessionData?.orsFilePath || isReadOnly}
-                            />
-                            {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
-                        </div>
-                        <Button
-                            variant="secondary"
-                            icon={<FileUp size={16} />}
-                            onClick={handleImportResults}
-                            disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
-                        >
-                            Importer les Résultats
-                        </Button>
-                        {!editingSessionData?.orsFilePath && !isReadOnly && (
-                            <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
-                        )}
-                        {isReadOnly && (
-                            <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
-                        )}
-                        <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
-                        {importSummary && activeTab === 'importResults' && (
-                            <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
-                            </div>
-                        )}
-                    </div>
-                </Card>
+          <Card title="Importer les résultats" className="mb-6">
+            {(!editingSessionData?.iterations || editingSessionData.iterations.length === 0) && (
+              <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">
+                Veuillez d'abord générer un questionnaire pour voir les options d'importation.
+              </p>
             )}
-            </>
-        )
+
+            {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && (
+              <div className="space-y-4">
+                {iterationNames.map((name, index) => {
+                  const iteration = editingSessionData.iterations.find(it => it.iteration_index === index);
+                  return (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{name}</p>
+                        <p className={`text-xs ${iteration?.status === 'completed' ? 'text-green-600' : 'text-gray-500'}`}>
+                          Statut: {iteration?.status || 'planned'}
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => handleImportResults(index)}
+                        disabled={!iteration?.ors_file_path || isReadOnly || iteration?.status === 'completed'}
+                        icon={<FileUp size={16} />}
+                      >
+                        Importer
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {importSummary && activeTab === 'importResults' && (
+              <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
+              </div>
+            )}
+          </Card>
+        );
       default:
         return null;
     }
   };
 
-  const renderGlobalView = () => (
-    <Card title="Vue Globale des Itérations">
-        <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-                <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Itération</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participants</th>
-                </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-                {iterationNames.map((name, index) => {
-                    const iteration = editingSessionData?.iterations?.[index];
-                    const participants = participantAssignments[index] || [];
-                    return (
-                        <tr key={index}>
-                            <td className="px-6 py-4 whitespace-nowrap">{name}</td>
-                            <td className="px-6 py-4 whitespace-nowrap">{iteration?.status || 'planned'}</td>
-                            <td className="px-6 py-4 whitespace-nowrap">{participants.length}</td>
-                        </tr>
-                    );
-                })}
-            </tbody>
-        </table>
-    </Card>
-  );
-
   return (
     <div>
-        <Button onClick={() => setShowGlobalView(!showGlobalView)}>{showGlobalView ? "Cacher" : "Vue Globale"}</Button>
-        {showGlobalView ? renderGlobalView() : (
-            <>
-                {renderTabNavigation()}
-                {renderTabContent()}
-            </>
-        )}
+        {renderTabNavigation()}
+        {renderTabContent()}
       <div className="flex justify-between items-center mt-8 py-4 border-t border-gray-200">
         <div>
           <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleCancelSession} disabled={editingSessionData?.status === 'completed' || editingSessionData?.status === 'cancelled'}>

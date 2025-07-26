@@ -409,26 +409,30 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
     return { canceled: false, path: filePaths[0] };
   });
 
-  ipcMain.handle('open-results-file', async (event: IpcMainInvokeEvent) => {
-    logger.debug('[IPC] open-results-file');
-    const { canceled, filePaths } = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [
-        { name: 'Fichiers ORS', extensions: ['ors'] },
-        { name: 'Tous les fichiers', extensions: ['*'] }
-      ]
-    });
+  ipcMain.handle('open-results-file', async (event: IpcMainInvokeEvent, filePath?: string) => {
+    logger.debug(`[IPC] open-results-file, path: ${filePath}`);
+    let finalFilePath = filePath;
 
-    if (canceled || filePaths.length === 0) {
-      return { canceled: true };
+    if (!finalFilePath) {
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: 'Fichiers ORS', extensions: ['ors'] },
+          { name: 'Tous les fichiers', extensions: ['*'] }
+        ]
+      });
+
+      if (canceled || filePaths.length === 0) {
+        return { canceled: true };
+      }
+      finalFilePath = filePaths[0];
     }
 
-    const filePath = filePaths[0];
     try {
-      const fileBuffer = await fs.readFile(filePath);
+      const fileBuffer = await fs.readFile(finalFilePath);
       return {
         canceled: false,
-        fileName: filePath.split(/[\\/]/).pop(),
+        fileName: finalFilePath.split(/[\\/]/).pop(),
         fileBuffer: fileBuffer.toString('base64')
       };
     } catch (error: any) {
