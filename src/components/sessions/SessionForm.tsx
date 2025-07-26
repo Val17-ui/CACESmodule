@@ -764,11 +764,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               name: iterationName,
               ors_file_path: saveResult.filePath,
               status: 'ready',
-              participants: participantsForIteration,
+                        participants: participantsForIteration,
               question_mappings: questionMappings,
               created_at: new Date().toISOString(),
             };
             await StorageManager.addOrUpdateSessionIteration(iterationToSave);
+
+                    // Also update the main session with the question mappings for the first iteration
+                    if (i === 0) {
+                        await StorageManager.updateSession(currentSavedId, { questionMappings });
+                    }
             setImportSummary(`Itération ${iterationName} générée avec succès.`);
           } else {
             setImportSummary(`Erreur lors de la sauvegarde du fichier pour l'itération ${iterationName}: ${saveResult.error}`);
