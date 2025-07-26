@@ -816,7 +816,7 @@ const sessionToRow = (session: Partial<Omit<Session, 'id'> | Session>) => {
 };
 
 const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
-  _logger.info(`[DB] Adding new session:`, session);
+  _logger.info(`[DB] Adding new session: ${JSON.stringify(session)}`);
   return asyncDbRun(() => {
     try {
       const stmt = getDb().prepare(`
@@ -883,7 +883,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 };
 
 const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>): Promise<number | undefined> => {
-  _logger.info(`[DB] Updating session ${id} with:`, updates);
+  _logger.info(`[DB] Updating session ${id} with: ${JSON.stringify(updates)}`);
   return asyncDbRun(() => {
     try {
       const rowUpdates = sessionToRow(updates);
@@ -894,7 +894,7 @@ const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>):
       const stmt = getDb().prepare(`UPDATE sessions SET ${setClause} WHERE id = @id`);
 
       const result = stmt.run({ ...rowUpdates, id });
-      _logger.info(`[DB] Session ${id} update result:`, result);
+      _logger.info(`[DB] Session ${id} update result: ${JSON.stringify(result)}`);
       return result.changes;
     } catch (error) {
       _logger.debug(`[DB Sessions] Error updating session ${id}: ${error}`);
