@@ -886,7 +886,16 @@ const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>):
   _logger.info(`[DB] Updating session ${id} with: ${JSON.stringify(updates)}`);
   return asyncDbRun(() => {
     try {
-      const rowUpdates = sessionToRow(updates);
+      // Ensure 'iteration_count' is included if it's in the updates
+      const fieldsToUpdate = { ...updates };
+      const rowUpdates = sessionToRow(fieldsToUpdate);
+
+      // Manually add iteration_count if it was in the original updates,
+      // as sessionToRow might not handle it if it's not a JSON field.
+      if (updates.iteration_count !== undefined && !rowUpdates.hasOwnProperty('iteration_count')) {
+          rowUpdates.iteration_count = updates.iteration_count;
+      }
+
       const fields = Object.keys(rowUpdates).filter(key => key !== 'id');
       if (fields.length === 0) return 0;
 
