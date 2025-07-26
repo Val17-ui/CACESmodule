@@ -438,7 +438,7 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
         fileBuffer: fileBuffer.toString('base64')
       };
     } catch (error: any) {
-      logger.error(`Failed to read file: ${finalFilePath}`, error);
+      logger.error(`Failed to read file: ${finalFilePath} - ${error.message}`);
       return { canceled: true, error: error.message };
     }
   });
