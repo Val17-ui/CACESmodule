@@ -89,7 +89,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [detectedAnomalies, setDetectedAnomalies] = useState<DetectedAnomalies | null>(null);
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
-  const [participantAssignments, setParticipantAssignments] = useState<Record<number, number[]>>({});
+  const [participantAssignments, setParticipantAssignments] = useState<Record<number, string[]>>({});
   const [showGlobalView, setShowGlobalView] = useState(false);
 
   useEffect(() => {
@@ -200,6 +200,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setNotes(sessionData.notes || '');
             setSelectedTrainerId(sessionData.trainerId || null);
             setSelectedKitIdState(sessionData.selectedKitId || null);
+
+            if (sessionData.iteration_count && sessionData.iteration_count > 1) {
+              setIterationCount(sessionData.iteration_count);
+              if (sessionData.iterations && sessionData.iterations.length > 0) {
+                setIterationNames(sessionData.iterations.map(iter => iter.name));
+              } else {
+                // Fallback if names are not stored in iterations
+                const newIterationNames = Array.from({ length: sessionData.iteration_count }, (_, i) => `Session_${i + 1}`);
+                setIterationNames(newIterationNames);
+              }
+            } else {
+              setIterationCount(1);
+              setIterationNames(['Session_1']);
+            }
+
             setModifiedAfterOrsGeneration(false);
             const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
               ...p_db,
@@ -211,6 +226,26 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               hasSigned: (p_db as any).hasSigned || false,
             }));
             setParticipants(formParticipants);
+
+            // Reconstruct participant assignments from loaded iteration data
+            if (sessionData.iterations && sessionData.iterations.length > 0) {
+              const newAssignments: Record<number, string[]> = {};
+              sessionData.iterations.forEach(iter => {
+                const participantIdsForIter: string[] = [];
+                if (iter.participants) {
+                  iter.participants.forEach((p_iter: DBParticipantType) => {
+                    const matchingFormParticipant = formParticipants.find(
+                      fp => fp.identificationCode === p_iter.identificationCode
+                    );
+                    if (matchingFormParticipant) {
+                      participantIdsForIter.push(matchingFormParticipant.id);
+                    }
+                  });
+                }
+                newAssignments[iter.iteration_index] = participantIdsForIter;
+              });
+              setParticipantAssignments(newAssignments);
+            }
           } else {
             console.warn(`Session avec ID ${sessionIdToLoad} non trouvée.`);
             resetFormTactic();
@@ -246,6 +281,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       setDisplayedBlockDetails([]);
     }
   }, [editingSessionData, editingSessionData?.selectedBlocIds, allThemesData, allBlocsData]);
+
+  useEffect(() => {
+    // Only default all participants to the first iteration for NEW sessions.
+    if (!sessionIdToLoad && iterationCount === 1) {
+        setParticipantAssignments({
+            0: participants.map(p => p.id)
+        });
+    }
+}, [participants, iterationCount, sessionIdToLoad]);
 
   const referentialOptionsFromData = referentielsData.map((r: Referential) => ({
     value: r.code,
@@ -289,13 +333,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       return;
     }
 
+    const assignedDeviceIds = participants.map(p => p.assignedGlobalDeviceId).filter(id => id !== null);
+    const nextAvailableDevice = votingDevicesInSelectedKit.find(d => !assignedDeviceIds.includes(d.id));
+
     const newParticipant: FormParticipant = {
       nom: '',
       prenom: '',
       identificationCode: '',
       score: undefined,
       reussite: undefined,
-      assignedGlobalDeviceId: null,
+      assignedGlobalDeviceId: nextAvailableDevice?.id || null,
       statusInSession: 'present',
       id: Date.now().toString(),
       firstName: '',
@@ -328,6 +375,23 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }));
   };
 
+  const handleParticipantIterationChange = (participantId: string, newIterationIndex: number) => {
+    setParticipantAssignments(prev => {
+        const newAssignments = { ...prev };
+        // Remove participant from all iterations first
+        Object.keys(newAssignments).forEach(iterIndex => {
+            const index = parseInt(iterIndex, 10);
+            newAssignments[index] = (newAssignments[index] || []).filter(id => id !== participantId);
+        });
+        // Add to the new iteration
+        if (!newAssignments[newIterationIndex]) {
+            newAssignments[newIterationIndex] = [];
+        }
+        newAssignments[newIterationIndex].push(participantId);
+        return newAssignments;
+    });
+  };
+
   const parseCsvParticipants = (fileContent: string): Array<Partial<DBParticipantType>> => {
     const parsed: Array<Partial<DBParticipantType>> = [];
     const lines = fileContent.split(/\r\n|\n/);
@@ -344,8 +408,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     return parsed;
   };
 
-  const parseExcelParticipants = (data: Uint8Array): Array<Partial<DBParticipantType>> => {
-    const parsed: Array<Partial<DBParticipantType>> = [];
+  const parseExcelParticipants = (data: Uint8Array): Array<Partial<DBParticipantType> & { iteration?: number }> => {
+    const parsed: Array<Partial<DBParticipantType> & { iteration?: number }> = [];
     const workbook = XLSX.read(data, { type: 'array' });
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
@@ -359,12 +423,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (hasPrenom && hasNom) {
       headers = potentialHeaders; dataStartIndex = 1;
     } else {
-      headers = ['prénom', 'nom', 'organisation', 'code identification']; dataStartIndex = 0;
+      headers = ['prénom', 'nom', 'organisation', 'code identification', 'itération']; dataStartIndex = 0;
     }
     const prenomIndex = headers.findIndex(h => h === 'prénom' || h === 'prenom');
     const nomIndex = headers.findIndex(h => h === 'nom');
     const orgIndex = headers.findIndex(h => h === 'organisation');
     const codeIndex = headers.findIndex(h => h === 'code identification' || h === 'code');
+    const iterationIndex = headers.findIndex(h => h === 'itération' || h === 'iteration');
     for (let i = dataStartIndex; i < jsonData.length; i++) {
       const row = jsonData[i];
       if (row.some(cell => cell && cell.toString().trim() !== '')) {
@@ -375,7 +440,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             prenom, nom,
             organization: orgIndex !== -1 ? row[orgIndex]?.toString().trim() || '' : row[2]?.toString().trim() || '',
             identificationCode: codeIndex !== -1 ? row[codeIndex]?.toString().trim() || '' : row[3]?.toString().trim() || '',
-            } as Partial<DBParticipantType>);
+            iteration: iterationIndex !== -1 ? parseInt(row[iterationIndex]?.toString().trim(), 10) : 1,
+            } as Partial<DBParticipantType> & { iteration?: number });
         }
       }
     }
@@ -383,7 +449,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const addImportedParticipants = (
-    parsedData: Array<Partial<DBParticipantType>>,
+    parsedData: Array<Partial<DBParticipantType> & { iteration?: number }>,
     fileName: string
   ) => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
@@ -403,7 +469,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         deviceId: null,
         hasSigned: false,
       }));
-      setParticipants(prev => [...prev, ...newFormParticipants]);
+      setParticipants(prev => {
+        const updatedParticipants = [...prev, ...newFormParticipants];
+        // Assign imported participants to iterations
+        const newAssignments = { ...participantAssignments };
+        newFormParticipants.forEach(p => {
+          const targetIteration = parsedData.find(data => data.identificationCode === p.identificationCode)?.iteration || 1; // Default to 1st iteration
+          const iterationIndex = targetIteration - 1; // Convert to 0-based index
+          if (!newAssignments[iterationIndex]) {
+            newAssignments[iterationIndex] = [];
+          }
+          newAssignments[iterationIndex].push(p.id);
+        });
+        setParticipantAssignments(newAssignments);
+        return updatedParticipants;
+      });
       setImportSummary(`${parsedData.length} participants importés de ${fileName}. Assignez les boîtiers.`);
     } else {
       setImportSummary(`Aucun participant valide trouvé dans ${fileName}.`);
@@ -510,32 +590,50 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         if (newId) { setCurrentSessionDbId(newId); savedId = newId; }
         else { setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée."); return null; }
       }
+
       if (savedId) {
-         const reloadedSession = await StorageManager.getSessionById(savedId);
-         setEditingSessionData(reloadedSession || null);
-         if (reloadedSession) {
-            setModifiedAfterOrsGeneration(false);
-            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db: DBParticipantType, index: number) => {
-              const visualDeviceId = index + 1;
-              const currentParticipantState = participants.find(p => p.nom === p_db.nom && p.prenom === p_db.prenom && p.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId) || participants[index];
-              return {
-                nom: p_db.nom,
-                prenom: p_db.prenom,
-                identificationCode: p_db.identificationCode,
-                score: p_db.score,
-                reussite: p_db.reussite,
-                assignedGlobalDeviceId: p_db.assignedGlobalDeviceId,
-                statusInSession: p_db.statusInSession,
-                id: currentParticipantState?.id || `form-reloaded-${index}-${Date.now()}`,
-                firstName: p_db.prenom,
-                lastName: p_db.nom,
-                deviceId: currentParticipantState?.deviceId ?? visualDeviceId,
-                organization: currentParticipantState?.organization || '',
-                hasSigned: currentParticipantState?.hasSigned || false,
+        // Save the iterations with their participant assignments
+        for (let i = 0; i < iterationCount; i++) {
+          const assignedParticipantIds = participantAssignments[i] || [];
+          const participantsForIteration = participants
+            .filter(p => assignedParticipantIds.includes(p.id))
+            .map(p => {
+              const dbParticipant: DBParticipantType = {
+                nom: p.lastName,
+                prenom: p.firstName,
+                organization: p.organization,
+                identificationCode: p.identificationCode,
+                score: p.score,
+                reussite: p.reussite,
+                assignedGlobalDeviceId: p.assignedGlobalDeviceId,
+                statusInSession: p.statusInSession,
               };
+              return dbParticipant;
             });
-            setParticipants(formParticipants);
-         }
+
+          const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
+          const iterationToSave = {
+            id: existingIteration?.id,
+            session_id: savedId,
+            iteration_index: i,
+            name: iterationNames[i] || `Session_${i + 1}`,
+            status: existingIteration?.status || 'planned',
+            participants: participantsForIteration,
+            ors_file_path: existingIteration?.ors_file_path,
+            question_mappings: existingIteration?.question_mappings,
+            created_at: existingIteration?.created_at || new Date().toISOString(),
+          };
+          await StorageManager.addOrUpdateSessionIteration(iterationToSave);
+        }
+
+        // Reload data to get the latest state and update UI
+        const reloadedSession = await StorageManager.getSessionById(savedId);
+        setEditingSessionData(reloadedSession || null);
+        if (reloadedSession) {
+          setModifiedAfterOrsGeneration(false);
+          // The participant list in the form should not change, just the assignments
+          // So, we don't need to remap the whole participant list here.
+        }
       }
       return savedId;
     } catch (error: any) {
@@ -637,7 +735,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         for (let i = 0; i < iterationCount; i++) {
             const iterationName = iterationNames[i];
             const assignedParticipantIds = participantAssignments[i] || [];
-            const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(parseInt(p.id)));
+            const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.id));
 
             const participantsForGenerator = participantsForIteration.map((p_db: DBParticipantType) => {
                 const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
@@ -662,11 +760,33 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 const { orsBlob, questionMappings } = generationOutput;
                 const fileName = `${sessionName}_${iterationName}.ors`;
                 const saveResult = await window.dbAPI.savePptxFile(orsBlob, fileName);
-                if (saveResult.success) {
-                    // Update iteration data in db
+                if (saveResult.success && currentSavedId) {
+                    const iterationToSave = {
+                        session_id: currentSavedId,
+                        iteration_index: i,
+                        name: iterationName,
+                        ors_file_path: saveResult.filePath,
+                        status: 'ready',
+                        participants: participantsForIteration, // Save participants for this iteration
+                        question_mappings: questionMappings,
+                        created_at: new Date().toISOString(),
+                    };
+                    await StorageManager.addOrUpdateSessionIteration(iterationToSave);
+                    setImportSummary(`Itération ${iterationName} générée avec succès.`);
+                } else {
+                    setImportSummary(`Erreur lors de la sauvegarde du fichier pour l'itération ${iterationName}: ${saveResult.error}`);
+                    // Stop further generation if one fails
+                    break;
                 }
             }
         }
+
+        // After all iterations are processed, reload the session data to refresh the UI
+        if (currentSavedId) {
+            const finalSessionData = await StorageManager.getSessionById(currentSavedId);
+            setEditingSessionData(finalSessionData || null);
+        }
+
     } catch (error: any) {
         setImportSummary(`Erreur majeure génération: ${error.message}`);
     } finally {
@@ -1196,78 +1316,43 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const [activeIteration, setActiveIteration] = useState(0);
 
-  const renderTabNavigation = () => (
-    <div className="mb-6 border-b border-gray-200">
-        <nav className="-mb-px flex space-x-4 sm:space-x-8" aria-label="Tabs">
-            <button
-                key="details"
-                onClick={() => setActiveTab('details')}
-                className={`
-                    ${activeTab === 'details' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
-                    whitespace-nowrap py-3 px-2 sm:py-4 sm:px-3 border-b-2 font-medium text-sm
-                `}
-                aria-current={activeTab === 'details' ? 'page' : undefined}
-            >
-                Détails Session
-            </button>
+  const renderTabNavigation = () => {
+    const tabLabels: Record<TabKey, string> = {
+        details: 'Détails Session',
+        participants: 'Participants',
+        generateQuestionnaire: 'Générer le questionnaire',
+        importResults: 'Importer les résultats',
+    };
 
-            {(['participants', 'generateQuestionnaire', 'importResults'] as TabKey[]).map((tabKey) => {
-                const tabLabels: Record<TabKey, string> = {
-                    details: 'Détails Session',
-                    participants: 'Participants',
-                    generateQuestionnaire: 'Générer le questionnaire',
-                    importResults: 'Importer les résultats',
-                };
-                if (iterationCount > 1) {
-                    return (
-                        <div key={tabKey} className="relative">
-                            <Select
-                                value={`${tabKey}-${activeIteration}`}
-                                onChange={(e) => {
-                                    const [tab, iter] = e.target.value.split('-');
-                                    setActiveTab(tab as TabKey);
-                                    setActiveIteration(parseInt(iter, 10));
-                                }}
-                                className="pr-8"
-                            >
-                                {iterationNames.map((name, index) => (
-                                    <option key={`${tabKey}-${index}`} value={`${tabKey}-${index}`}>
-                                        {name} - {tabLabels[tabKey]}
-                                    </option>
-                                ))}
-                            </Select>
-                        </div>
-                    );
-                }
-                return (
-                    <button
-                        key={tabKey}
-                        onClick={() => setActiveTab(tabKey)}
-                        className={`
-                            ${activeTab === tabKey ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
-                            whitespace-nowrap py-3 px-2 sm:py-4 sm:px-3 border-b-2 font-medium text-sm
-                        `}
-                        aria-current={activeTab === tabKey ? 'page' : undefined}
-                    >
-                        {tabLabels[tabKey]}
-                    </button>
-                );
-            })}
-        </nav>
-    </div>
-);
+    return (
+        <div className="mb-6">
+            <div className="border-b border-gray-200">
+                <nav className="-mb-px flex space-x-4 sm:space-x-8" aria-label="Tabs">
+                    {(['details', 'participants', 'generateQuestionnaire', 'importResults'] as TabKey[]).map((tabKey) => (
+                        <button
+                            key={tabKey}
+                            onClick={() => setActiveTab(tabKey)}
+                            className={`
+                                ${activeTab === tabKey ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
+                                whitespace-nowrap py-3 px-2 sm:py-4 sm:px-3 border-b-2 font-medium text-sm
+                            `}
+                            aria-current={activeTab === tabKey ? 'page' : undefined}
+                        >
+                            {tabLabels[tabKey]}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+            
+        </div>
+    );
+};
 
   const renderTabContent = () => {
     const isReadOnly = editingSessionData?.status === 'completed';
     const isOrsGeneratedAndNotEditable = !!editingSessionData?.orsFilePath && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
 
-    if (activeTab !== 'details' && iterationCount > 1) {
-        return (
-            <Card title={`${iterationNames[activeIteration]} - ${activeTab}`}>
-                <p>Content for {iterationNames[activeIteration]} - {activeTab}</p>
-            </Card>
-        );
-    }
+    
 
     switch (activeTab) {
       case 'details':
@@ -1345,6 +1430,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     setIterationCount(count);
                     const newIterationNames = Array.from({ length: count }, (_, i) => `Session_${i + 1}`);
                     setIterationNames(newIterationNames);
+                    setActiveIteration(0);
+                    setParticipantAssignments(prev => {
+                      const newAssignments: Record<number, string[]> = {};
+                      for (let i = 0; i < count; i++) {
+                        if (prev[i]) {
+                          newAssignments[i] = prev[i];
+                        } else {
+                          newAssignments[i] = [];
+                        }
+                      }
+                      return newAssignments;
+                    });
                   }
                 }}
                 disabled={isReadOnly}
@@ -1385,39 +1482,79 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           </Card>
         );
       case 'participants':
-        const assignedParticipantIds = participantAssignments[activeIteration] || [];
-        const assignedParticipants = participants.filter(p => assignedParticipantIds.includes(parseInt(p.id, 10)));
-        const unassignedParticipants = participants.filter(p => !assignedParticipantIds.includes(parseInt(p.id, 10)));
-
         return (
-          <Card title={`Participants - ${iterationNames[activeIteration]}`} className="mb-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium">Participants assignés</h3>
-              {assignedParticipants.length === 0 ? <p>Aucun participant assigné à cette itération.</p> : (
-                <ul>
-                  {assignedParticipants.map(p => <li key={p.id}>{p.firstName} {p.lastName}</li>)}
-                </ul>
-              )}
+          <Card title="Participants et Kits" className="mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <Select
+                label="Kit de boîtiers"
+                options={deviceKitsList.map(kit => ({ value: kit.id!.toString(), label: kit.name }))}
+                value={selectedKitIdState?.toString() || ''}
+                onChange={(e) => setSelectedKitIdState(e.target.value ? parseInt(e.target.value, 10) : null)}
+                placeholder="Sélectionner un kit"
+                disabled={isLoadingKits || isReadOnly}
+              />
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Actions</h4>
+                <div className="flex space-x-2">
+                  <Button onClick={handleAddParticipant} icon={<UserPlus size={16} />} disabled={isReadOnly}>Ajouter</Button>
+                  <label className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">
+                    <FileUp size={16} className="-ml-1 mr-2 h-5 w-5" />
+                    Importer
+                    <input type="file" className="hidden" onChange={handleParticipantFileSelect} accept=".csv, .xlsx, .xls" disabled={isReadOnly} />
+                  </label>
+                </div>
+              </div>
             </div>
-            <div className="mb-4">
-              <h3 className="text-lg font-medium">Participants non assignés</h3>
-              {unassignedParticipants.length === 0 ? <p>Tous les participants sont assignés.</p> : (
-                <ul className="flex flex-col space-y-2">
-                  {unassignedParticipants.map(p => (
-                    <li key={p.id} className="flex items-center justify-between">
-                      <span>{p.firstName} {p.lastName}</span>
-                      <Button onClick={() => {
-                        const newAssignments = { ...participantAssignments };
-                        if (!newAssignments[activeIteration]) {
-                          newAssignments[activeIteration] = [];
-                        }
-                        newAssignments[activeIteration].push(parseInt(p.id, 10));
-                        setParticipantAssignments(newAssignments);
-                      }}>Assigner</Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+
+            <h3 className="text-xl font-semibold mb-4">Liste Globale des Participants</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {iterationCount > 1 && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Itération</th>}
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Prénom</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Organisation</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code Identification</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Boîtier</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {participants.map((p, index) => {
+                    const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].includes(p.id));
+                    return (
+                      <tr key={p.id}>
+                        {iterationCount > 1 && (
+                          <td className="px-4 py-2">
+                            <Select
+                              value={assignedIteration || ''}
+                              onChange={(e) => handleParticipantIterationChange(p.id, parseInt(e.target.value, 10))}
+                              options={iterationNames.map((name, index) => ({ value: index.toString(), label: name }))}
+                              placeholder="N/A"
+                              disabled={isReadOnly}
+                            />
+                          </td>
+                        )}
+                        <td className="px-4 py-2"><Input value={p.firstName} onChange={(e) => handleParticipantChange(p.id, 'firstName', e.target.value)} disabled={isReadOnly} /></td>
+                        <td className="px-4 py-2"><Input value={p.lastName} onChange={(e) => handleParticipantChange(p.id, 'lastName', e.target.value)} disabled={isReadOnly} /></td>
+                        <td className="px-4 py-2"><Input value={p.organization || ''} onChange={(e) => handleParticipantChange(p.id, 'organization', e.target.value)} disabled={isReadOnly} /></td>
+                        <td className="px-4 py-2"><Input value={p.identificationCode || ''} onChange={(e) => handleParticipantChange(p.id, 'identificationCode', e.target.value)} disabled={isReadOnly} /></td>
+                        <td className="px-4 py-2">
+                          <Select
+                            value={p.assignedGlobalDeviceId?.toString() || ''}
+                            onChange={(e) => handleParticipantChange(p.id, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
+                            options={votingDevicesInSelectedKit.map(d => ({ value: d.id!.toString(), label: `${d.name} (${d.serialNumber})`, disabled: participants.some(participant => participant.id !== p.id && participant.assignedGlobalDeviceId === d.id) }))}
+                            placeholder="N/A"
+                            disabled={isReadOnly}
+                          />
+                        </td>
+                        <td className="px-4 py-2"><Button variant="danger" size="sm" onClick={() => handleRemoveParticipant(p.id)} disabled={isReadOnly}><Trash2 size={14} /></Button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </Card>
         );
@@ -1456,17 +1593,23 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
                     </div>
                   )}
-              {editingSessionData?.orsFilePath && (
+              {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && (
                 <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
-                      <h4 className="text-md font-semibold text-gray-700 mb-2">Fichier du questionnaire généré :</h4>
-                  <p className="text-sm text-gray-600 font-mono">{typeof editingSessionData.orsFilePath === 'string' ? editingSessionData.orsFilePath : 'N/A'}</p>
-                  <Button
-                        variant="primary"
-                    onClick={() => { if (typeof editingSessionData?.orsFilePath === 'string') window.dbAPI.openFile(editingSessionData.orsFilePath); }}
-                    className="mt-2 ml-2"
-                  >
-                    Ouvrir le fichier
-                  </Button>
+                  <h4 className="text-md font-semibold text-gray-700 mb-2">Fichiers de questionnaire générés :</h4>
+                  <ul className="list-disc list-inside pl-2 space-y-1">
+                    {editingSessionData.iterations.map((iter, index) => (
+                      <li key={index} className="text-sm text-gray-600">
+                        <span className="font-medium">{iter.name}:</span>
+                        <Button
+                          variant="link"
+                          onClick={() => { if (iter.ors_file_path) window.dbAPI.openFile(iter.ors_file_path); }}
+                          className="ml-2"
+                        >
+                          {iter.ors_file_path}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
          </Card>

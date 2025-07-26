@@ -36,6 +36,8 @@ export interface Session {
   num_session?: string;
   num_stage?: string;
   archived_at?: string;
+  iteration_count?: number;
+  iterations?: SessionIteration[];
 }
 
 // --- Nouveaux types pour la gestion des Kits de Boîtiers ---

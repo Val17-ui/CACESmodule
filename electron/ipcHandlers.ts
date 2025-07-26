@@ -41,6 +41,17 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
     return dbModule.updateSession(id, updates);
   });
 
+  // SessionIterations
+  ipcMain.handle('db-add-or-update-session-iteration', async (event: IpcMainInvokeEvent, iteration: any) => {
+    logger.debug(`[IPC] db-add-or-update-session-iteration: iteration for session ${iteration.session_id}`);
+    return dbModule.addOrUpdateSessionIteration(iteration);
+  });
+
+  ipcMain.handle('db-get-session-iterations', async (event: IpcMainInvokeEvent, sessionId: number) => {
+    logger.debug(`[IPC] db-get-session-iterations: for session ${sessionId}`);
+    return dbModule.getSessionIterations(sessionId);
+  });
+
   // SessionResults
   ipcMain.handle('db-add-bulk-session-results', async (event: IpcMainInvokeEvent, results: SessionResult[]) => {
     logger.debug(`[IPC] db-add-bulk-session-results: adding ${results.length} results`);

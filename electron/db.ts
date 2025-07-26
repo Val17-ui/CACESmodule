@@ -378,18 +378,46 @@ export type {
     VotingDevice, DeviceKit, DeviceKitAssignment
   };
 
-// SessionIterations
-const addSessionIteration = async (iteration: Omit<SessionIteration, 'id'>): Promise<number | undefined> => {
+const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise<number | undefined> => {
     return asyncDbRun(() => {
         try {
-            const stmt = getDb().prepare(`
-                INSERT INTO session_iterations (session_id, iteration_index, name, ors_file_path, status, participants, question_mappings, created_at, updated_at)
-                VALUES (@session_id, @iteration_index, @name, @ors_file_path, @status, @participants, @question_mappings, @created_at, @updated_at)
-            `);
-            const result = stmt.run(iteration);
-            return result.lastInsertRowid as number;
+            const selectStmt = getDb().prepare(
+                'SELECT id FROM session_iterations WHERE session_id = ? AND iteration_index = ?'
+            );
+            const existing = selectStmt.get(iteration.session_id, iteration.iteration_index) as { id: number } | undefined;
+
+            const dataToSave = {
+                ...iteration,
+                participants: JSON.stringify(iteration.participants || []),
+                question_mappings: JSON.stringify(iteration.question_mappings || []),
+                updated_at: new Date().toISOString(),
+            };
+
+            if (existing) {
+                // Update
+                const {
+                    id, session_id, iteration_index, created_at, // Exclude keys that should not be in SET clause
+                    ...updates
+                } = dataToSave;
+
+                const fields = Object.keys(updates);
+                if (fields.length === 0) return existing.id;
+
+                const setClause = fields.map(field => `${field} = @${field}`).join(', ');
+                const updateStmt = getDb().prepare(`UPDATE session_iterations SET ${setClause} WHERE id = @id`);
+                updateStmt.run({ ...updates, id: existing.id });
+                return existing.id;
+            } else {
+                // Insert
+                const insertStmt = getDb().prepare(`
+                    INSERT INTO session_iterations (session_id, iteration_index, name, ors_file_path, status, participants, question_mappings, created_at, updated_at)
+                    VALUES (@session_id, @iteration_index, @name, @ors_file_path, @status, @participants, @question_mappings, @created_at, @updated_at)
+                `);
+                const result = insertStmt.run(dataToSave);
+                return result.lastInsertRowid as number;
+            }
         } catch (error) {
-            _logger.debug(`[DB SessionIterations] Error adding session iteration: ${error}`);
+            _logger.debug(`[DB SessionIterations] Error in addOrUpdateSessionIteration: ${error}`);
             throw error;
         }
     });
@@ -831,7 +859,19 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
       const stmt = getDb().prepare("SELECT * FROM sessions WHERE id = ?");
       const row = stmt.get(id) as any;
       _logger.debug(`[DB Sessions] getSessionById: Raw row for session ${id}: ${JSON.stringify(row)}`);
-      return row ? rowToSession(row) : undefined;
+      if (!row) return undefined;
+
+      const session = rowToSession(row);
+
+      // Fetch and attach iterations
+      const iterations = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ?").all(id) as SessionIteration[];
+      session.iterations = iterations.map(iter => ({
+        ...iter,
+        participants: iter.participants ? JSON.parse(iter.participants as any) : [],
+        question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
+      }));
+
+      return session;
     } catch (error) {
       _logger.debug(`[DB Sessions] Error getting session by id ${id}: ${error}`);
       throw error;
@@ -2006,13 +2046,89 @@ const importAllData = async (data: any) => {
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console _logger.debugs with prefixes for easier debugging of setup and stub calls.
 
-Object.assign(module.exports, { getDb, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks,
-     getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult,
-     addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, addVotingDevice, getAllVotingDevices,
-     updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer,
-     addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers,
-     getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes,
-     getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit,
-     getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit,
-     getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData,
-     addSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId });
+module.exports = {
+    initializeDatabase,
+    getDb,
+    createSchema,
+    addOrUpdateSessionIteration,
+    getSessionIterationsBySessionId,
+    updateSessionIteration,
+    addParticipant,
+    addParticipantAssignment,
+    getParticipantAssignmentsByIterationId,
+    addQuestion,
+    getAllQuestions,
+    getQuestionById,
+    getQuestionsByIds,
+    updateQuestion,
+    deleteQuestion,
+    getQuestionsByBlocId,
+    getQuestionsForSessionBlocks,
+    getAdminSetting,
+    setAdminSetting,
+    getAllAdminSettings,
+    getGlobalPptxTemplate,
+    addSession,
+    getAllSessions,
+    getSessionById,
+    updateSession,
+    deleteSession,
+    addSessionResult,
+    addBulkSessionResults,
+    getAllResults,
+    getResultsForSession,
+    getResultBySessionAndQuestion,
+    updateSessionResult,
+    deleteResultsForSession,
+    addVotingDevice,
+    getAllVotingDevices,
+    updateVotingDevice,
+    deleteVotingDevice,
+    bulkAddVotingDevices,
+    addTrainer,
+    getAllTrainers,
+    getTrainerById,
+    updateTrainer,
+    deleteTrainer,
+    setDefaultTrainer,
+    getDefaultTrainer,
+    addSessionQuestion,
+    addBulkSessionQuestions,
+    getSessionQuestionsBySessionId,
+    deleteSessionQuestionsBySessionId,
+    addSessionBoitier,
+    addBulkSessionBoitiers,
+    getSessionBoitiersBySessionId,
+    deleteSessionBoitiersBySessionId,
+    addReferential,
+    getAllReferentiels,
+    getReferentialByCode,
+    getReferentialById,
+    addTheme,
+    getAllThemes,
+    getThemesByReferentialId,
+    getThemeByCodeAndReferentialId,
+    getThemeById,
+    addBloc,
+    getAllBlocs,
+    getBlocsByThemeId,
+    getBlocByCodeAndThemeId,
+    getBlocById,
+    addDeviceKit,
+    getAllDeviceKits,
+    getDeviceKitById,
+    updateDeviceKit,
+    deleteDeviceKit,
+    getDefaultDeviceKit,
+    setDefaultDeviceKit,
+    createOrUpdateGlobalKit,
+    assignDeviceToKit,
+    removeDeviceFromKit,
+    getVotingDevicesForKit,
+    getKitsForVotingDevice,
+    removeAssignmentsByKitId,
+    removeAssignmentsByVotingDeviceId,
+    calculateBlockUsage,
+    exportAllData,
+    importAllData
+};

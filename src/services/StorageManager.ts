@@ -172,6 +172,17 @@ export const StorageManager = {
     return window.dbAPI.updateSession(id, updates);
   },
 
+  // SessionIterations
+  async addOrUpdateSessionIteration(iteration: any) {
+    if (!window.dbAPI?.addOrUpdateSessionIteration) throw new Error("dbAPI.addOrUpdateSessionIteration is not available.");
+    return window.dbAPI.addOrUpdateSessionIteration(iteration);
+  },
+
+  async getSessionIterations(sessionId: number) {
+    if (!window.dbAPI?.getSessionIterations) throw new Error("dbAPI.getSessionIterations is not available.");
+    return window.dbAPI.getSessionIterations(sessionId);
+  },
+
   // SessionResults
   async addBulkSessionResults(results: any) {
     if (!window.dbAPI?.addBulkSessionResults) throw new Error("dbAPI.addBulkSessionResults is not available.");
