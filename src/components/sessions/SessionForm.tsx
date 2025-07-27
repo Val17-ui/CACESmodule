@@ -216,7 +216,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setModifiedAfterOrsGeneration(false);
             if (sessionData.iterations && sessionData.iterations.length > 0) {
               const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => iter.participants || []);
-              const uniqueParticipants = Array.from(new Map(allParticipantsFromIterations.map(p => [p.identificationCode, p])).values());
+              const uniqueParticipants = allParticipantsFromIterations;
 
               const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
                 ...p_db,
