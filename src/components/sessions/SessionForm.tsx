@@ -68,6 +68,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
   const [displayedBlockDetails, setDisplayedBlockDetails] = useState<Array<{ themeName: string, blocName: string }>>([]);
+  const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
   const [hardwareDevices, setHardwareDevices] = useState<VotingDevice[]>([]);
@@ -759,6 +760,13 @@ const handleGenerateQuestionnaire = async () => {
     }
   };
 
+  const handleResultsFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setResultsFile(file || null);
+    setImportSummary(null);
+    if(file) console.log("Fichier résultats sélectionné:", file.name);
+  };
+
   const handleImportResults = async (iterationIndex: number) => {
     if (!currentSessionDbId || !editingSessionData) {
       setImportSummary("Aucune session active.");
@@ -779,7 +787,7 @@ const handleGenerateQuestionnaire = async () => {
     }
     setImportSummary(`Lecture du fichier ORS pour l'itération ${iteration.name}...`);
     try {
-      const fileData = await window.dbAPI.openResultsFile(iteration.ors_file_path);
+      const fileData = await window.dbAPI.openResultsFile();
       if (fileData.canceled || !fileData.fileBuffer) {
         setImportSummary("Aucun fichier sélectionné ou lecture annulée.");
         return;
