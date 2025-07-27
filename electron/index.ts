@@ -1,7 +1,7 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 const { initializeIpcHandlers } = require('./ipcHandlers.js');
-import { initializeDatabase, getDb } from './db.js';
+import * as dbModule from './db.js';
 import { initializeLogger, getLogger, ILogger } from './utils/logger.js';
 
 
@@ -54,7 +54,7 @@ app.whenReady().then(async () => {
   });
   try {
     logger.info('Initializing database...');
-    initializeDatabase(logger);
+    dbModule.initializeDatabase(logger);
     logger.info('Initializing IPC handlers...');
     initializeIpcHandlers(logger);
     createWindow(logger);
@@ -74,7 +74,7 @@ app.on('window-all-closed', () => {
   const logger = getLogger();
   logger.info('All windows closed, quitting application...');
   if (process.platform !== 'darwin') {
-    getDb().close();
+    dbModule.getDb().close();
     app.quit();
   }
 });
