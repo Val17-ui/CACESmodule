@@ -1092,6 +1092,21 @@ const deleteResultsForSession = async (sessionId: number): Promise<void> => {
   });
 };
 
+const deleteResultsForIteration = async (iterationId: number): Promise<void> => {
+    return asyncDbRun(() => {
+        try {
+            // This is a placeholder implementation. You'll need to adjust it based on your actual schema.
+            // Assuming sessionResults are linked to a session, and you can identify the iteration.
+            // If results are directly linked to an iteration, this would be simpler.
+            const stmt = getDb().prepare("DELETE FROM sessionResults WHERE iterationId = ?");
+            stmt.run(iterationId);
+        } catch (error) {
+            _logger.debug(`[DB SessionResults] Error deleting results for iteration ${iterationId}: ${error}`);
+            throw error;
+        }
+    });
+};
+
 // VotingDevices
 const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number | undefined> => {
   const result = await asyncDbRun(() => {
@@ -2094,6 +2109,7 @@ module.exports = {
     getResultBySessionAndQuestion,
     updateSessionResult,
     deleteResultsForSession,
+    deleteResultsForIteration,
     addVotingDevice,
     getAllVotingDevices,
     updateVotingDevice,

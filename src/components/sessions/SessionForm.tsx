@@ -3,7 +3,6 @@ import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
-import Badge from '../ui/Badge';
 import { Save, FileUp, UserPlus, Trash2, PackagePlus, AlertTriangle } from 'lucide-react';
 import {
   CACESReferential,
@@ -89,8 +88,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [detectedAnomalies, setDetectedAnomalies] = useState<DetectedAnomalies | null>(null);
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
-  const [participantAssignments, setParticipantAssignments] = useState<Record<number, string[]>>({});
-  const [showGlobalView, setShowGlobalView] = useState(false);
+  const [participantAssignments, setParticipantAssignments] = useState<Record<number, { id: string; assignedGlobalDeviceId: number | null }[]>>({});
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -286,7 +284,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     // Only default all participants to the first iteration for NEW sessions.
     if (!sessionIdToLoad && iterationCount === 1) {
         setParticipantAssignments({
-            0: participants.map(p => p.id)
+            0: participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId }))
         });
     }
 }, [participants, iterationCount, sessionIdToLoad]);
@@ -295,31 +293,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     value: r.code,
     label: `${r.code} - ${r.nom_complet}`,
   }));
-
-  const assignDeviceToParticipant = (participantId: string, iterationIndex: number) => {
-    const assignedDevicesInIteration = Object.values(participantAssignments[iterationIndex] || {}).map(p => p.assignedGlobalDeviceId);
-    let nextAvailableDevice: VotingDevice | null = null;
-    for (const deviceInKit of votingDevicesInSelectedKit) {
-        if (deviceInKit.id && !assignedDevicesInIteration.includes(deviceInKit.id)) {
-            nextAvailableDevice = deviceInKit;
-            break;
-        }
-    }
-
-    if (nextAvailableDevice) {
-        const newAssignments = { ...participantAssignments };
-        if (!newAssignments[iterationIndex]) {
-            newAssignments[iterationIndex] = [];
-        }
-        const participantIndex = newAssignments[iterationIndex].findIndex(p => p.id === participantId);
-        if (participantIndex !== -1) {
-            newAssignments[iterationIndex][participantIndex].assignedGlobalDeviceId = nextAvailableDevice.id;
-            setParticipantAssignments(newAssignments);
-        }
-    } else {
-        alert("Tous les boîtiers du kit sélectionné sont déjà assignés dans cette itération.");
-    }
-  };
 
   const handleAddParticipant = () => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
@@ -378,16 +351,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const handleParticipantIterationChange = (participantId: string, newIterationIndex: number) => {
     setParticipantAssignments(prev => {
         const newAssignments = { ...prev };
+        const participantToMove = participants.find(p => p.id === participantId);
+        if (!participantToMove) return prev;
+
         // Remove participant from all iterations first
         Object.keys(newAssignments).forEach(iterIndex => {
             const index = parseInt(iterIndex, 10);
-            newAssignments[index] = (newAssignments[index] || []).filter(id => id !== participantId);
+            newAssignments[index] = (newAssignments[index] || []).filter(p => p.id !== participantId);
         });
+
         // Add to the new iteration
         if (!newAssignments[newIterationIndex]) {
             newAssignments[newIterationIndex] = [];
         }
-        newAssignments[newIterationIndex].push(participantId);
+        newAssignments[newIterationIndex].push({ id: participantToMove.id, assignedGlobalDeviceId: participantToMove.assignedGlobalDeviceId });
         return newAssignments;
     });
   };
@@ -764,6 +741,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
+  const handleResultsFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setResultsFile(file || null);
+    setImportSummary(null);
+    if(file) console.log("Fichier résultats sélectionné:", file.name);
+  };
+
   const handleImportResults = async (iterationIndex: number) => {
     if (!currentSessionDbId || !editingSessionData) {
       setImportSummary("Aucune session active.");
@@ -1002,16 +986,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             logger.info(`Résultats importés pour la session ID ${currentSessionDbId}`, {
               eventType: 'RESULTS_IMPORTED',
               sessionId: currentSessionDbId,
-              fileName: resultsFile.name,
+              fileName: resultsFile?.name,
               resultsCount: savedResultIds.length
             });
           } else {
             setImportSummary("Echec sauvegarde résultats.");
-            logger.warning(`Échec de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FAILED_DB_SAVE', sessionId: currentSessionDbId, fileName: resultsFile.name });
+            logger.warning(`Échec de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FAILED_DB_SAVE', sessionId: currentSessionDbId, fileName: resultsFile?.name });
           }
         } catch (dbError: any) {
           setImportSummary(`Erreur DB sauvegarde résultats: ${dbError.message}`);
-          logger.error(`Erreur DB lors de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_ERROR_DB_SAVE', sessionId: currentSessionDbId, error: dbError, fileName: resultsFile.name });
+          logger.error(`Erreur DB lors de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_ERROR_DB_SAVE', sessionId: currentSessionDbId, error: dbError, fileName: resultsFile?.name });
         }
       } else {
         setImportSummary("Aucun résultat transformé.");
@@ -1384,7 +1368,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               <Input
                 label="Nombre d’itérations"
                 type="number"
-                min="1"
+                min={1}
                 value={iterationCount}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   const count = parseInt(e.target.value, 10);
@@ -1394,7 +1378,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                     setIterationNames(newIterationNames);
                     setActiveIteration(0);
                     setParticipantAssignments(prev => {
-                      const newAssignments: Record<number, string[]> = {};
+                      const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
                       for (let i = 0; i < count; i++) {
                         if (prev[i]) {
                           newAssignments[i] = prev[i];
@@ -1484,7 +1468,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {participants.map((p, index) => {
-                    const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].includes(p.id));
+                    const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.id));
                     return (
                       <tr key={p.id}>
                         {iterationCount > 1 && (
@@ -1526,7 +1510,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             <Button
                     variant={editingSessionData?.orsFilePath ? "secondary" : "primary"}
                 icon={<PackagePlus size={16} />}
-                onClick={handleGenerateQuestionnaireAndOrs}
+                onClick={() => handleGenerateQuestionnaireAndOrs()}
                 disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
                 title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
                        isReadOnly ? "La session est terminée, regénération bloquée." :
@@ -1597,7 +1581,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         <Button
                             variant="secondary"
                             icon={<FileUp size={16} />}
-                            onClick={handleImportResults}
+                            onClick={() => handleImportResults(activeIteration)}
                             disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
                         >
                             Importer les Résultats

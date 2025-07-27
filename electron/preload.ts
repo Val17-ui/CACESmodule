@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   // SessionResults
   addBulkSessionResults: (results: any) => ipcRenderer.invoke('db-add-bulk-session-results', results),
   getResultsForSession: (sessionId: number) => ipcRenderer.invoke('db-get-results-for-session', sessionId),
+  deleteResultsForIteration: (iterationId: number) => ipcRenderer.invoke('db-delete-results-for-iteration', iterationId),
 
   // SessionQuestions
   addBulkSessionQuestions: (questions: any) => ipcRenderer.invoke('db-add-bulk-session-questions', questions),

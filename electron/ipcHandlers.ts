@@ -62,6 +62,11 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
     return dbModule.getResultsForSession(sessionId);
   });
 
+  ipcMain.handle('db-delete-results-for-iteration', async (event: IpcMainInvokeEvent, iterationId: number) => {
+    logger.debug(`[IPC] db-delete-results-for-iteration: ${iterationId}`);
+    return dbModule.deleteResultsForIteration(iterationId);
+  });
+
   // VotingDevices
   ipcMain.handle('db-get-all-voting-devices', async () => {
     logger.debug('[IPC] db-get-all-voting-devices');
