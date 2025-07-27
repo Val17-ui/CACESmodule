@@ -194,6 +194,16 @@ export const StorageManager = {
     return window.dbAPI.getResultsForSession(sessionId);
   },
 
+  async deleteResultsForIteration(iterationId: number): Promise<void> {
+    if (!window.dbAPI?.deleteResultsForIteration) throw new Error("dbAPI.deleteResultsForIteration is not available.");
+    try {
+      await window.dbAPI.deleteResultsForIteration(iterationId);
+    } catch (error) {
+      console.error(`StorageManager: Error deleting results for iteration ${iterationId} via IPC`, error);
+      throw error;
+    }
+  },
+
   // VotingDevices
   async getAllVotingDevices() {
     if (!window.dbAPI?.getAllVotingDevices) throw new Error("dbAPI.getAllVotingDevices is not available.");

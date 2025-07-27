@@ -227,16 +227,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
             // Reconstruct participant assignments from loaded iteration data
             if (sessionData.iterations && sessionData.iterations.length > 0) {
-              const newAssignments: Record<number, string[]> = {};
+              const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
               sessionData.iterations.forEach(iter => {
-                const participantIdsForIter: string[] = [];
+                const participantIdsForIter: { id: string; assignedGlobalDeviceId: number | null }[] = [];
                 if (iter.participants) {
                   iter.participants.forEach((p_iter: DBParticipantType) => {
                     const matchingFormParticipant = formParticipants.find(
                       fp => fp.identificationCode === p_iter.identificationCode
                     );
                     if (matchingFormParticipant) {
-                      participantIdsForIter.push(matchingFormParticipant.id);
+                      participantIdsForIter.push({ id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId });
                     }
                   });
                 }
@@ -450,13 +450,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const updatedParticipants = [...prev, ...newFormParticipants];
         // Assign imported participants to iterations
         const newAssignments = { ...participantAssignments };
-        newFormParticipants.forEach(p => {
-          const targetIteration = parsedData.find(data => data.identificationCode === p.identificationCode)?.iteration || 1; // Default to 1st iteration
+        newFormParticipants.forEach((p, index) => {
+          const parsedInfo = parsedData[index];
+          const targetIteration = parsedInfo?.iteration || 1; // Default to 1st iteration
           const iterationIndex = targetIteration - 1; // Convert to 0-based index
           if (!newAssignments[iterationIndex]) {
             newAssignments[iterationIndex] = [];
           }
-          newAssignments[iterationIndex].push(p.id);
+          newAssignments[iterationIndex].push({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId });
         });
         setParticipantAssignments(newAssignments);
         return updatedParticipants;
@@ -1296,9 +1297,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   const renderTabContent = () => {
     const isReadOnly = editingSessionData?.status === 'completed';
-    const isOrsGeneratedAndNotEditable = !!editingSessionData?.orsFilePath && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
-
-
 
     switch (activeTab) {
       case 'details':
@@ -1467,7 +1465,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {participants.map((p, index) => {
+                  {participants.map((p) => {
                     const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.id));
                     return (
                       <tr key={p.id}>
@@ -1547,7 +1545,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       <li key={index} className="text-sm text-gray-600">
                         <span className="font-medium">{iter.name}:</span>
                         <Button
-                          variant="link"
+                          variant="ghost"
                           onClick={() => { if (iter.ors_file_path) window.dbAPI.openFile(iter.ors_file_path); }}
                           className="ml-2"
                         >

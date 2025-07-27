@@ -64,16 +64,15 @@ function initializeDatabase(loggerInstance: ILogger) {
   _logger.debug("[DB SETUP] SQLite database module loaded and initialized.");
 }
 
-module.exports.initializeDatabase = initializeDatabase;
-
 
 // Schéma de la base de données
-export const getDb = () => {
+const getDb = () => {
     if (!db) {
         throw new Error("Database not initialized. Please call initializeDatabase first.");
     }
     return db;
 };
+
 const createSchema = () => {
   _logger.debug("[DB SCHEMA] Attempting to create/verify schema...");
   const DDL_STATEMENTS = [
@@ -372,12 +371,6 @@ const createSchema = () => {
     throw error; // Renvoyer l'erreur pour indiquer l'échec de createSchema
   }
 };
-
-export type {
-    QuestionWithId, Session, SessionResult, Trainer,
-    SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
-    VotingDevice, DeviceKit, DeviceKitAssignment
-  };
 
 const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise<number | undefined> => {
     return asyncDbRun(() => {
@@ -1093,18 +1086,18 @@ const deleteResultsForSession = async (sessionId: number): Promise<void> => {
 };
 
 const deleteResultsForIteration = async (iterationId: number): Promise<void> => {
-    return asyncDbRun(() => {
-        try {
-            // This is a placeholder implementation. You'll need to adjust it based on your actual schema.
-            // Assuming sessionResults are linked to a session, and you can identify the iteration.
-            // If results are directly linked to an iteration, this would be simpler.
-            const stmt = getDb().prepare("DELETE FROM sessionResults WHERE iterationId = ?");
-            stmt.run(iterationId);
-        } catch (error) {
-            _logger.debug(`[DB SessionResults] Error deleting results for iteration ${iterationId}: ${error}`);
-            throw error;
-        }
-    });
+  return asyncDbRun(() => {
+    try {
+      const iteration = getDb().prepare("SELECT session_id FROM session_iterations WHERE id = ?").get(iterationId) as { session_id: number } | undefined;
+      if (iteration) {
+        const stmt = getDb().prepare("DELETE FROM sessionResults WHERE sessionId = ?");
+        stmt.run(iteration.session_id);
+      }
+    } catch (error) {
+      _logger.debug(`[DB SessionResults] Error deleting results for iteration ${iterationId}: ${error}`);
+      throw error;
+    }
+  });
 };
 
 // VotingDevices
@@ -2075,7 +2068,7 @@ const importAllData = async (data: any) => {
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console _logger.debugs with prefixes for easier debugging of setup and stub calls.
 
-module.exports = {
+export = {
     initializeDatabase,
     getDb,
     createSchema,
