@@ -1398,7 +1398,6 @@ const handleGenerateQuestionnaire = async () => {
                     setIterationCount(count);
                     const newIterationNames = Array.from({ length: count }, (_, i) => `Session_${i + 1}`);
                     setIterationNames(newIterationNames);
-                    setActiveIteration(0);
                     setParticipantAssignments(prev => {
                       const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
                       for (let i = 0; i < count; i++) {
@@ -1575,14 +1574,6 @@ const handleGenerateQuestionnaire = async () => {
                         >
                           {iter.ors_file_path}
                         </Button>
-                        <Button
-                            variant="secondary"
-                            icon={<FileUp size={16} />}
-                            onClick={() => handleImportResults(index)}
-                            disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
-                        >
-                            Importer les Résultats
-                        </Button>
                       </li>
                     ))}
                   </ul>
@@ -1615,6 +1606,17 @@ const handleGenerateQuestionnaire = async () => {
                             <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
                         )}
                         <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
+                        {editingSessionData?.iterations?.map((iter, index) => (
+                            <Button
+                                key={index}
+                                variant="secondary"
+                                icon={<FileUp size={16} />}
+                                onClick={() => handleImportResults(index)}
+                                disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
+                            >
+                                Importer les Résultats pour {iter.name}
+                            </Button>
+                        ))}
                         {importSummary && activeTab === 'importResults' && (
                             <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
                                 <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
