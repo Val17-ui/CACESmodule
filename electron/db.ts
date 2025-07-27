@@ -790,42 +790,42 @@ const JSON_SESSION_FIELDS = [
 ];
 
 const rowToSession = (row: any): Session => {
-  if (!row) return undefined as any;
-  const session: any = { ...row };
-  for (const field of JSON_SESSION_FIELDS) {
-    if (session[field] && typeof session[field] === 'string') {
-      try {
-        session[field] = JSON.parse(session[field]);
-      } catch (e) {
-        _logger.debug(`[DB Sessions] Failed to parse JSON field ${field} for session id ${row.id}: ${e}`);
-        // Conserver la chaîne brute ou mettre à null/undefined selon la politique de gestion d'erreur
-        // Pour l'instant, on garde la chaîne brute si le parsing échoue, mais idéalement, ça ne devrait pas arriver.
-      }
-    } else if (session[field] === null && (field === 'selectedBlocIds' || field === 'ignoredSlideGuids')) {
-      // Pour les champs qui sont des tableaux, s'assurer qu'ils sont des tableaux vides si null en DB,
-      // plutôt que null, pour la cohérence du type.
-      // questionMappings et resolvedImportAnomalies peuvent être null/undefined s'ils ne sont pas définis.
-      session[field] = [];
-    }
-  }
-  // Les champs comme referentielId, selectedKitId, trainerId sont des FK et restent des nombres.
-  // dateSession et createdAt sont des TEXT ISO8601, pas de conversion nécessaire ici.
-  return session as Session;
-};
+	if (!row) return undefined as any;
+	const session: any = { ...row };
+	for (const field of JSON_SESSION_FIELDS) {
+	  if (session[field] && typeof session[field] === 'string') {
+		try {
+		  session[field] = JSON.parse(session[field]);
+		} catch (e) {
+		  _logger.debug(`[DB Sessions] Failed to parse JSON field ${field} for session id ${row.id}: ${e}`);
+		  // Conserver la chaîne brute ou mettre à null/undefined selon la politique de gestion d'erreur
+		  // Pour l'instant, on garde la chaîne brute si le parsing échoue, mais idéalement, ça ne devrait pas arriver.
+		}
+	  } else if (session[field] === null && (field === 'selectedBlocIds' || field === 'ignoredSlideGuids')) {
+		// Pour les champs qui sont des tableaux, s'assurer qu'ils sont des tableaux vides si null en DB,
+		// plutôt que null, pour la cohérence du type.
+		// questionMappings et resolvedImportAnomalies peuvent être null/undefined s'ils ne sont pas définis.
+		session[field] = [];
+	  }
+	}
+	// Les champs comme referentielId, selectedKitId, trainerId sont des FK et restent des nombres.
+	// dateSession et createdAt sont des TEXT ISO8601, pas de conversion nécessaire ici.
+	return session as Session;
+  };
 
-const sessionToRow = (session: Partial<Omit<Session, 'id'> | Session>) => {
-  const rowData: any = { ...session };
-  for (const field of JSON_SESSION_FIELDS) {
-    if (rowData[field] !== undefined) {
-      rowData[field] = JSON.stringify(rowData[field]);
-    }
-  }
-  // Supprimer 'id' si présent et qu'on ne veut pas l'utiliser dans un SET par exemple
-  if ('id' in rowData && !Object.prototype.hasOwnProperty.call(session, 'id')) {
-    delete rowData.id;
-  }
-  return rowData;
-};
+  const sessionToRow = (session: Partial<Omit<Session, 'id'> | Session>) => {
+	const rowData: any = { ...session };
+	for (const field of JSON_SESSION_FIELDS) {
+	  if (rowData[field] !== undefined) {
+		rowData[field] = JSON.stringify(rowData[field]);
+	  }
+	}
+	// Supprimer 'id' si présent et qu'on ne veut pas l'utiliser dans un SET par exemple
+	if ('id' in rowData && !Object.prototype.hasOwnProperty.call(session, 'id')) {
+	  delete rowData.id;
+	}
+	return rowData;
+  };
 
 const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
   _logger.info(`[DB] Adding new session: ${JSON.stringify(session)}`);
@@ -906,11 +906,6 @@ const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>):
       // as sessionToRow might not handle it if it's not a JSON field.
       if (updates.iteration_count !== undefined && !rowUpdates.hasOwnProperty('iteration_count')) {
           rowUpdates.iteration_count = updates.iteration_count;
-      }
-
-      // Remove participants from the update if it exists
-      if (rowUpdates.hasOwnProperty('participants')) {
-        delete rowUpdates.participants;
       }
 
       const fields = Object.keys(rowUpdates).filter(key => key !== 'id');
@@ -2093,5 +2088,3 @@ const importAllData = async (data: any) => {
 // 7. Logging: Added more console _logger.debugs with prefixes for easier debugging of setup and stub calls.
 
 export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData };
-
-[end of electron/db.ts]
