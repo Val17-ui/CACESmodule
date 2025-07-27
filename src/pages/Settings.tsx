@@ -13,7 +13,7 @@ import QuestionForm from '../components/library/QuestionForm';
 import BackupRestore from '../components/settings/BackupRestore';
 import TechnicalSettings from '../components/settings/TechnicalSettings';
 import TrainerSettings from '../components/settings/TrainerSettings';
-import SystemLogViewer from '../components/settings/SystemLogViewer';
+
 import DeviceAndKitManagement from '../components/settings/DeviceAndKitManagement'; // Nouvel import
 import { Users2, FileText as LogIcon } from 'lucide-react';
 
@@ -106,8 +106,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
         return <TechnicalSettings />;
       case 'trainers':
         return <TrainerSettings />;
-      case 'systemLog': // Ajout du cas pour le journal système
-        return <SystemLogViewer />;
+
       default:
         return null;
     }

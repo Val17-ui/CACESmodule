@@ -7,9 +7,19 @@ contextBridge.exposeInMainWorld('dbAPI', {
   addSession: (data: any) => ipcRenderer.invoke('db-add-session', data),
   updateSession: (id: number, updates: any) => ipcRenderer.invoke('db-update-session', id, updates),
 
+  // SessionIterations
+  addOrUpdateSessionIteration: (iteration: any) => ipcRenderer.invoke('db-add-or-update-session-iteration', iteration),
+  getSessionIterations: (sessionId: number) => ipcRenderer.invoke('db-get-session-iterations', sessionId),
+
   // SessionResults
   addBulkSessionResults: (results: any) => ipcRenderer.invoke('db-add-bulk-session-results', results),
   getResultsForSession: (sessionId: number) => ipcRenderer.invoke('db-get-results-for-session', sessionId),
+  deleteResultsForIteration: (iterationId: number) => ipcRenderer.invoke('db-delete-results-for-iteration', iterationId),
+
+  // SessionQuestions
+  addBulkSessionQuestions: (questions: any) => ipcRenderer.invoke('db-add-bulk-session-questions', questions),
+  deleteSessionQuestionsBySessionId: (sessionId: number) => ipcRenderer.invoke('db-delete-session-questions-by-session-id', sessionId),
+  getSessionQuestionsBySessionId: (sessionId: number) => ipcRenderer.invoke('db-get-session-questions-by-session-id', sessionId),
 
   // VotingDevices
   getAllVotingDevices: () => ipcRenderer.invoke('db-get-all-voting-devices'),
@@ -92,6 +102,15 @@ contextBridge.exposeInMainWorld('dbAPI', {
   openExcelFileDialog: () => ipcRenderer.invoke('open-excel-file-dialog'),
   openDirectoryDialog: (filePath?: string) => ipcRenderer.invoke('open-directory-dialog', filePath),
   openResultsFile: () => ipcRenderer.invoke('open-results-file'),
+  openFile: (filePath: string) => ipcRenderer.invoke('open-file', filePath),
+});
+
+contextBridge.exposeInMainWorld('electron', {
+  log: (message: string) => ipcRenderer.send('log', message), // Keep for backward compatibility
+  info: (message: string) => ipcRenderer.send('log:info', message),
+  debug: (message: string) => ipcRenderer.send('log:debug', message),
+  warn: (message: string) => ipcRenderer.send('log:warn', message),
+  error: (message: string) => ipcRenderer.send('log:error', message),
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {

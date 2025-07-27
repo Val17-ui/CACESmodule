@@ -16,7 +16,8 @@ export interface Session {
   participants: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
   // selectionBlocs: SelectedBlock[]; // Remplacé par selectedBlocIds
   selectedBlocIds?: number[]; // Liste des IDs des blocs sélectionnés pour cette session
-  donneesOrs?: Blob | null; // Stockage du fichier .ors généré
+  donneesOrs?: ArrayBuffer | Buffer | null; // Stockage du fichier .ors généré
+  orsFilePath?: string | Blob | ArrayBuffer | null; // Chemin d'accès au fichier .ors
   status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
   questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>;
@@ -31,6 +32,12 @@ export interface Session {
     resolvedAt: string;
   } | null;
   selectedKitId?: number | null; // ID du kit de boîtiers sélectionné pour la session
+  resultsImportedAt?: string | null; // Date/heure de l'importation des résultats
+  num_session?: string;
+  num_stage?: string;
+  archived_at?: string;
+  iteration_count?: number;
+  iterations?: SessionIteration[];
 }
 
 // --- Nouveaux types pour la gestion des Kits de Boîtiers ---
@@ -38,6 +45,7 @@ export interface DeviceKit {
   id?: number; // Auto-incremented primary key
   name: string; // Nom du kit, ex: "Salle A"
   isDefault?: 0 | 1; // 0 pour false, 1 pour true (un seul kit par défaut)
+  is_global?: 0 | 1; // 0 pour false, 1 for true
 }
 
 export interface DeviceKitAssignment {
@@ -122,11 +130,16 @@ export interface Participant {
   // idBoitier: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
   nom: string;
   prenom: string;
+  organization?: string;
   identificationCode?: string; // Code d'identification optionnel
   score?: number; // Score total du participant pour cette session
   reussite?: boolean; // Statut de réussite du participant pour cette session
   assignedGlobalDeviceId?: number | null; // Référence à GlobalDevice.id (VotingDevice.id)
   statusInSession?: 'present' | 'absent'; // Statut du participant pour cette session spécifique
+}
+
+export interface FormParticipant extends Participant {
+  organization?: string;
 }
 
 // L'interface SelectedBlock n'est plus nécessaire car nous stockons selectedBlocIds directement.
@@ -305,13 +318,15 @@ export interface QuestionWithId {
   timeLimit?: number;
   isEliminatory: boolean;
   blocId: number; // Made mandatory
-  image?: Blob | null;
+  image?: string | Blob | null;
   createdAt?: string;
   updatedAt?: string;
   usageCount?: number;
   correctResponseRate?: number;
   slideGuid?: string;
   imageName?: string;
+  version_questionnaire?: number;
+  updated_at?: string;
 }
 
 // Déplacé depuis db.ts
@@ -340,4 +355,26 @@ export interface OverallThemeStats {
   totalQuestionsAnswered: number;
   totalCorrectAnswers: number;
   successRate: number;
+}
+
+// src/types/index.ts
+export interface SessionIteration {
+    id?: number;
+    session_id: number;
+    iteration_index: number;
+    name: string;
+    ors_file_path?: string;
+    status?: 'planned' | 'ready' | 'completed';
+    participants?: Participant[];
+    question_mappings?: QuestionMapping[];
+    created_at: string;
+    updated_at?: string;
+}
+
+export interface ParticipantAssignment {
+    id?: number;
+    session_iteration_id: number;
+    participant_id: number;
+    voting_device_id: number;
+    kit_id: number;
 }

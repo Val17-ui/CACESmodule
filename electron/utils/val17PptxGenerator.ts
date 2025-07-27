@@ -1,5 +1,10 @@
+import * as path from 'path';
+import * as fs from 'fs';
 import JSZip from "jszip";
 import sizeOf from 'image-size';
+import { ILogger } from './logger';
+import { Participant, VotingDevice } from '../../src/types/index';
+import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.
 // These should ideally come from a './val17PptxTypes' import if that file is created with your type definitions.
@@ -85,6 +90,8 @@ interface AppXmlMetadata {
   totalWords: number;
   totalParagraphs: number;
   slideTitles: string[];
+  fonts: string[];
+  themes: string[];
 }
 
 interface SlideSizeAttributes {
@@ -100,31 +107,43 @@ interface ImageDimensions {
   height: number;
 }
 
-function generateGUID(): string {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+
+
+// Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
+
+
+
+function generateGUID(logger: ILogger): string {
+  logger.info('[LOG][val17PptxGenerator] Début de generateGUID.');
+  const result = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16).toUpperCase();
   });
+  logger.info('[LOG][val17PptxGenerator] Fin de generateGUID.');
+  return result;
 }
 
-function escapeXml(unsafe: string): string {
+function escapeXml(unsafe: string, logger: ILogger): string {
+  logger.info('[LOG][val17PptxGenerator] Début de escapeXml.');
   if (typeof unsafe !== "string") {
-    // Ensure input is a string
     if (unsafe === null || unsafe === undefined) return "";
     unsafe = String(unsafe);
   }
-  const cleaned = unsafe.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ""); // prefer-const
-  return cleaned
+  const cleaned = unsafe.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+  const result = cleaned
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;")
     .replace(/--/g, "—");
+  logger.info('[LOG][val17PptxGenerator] Fin de escapeXml.');
+  return result;
 }
 
-function countExistingSlides(zip: JSZip): number {
+function countExistingSlides(zip: JSZip, logger: ILogger): number {
+  logger.info('[LOG][val17PptxGenerator] Début de countExistingSlides.');
   let count = 0;
   zip.folder("ppt/slides")?.forEach((relativePath) => {
     if (
@@ -134,10 +153,12 @@ function countExistingSlides(zip: JSZip): number {
       count++;
     }
   });
+  logger.info(`[LOG][val17PptxGenerator] Fin de countExistingSlides: ${count} slides trouvées.`);
   return count;
 }
 
-function validateQuestions(questions: Val17Question[]): void {
+function validateQuestions(questions: Val17Question[], logger: ILogger): void {
+  logger.info('[LOG][val17PptxGenerator] Début de validateQuestions.');
   if (!Array.isArray(questions) || questions.length === 0) {
     throw new Error("Au moins une question est requise");
   }
@@ -168,12 +189,15 @@ function validateQuestions(questions: Val17Question[]): void {
       throw new Error(`Question ${index + 1}: correctAnswerIndex invalide`);
     }
   });
+  logger.info('[LOG][val17PptxGenerator] Fin de validateQuestions.');
 }
 
 function calculateImageDimensions(
   originalWidth: number,
-  originalHeight: number
+  originalHeight: number,
+  logger: ILogger
 ): ImageDimensions {
+  logger.info('[LOG][val17PptxGenerator] Début de calculateImageDimensions.');
   const imageAreaX = 5486400;
   const imageAreaY = 1600200;
   const imageAreaWidth = 3000000;
@@ -193,36 +217,67 @@ function calculateImageDimensions(
   const offsetX = Math.round((imageAreaWidth - finalWidth) / 2);
   const offsetY = Math.round((imageAreaHeight - finalHeight) / 2);
 
-  return {
+  const result = {
     x: imageAreaX + offsetX,
     y: imageAreaY + offsetY,
     width: finalWidth,
     height: finalHeight,
   };
+  logger.info('[LOG][val17PptxGenerator] Fin de calculateImageDimensions.');
+  return result;
 }
 
-function processCloudUrl(url: string): string {
+function processCloudUrl(url: string, logger: ILogger): string {
+  logger.info('[LOG][val17PptxGenerator] Début de processCloudUrl.');
   try {
     if (url.includes("dropbox.com")) {
       return url.replace("?dl=0", "?dl=1");
     }
     return url;
   } catch (error) {
-    console.error("Erreur lors du traitement de l'URL:", error);
+    logger.error(`Erreur lors du traitement de l'URL: ${error}`);
     return url;
+  } finally {
+    logger.info('[LOG][val17PptxGenerator] Fin de processCloudUrl.');
   }
 }
 
-async function downloadImageFromCloudWithDimensions(url: string): Promise<{
+async function loadLocalImageWithDimensions(filePath: string, logger: ILogger): Promise<{
   data: Buffer;
   extension: string;
   width: number;
   height: number;
 } | null> {
+  logger.info(`[LOG][val17PptxGenerator] Début de loadLocalImageWithDimensions pour ${filePath}.`);
+  try {
+    const imageBuffer = fs.readFileSync(filePath);
+    const dimensions = sizeOf(imageBuffer);
+    const extension = path.extname(filePath).substring(1) || 'jpg';
+    const result = {
+      data: imageBuffer,
+      extension: extension,
+      width: dimensions.width || 1920,
+      height: dimensions.height || 1080,
+    };
+    logger.info(`[LOG][val17PptxGenerator] Fin de loadLocalImageWithDimensions pour ${filePath}.`);
+    return result;
+  } catch (error) {
+    logger.error(`Erreur lors du chargement de l'image locale : ${error}`);
+    return null;
+  }
+}
+
+async function downloadImageFromCloudWithDimensions(url: string, logger: ILogger): Promise<{
+  data: Buffer;
+  extension: string;
+  width: number;
+  height: number;
+} | null> {
+  logger.info(`[LOG][val17PptxGenerator] Début de downloadImageFromCloudWithDimensions pour ${url}.`);
   try {
     let finalUrl = url;
     if (url.includes("dropbox.com")) {
-      finalUrl = processCloudUrl(url);
+      finalUrl = processCloudUrl(url, logger);
     }
     const response = await fetch(finalUrl);
     if (!response.ok) {
@@ -235,22 +290,26 @@ async function downloadImageFromCloudWithDimensions(url: string): Promise<{
     const dimensions = sizeOf(imageBuffer);
     const extension = dimensions.type || 'jpg';
 
-    return {
+    const result = {
       data: imageBuffer,
       extension,
       width: dimensions.width || 1920,
       height: dimensions.height || 1080,
     };
+    logger.info(`[LOG][val17PptxGenerator] Fin de downloadImageFromCloudWithDimensions pour ${url}.`);
+    return result;
   } catch (error) {
-    console.error(`[IMAGE] ✗ Échec pour ${url}:`, error);
+    logger.error(`[IMAGE] ✗ Échec pour ${url}: ${error}`);
     return null;
   }
 }
 
 function updateContentTypesForImages(
   content: string,
-  imageExtensions: Set<string>
+  imageExtensions: Set<string>,
+  logger: ILogger
 ): string {
+  logger.info('[LOG][val17PptxGenerator] Début de updateContentTypesForImages.');
   let updated = content;
   imageExtensions.forEach((ext) => {
     if (!updated.includes(`Extension="${ext}"`)) {
@@ -278,12 +337,15 @@ function updateContentTypesForImages(
       }
     }
   });
+  logger.info('[LOG][val17PptxGenerator] Fin de updateContentTypesForImages.');
   return updated;
 }
 
 async function findNextAvailableSlideLayoutId(
-  zip: JSZip
+  zip: JSZip,
+  logger: ILogger
 ): Promise<{ layoutId: number; layoutFileName: string; rId: string }> {
+  logger.info('[LOG][val17PptxGenerator] Début de findNextAvailableSlideLayoutId.');
   const masterRelsFile = zip.file(
     "ppt/slideMasters/_rels/slideMaster1.xml.rels"
   );
@@ -298,9 +360,10 @@ async function findNextAvailableSlideLayoutId(
     if (num > maxLayoutNum) maxLayoutNum = num;
   });
   const nextLayoutNum = maxLayoutNum + 1;
-  const allRIds = extractExistingRIds(masterRelsContent);
-  const existingRIds = allRIds.map((m) => m.rId); 
-  const nextRId = getNextAvailableRId(existingRIds); 
+  const allRIds = extractExistingRIds(masterRelsContent, logger);
+  const existingRIds = allRIds.map((m) => m.rId);
+  const nextRId = getNextAvailableRId(existingRIds, logger);
+  logger.info('[LOG][val17PptxGenerator] Fin de findNextAvailableSlideLayoutId.');
   return {
     layoutId: nextLayoutNum,
     layoutFileName: `slideLayout${nextLayoutNum}.xml`,
@@ -309,30 +372,33 @@ async function findNextAvailableSlideLayoutId(
 }
 
 async function ensureOmbeaSlideLayoutExists(
-  zip: JSZip
+  zip: JSZip,
+  logger: ILogger
 ): Promise<{ layoutFileName: string; layoutRId: string }> {
+  logger.info('[LOG][val17PptxGenerator] Début de ensureOmbeaSlideLayoutExists.');
   const { layoutId, layoutFileName, rId } =
-    await findNextAvailableSlideLayoutId(zip);
-  const slideLayoutContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="tx" preserve="1"><p:cSld name="Titre et texte"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Titre 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez le style du titre</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Espace réservé du texte 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="0"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez les styles du texte du masque</a:t></a:r></a:p><a:p><a:pPr lvl="1"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Deuxième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="2"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Troisième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="3"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Quatrième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="4"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Cinquième niveau</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Espace réservé de la date 3"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="dt" sz="half" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{ABB4FD2C-0372-488A-B992-EB1BD753A34A}" type="datetimeFigureOut"><a:rPr lang="fr-FR" smtClean=... [truncated]
-    Math.floor(Math.random() * 2147483647) + 1
-  }"/></p:ext></p:extLst></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
+    await findNextAvailableSlideLayoutId(zip, logger);
+  const slideLayoutContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="tx"><p:cSld name="Titre et texte"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Titre 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez le style du titre</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Espace réservé du texte 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="0"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Modifiez les styles du texte du masque</a:t></a:r></a:p><a:p><a:pPr lvl="1"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Deuxième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="2"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Troisième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="3"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Quatrième niveau</a:t></a:r></a:p><a:p><a:pPr lvl="4"/><a:r><a:rPr lang="fr-FR" smtClean="0"/><a:t>Cinquième niveau</a:t></a:r><a:endParaRPr lang="fr-FR"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Espace réservé de la date 3"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="dt" sz="half" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{9C62A8FC-B0A8-4E22-8F70-522498ABD20C}" type="datetimeFigureOut"><a:rPr lang="fr-FR" smtClean="0"/><a:t>24/07/2025</a:t></a:fld><a:endParaRPr lang="fr-FR" dirty="0"/></a:p></p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
   zip.file(`ppt/slideLayouts/${layoutFileName}`, slideLayoutContent);
   const slideLayoutRelsContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`;
   zip.file(
     `ppt/slideLayouts/_rels/${layoutFileName}.rels`,
     slideLayoutRelsContent
   );
-  await updateSlideMasterRelsForNewLayout(zip, layoutFileName, rId);
-  await updateSlideMasterForNewLayout(zip, layoutId, rId);
-  await updateContentTypesForNewLayout(zip, layoutFileName);
+  await updateSlideMasterRelsForNewLayout(zip, layoutFileName, rId, logger);
+  await updateSlideMasterForNewLayout(zip, layoutId, rId, logger);
+  await updateContentTypesForNewLayout(zip, layoutFileName, logger);
+  logger.info('[LOG][val17PptxGenerator] Fin de ensureOmbeaSlideLayoutExists.');
   return { layoutFileName: layoutFileName, layoutRId: rId };
 }
 
 async function updateSlideMasterRelsForNewLayout(
   zip: JSZip,
   layoutFileName: string,
-  rId: string
+  rId: string,
+  logger: ILogger
 ): Promise<void> {
+  logger.info('[LOG][val17PptxGenerator] Début de updateSlideMasterRelsForNewLayout.');
   const masterRelsFile = zip.file(
     "ppt/slideMasters/_rels/slideMaster1.xml.rels"
   );
@@ -347,20 +413,23 @@ async function updateSlideMasterRelsForNewLayout(
       content.slice(insertPoint);
     zip.file("ppt/slideMasters/_rels/slideMaster1.xml.rels", content);
   }
+  logger.info('[LOG][val17PptxGenerator] Fin de updateSlideMasterRelsForNewLayout.');
 }
 
 async function updateSlideMasterForNewLayout(
   zip: JSZip,
   layoutId: number,
-  rId: string
+  rId: string,
+  logger: ILogger
 ): Promise<void> {
+  logger.info('[LOG][val17PptxGenerator] Début de updateSlideMasterForNewLayout.');
   const masterFile = zip.file("ppt/slideMasters/slideMaster1.xml");
   if (masterFile) {
     let content = await masterFile.async("string");
     const layoutIdLstEnd = content.indexOf("</p:sldLayoutIdLst>");
     if (layoutIdLstEnd > -1) {
       const layoutIdValue = 2147483648 + layoutId;
-      const newLayoutId = `\n    <p:sldId id="${layoutIdValue}" r:id="${rId}"/>`;
+      const newLayoutId = `\n    <p:sldLayoutId id="${layoutIdValue}" r:id="${rId}"/>`;
       content =
         content.slice(0, layoutIdLstEnd) +
         newLayoutId +
@@ -369,12 +438,15 @@ async function updateSlideMasterForNewLayout(
       zip.file("ppt/slideMasters/slideMaster1.xml", content);
     }
   }
+  logger.info('[LOG][val17PptxGenerator] Fin de updateSlideMasterForNewLayout.');
 }
 
 async function updateContentTypesForNewLayout(
   zip: JSZip,
-  layoutFileName: string
+  layoutFileName: string,
+  logger: ILogger
 ): Promise<void> {
+  logger.info('[LOG][val17PptxGenerator] Début de updateContentTypesForNewLayout.');
   const contentTypesFile = zip.file("[Content_Types].xml");
   if (contentTypesFile) {
     let content = await contentTypesFile.async("string");
@@ -395,31 +467,40 @@ async function updateContentTypesForNewLayout(
       }
     }
   }
+  logger.info('[LOG][val17PptxGenerator] Fin de updateContentTypesForNewLayout.');
 }
 
 function createIntroTitleSlideXml(
   sessionInfo: SessionInfo,
-  slideNumber: number
+  slideNumber: number,
+  logger: ILogger
 ): string {
+  logger.info('[LOG][val17PptxGenerator] Début de createIntroTitleSlideXml.');
   const slideComment = `<!-- Intro Slide ${slideNumber}: Title -->`;
   const baseId = slideNumber * 1000;
   const titlePlaceholder = `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 1}" name="Title Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="title"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-    sessionInfo.title
+    sessionInfo.title,
+    logger
   )}</a:t></a:r></a:p>\n    </p:txBody>\n  </p:sp>`;
 
   const datePlaceholder = sessionInfo.date
     ? `<p:sp>\n    <p:nvSpPr>\n      <p:cNvPr id="${baseId + 2}" name="Subtitle Placeholder"/>\n      <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n      <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>\n    </p:nvSpPr>\n    <p:spPr/>\n    <p:txBody>\n      <a:bodyPr/><a:lstStyle/>\n      <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
-        sessionInfo.date
+        sessionInfo.date,
+        logger
       )}</a:t></a:r></a:p>\n    </p:txBody>\n  </p:sp>`
     : "";
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n  ${slideComment}\n  <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n    <p:cSld>\n      <p:spTree>\n        <p:nvGrpSpPr>\n          <p:cNvPr id="${baseId}" name="Intro Title Group"/>\n          <p:cNvGrpSpPr/><p:nvPr/>\n        </p:nvGrpSpPr>\n        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n        ${titlePlaceholder}\n        ${datePlaceholder}\n      </p:spTree>\n    </p:cSld>\n    <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n  </p:sld>`;
+  const result = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n  ${slideComment}\n  <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n    <p:cSld>\n      <p:spTree>\n        <p:nvGrpSpPr>\n          <p:cNvPr id="${baseId}" name="Intro Title Group"/>\n          <p:cNvGrpSpPr/><p:nvPr/>\n        </p:nvGrpSpPr>\n        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n        ${titlePlaceholder}\n        ${datePlaceholder}\n      </p:spTree>\n    </p:cSld>\n    <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n  </p:sld>`;
+  logger.info('[LOG][val17PptxGenerator] Fin de createIntroTitleSlideXml.');
+  return result;
 }
 
 function generateTableRowsXml(
   participants: ParticipantForGenerator[],
-  rowHeightEMU: number = 370840
+  rowHeightEMU: number = 370840,
+  logger: ILogger
 ): string {
+  logger.info('[LOG][val17PptxGenerator] Début de generateTableRowsXml.');
   let tableRowsXml = "";
   const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
 
@@ -430,26 +511,27 @@ function generateTableRowsXml(
   }
 
   headers.forEach(headerText => {
-    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1" lang="fr-FR"/><a:t>${escapeXml(headerText, logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
   });
   tableRowsXml += `</a:tr>`;
 
   participants.forEach((participant, index) => {
     tableRowsXml += `<a:tr h="${rowHeightEMU}">`;
     tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${index + 1}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
-    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.idBoitier || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+    tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     if (hasOrganizationData) {
-      tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "")}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     }
     tableRowsXml += `</a:tr>`;
   });
-
+  logger.info('[LOG][val17PptxGenerator] Fin de generateTableRowsXml.');
   return tableRowsXml;
 }
 
-function generateTableGraphicFrame(participants: ParticipantForGenerator[], baseSpId: number): string {
+function generateTableGraphicFrame(participants: ParticipantForGenerator[], baseSpId: number, logger: ILogger): string {
+    logger.info('[LOG][val17PptxGenerator] Début de generateTableGraphicFrame.');
     const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
 
     const slideWidthEMU = 12192000;
@@ -482,16 +564,17 @@ function generateTableGraphicFrame(participants: ParticipantForGenerator[], base
         colWidths.push(Math.round(tableCx * 0.335));
         colWidths.push(Math.round(tableCx * 0.335));
     }
-    const sumWidths = colWidths.reduce((a, b) => a + b, 0); 
+    const sumWidths = colWidths.reduce((a, b) => a + b, 0);
     if (sumWidths !== tableCx && colWidths.length > 0) {
         colWidths[colWidths.length - 1] += (tableCx - sumWidths);
     }
 
-    const tableRows = generateTableRowsXml(participants, rowHeightEMU);
+    const tableRows = generateTableRowsXml(participants, rowHeightEMU, logger);
 
     let tableXml = `<p:graphicFrame>\n      <p:nvGraphicFramePr>\n        <p:cNvPr id="${baseSpId}" name="Tableau Participants"/>\n        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>\n        <p:nvPr/>\n      </p:nvGraphicFramePr>\n      <p:xfrm>\n        <a:off x="${tableX}" y="${tableY}"/>\n        <a:ext cx="${tableCx}" cy="${tableCy}"/>\n      </p:xfrm>\n      <a:graphic>\n        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">\n          <a:tbl>\n            <a:tblPr firstRow="1" bandRow="1">\n              <a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>\n            </a:tblPr>\n            <a:tblGrid>`;
     colWidths.forEach(w => { tableXml += `<a:gridCol w="${w}"/>`; });
     tableXml += `</a:tblGrid>${tableRows}</a:tbl>\n        </a:graphicData>\n      </a:graphic>\n    </p:graphicFrame>`;
+    logger.info('[LOG][val17PptxGenerator] Fin de generateTableGraphicFrame.');
     return tableXml;
 }
 
@@ -499,35 +582,70 @@ function createIntroParticipantsSlideXml(
   participants: ParticipantForGenerator[],
   slideNumber: number,
   layoutPptxFilePath: string | null,
-  layoutXmlAsSlideBase: string | null,
   layoutGraphicFrameTarget: string | null,
   layoutTblPr: string | null,
-  layoutTblGrid: string | null
+  layoutTblGrid: string | null,
+  logger: ILogger
 ): string {
+  logger.info('[LOG][val17PptxGenerator] Début de createIntroParticipantsSlideXml.');
   const slideComment = `<!-- Intro Slide ${slideNumber}: Participants -->`;
   const titleTextToSet = "Participants";
 
   let finalSlideXml = "";
 
-  if (layoutXmlAsSlideBase && layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
-    console.log("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
-    const tableRows = generateTableRowsXml(participants);
+  if (layoutGraphicFrameTarget && layoutTblPr && layoutTblGrid) {
+    logger.debug("[DEBUG_PART_SLIDE_XML] Utilisation du tableau et du layout fournis.");
+    const tableRows = generateTableRowsXml(participants, undefined, logger);
+
+    // Re-créer le contenu de <a:tbl>
     const newTblContent = `${layoutTblPr}${layoutTblGrid}${tableRows}`;
-    const newFullTblXml = `<a:tbl>${newTblContent}</a:tbl>`;
+
+    // Remplacer l'ancien <a:tbl> par le nouveau
     const graphicFrameWithNewTable = layoutGraphicFrameTarget.replace(
-      /<a:tbl>[\s\S]*?<\/a:tbl>/,
-      newFullTblXml
+        /<a:tbl>[\s\S]*?<\/a:tbl>/,
+        `<a:tbl>${newTblContent}</a:tbl>`
     );
 
-    const baseSlideStructure = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000 + 0}" name="Group Shape"/> <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p></a:txBody>\n          </p:sp>\n          ${graphicFrameWithNewTable}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
-    finalSlideXml = baseSlideStructure;
+    // Construire une structure de diapositive propre
+    const spTreeContent = `
+        <p:nvGrpSpPr>
+          <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>
+          <p:cNvGrpSpPr/><p:nvPr/>
+        </p:nvGrpSpPr>
+        <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+        <p:sp>
+          <p:nvSpPr>
+            <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>
+            <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+            <p:nvPr><p:ph type="title"/></p:nvPr>
+          </p:nvSpPr>
+          <p:spPr/>
+          <p:txBody>
+            <a:bodyPr/><a:lstStyle/>
+            <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet, logger)}</a:t></a:r></a:p>
+          </p:txBody>
+        </p:sp>
+        ${graphicFrameWithNewTable}
+    `;
+
+    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    ${slideComment}
+    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+      <p:cSld name="${layoutPptxFilePath ? path.basename(layoutPptxFilePath, '.xml') : 'ParticipantsLayout'}">
+        <p:spTree>${spTreeContent}</p:spTree>
+      </p:cSld>
+      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+    </p:sld>`;
+
+    logger.debug(`[DEBUG_PART_SLIDE_XML] Final generated XML for participants slide (v3): ${finalSlideXml.substring(0, 1500)}...`);
 
   } else {
-    console.log("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
-    const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2);
+    logger.debug("[DEBUG_PART_SLIDE_XML] Fallback: Génération dynamique complète du tableau des participants.");
+    const dynamicTableGraphicFrame = generateTableGraphicFrame(participants, slideNumber * 1000 + 2, logger);
 
-    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? layoutPptxFilePath.substring(layoutPptxFilePath.lastIndexOf('/') + 1, layoutPptxFilePath.lastIndexOf('.')) : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
+    finalSlideXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n    ${slideComment}\n    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n      <p:cSld name="${layoutPptxFilePath ? path.basename(layoutPptxFilePath, '.xml') : 'ParticipantsLayout'}">\n        <p:spTree>\n          <p:nvGrpSpPr>\n            <p:cNvPr id="${slideNumber * 1000}" name="Content Group"/>\n            <p:cNvGrpSpPr/><p:nvPr/>\n          </p:nvGrpSpPr>\n          <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\n          <p:sp>\n            <p:nvSpPr>\n              <p:cNvPr id="${slideNumber * 1000 + 1}" name="Title"/>\n              <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\n              <p:nvPr><p:ph type="title"/></p:nvPr>\n            </p:nvSpPr>\n            <p:spPr/>\n            <p:txBody>\n              <a:bodyPr/><a:lstStyle/>\n              <a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(titleTextToSet, logger)}</a:t></a:r></a:p>\n            </p:txBody>\n          </p:sp>\n          ${dynamicTableGraphicFrame}\n        </p:spTree>\n      </p:cSld>\n      <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>\n    </p:sld>`;
   }
+  logger.info('[LOG][val17PptxGenerator] Fin de createIntroParticipantsSlideXml.');
   return finalSlideXml;
 }
 
@@ -565,23 +683,19 @@ function createSlideXml(
   options: string[],
   slideNumber: number,
   duration: number = 30,
+  logger: ILogger,
   imageDimensions?: ImageDimensions,
   ombeaConfig?: ConfigOptions
 ): string {
+  logger.info(`[LOG][val17PptxGenerator] Début de createSlideXml pour la slide ${slideNumber}.`);
   const slideComment = `<!-- Slide ${slideNumber} -->`;
-  // slideNumber est le numéro de la diapositive dans le lot de questions (1ère q, 2ème q)
-  // et non le numéro absolu de la diapositive dans la présentation finale.
+  const grpId = 1;
+  const titleId = 2;
+  const bodyId = 3;
+  const countdownId = 4;
+  const imageId = 5;
 
-  const grpId = 1; // ID fixe pour le p:nvGrpSpPr principal de la diapositive de question
-  const titleId = 2; // ID pour la forme du titre
-  const bodyId = 3;  // ID pour la forme des réponses/options
-  const countdownId = 4; // ID pour la forme du compte-à-rebours
-  const imageId = 5; // ID pour la forme de l'image (si présente)
-
-  // L'ancienne méthode de calcul des IDs basée sur slideNumber * 100 est supprimée
-  // pour ces éléments spécifiques dans les diapositives de questions OMBEA.
-
-  const countdownDisplayText = 
+  const countdownDisplayText =
     ombeaConfig?.pollTimeLimit !== undefined
       ? ombeaConfig.pollTimeLimit
       : duration;
@@ -598,22 +712,28 @@ function createSlideXml(
       styleMap[ombeaConfig.answersBulletStyle] || "arabicPeriod";
   }
   const listStyleXml = `<a:lstStyle><a:lvl1pPr marL="514350" indent="-514350" algn="l"><a:buFontTx/><a:buClrTx/><a:buSzTx/><a:buAutoNum type="${bulletTypeForXml}"/></a:lvl1pPr></a:lstStyle>`;
-  let xmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>${slideComment}<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="${grpId}" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="${titleId}" name="Titre ${slideNumber}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/><p:custDataLst><p:tags r:id="rId2"/></p:custDataLst></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" dirty="0"/><a:t>${escapeXml(
-    question
-  )}</a:t></a:r><a:endParaRPr lang="fr-FR" dirty="0"/></a:p></p:txBody></p:sp>`;
+  const questionLines = question.split('\n');
+  const questionXml = questionLines.map((line, index) => {
+    const text = escapeXml(line, logger);
+    if (index === questionLines.length - 1) {
+      return `<a:r><a:rPr lang="fr-FR" dirty="0"/><a:t>${text}</a:t></a:r>`;
+    }
+    return `<a:r><a:rPr lang="fr-FR" dirty="0"/><a:t>${text}</a:t></a:r><a:br/>`;
+  }).join('');
+
+  let xmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>${slideComment}<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="${grpId}" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="${titleId}" name="Titre ${slideNumber}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/><p:custDataLst><p:tags r:id="rId2"/></p:custDataLst></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p>${questionXml}<a:endParaRPr lang="fr-FR" dirty="0"/></a:p></p:txBody></p:sp>`;
   if (imageDimensions) {
     xmlContent += `<p:pic><p:nvPicPr><p:cNvPr id="${imageId}" name="Image ${slideNumber}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rId6"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="${imageDimensions.x}" y="${imageDimensions.y}"/><a:ext cx="${imageDimensions.width}" cy="${imageDimensions.height}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
   }
   xmlContent += `<p:sp><p:nvSpPr><p:cNvPr id="${bodyId}" name="Espace réservé du texte ${slideNumber}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/><p:custDataLst><p:tags r:id="rId3"/></p:custDataLst></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1600200"/><a:ext cx="4572000" cy="4525963"/></a:xfrm></p:spPr><p:txBody><a:bodyPr/>${listStyleXml}${options
     .map(
       (option) =>
-        `<a:p><a:pPr><a:buFont typeface="+mj-lt"/><a:buAutoNum type="${bulletTypeForXml}"/></a:pPr><a:r><a:rPr lang="fr-FR" dirty="0"/><a:t>${escapeXml(
-          option
+        `<a:p><a:pPr><a:buFont typeface="+mj-lt"/><a:buAutoNum type="${bulletTypeForXml}"/></a:pPr><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(
+          option, logger
         )}</a:t></a:r></a:p>`
     )
-    .join("")}</p:txBody></p:sp>`;
+    .join("")}</p:txBody></p:sp>`;;
   if (Number(countdownDisplayText) > 0) {
-    // Nouvelles coordonnées X=7380000 (20.5cm), Y=3722400 (10.34cm)
     xmlContent += `<p:sp><p:nvSpPr><p:cNvPr id="${countdownId}" name="OMBEA Countdown ${slideNumber}"/><p:cNvSpPr txBox="1"/><p:nvPr><p:custDataLst><p:tags r:id="rId4"/></p:custDataLst></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="7380000" y="3722400"/><a:ext cx="1524000" cy="769441"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr vert="horz" rtlCol="0" anchor="ctr" anchorCtr="1"><a:spAutoFit/></a:bodyPr><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" sz="4400" smtClean="0"/><a:t>${String(
       countdownDisplayText
     )}</a:t></a:r><a:endParaRPr lang="fr-FR" sz="4400"/></a:p></p:txBody></p:sp>`;
@@ -621,17 +741,23 @@ function createSlideXml(
   xmlContent += `</p:spTree><p:custDataLst><p:tags r:id="rId1"/></p:custDataLst><p:extLst><p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}"><p14:creationId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="${
     Math.floor(Math.random() * 2147483647) + 1
   }"/></p:ext></p:extLst></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr><p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"/></p:par></p:tnLst></p:timing></p:sld>`;
+  logger.info(`[LOG][val17PptxGenerator] Fin de createSlideXml pour la slide ${slideNumber}.`);
   return xmlContent;
 }
 
 function calculateBaseTagNumber(
   slideNumberInBatch: number,
-  tagOffset: number = 0
+  tagOffset: number = 0,
+  logger: ILogger
 ): number {
-  return tagOffset + 1 + (slideNumberInBatch - 1) * 4;
+  logger.info('[LOG][val17PptxGenerator] Début de calculateBaseTagNumber.');
+  const result = tagOffset + 1 + (slideNumberInBatch - 1) * 4;
+  logger.info('[LOG][val17PptxGenerator] Fin de calculateBaseTagNumber.');
+  return result;
 }
 
-function findHighestExistingTagNumber(zip: JSZip): number {
+function findHighestExistingTagNumber(zip: JSZip, logger: ILogger): number {
+  logger.info('[LOG][val17PptxGenerator] Début de findHighestExistingTagNumber.');
   let maxTagNumber = 0;
   const tagsFolder = zip.folder("ppt/tags");
   if (tagsFolder) {
@@ -643,14 +769,17 @@ function findHighestExistingTagNumber(zip: JSZip): number {
       }
     });
   }
+  logger.info(`[LOG][val17PptxGenerator] Fin de findHighestExistingTagNumber: ${maxTagNumber} tags trouvés.`);
   return maxTagNumber;
 }
 
 async function findLayoutByCSldName(
   zip: JSZip,
   targetName: string,
-  layoutType: "title" | "participants"
+  layoutType: "title" | "participants",
+  logger: ILogger
 ): Promise<string | null> {
+  logger.info(`[LOG][val17PptxGenerator] Début de findLayoutByCSldName pour ${targetName}.`);
   const layoutsFolder = zip.folder("ppt/slideLayouts");
   if (!layoutsFolder) {
     return null;
@@ -686,6 +815,7 @@ async function findLayoutByCSldName(
           const normalizedCSldNameAttr = cSldNameAttr.toLowerCase().replace(/\s+/g, "");
 
           if (normalizedCSldNameAttr === normalizedTargetName) {
+            logger.info(`[LOG][val17PptxGenerator] Fin de findLayoutByCSldName: ${fileEntry.name} trouvé.`);
             return fileEntry.name;
           }
 
@@ -704,30 +834,35 @@ async function findLayoutByCSldName(
               }
 
               if (targetMatchesAliasOrType) {
+                logger.info(`[LOG][val17PptxGenerator] Fin de findLayoutByCSldName: ${fileEntry.name} trouvé par alias.`);
                 return fileEntry.name;
               }
             }
           }
         }
-       } catch (_error) { 
-        
+       } catch (_error) {
+
       }
     }
   }
+  logger.info(`[LOG][val17PptxGenerator] Fin de findLayoutByCSldName: aucun layout trouvé.`);
   return null;
 }
 
 function ensureTagContinuity(
   zip: JSZip,
   startingTag: number,
-  endingTag: number
+  endingTag: number,
+  logger: ILogger
 ): string[] {
+  logger.info('[LOG][val17PptxGenerator] Début de ensureTagContinuity.');
   const warnings: string[] = [];
   for (let i = startingTag; i <= endingTag; i++) {
     if (!zip.file(`ppt/tags/tag${i}.xml`)) {
       warnings.push(`Attention: tag${i}.xml manquant dans la séquence`);
     }
   }
+  logger.info('[LOG][val17PptxGenerator] Fin de ensureTagContinuity.');
   return warnings;
 }
 
@@ -736,12 +871,14 @@ function createSlideTagFiles(
   options: string[],
   correctAnswerIndex: number | undefined,
   duration: number,
-  ombeaConfig?: ConfigOptions,
+  ombeaConfig: ConfigOptions | undefined,
+  logger: ILogger,
   tagOffset: number = 0
 ): TagInfo[] {
-  const baseTagNumber = calculateBaseTagNumber(questionIndexInBatch, tagOffset);
-  const slideGuid = generateGUID();
-  const points = options 
+  logger.info(`[LOG][val17PptxGenerator] Début de createSlideTagFiles pour la question ${questionIndexInBatch}.`);
+  const baseTagNumber = calculateBaseTagNumber(questionIndexInBatch, tagOffset, logger);
+    const slideGuid = generateGUID(logger);
+  const points = options
     .map((_, index) =>
       correctAnswerIndex !== undefined && index === correctAnswerIndex
         ? "1.00"
@@ -780,18 +917,20 @@ function createSlideTagFiles(
     tagNumber: baseTagNumber + 2,
     fileName: `tag${baseTagNumber + 2}.xml`,
     content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tag name="OR_SHAPE_TYPE" val="OR_ANSWERS"/><p:tag name="OR_ANSWER_POINTS" val="${points}"/><p:tag name="OR_ANSWERS_TEXT" val="${options
-      .map(escapeXml)
-      .join("&#13;")}"/></p:tagLst>`, 
+      .map(option => escapeXml(option, logger))
+      .join("&#13;")}"/></p:tagLst>`,
   });
   tags.push({
     tagNumber: baseTagNumber + 3,
     fileName: `tag${baseTagNumber + 3}.xml`,
-    content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tag name="OR_SHAPE_TYPE" val="OR_COUNTDOWN"/></p:tagLst>`, 
+    content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tag name="OR_SHAPE_TYPE" val="OR_COUNTDOWN"/></p:tagLst>`,
   });
+  logger.info(`[LOG][val17PptxGenerator] Fin de createSlideTagFiles pour la question ${questionIndexInBatch}.`);
   return tags;
 }
 
-function extractExistingRIds(relsContent: string): RIdMapping[] {
+function extractExistingRIds(relsContent: string, logger: ILogger): RIdMapping[] {
+  logger.info('[LOG][val17PptxGenerator] Début de extractExistingRIds.');
   const mappings: RIdMapping[] = [];
   const relationshipRegex = /<Relationship\s+([^>]+)>/g;
   let match;
@@ -808,10 +947,12 @@ function extractExistingRIds(relsContent: string): RIdMapping[] {
       });
     }
   }
+  logger.info('[LOG][val17PptxGenerator] Fin de extractExistingRIds.');
   return mappings;
 }
 
-function getNextAvailableRId(existingRIds: string[]): string {
+function getNextAvailableRId(existingRIds: string[], logger: ILogger): string {
+  logger.info('[LOG][val17PptxGenerator] Début de getNextAvailableRId.');
   let maxId = 0;
   existingRIds.forEach((rId) => {
     const match = rId.match(/rId(\d+)/);
@@ -820,10 +961,13 @@ function getNextAvailableRId(existingRIds: string[]): string {
       if (num > maxId) maxId = num;
     }
   });
-  return `rId${maxId + 1}`;
+  const result = `rId${maxId + 1}`;
+  logger.info('[LOG][val17PptxGenerator] Fin de getNextAvailableRId.');
+  return result;
 }
 
-function updatePresentationRelsWithMappings(
+async function updatePresentationRelsWithMappings(
+  zip: JSZip,
   originalContent: string,
   initialExistingSlideCount: number,
   introSlideDetails: {
@@ -831,13 +975,16 @@ function updatePresentationRelsWithMappings(
     layoutRIdInSlide: string;
     layoutFileName: string;
   }[],
-  newOmbeaQuestionCount: number
-): {
+  newOmbeaQuestionCount: number,
+  logger: ILogger
+): Promise<{
   updatedContent: string;
   slideRIdMappings: { slideNumber: number; rId: string }[];
   oldToNewRIdMap: { [oldRId: string]: string };
-} {
-  const existingRels = extractExistingRIds(originalContent);
+  orderedSlides: { rId: string, target: string }[];
+}> {
+  logger.info('[LOG][val17PptxGenerator] Début de updatePresentationRelsWithMappings.');
+  const existingRels = extractExistingRIds(originalContent, logger);
   const finalRelsOutput: RIdMapping[] = [];
   const slideRIdMappings: { slideNumber: number; rId: string }[] = [];
   const oldToNewRIdMap: { [oldRId: string]: string } = {};
@@ -851,29 +998,39 @@ function updatePresentationRelsWithMappings(
     finalRelsOutput.push({ ...originalSlideMaster, rId: "rId1" });
     oldToNewRIdMap[originalSlideMaster.rId] = "rId1";
   } else {
-    console.warn("No Slide Master found. Adding a default as rId1.");
+    logger.info("No Slide Master found. Adding a default as rId1.");
     finalRelsOutput.push({ rId: "rId1", type: slideMasterType, target: "slideMasters/slideMaster1.xml", originalRId: "rId1_placeholder" });
   }
   rIdCounter = 2;
 
+  const orderedSlides: { rId: string, target: string, slideNumber: number }[] = [];
+
+  // 1. Intro slides
   introSlideDetails.forEach((detail, index) => {
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = index + 1;
+    const target = `slides/slide${detail.slideNumber}.xml`;
+    orderedSlides.push({ rId: newRId, target, slideNumber: detail.slideNumber });
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
-      target: `slides/slide${detail.slideNumber}.xml`,
+      target: target,
     });
     slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   });
 
+  // 2. Existing slides
+  const introSlidesCount = introSlideDetails.length;
   for (let i = 0; i < initialExistingSlideCount; i++) {
     const templateSlideFileNumber = i + 1;
-    const slideTarget = `slides/slide${templateSlideFileNumber}.xml`;
-    const originalRel = existingRels.find(m => m.target === slideTarget && m.type === slideType);
+    const newSlideFileNumber = templateSlideFileNumber + introSlidesCount;
+    const slideTarget = `slides/slide${newSlideFileNumber}.xml`;
+    const originalRel = existingRels.find(
+      (m) => m.target === `slides/slide${templateSlideFileNumber}.xml` && m.type === slideType
+    );
     const newRId = `rId${rIdCounter++}`;
-    const finalSlideOrderIndex = introSlideDetails.length + 1 + i;
-
+    const finalSlideOrderIndex = introSlidesCount + 1 + i;
+    orderedSlides.push({ rId: newRId, target: slideTarget, slideNumber: newSlideFileNumber });
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
@@ -884,19 +1041,24 @@ function updatePresentationRelsWithMappings(
     if (originalRel) oldToNewRIdMap[originalRel.rId] = newRId;
   }
 
+  // 3. New question slides
   for (let i = 0; i < newOmbeaQuestionCount; i++) {
     const questionSlideFileNumber = initialExistingSlideCount + introSlideDetails.length + 1 + i;
     const newRId = `rId${rIdCounter++}`;
     const finalSlideOrderIndex = introSlideDetails.length + initialExistingSlideCount + 1 + i;
-
+    const target = `slides/slide${questionSlideFileNumber}.xml`;
+    orderedSlides.push({ rId: newRId, target, slideNumber: questionSlideFileNumber });
     finalRelsOutput.push({
       rId: newRId,
       type: slideType,
-      target: `slides/slide${questionSlideFileNumber}.xml`
+      target
     });
     slideRIdMappings.push({ slideNumber: finalSlideOrderIndex, rId: newRId });
   }
 
+  orderedSlides.sort((a,b) => a.slideNumber - b.slideNumber);
+
+  // 4. Other relationships
   existingRels.forEach((origRel) => {
     if (origRel.type !== slideMasterType && origRel.type !== slideType) {
       if (!oldToNewRIdMap[origRel.rId]) {
@@ -919,19 +1081,21 @@ function updatePresentationRelsWithMappings(
     });
   updatedContent += "\n</Relationships>";
 
-  slideRIdMappings.sort((a, b) => a.slideNumber - b.slideNumber);
-  return { updatedContent, slideRIdMappings, oldToNewRIdMap };
+  logger.info('[LOG][val17PptxGenerator] Fin de updatePresentationRelsWithMappings.');
+  return { updatedContent, slideRIdMappings, oldToNewRIdMap, orderedSlides };
 }
 
 async function rebuildPresentationXml(
   zip: JSZip,
   slideRIdMappings: { slideNumber: number; rId: string }[],
   slideSizeAttrs: SlideSizeAttributes | null,
-  oldToNewRIdMap: { [oldRId: string]: string }
+  oldToNewRIdMap: { [oldRId: string]: string },
+  logger: ILogger
 ): Promise<void> {
+  logger.info('[LOG][val17PptxGenerator] Début de rebuildPresentationXml.');
   const presentationFile = zip.file("ppt/presentation.xml");
   if (!presentationFile) {
-    console.error("ppt/presentation.xml not found in template ZIP.");
+    logger.error("ppt/presentation.xml not found in template ZIP.");
     return;
   }
   let content = await presentationFile.async("string");
@@ -941,7 +1105,7 @@ async function rebuildPresentationXml(
     if (newRId) {
       return `r:id="${newRId}"`;
     }
-    console.warn(
+    logger.warn(
       `presentation.xml: No new r:id mapping found for old r:id="${oldRId}". Keeping original. Match: ${match}`
     );
     return match;
@@ -989,7 +1153,7 @@ async function rebuildPresentationXml(
               insertPoint
             )}${newSldSzTag}\n  ${content.slice(insertPoint)}`;
           } else {
-            console.warn(
+            logger.warn(
               "Could not find a suitable place to insert <p:sldSz> in presentation.xml."
             );
           }
@@ -998,51 +1162,33 @@ async function rebuildPresentationXml(
     }
   }
   zip.file("ppt/presentation.xml", content);
+  logger.info('[LOG][val17PptxGenerator] Fin de rebuildPresentationXml.');
 }
 
 function updateContentTypesComplete(
   originalContent: string,
-  introSlideDetails: { slideNumber: number; layoutFileName: string }[],
-  newOmbeaQuestionCount: number,
-  totalSlidesInFinalPptx: number,
-  ombeaQuestionLayoutFileName: string,
-  totalTagsUsed: number
+  allSlideNumbers: number[],
+  newLayouts: string[],
+  totalTagsUsed: number,
+  logger: ILogger
 ): string {
+  logger.info('[LOG][val17PptxGenerator] Début de updateContentTypesComplete.');
   let updatedContent = originalContent;
   let newOverrides = "";
 
-  introSlideDetails.forEach((detail) => {
-    const slidePartName = `/ppt/slides/slide${detail.slideNumber}.xml`;
+  allSlideNumbers.forEach((slideNumber) => {
+    const slidePartName = `/ppt/slides/slide${slideNumber}.xml`;
     if (!updatedContent.includes(`PartName="${slidePartName}"`)) {
       newOverrides += `\n  <Override PartName="${slidePartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
     }
   });
 
-  const ombeaLayoutPartName = `/ppt/slideLayouts/${ombeaQuestionLayoutFileName}`;
-  if (!updatedContent.includes(`PartName="${ombeaLayoutPartName}"`)) {
-    const lastLayoutIdx = updatedContent.lastIndexOf("slideLayout");
-    let insertPt = -1;
-    if (lastLayoutIdx > -1)
-      insertPt = updatedContent.indexOf("/>", lastLayoutIdx) + 2;
-    else insertPt = updatedContent.lastIndexOf("</Types>");
-    if (insertPt > -1) {
-      const newLayoutOverride = `\n  <Override PartName="${ombeaLayoutPartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>`;
-      updatedContent =
-        updatedContent.slice(0, insertPt) +
-        newLayoutOverride +
-        updatedContent.slice(insertPt);
+  newLayouts.forEach((layoutFileName) => {
+    const layoutPartName = `/ppt/slideLayouts/${layoutFileName}`;
+    if (!updatedContent.includes(`PartName="${layoutPartName}"`)) {
+        newOverrides += `\n  <Override PartName="${layoutPartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>`;
     }
-  }
-
-  const slidesBeforeOmbeaQuestions =
-    totalSlidesInFinalPptx - newOmbeaQuestionCount;
-  for (let i = 0; i < newOmbeaQuestionCount; i++) {
-    const slideNum = slidesBeforeOmbeaQuestions + 1 + i;
-    const slidePartName = `/ppt/slides/slide${slideNum}.xml`;
-    if (!updatedContent.includes(`PartName="${slidePartName}"`)) {
-      newOverrides += `\n  <Override PartName="${slidePartName}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
-    }
-  }
+  });
 
   for (let i = 1; i <= totalTagsUsed; i++) {
     const tagPath = `/ppt/tags/tag${i}.xml`;
@@ -1058,50 +1204,196 @@ function updateContentTypesComplete(
       "\n" +
       updatedContent.slice(insertPoint);
   }
+  logger.info('[LOG][val17PptxGenerator] Fin de updateContentTypesComplete.');
   return updatedContent;
 }
 
-function calculateAppXmlMetadata(
-  totalFinalSlides: number,
-  newOmbeaQuestions: Val17Question[]
-): AppXmlMetadata {
+async function calculateAppXmlMetadata(
+  zip: JSZip,
+  orderedSlides: { rId: string, target: string }[],
+  logger: ILogger
+): Promise<AppXmlMetadata> {
+  logger.info('[LOG][val17PptxGenerator] Début de calculateAppXmlMetadata.');
   let totalWords = 0;
   let totalParagraphs = 0;
-  const newSlideTitles: string[] = [];
-  newOmbeaQuestions.forEach((q) => {
-    const questionWords = q.question.trim().split(/\s+/).filter(Boolean).length;
-    const optionsWords = q.options
-      .map((opt) => opt.trim().split(/\s+/).filter(Boolean).length)
-      .reduce((a, b) => a + b, 0);
-    totalWords += questionWords + optionsWords + 1;
-    totalParagraphs += 1 + q.options.length + 1;
-    newSlideTitles.push(q.question);
-  });
-  return {
-    totalSlides: totalFinalSlides,
+  const slideTitles: string[] = [];
+  const fonts: string[] = [];
+  const themes: string[] = [];
+
+  const appFile = zip.file("docProps/app.xml");
+  if (appFile) {
+    const content = await appFile.async("string");
+    const contentWithoutXmlDecl = content.replace(/<\?xml[^>]*\?>\s*/, "");
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: "@_",
+      textNodeName: "#text",
+      allowBooleanAttributes: true,
+      parseTagValue: false,
+      trimValues: false,
+    });
+    const jsonObj = parser.parse(contentWithoutXmlDecl);
+
+    const titlesOfParts = jsonObj.Properties.TitlesOfParts["vt:vector"]["vt:lpstr"];
+    if (titlesOfParts) {
+      const headingPairs = jsonObj.Properties.HeadingPairs["vt:vector"]["vt:variant"];
+      const fontPair = headingPairs.find(
+        (p: any) => p["vt:lpstr"] === "Polices utilisées"
+      );
+      const themePair = headingPairs.find(
+        (p: any) => p["vt:lpstr"] === "Thème"
+      );
+
+      const fontCount = fontPair ? parseInt(headingPairs[headingPairs.indexOf(fontPair) + 1]["vt:i4"]) : 0;
+      const themeCount = themePair ? parseInt(headingPairs[headingPairs.indexOf(themePair) + 1]["vt:i4"]) : 0;
+
+      for (let i = 0; i < fontCount; i++) {
+        fonts.push(titlesOfParts[i]);
+      }
+      for (let i = 0; i < themeCount; i++) {
+        themes.push(titlesOfParts[fontCount + i]);
+      }
+    }
+  }
+
+
+  for (const slide of orderedSlides) {
+    const slideFile = zip.file(`ppt/${slide.target}`);
+    if (slideFile) {
+      const content = await slideFile.async("string");
+      const textNodes = content.match(/<a:t>.*?<\/a:t>/g) || [];
+      let slideText = "";
+      textNodes.forEach((node) => {
+        slideText += node.replace(/<a:t>(.*?)<\/a:t>/, "$1 ");
+      });
+      totalWords += slideText.trim().split(/\s+/).filter(Boolean).length;
+      totalParagraphs += (content.match(/<a:p>/g) || []).length;
+
+      const titleShapeMatch = content.match(/<p:sp>\s*<p:nvSpPr>\s*<p:cNvPr id="\d+" name="Titre \d+"\/>\s*<p:cNvSpPr>\s*<a:spLocks noGrp="1"\/>\s*<\/p:cNvSpPr>\s*<p:nvPr>\s*<p:ph type="title"\/>/);
+      if (titleShapeMatch) {
+        const titleBodyMatch = content.match(/<p:txBody>([\s\S]*?)<\/p:txBody>/);
+        if (titleBodyMatch) {
+          const textRuns = titleBodyMatch[1].match(/<a:t>.*?<\/a:t>/g) || [];
+          const title = textRuns.map(run => run.replace(/<a:t>(.*?)<\/a:t>/, "$1")).join('');
+          slideTitles.push(title);
+        }
+      } else {
+        const introTitleMatch = content.match(/<p:sp>\s*<p:nvSpPr>\s*<p:cNvPr id="\d+" name="Title Placeholder"\/>\s*<p:cNvSpPr>\s*<a:spLocks noGrp="1"\/>\s*<\/p:cNvSpPr>\s*<p:nvPr>\s*<p:ph type="title"\/>/);
+        if(introTitleMatch) {
+          const titleBodyMatch = content.match(/<p:txBody>([\s\S]*?)<\/p:txBody>/);
+          if (titleBodyMatch) {
+            const textRuns = titleBodyMatch[1].match(/<a:t>.*?<\/a:t>/g) || [];
+            const title = textRuns.map(run => run.replace(/<a:t>(.*?)<\/a:t>/, "$1")).join('');
+            slideTitles.push(title);
+          }
+        } else {
+          const participantsTitleMatch = content.match(/<p:sp>\s*<p:nvSpPr>\s*<p:cNvPr id="\d+" name="Title"\/>\s*<p:cNvSpPr>\s*<a:spLocks noGrp="1"\/>\s*<\/p:cNvSpPr>\s*<p:nvPr>\s*<p:ph type="title"\/>/);
+          if(participantsTitleMatch) {
+            const titleBodyMatch = content.match(/<p:txBody>([\s\S]*?)<\/p:txBody>/);
+            if (titleBodyMatch) {
+              const textRuns = titleBodyMatch[1].match(/<a:t>.*?<\/a:t>/g) || [];
+              const title = textRuns.map(run => run.replace(/<a:t>(.*?)<\/a:t>/, "$1")).join('');
+              slideTitles.push(title);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const result = {
+    totalSlides: orderedSlides.length,
     totalWords,
     totalParagraphs,
-    slideTitles: newSlideTitles,
+    slideTitles,
+    fonts,
+    themes
   };
+  logger.info(`[LOG][val17PptxGenerator] Fin de calculateAppXmlMetadata: ${JSON.stringify(result)}`);
+  return result;
 }
 
 async function updateAppXml(
   zip: JSZip,
-  metadata: AppXmlMetadata
+  metadata: AppXmlMetadata,
+  logger: ILogger
 ): Promise<void> {
+  logger.info('[LOG][val17PptxGenerator] Début de updateAppXml.');
   const appFile = zip.file("docProps/app.xml");
   if (!appFile) {
-    console.warn("app.xml non trouvé, création d'un nouveau fichier");
-    createNewAppXml(zip, metadata);
+    logger.warn("app.xml non trouvé, création d'un nouveau fichier");
+    createNewAppXml(zip, metadata, logger);
     return;
   }
-  let content = await appFile.async("string");
-  content = updateSimpleFields(content, metadata);
-  content = updateHeadingPairsAndTitles(content, metadata.slideTitles);
-  zip.file("docProps/app.xml", content);
+
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    textNodeName: "#text",
+    allowBooleanAttributes: true,
+    parseTagValue: false,
+    trimValues: false,
+  });
+  const content = await appFile.async("string");
+  const contentWithoutXmlDecl = content.replace(/<\?xml[^>]*\?>\s*/, "");
+  const jsonObj = parser.parse(contentWithoutXmlDecl);
+
+  jsonObj.Properties.Slides = metadata.totalSlides;
+  jsonObj.Properties.Words = metadata.totalWords;
+  jsonObj.Properties.Paragraphs = metadata.totalParagraphs;
+  jsonObj.Properties.TotalTime = 41;
+
+  const allTitles = [...metadata.fonts, ...metadata.themes, ...metadata.slideTitles];
+
+  const headingPairs = jsonObj.Properties.HeadingPairs["vt:vector"]["vt:variant"];
+  const fontPair = headingPairs.find(
+    (p: any) => p["vt:lpstr"] === "Polices utilisées"
+  );
+  if(fontPair) {
+    const fontPairIndex = headingPairs.indexOf(fontPair);
+    headingPairs[fontPairIndex + 1]["vt:i4"] = metadata.fonts.length;
+  }
+
+  const themePair = headingPairs.find(
+    (p: any) => p["vt:lpstr"] === "Thème"
+  );
+  if(themePair) {
+    const themePairIndex = headingPairs.indexOf(themePair);
+    headingPairs[themePairIndex + 1]["vt:i4"] = metadata.themes.length;
+  }
+
+  const slideTitlesPair = headingPairs.find(
+    (p: any) => p["vt:lpstr"] === "Titres des diapositives"
+  );
+  if (slideTitlesPair) {
+    const slideTitlesPairIndex = headingPairs.indexOf(slideTitlesPair);
+    headingPairs[slideTitlesPairIndex + 1]["vt:i4"] = metadata.slideTitles.length;
+  }
+
+  jsonObj.Properties.TitlesOfParts["vt:vector"]["vt:lpstr"] = allTitles.map(
+    (title) => escapeXml(title, logger)
+  );
+  jsonObj.Properties.TitlesOfParts["vt:vector"]["@_size"] = allTitles.length;
+
+  const builder = new XMLBuilder({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    textNodeName: "#text",
+    format: true,
+    suppressBooleanAttributes: false,
+    suppressEmptyNode: true,
+  });
+
+  const xmlContent = builder.build(jsonObj);
+  const finalXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${xmlContent}`;
+
+  zip.file("docProps/app.xml", finalXml);
+
+  logger.info('[LOG][val17PptxGenerator] Fin de updateAppXml.');
 }
 
-function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
+function updateSimpleFields(content: string, metadata: AppXmlMetadata, logger: ILogger): string {
+  logger.info('[LOG][val17PptxGenerator] Début de updateSimpleFields.');
   let updated = content;
   updated = updated.replace(
     /<Slides>\d+<\/Slides>/,
@@ -1148,58 +1440,49 @@ function updateSimpleFields(content: string, metadata: AppXmlMetadata): string {
         updated.slice(0, insertPoint) + companyTag + updated.slice(insertPoint);
     }
   }
+  logger.info('[LOG][val17PptxGenerator] Fin de updateSimpleFields.');
   return updated;
 }
 
 function updateHeadingPairsAndTitles(
   content: string,
-  newOmbeaSlideTitles: string[]
+  allSlideTitles: string[],
+  logger: ILogger
 ): string {
+  logger.info('[LOG][val17PptxGenerator] Début de updateHeadingPairsAndTitles.');
   let updated = content;
-  const titlesToAddCount = newOmbeaSlideTitles.length;
+  const titlesToAddCount = allSlideTitles.length;
 
   const headingPairsRegex =
     /<vt:lpstr>Titres des diapositives<\/vt:lpstr>\s*<\/vt:variant>\s*<vt:variant>\s*<vt:i4>(\d+)<\/vt:i4>/;
   updated = updated.replace(headingPairsRegex, (_match, p1) => {
-    const existingCount = parseInt(p1, 10);
-    return `<vt:lpstr>Titres des diapositives<\/vt:lpstr><\/vt:variant><vt:variant><vt:i4>${
-      existingCount + titlesToAddCount
-    }<\/vt:i4>`;
+    return `<vt:lpstr>Titres des diapositives<\/vt:lpstr><\/vt:variant><vt:variant><vt:i4>${titlesToAddCount}<\/vt:i4>`;
   });
 
-  const titlesOfPartsEndIndex = updated.indexOf(
-    "</vt:vector>",
-    updated.indexOf("<TitlesOfParts>")
-  );
-  if (titlesOfPartsEndIndex !== -1) {
-    let titlesXmlToAdd = "";
-    newOmbeaSlideTitles.forEach((title) => {
-      titlesXmlToAdd += `\n      <vt:lpstr>${escapeXml(
-        title.substring(0, 250)
-      )}<\/vt:lpstr>`;
-    });
-    updated =
-      updated.slice(0, titlesOfPartsEndIndex) +
-      titlesXmlToAdd +
-      updated.slice(titlesOfPartsEndIndex);
+  const titlesVector = `<vt:vector size="${titlesToAddCount}" baseType="lpstr">${allSlideTitles
+    .map(
+      (title) =>
+        `\n      <vt:lpstr>${escapeXml(
+          title.substring(0, 250),
+          logger
+        )}<\/vt:lpstr>`
+    )
+    .join("")}\n    </vt:vector>`;
 
-    updated = updated.replace(
-      /<TitlesOfParts>\s*<vt:vector size="(\d+)"/,
-      (_match, p1) => {
-        const existingSize = parseInt(p1, 10);
-        return `<TitlesOfParts><vt:vector size="${
-          existingSize + titlesToAddCount
-        }"`;
-      }
-    );
-  }
+  updated = updated.replace(
+    /<TitlesOfParts>[\s\S]*?<\/TitlesOfParts>/,
+    `<TitlesOfParts>${titlesVector}</TitlesOfParts>`
+  );
+  logger.info('[LOG][val17PptxGenerator] Fin de updateHeadingPairsAndTitles.');
   return updated;
 }
 
 function buildHeadingPairs(
   nonSlideTitles: string[],
-  allSlideTitles: string[]
+  allSlideTitles: string[],
+  logger: ILogger
 ): string {
+  logger.info('[LOG][val17PptxGenerator] Début de buildHeadingPairs.');
   const pairs: string[] = [];
   const fontCount = nonSlideTitles.filter(
     (t) =>
@@ -1230,100 +1513,158 @@ function buildHeadingPairs(
     (acc, curr) => acc + curr.split("<vt:variant>").length - 1,
     0
   );
-  return `<HeadingPairs><vt:vector size="${vectorSize}" baseType="variant">${pairs.join(
+  const result = `<HeadingPairs><vt:vector size="${vectorSize}" baseType="variant">${pairs.join(
     ""
   )}\n    <\/vt:vector><\/HeadingPairs>`;
+  logger.info('[LOG][val17PptxGenerator] Fin de buildHeadingPairs.');
+  return result;
 }
 
 function buildTitlesOfParts(
   fonts: string[],
   themes: string[],
   existingSlideTitles: string[],
-  newSlideTitles: string[]
+  newSlideTitles: string[],
+  logger: ILogger
 ): string {
+  logger.info('[LOG][val17PptxGenerator] Début de buildTitlesOfParts.');
   const allTitles: string[] = [];
-  fonts.forEach((font) => allTitles.push(escapeXml(font)));
-  themes.forEach((theme) => allTitles.push(escapeXml(theme)));
-  existingSlideTitles.forEach((title) => allTitles.push(escapeXml(title)));
+  fonts.forEach((font) => allTitles.push(escapeXml(font, logger)));
+  themes.forEach((theme) => allTitles.push(escapeXml(theme, logger)));
+  existingSlideTitles.forEach((title) => allTitles.push(escapeXml(title, logger)));
   newSlideTitles.forEach((title) => {
     const truncatedTitle =
       title.length > 250 ? title.substring(0, 247) + "..." : title;
-    allTitles.push(escapeXml(truncatedTitle));
+    allTitles.push(escapeXml(truncatedTitle, logger));
   });
   const vectorContent = allTitles
     .map((title) => `\n      <vt:lpstr>${title}<\/vt:lpstr>`)
     .join("");
-  return `<TitlesOfParts><vt:vector size="${allTitles.length}" baseType="lpstr">${vectorContent}\n    <\/vt:vector><\/TitlesOfParts>`;
+  const result = `<TitlesOfParts><vt:vector size="${allTitles.length}" baseType="lpstr">${vectorContent}\n    <\/vt:vector><\/TitlesOfParts>`;
+  logger.info('[LOG][val17PptxGenerator] Fin de buildTitlesOfParts.');
+  return result;
 }
 
-function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata): void {
+function createNewAppXml(zip: JSZip, metadata: AppXmlMetadata, logger: ILogger): void {
+  logger.info('[LOG][val17PptxGenerator] Début de createNewAppXml.');
   const defaultFonts = ["Arial", "Calibri"];
   const defaultThemes = ["Thème Office"];
   const headingPairs = buildHeadingPairs(
     [...defaultFonts, ...defaultThemes],
-    metadata.slideTitles
+    metadata.slideTitles,
+    logger
   );
   const titlesOfParts = buildTitlesOfParts(
     defaultFonts,
     defaultThemes,
     [],
-    metadata.slideTitles
+    metadata.slideTitles,
+    logger
   );
 
-  const appXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">\n  <TotalTime>2<\/TotalTime><Words>${metadata.totalWords}<\/Words><Application>Microsoft Office PowerPoint<\/Application>\n  <PresentationFormat>Affichage à l'écran (4:3)<\/PresentationFormat><Paragraphs>${metadata.totalParagraphs}<\/Paragraphs>\n  <Slides>${metadata.totalSlides}<\/Slides><Notes>0<\/Notes><HiddenSlides>0<\/HiddenSlides><MMClips>0<\/MMClips>\n  <ScaleCrop>false<\/ScaleCrop>${headingPairs}${titlesOfParts}<Company/><LinksUpToDate>false<\/LinksUpToDate>\n  <SharedDoc>false<\/SharedDoc><HyperlinksChanged>false<\/HyperlinksChanged><AppVersion>14.0000<\/AppVersion><\/Properties>`;
+  const appXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <TotalTime>2<\/TotalTime><Words>${metadata.totalWords}<\/Words><Application>Microsoft Office PowerPoint<\/Application>
+  <PresentationFormat>Affichage à l'écran (4:3)<\/PresentationFormat><Paragraphs>${metadata.totalParagraphs}<\/Paragraphs>
+  <Slides>${metadata.totalSlides}<\/Slides><Notes>0<\/Notes><HiddenSlides>0<\/HiddenSlides><MMClips>0<\/MMClips>
+  <ScaleCrop>false<\/ScaleCrop>${headingPairs}${titlesOfParts}<Company/><LinksUpToDate>false<\/LinksUpToDate>
+  <SharedDoc>false<\/SharedDoc><HyperlinksChanged>false<\/HyperlinksChanged><AppVersion>14.0000<\/AppVersion><\/Properties>`;
   zip.file("docProps/app.xml", appXmlContent);
+  logger.info('[LOG][val17PptxGenerator] Fin de createNewAppXml.');
 }
 
 async function updateCoreXml(
   zip: JSZip,
-  newQuestionCount: number
+  newQuestionCount: number,
+  logger: ILogger
 ): Promise<void> {
+  logger.info("[LOG][val17PptxGenerator] Début de updateCoreXml.");
   const coreFile = zip.file("docProps/core.xml");
   if (coreFile) {
-    let content = await coreFile.async("string");
-    const title = `Quiz OMBEA ${newQuestionCount} question${
-      newQuestionCount > 1 ? "s" : ""
-    }`;
-    content = content.replace(
-      /<dc:title>.*?<\/dc:title>/,
-      `<dc:title>${escapeXml(title)}<\/dc:title>`
-    );
-    const now = new Date().toISOString();
-    content = content.replace(
-      /<dcterms:modified.*?>.*?<\/dcterms:modified>/,
-      `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}<\/dcterms:W3CDTF>`
-    );
-    if (!content.includes("<dcterms:created>")) {
-      const lastModifiedEnd =
-        content.indexOf("</dcterms:modified>") + "</dcterms:modified>".length;
-      const createdTag = `\n  <dcterms:created xsi:type="dcterms:W3CDTF">${now}<\/dcterms:W3CDTF>`;
-      if (lastModifiedEnd > -1 && lastModifiedEnd <= content.length) {
-        content =
-          content.slice(0, lastModifiedEnd) +
-          createdTag +
-          content.slice(lastModifiedEnd);
-      } else {
-        const corePropsEnd = content.lastIndexOf("</cp:coreProperties>");
-        if (corePropsEnd > -1) {
-          content =
-            content.slice(0, corePropsEnd) +
-            createdTag +
-            "\n" +
-            content.slice(corePropsEnd);
+    try {
+      const content = await coreFile.async("string");
+      // Supprimer la déclaration XML si elle existe pour éviter les doublons
+      const contentWithoutXmlDecl = content.replace(
+        /<\?xml[^>]*\?>\s*/,
+        ""
+      );
+
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+        textNodeName: "#text",
+        allowBooleanAttributes: true,
+        parseTagValue: false, // Important pour préserver la structure exacte
+        trimValues: false,
+      });
+      const jsonObj = parser.parse(contentWithoutXmlDecl);
+
+      const coreProperties = jsonObj["cp:coreProperties"];
+      if (coreProperties) {
+        // Mettre à jour le titre
+        const title = `Quiz OMBEA ${newQuestionCount} question${
+          newQuestionCount > 1 ? "s" : ""
+        }`;
+        coreProperties["dc:title"] = title;
+
+        const now = new Date().toISOString();
+
+        // Mettre à jour la date de modification
+        coreProperties["dcterms:modified"] = {
+          "#text": now,
+          "@_xsi:type": "dcterms:W3CDTF",
+        };
+
+        // Ajouter la date de création si elle n'existe pas
+        if (!coreProperties["dcterms:created"]) {
+          coreProperties["dcterms:created"] = {
+            "#text": now,
+            "@_xsi:type": "dcterms:W3CDTF",
+          };
         }
       }
+
+      const builder = new XMLBuilder({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+        textNodeName: "#text",
+        format: true, // Pour un XML bien indenté
+        suppressBooleanAttributes: false,
+        suppressEmptyNode: true, // Ne pas générer de balises auto-fermantes vides
+      });
+
+      const xmlContent = builder.build(jsonObj);
+      const finalXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${xmlContent}`;
+
+      zip.file("docProps/core.xml", finalXml);
+      logger.info(
+        "[LOG][val17PptxGenerator] core.xml mis à jour avec succès via fast-xml-parser."
+      );
+    } catch (error) {
+      logger.error(
+        `[ERREUR][val17PptxGenerator] Erreur lors de la mise à jour de core.xml avec fast-xml-parser: ${error}`
+      );
+      // Fallback vers l'ancienne méthode si le parsing échoue
+      // (vous pouvez choisir de supprimer ce fallback si vous êtes sûr de la nouvelle méthode)
+      const content = await coreFile.async("string");
+      zip.file("docProps/core.xml", content); // Rétablit le contenu original en cas d'erreur
     }
-    zip.file("docProps/core.xml", content);
+  } else {
+    logger.warn("[LOG][val17PptxGenerator] docProps/core.xml non trouvé.");
   }
+  logger.info("[LOG][val17PptxGenerator] Fin de updateCoreXml.");
 }
 
 // Helper function to get XML content of a layout file
-async function getLayoutXml(zip: JSZip, layoutFileName: string): Promise<string | null> {
+async function getLayoutXml(zip: JSZip, layoutFileName: string, logger: ILogger): Promise<string | null> {
+  logger.info(`[LOG][val17PptxGenerator] Début de getLayoutXml pour ${layoutFileName}.`);
   const layoutFile = zip.file(layoutFileName);
   if (layoutFile) {
-    return layoutFile.async("string");
+    const result = await layoutFile.async("string");
+    logger.info(`[LOG][val17PptxGenerator] Fin de getLayoutXml pour ${layoutFileName}.`);
+    return result;
   }
-  console.warn(`[getLayoutXml] Fichier layout non trouvé: ${layoutFileName}`);
+  logger.warn(`[getLayoutXml] Fichier layout non trouvé: ${layoutFileName}`);
   return null;
 }
 
@@ -1331,20 +1672,25 @@ async function getLayoutXml(zip: JSZip, layoutFileName: string): Promise<string 
 export async function generatePPTXVal17(
   templateFile: any,
   questions: Val17Question[],
+  participants: ParticipantForGenerator[],
   options: GenerationOptions = {},
-  sessionInfo?: SessionInfo,
-  participants?: ParticipantForGenerator[]
+  logger: ILogger,
+  sessionInfo?: SessionInfo
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
+  logger.debug(`[LOG][val17PptxGenerator] Final participants for generator: ${JSON.stringify(participants)}`);
+  logger.debug(`  - Nombre de questions: ${questions.length}`);
+  logger.debug(`  - Options: ${JSON.stringify(options)}`);
+  logger.debug(`  - Session Info: ${JSON.stringify(sessionInfo)}`);
+  logger.debug(`  - Nombre de participants: ${participants.length}`);
+  logger.info('[LOG][val17PptxGenerator] === Début de generatePPTXVal17 ===');
   try {
-    // const executionId = Date.now(); 
-    validateQuestions(questions);
+    validateQuestions(questions, logger);
     if (!templateFile) {
-      console.warn("Aucun fichier modèle fourni.");
+      logger.warn("Aucun fichier modèle fourni.");
       throw new Error("Template file is required by generatePPTXVal17.");
     }
     const templateZip = await JSZip.loadAsync(templateFile);
 
-    // ---> DÉBUT : Logique d'extraction exhaustive des GUIDs des questions préexistantes (sans logs internes excessifs) <---
     const preExistingQuestionSlideGuids: string[] = [];
     const slideFilesFolder = templateZip.folder("ppt/slides");
 
@@ -1352,7 +1698,6 @@ export async function generatePPTXVal17(
       const slideProcessingPromises: Promise<void>[] = [];
       slideFilesFolder.forEach((relativePath, slideFileEntry) => {
         if (relativePath.startsWith("slide") && relativePath.endsWith(".xml") && !slideFileEntry.dir) {
-          // Pour chaque diapositive, lire son fichier de relations .rels
           const slideNumberMatch = relativePath.match(/slide(\d+)\.xml/);
           if (slideNumberMatch && slideNumberMatch[1]) {
             const slideNumPart = slideNumberMatch[1];
@@ -1378,12 +1723,12 @@ export async function generatePPTXVal17(
                           preExistingQuestionSlideGuids.push(foundGuid);
                         }
                       }
-                    } catch (_e) { 
+                    } catch (_e) {
                       // Silently ignore errors for individual tag files
                     }
                   }
                 }
-              }).catch(_err => { 
+              }).catch(_err => {
                 // Silently ignore errors for individual rels files
               });
               slideProcessingPromises.push(promise);
@@ -1395,15 +1740,13 @@ export async function generatePPTXVal17(
       await Promise.all(slideProcessingPromises);
 
       if (preExistingQuestionSlideGuids.length > 0) {
-        console.log("[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle:", preExistingQuestionSlideGuids);
+        logger.info(`[val17PptxGenerator] GUIDs des questions OMBEA préexistantes trouvés dans le modèle: ${JSON.stringify(preExistingQuestionSlideGuids)}`);
       } else {
-        console.log("[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID) trouvée dans le modèle.");
+        logger.info(`[val17PptxGenerator] Aucune question OMBEA préexistante (avec OR_SLIDE_GUID) trouvée dans le modèle.`);
       }
     } else {
-        console.log("[val17PptxGenerator] Dossier ppt/slides non trouvé dans le templateZip.");
+        logger.info(`[val17PptxGenerator] Dossier ppt/slides non trouvé dans le templateZip.`);
     }
-    // ---> FIN : Logique d'extraction exhaustive des GUIDs des questions préexistantes <---
-
 
     let slideSizeAttrs: SlideSizeAttributes | null = null;
     const presentationXmlFileFromTemplate = templateZip.file(
@@ -1421,25 +1764,55 @@ export async function generatePPTXVal17(
           slideSizeAttrs.type = sldSzMatch[3];
         }
       } else {
-        console.warn(
+        logger.warn(
           "<p:sldSz> non trouvé dans le presentation.xml du modèle."
         );
       }
     } else {
-      console.warn("ppt/presentation.xml non trouvé dans le ZIP du modèle.");
+      logger.warn("ppt/presentation.xml non trouvé dans le ZIP du modèle.");
     }
 
-    const existingTagsCount = findHighestExistingTagNumber(templateZip);
+    const existingTagsCount = findHighestExistingTagNumber(templateZip, logger);
     let maxTagNumberUsed = existingTagsCount;
 
     const outputZip = new JSZip();
     const copyPromises: Promise<void>[] = [];
+
+    // START of modification
+    const introSlidesCount = (sessionInfo && options.introSlideLayouts?.titleLayoutName ? 1 : 0) +
+                             (participants.length > 0 && options.introSlideLayouts?.participantsLayoutName ? 1 : 0);
+
     templateZip.forEach((relativePath, file) => {
       if (!file.dir) {
+        let newPath = relativePath;
+        const slideMatch = relativePath.match(/ppt\/slides\/slide(\d+)\.xml/);
+        const slideRelsMatch = relativePath.match(/ppt\/slides\/_rels\/slide(\d+)\.xml\.rels/);
+
+        if (slideMatch) {
+          const slideNum = parseInt(slideMatch[1], 10);
+          newPath = `ppt/slides/slide${slideNum + introSlidesCount}.xml`;
+          logger.info(`[val17PptxGenerator] Renaming ${relativePath} to ${newPath}`);
+        } else if (slideRelsMatch) {
+          const slideNum = parseInt(slideRelsMatch[1], 10);
+          newPath = `ppt/slides/_rels/slide${slideNum + introSlidesCount}.xml.rels`;
+          logger.info(`[val17PptxGenerator] Renaming ${relativePath} to ${newPath}`);
+        } else {
+           logger.info(`[val17PptxGenerator] Copying file: ${relativePath}`);
+        }
+
         const copyPromise: Promise<void> = file
-          .async("nodebuffer")
+          .async("arraybuffer")
           .then((content) => {
-            outputZip.file(relativePath, content);
+             if (slideRelsMatch) {
+                let contentStr = new TextDecoder().decode(content);
+                // We might need to update the target file name inside the rels file if it contains references to other slides.
+                // For now, we assume it does not, but this is a point of attention.
+                // Example: Relationship Target="../slides/slide2.xml" would need to be updated.
+                // This is not the case for slide relationships to slide layouts, notes, etc.
+                // Let's log to be sure
+                logger.debug(`[val17PptxGenerator] Content of ${newPath}: ${contentStr}`);
+             }
+            outputZip.file(newPath, content);
           });
         copyPromises.push(copyPromise);
       } else {
@@ -1447,8 +1820,9 @@ export async function generatePPTXVal17(
       }
     });
     await Promise.all(copyPromises);
+    // END of modification
 
-    const initialExistingSlideCount = countExistingSlides(outputZip);
+    const initialExistingSlideCount = countExistingSlides(templateZip, logger);
     let introSlidesAddedCount = 0;
     const newIntroSlideDetails: {
       slideNumber: number;
@@ -1456,13 +1830,12 @@ export async function generatePPTXVal17(
       layoutFileName: string;
     }[] = [];
 
-    // Gestion de la diapositive de titre
     if (sessionInfo && options.introSlideLayouts?.titleLayoutName) {
       const targetTitleLayoutName = options.introSlideLayouts.titleLayoutName;
-      const actualTitleLayoutPath = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title");
+      const actualTitleLayoutPath = await findLayoutByCSldName(outputZip, targetTitleLayoutName, "title", logger);
       if (actualTitleLayoutPath) {
-        const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
-        const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber);
+        const currentIntroSlideNumber = introSlidesAddedCount + 1;
+        const titleSlideXml = createIntroTitleSlideXml(sessionInfo, currentIntroSlideNumber, logger);
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, titleSlideXml);
         const layoutRIdInSlide = "rId1";
         const titleLayoutBaseName = actualTitleLayoutPath.substring(actualTitleLayoutPath.lastIndexOf('/') + 1);
@@ -1475,21 +1848,20 @@ export async function generatePPTXVal17(
         });
         introSlidesAddedCount++;
       } else {
-        console.warn(`Layout de titre avec nom approchant "${targetTitleLayoutName}" non trouvé. Slide de titre non ajoutée.`);
+        logger.warn(`Layout de titre avec nom approchant "${targetTitleLayoutName}" non trouvé. Slide de titre non ajoutée.`);
       }
     }
 
-    // Gestion de la diapositive des participants
-    if (participants && participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
+    if (participants.length > 0 && options.introSlideLayouts?.participantsLayoutName) {
       const targetParticipantsLayoutName = options.introSlideLayouts.participantsLayoutName;
-      const actualParticipantsLayoutPath = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants");
+      const actualParticipantsLayoutPath = await findLayoutByCSldName(outputZip, targetParticipantsLayoutName, "participants", logger);
 
       if (actualParticipantsLayoutPath) {
         let layoutTblPrXml: string | null = null;
         let layoutTblGridXml: string | null = null;
         let layoutGraphicFrameXml: string | null = null;
 
-        const layoutFileXmlContent = await getLayoutXml(outputZip, actualParticipantsLayoutPath);
+        const layoutFileXmlContent = await getLayoutXml(outputZip, actualParticipantsLayoutPath, logger);
 
         if (layoutFileXmlContent) {
           const graphicFrameRegex = /<p:graphicFrame>([\s\S]*?<a:tbl>[\s\S]*?<\/a:tbl>[\s\S]*?)<\/p:graphicFrame>/;
@@ -1497,61 +1869,57 @@ export async function generatePPTXVal17(
 
           if (graphicFrameMatch && graphicFrameMatch[0]) {
             layoutGraphicFrameXml = graphicFrameMatch[0];
-            // Log plus complet de layoutGraphicFrameXml pour inspection
-            if (layoutGraphicFrameXml.length < 2000) { // Limiter la taille du log si trop grand
-                 console.log("[DEBUG_TABLE_LAYOUT] Full layoutGraphicFrameXml:", layoutGraphicFrameXml);
+            if (layoutGraphicFrameXml.length < 2000) {
+                 logger.debug(`[DEBUG_TABLE_LAYOUT] Full layoutGraphicFrameXml: ${layoutGraphicFrameXml}`);
             } else {
-                 console.log("[DEBUG_TABLE_LAYOUT] Found graphicFrame (snippet):", layoutGraphicFrameXml.substring(0, 1000) + "...");
+                 logger.debug(`[DEBUG_TABLE_LAYOUT] Found graphicFrame (snippet): ${layoutGraphicFrameXml.substring(0, 1000)}...`);
             }
-            console.log(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblPr' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblPr')}`);
-            console.log(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblGrid' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblGrid')}`);
+            logger.debug(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblPr' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblPr')}`);
+            logger.debug(`[DEBUG_TABLE_LAYOUT] Index of '<a:tblGrid' in layoutGraphicFrameXml: ${layoutGraphicFrameXml.indexOf('<a:tblGrid')}`);
 
-            // Tentative avec une regex très simple pour tblPr
             const simpleTblPrRegex = /<a:tblPr/;
             const simpleTblPrMatch = layoutGraphicFrameXml.match(simpleTblPrRegex);
             if (simpleTblPrMatch) {
-              console.log("[DEBUG_TABLE_LAYOUT] Found '<a:tblPr' using simple regex. Match object:", simpleTblPrMatch);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Found '<a:tblPr' using simple regex. Match object: ${JSON.stringify(simpleTblPrMatch)}`);
             } else {
-              console.warn("[DEBUG_TABLE_LAYOUT] Did NOT find '<a:tblPr' using simple regex.");
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Did NOT find '<a:tblPr' using simple regex.`);
             }
 
-            // Regex pour tblPr:
             const tblPrRegex = /<a:tblPr([^>]*)>([\s\S]*?)<\/a:tblPr>/;
             const tblPrMatch = layoutGraphicFrameXml.match(tblPrRegex);
-            if (tblPrMatch && tblPrMatch[0]) { // tblPrMatch[0] est la balise complète, tblPrMatch[1] les attributs, tblPrMatch[2] le contenu interne
+            if (tblPrMatch && tblPrMatch[0]) {
               layoutTblPrXml = tblPrMatch[0];
-              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblPr from layout (v2):", layoutTblPrXml);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Extracted tblPr from layout (v2): ${layoutTblPrXml}`);
             } else {
-              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblPr from layout's table within graphicFrame (v2).");
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Could not extract tblPr from layout's table within graphicFrame (v2).`);
             }
 
-            // Regex pour tblGrid:
             const tblGridRegex = /<a:tblGrid([^>]*)>([\s\S]*?)<\/a:tblGrid>/;
             const tblGridMatch = layoutGraphicFrameXml.match(tblGridRegex);
             if (tblGridMatch && tblGridMatch[0]) {
               layoutTblGridXml = tblGridMatch[0];
-              console.log("[DEBUG_TABLE_LAYOUT] Extracted tblGrid from layout (v2):", layoutTblGridXml);
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Extracted tblGrid from layout (v2): ${layoutTblGridXml}`);
             } else {
-              console.warn("[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table within graphicFrame (v2).");
+              logger.debug(`[DEBUG_TABLE_LAYOUT] Could not extract tblGrid from layout's table within graphicFrame (v2).`);
             }
           } else {
-            console.warn("[DEBUG_TABLE_LAYOUT] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
+            logger.debug("[DEBUG_TABLE_LAYOUT] No graphicFrame with a table found directly in layout XML. Will create table from scratch.");
           }
         } else {
-          console.warn(`[DEBUG_TABLE_LAYOUT] Could not read content of layout file: ${actualParticipantsLayoutPath}`);
+          logger.debug(`[DEBUG_TABLE_LAYOUT] Could not read content of layout file: ${actualParticipantsLayoutPath}`);
         }
 
-        console.log(`[TEST_PPTX_GEN] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
-        const currentIntroSlideNumber = initialExistingSlideCount + introSlidesAddedCount + 1;
+        logger.debug(`[TEST_PPTX_GEN] Layout des participants trouvé: ${actualParticipantsLayoutPath}. Préparation de la diapositive.`);
+        const currentIntroSlideNumber = introSlidesAddedCount + 1;
 
         const participantsSlideXml = createIntroParticipantsSlideXml(
           participants,
           currentIntroSlideNumber,
           actualParticipantsLayoutPath,
-          layoutFileXmlContent,
           layoutGraphicFrameXml,
           layoutTblPrXml,
-          layoutTblGridXml
+          layoutTblGridXml,
+          logger
         );
 
         outputZip.file(`ppt/slides/slide${currentIntroSlideNumber}.xml`, participantsSlideXml);
@@ -1568,13 +1936,13 @@ export async function generatePPTXVal17(
         });
         introSlidesAddedCount++;
       } else {
-        console.warn(`Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé.`);
+        logger.warn(`Layout des participants avec nom approchant "${targetParticipantsLayoutName}" non trouvé.`);
       }
     }
 
     const effectiveExistingSlideCount =
-      initialExistingSlideCount + introSlidesAddedCount;
-    const ombeaLayout = await ensureOmbeaSlideLayoutExists(outputZip);
+      initialExistingSlideCount;
+    const ombeaLayout = await ensureOmbeaSlideLayoutExists(outputZip, logger);
     const ombeaLayoutFileName = ombeaLayout.layoutFileName;
 
     outputZip.folder("ppt/tags");
@@ -1594,58 +1962,60 @@ export async function generatePPTXVal17(
     const downloadedImages = new Map<number, DownloadedImage>();
     const questionMappingsInternal: QuestionMapping[] = [];
 
-    if (questions.some((q) => q.imageUrl)) {
-      const imagePromises = questions.map(async (question, index) => {
-        if (question.imageUrl) {
-          try {
-            const imageData = await downloadImageFromCloudWithDimensions(
-              question.imageUrl
-            );
-            if (imageData) {
-              const absoluteSlideNumberForImage =
-                effectiveExistingSlideCount + index + 1;
-              const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
-              const dimensions = calculateImageDimensions(
-                imageData.width,
-                imageData.height
-              );
-              return {
-                slideNumberContext: absoluteSlideNumberForImage,
-                image: {
-                  fileName: imgFileName,
-                  data: imageData.data,
-                  width: imageData.width,
-                  height: imageData.height,
-                  dimensions,
-                  extension: imageData.extension,
-                },
-              };
-            }
-          } catch (error) {
-            console.error(
-              `Erreur téléchargement image pour question ${index + 1} (${
-                question.imageUrl
-              }):`,
-              error
-            );
-          }
-        }
-        return null;
-      });
-      const imageResults = await Promise.all(imagePromises);
-      imageResults.forEach((result) => {
-        if (result && result.image) {
-          downloadedImages.set(result.slideNumberContext, result.image);
-          imageExtensions.add(result.image.extension);
-          outputZip
-            .folder("ppt/media")
-            ?.file(result.image.fileName, result.image.data);
-        }
-      });
-    }
+    // if (questions.some((q) => q.imageUrl)) {
+    //   const imagePromises = questions.map(async (question, index) => {
+    //     if (question.imageUrl) {
+    //       let imageData = null;
+    //       if (question.imageUrl.startsWith("http://") || question.imageUrl.startsWith("https://")) {
+    //         imageData = await downloadImageFromCloudWithDimensions(question.imageUrl, logger);
+    //       } else {
+    //         const resolvedImagePath = path.resolve(question.imageUrl);
+    //         logger.info(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
+    //         if (fs.existsSync(resolvedImagePath)) {
+    //           imageData = await loadLocalImageWithDimensions(resolvedImagePath, logger);
+    //         } else {
+    //           logger.warn(`[IMAGE] Fichier image local non trouvé: ${resolvedImagePath}`);
+    //         }
+    //       }
+
+    //       if (imageData) {
+    //         const absoluteSlideNumberForImage =
+    //           effectiveExistingSlideCount + index + 1;
+    //         const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
+    //         const dimensions = calculateImageDimensions(
+    //           imageData.width,
+    //           imageData.height,
+    //           logger
+    //         );
+    //         return {
+    //           slideNumberContext: absoluteSlideNumberForImage,
+    //           image: {
+    //             fileName: imgFileName,
+    //             data: imageData.data,
+    //             width: imageData.width,
+    //             height: imageData.height,
+    //             dimensions,
+    //             extension: imageData.extension,
+    //           },
+    //         };
+    //       }
+    //     }
+    //     return null;
+    //   });
+    //   const imageResults = await Promise.all(imagePromises);
+    //   imageResults.forEach((result) => {
+    //     if (result && result.image) {
+    //       downloadedImages.set(result.slideNumberContext, result.image);
+    //       imageExtensions.add(result.image.extension);
+    //       outputZip
+    //         .folder("ppt/media")
+    //         ?.file(result.image.fileName, result.image.data);
+    //     }
+    //   });
+    // }
 
     for (let i = 0; i < questions.length; i++) {
-      const absoluteSlideNumber = effectiveExistingSlideCount + i + 1;
+      const absoluteSlideNumber = effectiveExistingSlideCount + introSlidesAddedCount + i + 1;
       const questionData = questions[i];
       const duration =
         questionData.points ||
@@ -1658,6 +2028,7 @@ export async function generatePPTXVal17(
         questionData.options,
         absoluteSlideNumber,
         duration,
+        logger,
         downloadedImage?.dimensions,
         options.ombeaConfig
       );
@@ -1665,7 +2036,8 @@ export async function generatePPTXVal17(
 
       const baseTagNumberForSlide = calculateBaseTagNumber(
         i + 1,
-        existingTagsCount
+        existingTagsCount,
+        logger
       );
       let slideRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
       slideRelsXml += `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags" Target="../tags/tag${baseTagNumberForSlide + 2}.xml"/>`;
@@ -1689,6 +2061,7 @@ export async function generatePPTXVal17(
         questionData.correctAnswerIndex,
         duration,
         options.ombeaConfig,
+        logger,
         existingTagsCount
       );
       tags.forEach((tag) => {
@@ -1716,7 +2089,7 @@ export async function generatePPTXVal17(
         if (parts.length > 1) {
           blockIdentifier = parts[1];
         } else {
-          console.warn(`[val17PptxGenerator] Question avec dbQuestionId ${questionData.dbQuestionId} a un thème "${questionData.theme}" sans suffixe de bloc identifiable (_X).`);
+          logger.warn(`[val17PptxGenerator] Question avec dbQuestionId ${questionData.dbQuestionId} a un thème "${questionData.theme}" sans suffixe de bloc identifiable (_X).`);
         }
       }
 
@@ -1729,12 +2102,21 @@ export async function generatePPTXVal17(
       });
     }
     if (existingTagsCount > 0 && questions.length > 0) {
-      const warnings = ensureTagContinuity(outputZip, 1, maxTagNumberUsed);
+      const warnings = ensureTagContinuity(outputZip, 1, maxTagNumberUsed, logger);
       if (warnings.length > 0)
-        console.warn("⚠️ Problèmes de continuité des tags détectés:", warnings);
+        logger.warn(`⚠️ Problèmes de continuité des tags détectés: ${JSON.stringify(warnings)}`);
     }
 
-    const totalFinalSlideCount = effectiveExistingSlideCount + questions.length;
+    const allSlideNumbers: number[] = [];
+    newIntroSlideDetails.forEach(d => allSlideNumbers.push(d.slideNumber));
+    for (let i = 0; i < initialExistingSlideCount; i++) {
+        allSlideNumbers.push(i + 1 + introSlidesAddedCount);
+    }
+    for (let i = 0; i < questions.length; i++) {
+        allSlideNumbers.push(initialExistingSlideCount + introSlidesAddedCount + i + 1);
+    }
+
+    const newLayouts = [ombeaLayoutFileName];
 
     const contentTypesFile = outputZip.file("[Content_Types].xml");
     if (contentTypesFile) {
@@ -1742,18 +2124,15 @@ export async function generatePPTXVal17(
       if (imageExtensions.size > 0)
         contentTypesContent = updateContentTypesForImages(
           contentTypesContent,
-          imageExtensions
+          imageExtensions,
+          logger
         );
       contentTypesContent = updateContentTypesComplete(
         contentTypesContent,
-        newIntroSlideDetails.map((d) => ({
-          slideNumber: d.slideNumber,
-          layoutFileName: d.layoutFileName,
-        })),
-        questions.length,
-        totalFinalSlideCount,
-        ombeaLayoutFileName,
-        maxTagNumberUsed
+        allSlideNumbers,
+        newLayouts,
+        maxTagNumberUsed,
+        logger
       );
       outputZip.file("[Content_Types].xml", contentTypesContent);
     }
@@ -1769,11 +2148,14 @@ export async function generatePPTXVal17(
         updatedContent: updatedPresentationRels,
         slideRIdMappings,
         oldToNewRIdMap,
-      } = updatePresentationRelsWithMappings(
+        orderedSlides,
+      } = await updatePresentationRelsWithMappings(
+        outputZip,
         presentationRelsContent,
         initialExistingSlideCount,
         newIntroSlideDetails,
-        questions.length
+        questions.length,
+        logger
       );
       outputZip.file(
         "ppt/_rels/presentation.xml.rels",
@@ -1783,16 +2165,35 @@ export async function generatePPTXVal17(
         outputZip,
         slideRIdMappings,
         slideSizeAttrs,
-        oldToNewRIdMap
+        oldToNewRIdMap,
+        logger
       );
     }
 
-    await updateCoreXml(outputZip, questions.length);
-    const appMetadata = calculateAppXmlMetadata(
-      totalFinalSlideCount,
-      questions
+    await updateCoreXml(outputZip, questions.length, logger);
+    if (!presentationRelsFile) {
+        throw new Error("ppt/_rels/presentation.xml.rels not found");
+    }
+    const relsContent = await presentationRelsFile.async("string");
+    const {
+        updatedContent: updatedPresentationRels,
+        slideRIdMappings,
+        oldToNewRIdMap,
+        orderedSlides
+      } = await updatePresentationRelsWithMappings(
+        outputZip,
+        relsContent,
+        initialExistingSlideCount,
+        newIntroSlideDetails,
+        questions.length,
+        logger
+      );
+    const appMetadata = await calculateAppXmlMetadata(
+        outputZip,
+        orderedSlides,
+        logger
     );
-    await updateAppXml(outputZip, appMetadata);
+    await updateAppXml(outputZip, appMetadata, logger);
 
     const outputBlob = await outputZip.generateAsync({
       type: "blob",
@@ -1802,11 +2203,12 @@ export async function generatePPTXVal17(
       compressionOptions: { level: 3 },
     });
 
-    console.log(`PPTX Blob et mappings de questions générés.`);
+    logger.info(`PPTX Blob et mappings de questions générés.`);
+    logger.info('[LOG][val17PptxGenerator] Fin de generatePPTXVal17.');
     return { pptxBlob: outputBlob, questionMappings: questionMappingsInternal, preExistingQuestionSlideGuids };
   } catch (error: any) {
-    console.error(`=== ERREUR GÉNÉRATION VAL17 ===`);
-    console.error(error.message);
+    logger.error(`=== ERREUR GÉNÉRATION VAL17 ===`);
+    logger.error(error.message);
     throw new Error(`Erreur lors de la génération du PPTX interactif des questions OMBEA: ${error.message}`);
   }
 }

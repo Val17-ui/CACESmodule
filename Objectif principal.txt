@@ -1,0 +1,19 @@
+Objectif principal : Assurer que les logs détaillés de l'application, y compris ceux générés par les modules pptxOrchestrator et val17PptxGenerator, soient correctement enregistrés dans
+  le fichier de log situé dans le dossier appdata, en plus d'apparaître dans le terminal.
+
+  État actuel des problèmes :
+
+   * Les erreurs de compilation précédentes sont résolues. Le code compile sans erreur.
+   * Les logs apparaissent bien dans le terminal.
+   * Le problème persistant est que ces logs ne sont PAS écrits dans le fichier de log dans le dossier `appdata`. Cela inclut les messages "dummy logger" qui indiquent que le logger est
+     utilisé avant d'être pleinement initialisé pour l'écriture dans le fichier.
+
+  Historique des actions pertinentes :
+
+   * Refactorisation du système de journalisation vers un modèle singleton (initializeLogger(), getLogger()).
+   * Déplacement de l'initialisation du logger dans app.whenReady() pour garantir l'accès au chemin userData.
+   * Mise à jour des modules (db.ts, ipcHandlers.ts, pptxOrchestrator.ts, val17PptxGenerator.ts) pour utiliser la nouvelle instance du logger.
+   * Suppression du composant SystemLogViewer et de ses références.
+
+  Prochaine étape identifiée :
+  Le focus doit être mis sur le diagnostic et la résolution du problème d'écriture dans le fichier de log (appdata), en vérifiant les chemins, les permissions et la logique d'écriture dans electron/utils/logger.ts.

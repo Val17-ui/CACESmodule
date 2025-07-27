@@ -1,3 +1,4 @@
+import { logger } from './logger';
 // src/utils/templateManager.ts
 // import { getAdminSetting } from '../db'; // Supprimé
 import { UserPptxTemplate } from '../components/settings/UserPreferences'; // Importer le type
@@ -29,7 +30,7 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
     const userTemplates: UserPptxTemplate[] = await window.dbAPI.getAdminSetting('userPptxTemplates') || [];
     templateToUse = userTemplates.find(t => t.id === selectedTemplateId) || null;
     if (!templateToUse) {
-      console.warn(`[templateManager] Modèle sélectionné avec ID "${selectedTemplateId}" non trouvé. Tentative avec le modèle par défaut utilisateur.`);
+      logger.warning(`[templateManager] Modèle sélectionné avec ID "${selectedTemplateId}" non trouvé. Tentative avec le modèle par défaut utilisateur.`);
       // Fallback vers le défaut utilisateur si l'ID sélectionné n'est pas trouvé (ne devrait pas arriver si l'UI est correcte et synchro)
       // Laisser la logique ci-dessous gérer le fallback vers le défaut utilisateur puis le défaut outil.
     }
@@ -42,7 +43,7 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
       const userTemplates: UserPptxTemplate[] = await window.dbAPI.getAdminSetting('userPptxTemplates') || [];
       templateToUse = userTemplates.find(t => t.id === userDefaultId) || null;
       if (!templateToUse) {
-        console.warn(`[templateManager] Modèle par défaut utilisateur (ID: "${userDefaultId}") non trouvé dans la liste des modèles. Utilisation du modèle par défaut de l'outil.`);
+        logger.warning(`[templateManager] Modèle par défaut utilisateur (ID: "${userDefaultId}") non trouvé dans la liste des modèles. Utilisation du modèle par défaut de l'outil.`);
         isToolDefault = true; // Fallback au modèle de l'outil
       }
     } else {
@@ -53,11 +54,11 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
 
   if (isToolDefault || !templateToUse) {
     // Utiliser le modèle par défaut de l'outil
-    console.log("[templateManager] Utilisation du modèle PowerPoint par défaut de l'outil.");
+    logger.info("[templateManager] Utilisation du modèle PowerPoint par défaut de l'outil.");
     return Promise.resolve('tool_default_template');
   } else {
     // Utiliser le modèle personnalisé (templateToUse est non null ici)
-    console.log(`[templateManager] Utilisation du modèle PowerPoint personnalisé: "${templateToUse.name}" (ID: ${templateToUse.id})`);
+    logger.info(`[templateManager] Utilisation du modèle PowerPoint personnalisé: "${templateToUse.name}" (ID: ${templateToUse.id})`);
     return new File([templateToUse.fileBlob], templateToUse.name, { type: templateToUse.fileBlob.type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
   }
 }

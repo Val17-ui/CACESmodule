@@ -9,12 +9,18 @@ export default defineConfig({
     electron([
       {
         // Point d'entre pour le processus principal d'Electron
-        entry: 'electron/index.ts',
+        entry: 'electron/index.ts', // Changement ici: fichier source
         vite: {
           build: {
-            outDir: 'dist-electron',
+            outDir: 'dist-electron/electron', // Répertoire de sortie pour le processus principal
+            lib: {
+              entry: 'electron/index.ts', // Fichier source pour le processus principal
+              formats: ['cjs'], // Sortie en CommonJS
+              fileName: () => 'index.js', // Nom du fichier de sortie
+            },
             rollupOptions: {
-              external: ['better-sqlite3'],
+              // Externaliser les modules Node.js et autres dépendances
+              external: ['electron', 'better-sqlite3', 'path', 'fs', 'jszip', 'image-size'],
             },
           },
         },
@@ -25,30 +31,6 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron',
-          },
-        },
-      },
-      {
-        // Point d'entre pour le module de base de donnes
-        entry: 'electron/db.ts',
-        vite: {
-          build: {
-            outDir: 'dist-electron',
-            rollupOptions: {
-              external: ['better-sqlite3'],
-            },
-          },
-        },
-      },
-      {
-        // Point d'entre pour le module de gestion des IPC
-        entry: 'electron/ipcHandlers.ts',
-        vite: {
-          build: {
-            outDir: 'dist-electron',
-            rollupOptions: {
-              external: ['better-sqlite3'],
-            },
           },
         },
       },

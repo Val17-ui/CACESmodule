@@ -172,6 +172,17 @@ export const StorageManager = {
     return window.dbAPI.updateSession(id, updates);
   },
 
+  // SessionIterations
+  async addOrUpdateSessionIteration(iteration: any) {
+    if (!window.dbAPI?.addOrUpdateSessionIteration) throw new Error("dbAPI.addOrUpdateSessionIteration is not available.");
+    return window.dbAPI.addOrUpdateSessionIteration(iteration);
+  },
+
+  async getSessionIterations(sessionId: number) {
+    if (!window.dbAPI?.getSessionIterations) throw new Error("dbAPI.getSessionIterations is not available.");
+    return window.dbAPI.getSessionIterations(sessionId);
+  },
+
   // SessionResults
   async addBulkSessionResults(results: any) {
     if (!window.dbAPI?.addBulkSessionResults) throw new Error("dbAPI.addBulkSessionResults is not available.");
@@ -181,6 +192,16 @@ export const StorageManager = {
   async getResultsForSession(sessionId: number) {
     if (!window.dbAPI?.getResultsForSession) throw new Error("dbAPI.getResultsForSession is not available.");
     return window.dbAPI.getResultsForSession(sessionId);
+  },
+
+  async deleteResultsForIteration(iterationId: number): Promise<void> {
+    if (!window.dbAPI?.deleteResultsForIteration) throw new Error("dbAPI.deleteResultsForIteration is not available.");
+    try {
+      await window.dbAPI.deleteResultsForIteration(iterationId);
+    } catch (error) {
+      console.error(`StorageManager: Error deleting results for iteration ${iterationId} via IPC`, error);
+      throw error;
+    }
   },
 
   // VotingDevices

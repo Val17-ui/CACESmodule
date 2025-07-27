@@ -10,15 +10,16 @@ type SessionsListProps = {
   sessions: DBSession[];
   onManageSession: (id: number) => void;
   onStartExam: (id: number) => void;
+  isArchive?: boolean;
 };
 
 const SessionsList: React.FC<SessionsListProps> = ({
   sessions,
   onManageSession,
   onStartExam,
+  isArchive = false,
 }) => {
   const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
-
   useEffect(() => {
     const loadReferentiels = async () => {
       if (window.dbAPI && typeof window.dbAPI.getAllReferentiels === 'function') {
@@ -164,18 +165,20 @@ const SessionsList: React.FC<SessionsListProps> = ({
            (session.status === 'planned' || session.status === 'ready');
   });
 
-  const sessionsTerminees = sessions.filter(session => session.status === 'completed');
+  const sessionsEnAttente = sessions.filter(session => {
+    const sessionDate = new Date(session.dateSession);
+    sessionDate.setHours(0, 0, 0, 0);
+    return sessionDate.getTime() < today.getTime() &&
+           (session.status === 'planned' || session.status === 'ready');
+  });
 
-  // Optionnel: sessions restantes (ex: annulées ou autres)
-  // const sessionsAutres = sessions.filter(session =>
-  //   !sessionsDuJour.includes(session) &&
-  //   !sessionsPlanifiees.includes(session) &&
-  //   !sessionsTerminees.includes(session)
-  // );
+  const sessionsTerminees = sessions.filter(session => session.status === 'completed' && !session.archived_at);
+  const sessionsArchivees = sessions.filter(session =>  session.archived_at);
+
 
   if (sessions.length === 0) {
     return (
-      <Card title="Sessions de formation">
+      <Card>
         <div className="px-6 py-12 text-center text-sm text-gray-500">
           <div className="flex flex-col items-center">
             <AlertTriangle size={48} className="text-gray-400 mb-3" />
@@ -188,15 +191,16 @@ const SessionsList: React.FC<SessionsListProps> = ({
     );
   }
 
+  if (isArchive) {
+    return renderSessionTable(sessions, "Toutes les archives");
+  }
+
   return (
-    // Le Card title est maintenant plus générique, les titres spécifiques sont dans renderSessionTable
-    <Card title="Aperçu des Sessions">
+    <Card>
       {renderSessionTable(sessionsDuJour, "Sessions du jour")}
       {renderSessionTable(sessionsPlanifiees, "Sessions planifiées")}
+      {renderSessionTable(sessionsEnAttente, "Sessions en attente")}
       {renderSessionTable(sessionsTerminees, "Sessions terminées")}
-      {/* Si vous voulez afficher les autres sessions (ex: annulées)
-      {renderSessionTable(sessionsAutres, "Autres sessions")}
-      */}
     </Card>
   );
 };

@@ -1,157 +1,69 @@
-[{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 543,
-	"startColumn": 24,
-	"endLineNumber": 543,
-	"endColumn": 50,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 544,
-	"startColumn": 24,
-	"endLineNumber": 544,
-	"endColumn": 50,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 545,
-	"startColumn": 24,
-	"endLineNumber": 545,
-	"endColumn": 50,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 546,
-	"startColumn": 24,
-	"endLineNumber": 546,
-	"endColumn": 50,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 547,
-	"startColumn": 24,
-	"endLineNumber": 547,
-	"endColumn": 50,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 549,
-	"startColumn": 24,
-	"endLineNumber": 549,
-	"endColumn": 50,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 550,
-	"startColumn": 24,
-	"endLineNumber": 550,
-	"endColumn": 50,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 551,
-	"startColumn": 24,
-	"endLineNumber": 551,
-	"endColumn": 51,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'number' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 552,
-	"startColumn": 24,
-	"endLineNumber": 552,
-	"endColumn": 51,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2322",
-	"severity": 8,
-	"message": "Type 'number' is not assignable to type 'never'.",
-	"source": "ts",
-	"startLineNumber": 556,
-	"startColumn": 9,
-	"endLineNumber": 556,
-	"endColumn": 40,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type '\"SUCCÈS - Blob PPTX généré\"' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 2024,
-	"startColumn": 22,
-	"endLineNumber": 2024,
-	"endColumn": 49,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type '\"ÉCHEC - Le générateur n'a pas retourné de blob PPTX\"' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 2026,
-	"startColumn": 22,
-	"endLineNumber": 2026,
-	"endColumn": 75,
-	"origin": "extHost1"
-},{
-	"resource": "/e:/AAS/Devis/Vente/Camira/projet CACES/plateforme sur github/CACESmodule/dist-electron/utils/val17PptxGenerator.ts",
-	"owner": "typescript",
-	"code": "2345",
-	"severity": 8,
-	"message": "Argument of type 'string' is not assignable to parameter of type 'never'.",
-	"source": "ts",
-	"startLineNumber": 2029,
-	"startColumn": 20,
-	"endLineNumber": 2029,
-	"endColumn": 45,
-	"origin": "extHost1"
-}]
+electron/db.ts:378:5 - error TS2552: Cannot find name 'SessionIteration'. Did you mean 'addSessionIteration'?
+
+378     SessionIteration, Participant, ParticipantAssignment
+        ~~~~~~~~~~~~~~~~
+
+  electron/db.ts:382:7
+    382 const addSessionIteration = async (iteration: Omit<SessionIteration, 'id'>): Promise<number | undefined> => {
+              ~~~~~~~~~~~~~~~~~~~
+    'addSessionIteration' is declared here.
+
+electron/db.ts:378:23 - error TS2552: Cannot find name 'Participant'. Did you mean 'addParticipant'?
+
+378     SessionIteration, Participant, ParticipantAssignment
+                          ~~~~~~~~~~~
+
+  electron/db.ts:429:7
+    429 const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<number | undefined> => {
+              ~~~~~~~~~~~~~~
+    'addParticipant' is declared here.
+
+electron/db.ts:378:36 - error TS2552: Cannot find name 'ParticipantAssignment'. Did you mean 'addParticipantAssignment'?
+
+378     SessionIteration, Participant, ParticipantAssignment
+                                       ~~~~~~~~~~~~~~~~~~~~~
+
+  electron/db.ts:446:7
+    446 const addParticipantAssignment = async (assignment: Omit<ParticipantAssignment, 'id'>): Promise<number | undefined> => {
+              ~~~~~~~~~~~~~~~~~~~~~~~~
+    'addParticipantAssignment' is declared here.
+
+electron/db.ts:382:52 - error TS2304: Cannot find name 'SessionIteration'.
+
+382 const addSessionIteration = async (iteration: Omit<SessionIteration, 'id'>): Promise<number | undefined> => {
+                                                       ~~~~~~~~~~~~~~~~
+
+electron/db.ts:398:76 - error TS2304: Cannot find name 'SessionIteration'.
+
+398 const getSessionIterationsBySessionId = async (sessionId: number): Promise<SessionIteration[]> => {
+                                                                               ~~~~~~~~~~~~~~~~
+
+electron/db.ts:402:43 - error TS2304: Cannot find name 'SessionIteration'.
+
+402             return stmt.all(sessionId) as SessionIteration[];
+                                              ~~~~~~~~~~~~~~~~
+
+electron/db.ts:410:73 - error TS2304: Cannot find name 'SessionIteration'.
+
+410 const updateSessionIteration = async (id: number, updates: Partial<Omit<SessionIteration, 'id'>>): Promise<number | undefined> => {
+                                                                            ~~~~~~~~~~~~~~~~
+
+electron/db.ts:429:49 - error TS2304: Cannot find name 'Participant'.
+
+429 const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<number | undefined> => {
+                                                    ~~~~~~~~~~~
+
+electron/db.ts:446:58 - error TS2304: Cannot find name 'ParticipantAssignment'.
+
+446 const addParticipantAssignment = async (assignment: Omit<ParticipantAssignment, 'id'>): Promise<number | undefined> => {
+                                                             ~~~~~~~~~~~~~~~~~~~~~
+
+electron/db.ts:462:85 - error TS2304: Cannot find name 'ParticipantAssignment'.
+
+462 const getParticipantAssignmentsByIterationId = async (iterationId: number): Promise<ParticipantAssignment[]> => {
+                                                                                        ~~~~~~~~~~~~~~~~~~~~~
+
+electron/db.ts:466:45 - error TS2304: Cannot find name 'ParticipantAssignment'.
+
+466             return stmt.all(iterationId) as ParticipantAssignment[];
+                                                ~~~~~~~~~~~~~~~~~~~~~

@@ -3,7 +3,6 @@ import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
-import Badge from '../ui/Badge';
 import { Save, FileUp, UserPlus, Trash2, PackagePlus, AlertTriangle } from 'lucide-react';
 import {
   CACESReferential,
@@ -43,7 +42,7 @@ interface SessionFormProps {
   sessionIdToLoad?: number;
 }
 
-type TabKey = 'details' | 'participants' | 'resultsOrs';
+type TabKey = 'details' | 'participants' | 'generateQuestionnaire' | 'importResults';
 
 interface AdminPPTXSettings {
     defaultDuration: number;
@@ -59,6 +58,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [currentSessionDbId, setCurrentSessionDbId] = useState<number | null>(sessionIdToLoad || null);
   const [sessionName, setSessionName] = useState('');
   const [sessionDate, setSessionDate] = useState('');
+  const [numSession, setNumSession] = useState('');
+  const [numStage, setNumStage] = useState('');
+  const [iterationCount, setIterationCount] = useState(1);
+  const [iterationNames, setIterationNames] = useState<string[]>(['Session_1']);
   const [selectedReferential, setSelectedReferential] = useState<CACESReferential | ''>('');
   const [selectedReferentialId, setSelectedReferentialId] = useState<number | null>(null);
   const [location, setLocation] = useState('');
@@ -85,6 +88,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [detectedAnomalies, setDetectedAnomalies] = useState<DetectedAnomalies | null>(null);
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
+  const [participantAssignments, setParticipantAssignments] = useState<Record<number, { id: string; assignedGlobalDeviceId: number | null }[]>>({});
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -172,6 +176,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setCurrentSessionDbId(sessionData.id ?? null);
             setSessionName(sessionData.nomSession);
             setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
+              setNumSession(sessionData.num_session || '');
+              setNumStage(sessionData.num_stage || '');
             if (sessionData.referentielId) {
               const refObj = referentielsData.find(r => r.id === sessionData.referentielId);
               if (refObj) {
@@ -192,6 +198,21 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setNotes(sessionData.notes || '');
             setSelectedTrainerId(sessionData.trainerId || null);
             setSelectedKitIdState(sessionData.selectedKitId || null);
+
+            if (sessionData.iteration_count && sessionData.iteration_count > 1) {
+              setIterationCount(sessionData.iteration_count);
+              if (sessionData.iterations && sessionData.iterations.length > 0) {
+                setIterationNames(sessionData.iterations.map(iter => iter.name));
+              } else {
+                // Fallback if names are not stored in iterations
+                const newIterationNames = Array.from({ length: sessionData.iteration_count }, (_, i) => `Session_${i + 1}`);
+                setIterationNames(newIterationNames);
+              }
+            } else {
+              setIterationCount(1);
+              setIterationNames(['Session_1']);
+            }
+
             setModifiedAfterOrsGeneration(false);
             const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
               ...p_db,
@@ -203,6 +224,26 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
               hasSigned: (p_db as any).hasSigned || false,
             }));
             setParticipants(formParticipants);
+
+            // Reconstruct participant assignments from loaded iteration data
+            if (sessionData.iterations && sessionData.iterations.length > 0) {
+              const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+              sessionData.iterations.forEach(iter => {
+                const participantIdsForIter: { id: string; assignedGlobalDeviceId: number | null }[] = [];
+                if (iter.participants) {
+                  iter.participants.forEach((p_iter: DBParticipantType) => {
+                    const matchingFormParticipant = formParticipants.find(
+                      fp => fp.identificationCode === p_iter.identificationCode
+                    );
+                    if (matchingFormParticipant) {
+                      participantIdsForIter.push({ id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null });
+                    }
+                  });
+                }
+                newAssignments[iter.iteration_index] = participantIdsForIter;
+              });
+              setParticipantAssignments(newAssignments);
+            }
           } else {
             console.warn(`Session avec ID ${sessionIdToLoad} non trouvée.`);
             resetFormTactic();
@@ -239,6 +280,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   }, [editingSessionData, editingSessionData?.selectedBlocIds, allThemesData, allBlocsData]);
 
+  useEffect(() => {
+    // Only default all participants to the first iteration for NEW sessions.
+    if (!sessionIdToLoad && iterationCount === 1) {
+        setParticipantAssignments({
+            0: participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null }))
+        });
+    }
+}, [participants, iterationCount, sessionIdToLoad]);
+
   const referentialOptionsFromData = referentielsData.map((r: Referential) => ({
     value: r.code,
     label: `${r.code} - ${r.nom_complet}`,
@@ -255,36 +305,23 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       alert("Le kit sélectionné ne contient aucun boîtier. Veuillez ajouter des boîtiers au kit ou en sélectionner un autre.");
       return;
     }
-    const assignedDeviceIdsInSession = new Set(
-      participants.map(p => p.assignedGlobalDeviceId).filter(id => id !== null)
-    );
-    let nextAvailableDevice: VotingDevice | null = null;
-    for (const deviceInKit of votingDevicesInSelectedKit) {
-      if (deviceInKit.id && !assignedDeviceIdsInSession.has(deviceInKit.id)) {
-        nextAvailableDevice = deviceInKit;
-        break;
-      }
-    }
-    if (!nextAvailableDevice) {
-      alert("Tous les boîtiers du kit sélectionné sont déjà assignés dans cette session.");
-      return;
-    }
-    const nextVisualDeviceId = participants.length > 0
-        ? Math.max(...participants.map(p => p.deviceId || 0)) + 1
-        : 1;
+
+    const assignedDeviceIds = participants.map(p => p.assignedGlobalDeviceId).filter(id => id !== null);
+    const nextAvailableDevice = votingDevicesInSelectedKit.find(d => !assignedDeviceIds.includes(d.id));
+
     const newParticipant: FormParticipant = {
       nom: '',
       prenom: '',
       identificationCode: '',
       score: undefined,
       reussite: undefined,
-      assignedGlobalDeviceId: nextAvailableDevice.id!,
+      assignedGlobalDeviceId: nextAvailableDevice?.id || null,
       statusInSession: 'present',
       id: Date.now().toString(),
       firstName: '',
       lastName: '',
       organization: '',
-      deviceId: nextVisualDeviceId,
+      deviceId: null,
       hasSigned: false,
     };
     setParticipants([...participants, newParticipant]);
@@ -294,6 +331,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     const updatedParticipants = participants.filter(p => p.id !== id);
     setParticipants(updatedParticipants);
+    // Also remove from assignments
+    setParticipantAssignments(prev => {
+        const newAssignments = { ...prev };
+        Object.keys(newAssignments).forEach(iterIndex => {
+            const index = parseInt(iterIndex, 10);
+            newAssignments[index] = (newAssignments[index] || []).filter(p => p.id !== id);
+        });
+        return newAssignments;
+    });
   };
 
   const handleParticipantChange = (id: string, field: keyof FormParticipant, value: string | number | boolean | null) => {
@@ -309,6 +355,27 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       }
       return p;
     }));
+  };
+
+  const handleParticipantIterationChange = (participantId: string, newIterationIndex: number) => {
+    setParticipantAssignments(prev => {
+        const newAssignments = { ...prev };
+        const participantToMove = participants.find(p => p.id === participantId);
+        if (!participantToMove) return prev;
+
+        // Remove participant from all iterations first
+        Object.keys(newAssignments).forEach(iterIndex => {
+            const index = parseInt(iterIndex, 10);
+            newAssignments[index] = (newAssignments[index] || []).filter(p => p.id !== participantId);
+        });
+
+        // Add to the new iteration
+        if (!newAssignments[newIterationIndex]) {
+            newAssignments[newIterationIndex] = [];
+        }
+        newAssignments[newIterationIndex].push({ id: participantToMove.id, assignedGlobalDeviceId: participantToMove.assignedGlobalDeviceId || null });
+        return newAssignments;
+    });
   };
 
   const parseCsvParticipants = (fileContent: string): Array<Partial<DBParticipantType>> => {
@@ -327,8 +394,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     return parsed;
   };
 
-  const parseExcelParticipants = (data: Uint8Array): Array<Partial<DBParticipantType>> => {
-    const parsed: Array<Partial<DBParticipantType>> = [];
+  const parseExcelParticipants = (data: Uint8Array): Array<Partial<DBParticipantType> & { iteration?: number }> => {
+    const parsed: Array<Partial<DBParticipantType> & { iteration?: number }> = [];
     const workbook = XLSX.read(data, { type: 'array' });
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
@@ -342,12 +409,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (hasPrenom && hasNom) {
       headers = potentialHeaders; dataStartIndex = 1;
     } else {
-      headers = ['prénom', 'nom', 'organisation', 'code identification']; dataStartIndex = 0;
+      headers = ['prénom', 'nom', 'organisation', 'code identification', 'itération']; dataStartIndex = 0;
     }
     const prenomIndex = headers.findIndex(h => h === 'prénom' || h === 'prenom');
     const nomIndex = headers.findIndex(h => h === 'nom');
     const orgIndex = headers.findIndex(h => h === 'organisation');
     const codeIndex = headers.findIndex(h => h === 'code identification' || h === 'code');
+    const iterationIndex = headers.findIndex(h => h === 'itération' || h === 'iteration');
     for (let i = dataStartIndex; i < jsonData.length; i++) {
       const row = jsonData[i];
       if (row.some(cell => cell && cell.toString().trim() !== '')) {
@@ -358,7 +426,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             prenom, nom,
             organization: orgIndex !== -1 ? row[orgIndex]?.toString().trim() || '' : row[2]?.toString().trim() || '',
             identificationCode: codeIndex !== -1 ? row[codeIndex]?.toString().trim() || '' : row[3]?.toString().trim() || '',
-            } as Partial<DBParticipantType>);
+            iteration: iterationIndex !== -1 ? parseInt(row[iterationIndex]?.toString().trim(), 10) : 1,
+            } as Partial<DBParticipantType> & { iteration?: number });
         }
       }
     }
@@ -366,7 +435,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const addImportedParticipants = (
-    parsedData: Array<Partial<DBParticipantType>>,
+    parsedData: Array<Partial<DBParticipantType> & { iteration?: number }>,
     fileName: string
   ) => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
@@ -386,12 +455,37 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         deviceId: null,
         hasSigned: false,
       }));
-      setParticipants(prev => [...prev, ...newFormParticipants]);
+      setParticipants(prev => {
+        const updatedParticipants = [...prev, ...newFormParticipants];
+        // Assign imported participants to iterations
+        const newAssignments = { ...participantAssignments };
+        newFormParticipants.forEach((p, index) => {
+          const parsedInfo = parsedData[index];
+          const targetIteration = parsedInfo?.iteration || 1; // Default to 1st iteration
+          const iterationIndex = targetIteration - 1; // Convert to 0-based index
+          if (!newAssignments[iterationIndex]) {
+            newAssignments[iterationIndex] = [];
+          }
+          newAssignments[iterationIndex].push({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null });
+        });
+        setParticipantAssignments(newAssignments);
+        return updatedParticipants;
+      });
       setImportSummary(`${parsedData.length} participants importés de ${fileName}. Assignez les boîtiers.`);
     } else {
       setImportSummary(`Aucun participant valide trouvé dans ${fileName}.`);
     }
   };
+
+const handleGenerateQuestionnaire = async () => {
+    const sessionData = await prepareSessionDataForDb();
+    if (sessionData) {
+        const savedId = await handleSaveSession(sessionData);
+        if (savedId) {
+            handleGenerateQuestionnaireAndOrs(savedId);
+        }
+    }
+};
 
   const handleParticipantFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -429,7 +523,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
-  const prepareSessionDataForDb = async (includeOrsBlob?: Blob | null): Promise<DBSession | null> => {
+  const prepareSessionDataForDb = async (includeOrsBlob?: string | Blob | ArrayBuffer | null): Promise<DBSession | null> => {
     const dbParticipants: DBParticipantType[] = participants.map((p_form: FormParticipant) => ({
       nom: p_form.lastName,
       prenom: p_form.firstName,
@@ -456,8 +550,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
     const sessionToSave: DBSession = {
       id: currentSessionDbId || undefined,
+      iteration_count: iterationCount,
       nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
       dateSession: sessionDate || new Date().toISOString().split('T')[0],
+      num_session: numSession,
+      num_stage: numStage,
       referentielId: currentReferentielId,
       participants: dbParticipants,
       selectedBlocIds: editingSessionData?.selectedBlocIds || [],
@@ -474,6 +571,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
       resultsImportedAt: null,
     };
+    logger.info(`[LOG][SessionForm] Session data to save: ${JSON.stringify(sessionToSave.participants.map(p => ({ nom: p.nom, prenom: p.prenom, assignedGlobalDeviceId: p.assignedGlobalDeviceId })))}`);
     return sessionToSave;
   };
 
@@ -489,32 +587,50 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         if (newId) { setCurrentSessionDbId(newId); savedId = newId; }
         else { setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée."); return null; }
       }
+
       if (savedId) {
-         const reloadedSession = await StorageManager.getSessionById(savedId);
-         setEditingSessionData(reloadedSession || null);
-         if (reloadedSession) {
-            setModifiedAfterOrsGeneration(false);
-            const formParticipants: FormParticipant[] = reloadedSession.participants.map((p_db: DBParticipantType, index: number) => {
-              const visualDeviceId = index + 1;
-              const currentParticipantState = participants.find(p => p.nom === p_db.nom && p.prenom === p_db.prenom && p.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId) || participants[index];
-              return {
-                nom: p_db.nom,
-                prenom: p_db.prenom,
-                identificationCode: p_db.identificationCode,
-                score: p_db.score,
-                reussite: p_db.reussite,
-                assignedGlobalDeviceId: p_db.assignedGlobalDeviceId,
-                statusInSession: p_db.statusInSession,
-                id: currentParticipantState?.id || `form-reloaded-${index}-${Date.now()}`,
-                firstName: p_db.prenom,
-                lastName: p_db.nom,
-                deviceId: currentParticipantState?.deviceId ?? visualDeviceId,
-                organization: currentParticipantState?.organization || '',
-                hasSigned: currentParticipantState?.hasSigned || false,
+        // Save the iterations with their participant assignments
+        for (let i = 0; i < iterationCount; i++) {
+          const assignedParticipantIds = (participantAssignments[i] || []).map(p => p.id);
+          const participantsForIteration = participants
+            .filter(p => assignedParticipantIds.includes(p.id))
+            .map(p => {
+              const dbParticipant: DBParticipantType = {
+                nom: p.lastName,
+                prenom: p.firstName,
+                organization: p.organization,
+                identificationCode: p.identificationCode,
+                score: p.score,
+                reussite: p.reussite,
+                assignedGlobalDeviceId: p.assignedGlobalDeviceId,
+                statusInSession: p.statusInSession,
               };
+              return dbParticipant;
             });
-            setParticipants(formParticipants);
-         }
+
+          const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
+          const iterationToSave = {
+            id: existingIteration?.id,
+            session_id: savedId,
+            iteration_index: i,
+            name: iterationNames[i] || `Session_${i + 1}`,
+            status: existingIteration?.status || 'planned',
+            participants: participantsForIteration,
+            ors_file_path: existingIteration?.ors_file_path,
+            question_mappings: existingIteration?.question_mappings,
+            created_at: existingIteration?.created_at || new Date().toISOString(),
+          };
+          await StorageManager.addOrUpdateSessionIteration(iterationToSave);
+        }
+
+        // Reload data to get the latest state and update UI
+        const reloadedSession = await StorageManager.getSessionById(savedId);
+        setEditingSessionData(reloadedSession || null);
+        if (reloadedSession) {
+          setModifiedAfterOrsGeneration(false);
+          // The participant list in the form should not change, just the assignments
+          // So, we don't need to remap the whole participant list here.
+        }
       }
       return savedId;
     } catch (error: any) {
@@ -532,243 +648,152 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   };
 
-  const handleGenerateQuestionnaireAndOrs = async () => {
+  const handleCancelSession = async () => {
+    if (window.confirm("Êtes-vous sûr de vouloir annuler cette session ? Cette action est irréversible.")) {
+      if (currentSessionDbId) {
+        try {
+          await StorageManager.updateSession(currentSessionDbId, {
+            status: 'cancelled',
+            archived_at: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          setImportSummary("Session annulée et archivée.");
+          // Optionnel: rediriger l'utilisateur ou rafraîchir l'état
+        } catch (error) {
+          console.error("Erreur lors de l'annulation de la session:", error);
+          setImportSummary("Erreur lors de l'annulation de la session.");
+        }
+      } else {
+        setImportSummary("Impossible d'annuler une session non sauvegardée.");
+      }
+    }
+  };
+
+  const handleGenerateQuestionnaireAndOrs = async (iterationIndex?: number) => {
     const refCodeToUse = selectedReferential || (editingSessionData?.referentielId ? referentielsData.find(r => r.id === editingSessionData.referentielId)?.code : null);
     if (!refCodeToUse) {
       setImportSummary("Veuillez sélectionner un référentiel pour générer l'ORS.");
-      setIsGeneratingOrs(false); return;
+      return;
     }
     setIsGeneratingOrs(true);
-    setImportSummary("Préparation des données et vérification des boîtiers...");
-    let sessionDataPreORS = await prepareSessionDataForDb(undefined);
-    if (!sessionDataPreORS) { setImportSummary("Erreur préparation données session."); setIsGeneratingOrs(false); return; }
-    const currentSavedId = await handleSaveSession(sessionDataPreORS);
-    if (!currentSavedId) {
-        setImportSummary("Erreur lors de la sauvegarde de la session avant génération ORS.");
-        setIsGeneratingOrs(false); return;
-    }
-    const upToDateSessionData = await StorageManager.getSessionById(currentSavedId);
-    if (!upToDateSessionData) { setImportSummary("Erreur rechargement session après sauvegarde."); setIsGeneratingOrs(false); return; }
-    setEditingSessionData(upToDateSessionData);
-    const participantsWithoutValidDevice = [];
-    for (const p of upToDateSessionData.participants) {
-      if (p.assignedGlobalDeviceId === null || p.assignedGlobalDeviceId === undefined) {
-        participantsWithoutValidDevice.push(`${p.prenom} ${p.nom} (aucun boîtier physique assigné)`);
-      } else {
-        const foundDevice = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
-        if (!foundDevice) {
-          participantsWithoutValidDevice.push(`${p.prenom} ${p.nom} (boîtier physique assigné introuvable - ID: ${p.assignedGlobalDeviceId})`);
-        }
-      }
-    }
-    if (participantsWithoutValidDevice.length > 0) {
-      const participantIssues = participantsWithoutValidDevice.join('; ');
-      setImportSummary(`Erreur: Participants avec problèmes d'assignation de boîtier: ${participantIssues}. Vérifiez les assignations.`);
+    setImportSummary("Sauvegarde de la session avant génération...");
+    let sessionDataPreORS = await prepareSessionDataForDb();
+    if (!sessionDataPreORS) {
+      setImportSummary("Erreur lors de la préparation des données de la session.");
       setIsGeneratingOrs(false); return;
     }
-    setImportSummary("Préparation du modèle PPTX et génération .ors...");
-    let allSelectedQuestionsForPptx: StoredQuestion[] = [];
-    let selectedBlocIdsForSession: number[] = [];
+    const currentSavedId = await handleSaveSession(sessionDataPreORS);
+    if (!currentSavedId) {
+      setImportSummary("Erreur lors de la sauvegarde de la session avant la génération.");
+      setIsGeneratingOrs(false); return;
+    }
+    const upToDateSessionData = await StorageManager.getSessionById(currentSavedId);
+    if (!upToDateSessionData) {
+      setImportSummary("Erreur lors du rechargement de la session après sauvegarde.");
+      setIsGeneratingOrs(false); return;
+    }
+    setEditingSessionData(upToDateSessionData);
+
     try {
-      const referentielObject = await StorageManager.getReferentialByCode(refCodeToUse as string);
-      if (!referentielObject || !referentielObject.id) {
-        setImportSummary(`Référentiel avec code "${refCodeToUse}" non trouvé.`);
-        setIsGeneratingOrs(false); return;
-      }
-      const themesForReferential = await StorageManager.getThemesByReferentialId(referentielObject.id);
-      if (!themesForReferential || themesForReferential.length === 0) {
-        setImportSummary(`Aucun thème trouvé pour le référentiel "${refCodeToUse}".`);
-        setIsGeneratingOrs(false); return;
-      }
-      for (const theme of themesForReferential) {
-        if (!theme.id) continue;
-        const blocsForTheme = await StorageManager.getBlocsByThemeId(theme.id);
-        if (!blocsForTheme || blocsForTheme.length === 0) {
-          console.warn(`Aucun bloc trouvé pour le thème "${theme.code_theme}" (ID: ${theme.id}).`);
-          continue;
-        }
-        const filteredBlocs = blocsForTheme.filter((bloc: Bloc) =>
-          bloc.code_bloc.match(/_([A-E])$/i)
-        );
-        if (filteredBlocs.length === 0) {
-          console.warn(`Aucun bloc de type _A à _E trouvé pour le thème "${theme.code_theme}".`);
-          continue;
-        }
-        const chosenBloc = filteredBlocs[Math.floor(Math.random() * filteredBlocs.length)];
-        if (chosenBloc && chosenBloc.id) {
-          selectedBlocIdsForSession.push(chosenBloc.id);
-          const questionsFromBloc = await StorageManager.getQuestionsForBloc(chosenBloc.id);
-          allSelectedQuestionsForPptx = allSelectedQuestionsForPptx.concat(questionsFromBloc);
-          logger.info(`Thème: ${theme.code_theme}, Bloc choisi: ${chosenBloc.code_bloc}, Questions: ${questionsFromBloc.length}`);
-        }
-      }
-      if (allSelectedQuestionsForPptx.length === 0) {
-        setImportSummary("Aucune question sélectionnée après le processus de choix aléatoire des blocs.");
-        setIsGeneratingOrs(false); return;
-      }
-      const sessionDataWithSelectedBlocs: DBSession = {
-        ...upToDateSessionData,
-        selectedBlocIds: selectedBlocIdsForSession,
-        referentielId: referentielObject.id
-      };
-      await StorageManager.updateSession(currentSavedId, { selectedBlocIds: selectedBlocIdsForSession, referentielId: referentielObject.id });
-      setEditingSessionData(sessionDataWithSelectedBlocs);
-      const sessionInfoForPptx = { name: sessionDataWithSelectedBlocs.nomSession, date: sessionDataWithSelectedBlocs.dateSession, referential: referentielObject.code as CACESReferential };
-      const prefPollStartMode = await StorageManager.getAdminSetting('pollStartMode') || 'Automatic';
-      const prefAnswersBulletStyle = await StorageManager.getAdminSetting('answersBulletStyle') || 'ppBulletAlphaUCPeriod';
-      const prefPollTimeLimit = await StorageManager.getAdminSetting('pollTimeLimit');
-      const prefPollCountdownStartMode = await StorageManager.getAdminSetting('pollCountdownStartMode') || 'Automatic';
-      const timeLimitFromPrefs = prefPollTimeLimit !== undefined ? Number(prefPollTimeLimit) : 30;
-      const adminSettings: AdminPPTXSettings = {
-        defaultDuration: timeLimitFromPrefs, pollTimeLimit: timeLimitFromPrefs,
-        answersBulletStyle: prefAnswersBulletStyle, pollStartMode: prefPollStartMode,
-        chartValueLabelFormat: 'Response_Count', pollCountdownStartMode: prefPollCountdownStartMode,
-        pollMultipleResponse: '1'
-      };
-      const participantsForGenerator = sessionDataWithSelectedBlocs.participants.map((p_db: DBParticipantType) => {
-        const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
-        return {
-          idBoitier: assignedDevice ? assignedDevice.serialNumber : '',
-          nom: p_db.nom,
-          prenom: p_db.prenom,
-          identificationCode: p_db.identificationCode,
-        };
-      });
-      const stillMissingSerial = participantsForGenerator.find(p => !p.idBoitier);
-      if (stillMissingSerial) {
-          setImportSummary(`Erreur critique: Impossible de trouver le numéro de série pour ${stillMissingSerial.prenom} ${stillMissingSerial.nom}.`);
-          setIsGeneratingOrs(false); return;
-      }
-      const templateFile = await getActivePptxTemplateFile();
-      const generationOutput = await window.dbAPI.generatePresentation(
-        sessionInfoForPptx,
-        participantsForGenerator as DBParticipantType[],
-        allSelectedQuestionsForPptx,
-        templateFile,
-        adminSettings
-      );
-      if (generationOutput && generationOutput.orsBlob && generationOutput.questionMappings && sessionDataWithSelectedBlocs) {
-        const { orsBlob, questionMappings, ignoredSlideGuids: newlyIgnoredSlideGuids } = generationOutput;
-        const fileName = `${sessionDataWithSelectedBlocs.nomSession}.ors`; // Use .ors extension
-        const saveResult = await window.dbAPI.savePptxFile(orsBlob, fileName);
-
-        if (!saveResult.success) {
-          throw new Error(`Échec de la sauvegarde du fichier ORS: ${saveResult.error}`);
-        }
-
-        try {
-          await StorageManager.updateSession(currentSavedId, {
-            orsFilePath: saveResult.filePath, // Store the file path
-            questionMappings: questionMappings,
-            ignoredSlideGuids: newlyIgnoredSlideGuids || [],
-            updatedAt: new Date().toISOString(),
-            status: 'ready',
-            selectedBlocIds: sessionDataWithSelectedBlocs.selectedBlocIds,
-            referentielId: sessionDataWithSelectedBlocs.referentielId
-          });
-          const freshlyUpdatedSessionData = await StorageManager.getSessionById(currentSavedId);
-          if (!freshlyUpdatedSessionData) {
-            throw new Error("Impossible de recharger la session après la mise à jour avec l'ORS.");
-          }
-          setEditingSessionData(freshlyUpdatedSessionData);
-          await StorageManager.deleteSessionQuestionsBySessionId(currentSavedId);
-          await StorageManager.deleteSessionBoitiersBySessionId(currentSavedId);
-          const sessionQuestionsToSave: SessionQuestion[] = [];
-          for (const qMap of questionMappings) {
-            if (qMap.slideGuid && qMap.dbQuestionId !== undefined) {
-              const originalQuestion = allSelectedQuestionsForPptx.find(q => q.id === qMap.dbQuestionId);
-              if (originalQuestion) {
-                let blocCodeForSessionQuestion = 'N/A';
-                if (originalQuestion.blocId) {
-                  const blocDetails = allBlocsData.find((b: Bloc) => b.id === originalQuestion.blocId);
-                  if (blocDetails) {
-                    blocCodeForSessionQuestion = blocDetails.code_bloc;
-                  } else {
-                    blocCodeForSessionQuestion = `ID_Bloc_${originalQuestion.blocId}`;
-                  }
-                }
-                sessionQuestionsToSave.push({
-                  sessionId: currentSavedId,
-                  dbQuestionId: originalQuestion.id!,
-                  slideGuid: qMap.slideGuid,
-                  text: originalQuestion.text,
-                  options: originalQuestion.options,
-                  correctAnswer: originalQuestion.correctAnswer,
-                  blockId: blocCodeForSessionQuestion,
-                });
-              }
+      let allSelectedQuestionsForPptx: StoredQuestion[] = [];
+      if (!upToDateSessionData.questionMappings || upToDateSessionData.questionMappings.length === 0) {
+        const referentielObject = await StorageManager.getReferentialByCode(refCodeToUse as string);
+        if (!referentielObject?.id) throw new Error(`Référentiel non trouvé: ${refCodeToUse}`);
+        const themes = await StorageManager.getThemesByReferentialId(referentielObject.id);
+        for (const theme of themes) {
+          if (!theme.id) continue;
+          const blocs = (await StorageManager.getBlocsByThemeId(theme.id)).filter(b => b.code_bloc.match(/_([A-E])$/i));
+          if (blocs.length > 0) {
+            const chosenBloc = blocs[Math.floor(Math.random() * blocs.length)];
+            if (chosenBloc.id) {
+              const questions = await StorageManager.getQuestionsForBloc(chosenBloc.id);
+              allSelectedQuestionsForPptx.push(...questions);
             }
           }
-          if (sessionQuestionsToSave.length > 0) {
-            await StorageManager.addBulkSessionQuestions(sessionQuestionsToSave);
-          }
-          const sessionBoitiersToSave: SessionBoitier[] = [];
-          freshlyUpdatedSessionData.participants.forEach((p_db: DBParticipantType, p_idx: number) => {
-            const assignedDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
-            if (assignedDevice) {
-              const formP = participants.find(fp => fp.assignedGlobalDeviceId === p_db.assignedGlobalDeviceId);
-              const visualId = formP?.deviceId ?? (p_idx + 1);
-              sessionBoitiersToSave.push({
-                sessionId: currentSavedId,
-                participantId: `P${p_idx + 1}`,
-                visualId: visualId,
-                serialNumber: assignedDevice.serialNumber,
-                participantName: `${p_db.prenom} ${p_db.nom}`,
-              });
-            }
-          });
-          if (sessionBoitiersToSave.length > 0) {
-            await StorageManager.addBulkSessionBoitiers(sessionBoitiersToSave);
-          }
-          setImportSummary(`Session (ID: ${currentSavedId}) .ors, mappings et métadonnées générés. Statut: Prête.`);
-          logger.info(`Fichier .ors, mappings et métadonnées générés/mis à jour pour la session "${freshlyUpdatedSessionData.nomSession}"`, {
-            eventType: 'ORS_METADATA_UPDATED',
-            sessionId: currentSavedId,
-            sessionName: freshlyUpdatedSessionData.nomSession
-          });
-          setModifiedAfterOrsGeneration(false);
-        } catch (e: any) {
-          setImportSummary(`Erreur sauvegarde .ors/mappings/métadonnées: ${e.message}`);
-          console.error("Erreur sauvegarde .ors/mappings/métadonnées:", e);
-          logger.error(`Erreur lors de la sauvegarde .ors/mappings/métadonnées pour la session "${sessionDataWithSelectedBlocs.nomSession}"`, { eventType: 'ORS_METADATA_SAVE_ERROR', sessionId: currentSavedId, error: e });
         }
+        if (allSelectedQuestionsForPptx.length === 0) throw new Error("Aucune question sélectionnée.");
       } else {
-        setImportSummary("Erreur génération .ors/mappings ou données de session manquantes.");
-        console.error("Erreur génération .ors/mappings. Output:", generationOutput);
-        logger.error(`Erreur lors de la génération .ors/mappings pour la session "${sessionDataWithSelectedBlocs.nomSession}"`, { eventType: 'ORS_GENERATION_ERROR', sessionId: currentSavedId, output: generationOutput });
+        const questionIds = upToDateSessionData.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id != null);
+        allSelectedQuestionsForPptx = await StorageManager.getQuestionsByIds(questionIds);
       }
+
+      const iterationsToGenerate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: iterationCount }, (_, i) => i);
+      for (const i of iterationsToGenerate) {
+        const iterationName = iterationNames[i];
+        const assignedParticipantIds = (participantAssignments[i] || []).map(p => p.id);
+        const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.id));
+        const participantsForGenerator = participantsForIteration.map(p => {
+          const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
+          return { idBoitier: device?.serialNumber || '', nom: p.lastName, prenom: p.firstName, identificationCode: p.identificationCode };
+        });
+
+        const templateFile = await getActivePptxTemplateFile();
+        const { orsBlob, questionMappings } = await window.dbAPI.generatePresentation(
+          { name: `${sessionName} - ${iterationName}`, date: sessionDate, referential: refCodeToUse as CACESReferential },
+          participantsForGenerator, allSelectedQuestionsForPptx, templateFile, {} as AdminPPTXSettings
+        );
+
+        if (orsBlob) {
+          const fileName = `${sessionName.replace(/ /g, '_')}_${iterationName.replace(/ /g, '_')}.ors`;
+          const saveResult = await window.dbAPI.savePptxFile(orsBlob, fileName);
+          if (saveResult.success) {
+            const iterToUpdate = upToDateSessionData.iterations?.find(it => it.iteration_index === i) || { created_at: new Date().toISOString() };
+            await StorageManager.addOrUpdateSessionIteration({
+              ...iterToUpdate,
+              session_id: currentSavedId,
+              iteration_index: i,
+              name: iterationName,
+              ors_file_path: saveResult.filePath,
+              status: 'ready',
+              participants: participantsForIteration.map(p => ({ nom: p.lastName, prenom: p.firstName, identificationCode: p.identificationCode, assignedGlobalDeviceId: p.assignedGlobalDeviceId, statusInSession: 'present' })),
+              question_mappings: questionMappings,
+            });
+            setImportSummary(`Itération ${iterationName} générée.`);
+          } else { throw new Error(`Sauvegarde échouée pour ${iterationName}: ${saveResult.error}`); }
+        }
+      }
+      const finalSessionData = await StorageManager.getSessionById(currentSavedId);
+      setEditingSessionData(finalSessionData || null);
     } catch (error: any) {
       setImportSummary(`Erreur majeure génération: ${error.message}`);
-      console.error("Erreur majeure génération:", error);
-      logger.error(`Erreur majeure lors de la génération ORS pour la session "${upToDateSessionData?.nomSession || `ID ${currentSavedId}`}"`, { eventType: 'ORS_MAJOR_GENERATION_ERROR', sessionId: currentSavedId, error });
+    } finally {
+      setIsGeneratingOrs(false);
     }
-    finally { setIsGeneratingOrs(false); }
-    };
+  };
 
-    const handleResultsFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        setResultsFile(file || null);
-        setImportSummary(null);
+  const handleResultsFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setResultsFile(file || null);
+    setImportSummary(null);
     if(file) console.log("Fichier résultats sélectionné:", file.name);
-    };
+  };
 
-    const handleImportResults = async () => {
-        if (!resultsFile && !editingSessionData?.orsFilePath) { setImportSummary("Veuillez sélectionner un fichier de résultats ou enregistrer un chemin ORS."); return; }
-        if (!currentSessionDbId || !editingSessionData) { setImportSummary("Aucune session active."); return; }
-        if (!editingSessionData.orsFilePath) { setImportSummary("Veuillez d'abord générer un fichier .ors pour cette session."); return; }
-    setImportSummary("Lecture .ors...");
-    try {
-      let arrayBuffer;
-      if (resultsFile) {
-        arrayBuffer = await resultsFile.arrayBuffer();
-      } else {
-        const fileData = await window.dbAPI.openResultsFile();
-        if (fileData.canceled || !fileData.fileBuffer) {
-          setImportSummary("Aucun fichier sélectionné.");
-          return;
-        }
-        arrayBuffer = Buffer.from(fileData.fileBuffer, 'base64');
+  const handleImportResults = async (iterationIndex: number) => {
+    if (!currentSessionDbId || !editingSessionData) {
+      setImportSummary("Aucune session active.");
+      return;
+    }
+    const iteration = editingSessionData.iterations?.find(it => it.iteration_index === iterationIndex);
+    if (!iteration?.ors_file_path) {
+      setImportSummary("Veuillez d'abord générer un fichier .ors pour cette itération.");
+      return;
+    }
+    if (iteration.status === 'completed') {
+      if (!window.confirm("Les résultats pour cette itération ont déjà été importés. Voulez-vous vraiment les ré-importer et écraser les données existantes ?")) {
+        return;
       }
+      if (iteration?.id) {
+        await StorageManager.deleteResultsForIteration(iteration.id);
+      }
+    }
+    setImportSummary(`Lecture du fichier ORS pour l'itération ${iteration.name}...`);
+    try {
+      const fileData = await window.dbAPI.openResultsFile(iteration.ors_file_path);
+      if (fileData.canceled || !fileData.fileBuffer) {
+        setImportSummary("Aucun fichier sélectionné ou lecture annulée.");
+        return;
+      }
+      const arrayBuffer = Buffer.from(fileData.fileBuffer);
 
       const zip = await JSZip.loadAsync(arrayBuffer);
       const orSessionXmlFile = zip.file("ORSession.xml");
@@ -812,6 +837,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       logger.info(`[Import Results] ${finalExtractedResults.length} réponses retenues après déduplication.`);
       if (finalExtractedResults.length === 0 && !(editingSessionData.ignoredSlideGuids && editingSessionData.ignoredSlideGuids.length > 0 && extractedResultsFromXml.length === 0) ) {
         setImportSummary("Aucune réponse valide à importer après filtrage et déduplication.");
+        return;
+      }
+      if (!currentSessionDbId) {
+        setImportSummary("Erreur: ID de session non défini. Impossible de continuer.");
+        logger.error("[Import Results] currentSessionDbId is null, cannot proceed.");
         return;
       }
       const sessionQuestionsFromDb = await StorageManager.getSessionQuestionsBySessionId(currentSessionDbId);
@@ -983,20 +1013,20 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             logger.info(`Résultats importés pour la session ID ${currentSessionDbId}`, {
               eventType: 'RESULTS_IMPORTED',
               sessionId: currentSessionDbId,
-              fileName: resultsFile.name,
+              fileName: resultsFile?.name,
               resultsCount: savedResultIds.length
             });
           } else {
             setImportSummary("Echec sauvegarde résultats.");
-            logger.warning(`Échec de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FAILED_DB_SAVE', sessionId: currentSessionDbId, fileName: resultsFile.name });
+            logger.warning(`Échec de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FAILED_DB_SAVE', sessionId: currentSessionDbId, fileName: resultsFile?.name });
           }
         } catch (dbError: any) {
           setImportSummary(`Erreur DB sauvegarde résultats: ${dbError.message}`);
-          logger.error(`Erreur DB lors de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_ERROR_DB_SAVE', sessionId: currentSessionDbId, error: dbError, fileName: resultsFile.name });
+          logger.error(`Erreur DB lors de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_ERROR_DB_SAVE', sessionId: currentSessionDbId, error: dbError, fileName: resultsFile?.name });
         }
       } else {
         setImportSummary("Aucun résultat transformé.");
-        logger.warning(`Aucun résultat transformé après parsing du fichier pour la session ID ${currentSessionDbId}`, {eventType: 'RESULTS_IMPORT_NO_TRANSFORMED_DATA', sessionId: currentSessionDbId, fileName: resultsFile.name});
+        logger.warning(`Aucun résultat transformé après parsing du fichier pour la session ID ${currentSessionDbId}`, {eventType: 'RESULTS_IMPORT_NO_TRANSFORMED_DATA', sessionId: currentSessionDbId, fileName: resultsFile?.name});
       }
     } catch (error: any) {
       setImportSummary(`Erreur traitement fichier: ${error.message}`);
@@ -1197,7 +1227,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   unknownDevices: unknownResolutions,
                   resolvedAt: new Date().toISOString(),
                 };
-                await updateSession(currentSessionDbId, {
+                await StorageManager.updateSession(currentSessionDbId, {
                   participants: participantsWithScores,
                   status: 'completed',
                   resolvedImportAnomalies: anomaliesAuditData,
@@ -1257,38 +1287,40 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setResultsFile(null);
   };
 
-  const renderTabNavigation = () => (
-    <div className="mb-6 border-b border-gray-200">
-      <nav className="-mb-px flex space-x-4 sm:space-x-8" aria-label="Tabs">
-        {(Object.keys({ details: 'Détails Session', participants: 'Participants', resultsOrs: 'Résultats & ORS' }) as TabKey[]).map((tabKey) => {
-          const tabLabels: Record<TabKey, string> = {
-            details: 'Détails Session',
-            participants: 'Participants',
-            resultsOrs: 'Résultats & ORS',
-          };
-          return (
-            <button
-              key={tabKey}
-              onClick={() => setActiveTab(tabKey)}
-              className={`
-                ${activeTab === tabKey
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
-                whitespace-nowrap py-3 px-2 sm:py-4 sm:px-3 border-b-2 font-medium text-sm
-              `}
-              aria-current={activeTab === tabKey ? 'page' : undefined}
-            >
-              {tabLabels[tabKey]}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
-  );
+  const renderTabNavigation = () => {
+    const tabLabels: Record<TabKey, string> = {
+        details: 'Détails Session',
+        participants: 'Participants',
+        generateQuestionnaire: 'Générer le questionnaire',
+        importResults: 'Importer les résultats',
+    };
+
+    return (
+        <div className="mb-6">
+            <div className="border-b border-gray-200">
+                <nav className="-mb-px flex space-x-4 sm:space-x-8" aria-label="Tabs">
+                    {(['details', 'participants', 'generateQuestionnaire', 'importResults'] as TabKey[]).map((tabKey) => (
+                        <button
+                            key={tabKey}
+                            onClick={() => setActiveTab(tabKey)}
+                            className={`
+                                ${activeTab === tabKey ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
+                                whitespace-nowrap py-3 px-2 sm:py-4 sm:px-3 border-b-2 font-medium text-sm
+                            `}
+                            aria-current={activeTab === tabKey ? 'page' : undefined}
+                        >
+                            {tabLabels[tabKey]}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+
+        </div>
+    );
+};
 
   const renderTabContent = () => {
     const isReadOnly = editingSessionData?.status === 'completed';
-    const isOrsGeneratedAndNotEditable = !!editingSessionData?.orsFilePath && (editingSessionData?.status !== 'planned' && editingSessionData?.status !== 'ready');
 
     switch (activeTab) {
       case 'details':
@@ -1314,7 +1346,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <Select
-                label="Référentiel CACES"
+                label="Référentiel"
                 options={referentialOptionsFromData}
                 value={selectedReferential}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1339,7 +1371,49 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 placeholder="Sélectionner un formateur"
                 disabled={isReadOnly}
               />
-              {/* Le Select "Kit de Boîtiers" est déplacé vers l'onglet Participants */}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              <Input
+                label="Numéro de session"
+                placeholder="Ex: 2024-001"
+                value={numSession}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumSession(e.target.value)}
+                disabled={isReadOnly}
+              />
+              <Input
+                label="Numéro de stage"
+                placeholder="Ex: CACES-2024-A"
+                value={numStage}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
+                disabled={isReadOnly}
+              />
+              <Input
+                label="Nombre d’itérations"
+                type="number"
+                min={1}
+                value={iterationCount}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const count = parseInt(e.target.value, 10);
+                  if (count > 0) {
+                    setIterationCount(count);
+                    const newIterationNames = Array.from({ length: count }, (_, i) => `Session_${i + 1}`);
+                    setIterationNames(newIterationNames);
+                    setActiveIteration(0);
+                    setParticipantAssignments(prev => {
+                      const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+                      for (let i = 0; i < count; i++) {
+                        if (prev[i]) {
+                          newAssignments[i] = prev[i];
+                        } else {
+                          newAssignments[i] = [];
+                        }
+                      }
+                      return newAssignments;
+                    });
+                  }
+                }}
+                disabled={isReadOnly}
+              />
             </div>
             <div className="mt-4">
               <Input
@@ -1377,266 +1451,180 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         );
       case 'participants':
         return (
-          <Card title="Participants" className="mb-6">
-            {/* Champ Kit de Boîtiers déplacé ici */}
-            <div className="mb-6 pb-4 border-b border-gray-200">
+          <Card title="Participants et Kits" className="mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <Select
-                label="Kit de Boîtiers Actif pour cette Session *"
+                label="Kit de boîtiers"
                 options={deviceKitsList.map(kit => ({ value: kit.id!.toString(), label: kit.name }))}
                 value={selectedKitIdState?.toString() || ''}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                  const newKitIdValue = e.target.value;
-                  const newKitId = newKitIdValue ? parseInt(newKitIdValue, 10) : null;
-
-                  if (newKitId !== selectedKitIdState) {
-                    if (participants.length > 0) {
-                      if (window.confirm("Changer de kit réinitialisera les assignations de boîtiers pour tous les participants de cette session et videra la liste des participants actuels. Voulez-vous continuer ?")) {
-                        setParticipants([]); // Vider les participants car les assignations de boîtiers ne sont plus valides
-                        setSelectedKitIdState(newKitId);
-                        if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') {
-                          setModifiedAfterOrsGeneration(true);
-                        }
-                      } else {
-                        e.target.value = selectedKitIdState?.toString() || '';
-                        return;
-                      }
-                    } else {
-                      setSelectedKitIdState(newKitId);
-                      if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') {
-                        setModifiedAfterOrsGeneration(true);
-                      }
-                    }
-                  }
-                }}
-                placeholder="Sélectionner un kit de boîtiers"
-                disabled={isReadOnly || isLoadingKits}
-                required
+                onChange={(e) => setSelectedKitIdState(e.target.value ? parseInt(e.target.value, 10) : null)}
+                placeholder="Sélectionner un kit"
+                disabled={isLoadingKits || isReadOnly}
               />
-               {!selectedKitIdState && !isReadOnly && (
-                <p className="mt-1 text-xs text-red-600">La sélection d'un kit est requise pour ajouter des participants.</p>
-              )}
-               {selectedKitIdState && votingDevicesInSelectedKit.length === 0 && !isReadOnly && (
-                 <p className="mt-1 text-xs text-yellow-600">Le kit sélectionné ne contient aucun boîtier. Ajoutez des boîtiers au kit dans les paramètres.</p>
-               )}
-            </div>
-
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm text-gray-500">Gérez la liste des participants.</p>
-              <div className="flex space-x-3">
-                 <input
-                  type="file"
-                  id="participant-file-input"
-                  className="hidden"
-                  accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  onChange={handleParticipantFileSelect}
-                />
-                <Button
-                  variant="outline"
-                  icon={<FileUp size={16} />}
-                  disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                  onClick={() => document.getElementById('participant-file-input')?.click()}
-                  title={isOrsGeneratedAndNotEditable ? "Modifications bloquées car l'ORS est généré et la session n'est plus en attente." : "Importer une liste de participants"}
-                >
-                  Importer Participants
-                </Button>
-                <Button
-                  variant="outline"
-                  icon={<UserPlus size={16} />}
-                  onClick={handleAddParticipant}
-                  disabled={isOrsGeneratedAndNotEditable || isReadOnly || !selectedKitIdState} // Désactiver si aucun kit sélectionné
-                  title={!selectedKitIdState ? "Sélectionnez d'abord un kit" : isOrsGeneratedAndNotEditable ? "Modifications bloquées" : "Ajouter un participant"}
-                />
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Actions</h4>
+                <div className="flex space-x-2">
+                  <Button onClick={handleAddParticipant} icon={<UserPlus size={16} />} disabled={isReadOnly}>Ajouter</Button>
+                  <label className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">
+                    <FileUp size={16} className="-ml-1 mr-2 h-5 w-5" />
+                    Importer
+                    <input type="file" className="hidden" onChange={handleParticipantFileSelect} accept=".csv, .xlsx, .xls" disabled={isReadOnly} />
+                  </label>
+                </div>
               </div>
             </div>
-            <div className="border rounded-lg overflow-hidden">
+
+            <h3 className="text-xl font-semibold mb-4">Liste Globale des Participants</h3>
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîtier Assigné (Nom et S/N)</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prénom</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Ident.</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Réussite</th>
-                    <th className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
+                    {iterationCount > 1 && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Itération</th>}
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Prénom</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Organisation</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code Identification</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Boîtier</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {participants.map((participant, index) => {
-                    const assignedDevice = votingDevicesInSelectedKit.find(d => d.id === participant.assignedGlobalDeviceId);
+                  {participants.map((p) => {
+                    const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.id));
                     return (
-                      <tr key={participant.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{participant.deviceId || index + 1}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                          {assignedDevice
-                            ? `${assignedDevice.name} (S/N: ${assignedDevice.serialNumber})`
-                            : <span className="text-xs text-red-500 italic">Non assigné / Kit changé</span>
-                          }
-                        </td>
-                        <td className="px-4 py-3">
-                          <Input
-                            type="text"
-                            value={participant.firstName}
-                            onChange={(e) => handleParticipantChange(participant.id, 'firstName', e.target.value)}
-                            className="mt-1 block w-full sm:text-sm"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
+                      <tr key={p.id}>
+                        {iterationCount > 1 && (
+                          <td className="px-4 py-2">
+                            <Select
+                              value={assignedIteration || ''}
+                              onChange={(e) => handleParticipantIterationChange(p.id, parseInt(e.target.value, 10))}
+                              options={iterationNames.map((name, index) => ({ value: index.toString(), label: name }))}
+                              placeholder="N/A"
+                              disabled={isReadOnly}
+                            />
+                          </td>
+                        )}
+                        <td className="px-4 py-2"><Input value={p.firstName} onChange={(e) => handleParticipantChange(p.id, 'firstName', e.target.value)} disabled={isReadOnly} /></td>
+                        <td className="px-4 py-2"><Input value={p.lastName} onChange={(e) => handleParticipantChange(p.id, 'lastName', e.target.value)} disabled={isReadOnly} /></td>
+                        <td className="px-4 py-2"><Input value={p.organization || ''} onChange={(e) => handleParticipantChange(p.id, 'organization', e.target.value)} disabled={isReadOnly} /></td>
+                        <td className="px-4 py-2"><Input value={p.identificationCode || ''} onChange={(e) => handleParticipantChange(p.id, 'identificationCode', e.target.value)} disabled={isReadOnly} /></td>
+                        <td className="px-4 py-2">
+                          <Select
+                            value={p.assignedGlobalDeviceId?.toString() || ''}
+                            onChange={(e) => handleParticipantChange(p.id, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
+                            options={votingDevicesInSelectedKit.map(d => ({ value: d.id!.toString(), label: `${d.name} (${d.serialNumber})`, disabled: participants.some(participant => participant.id !== p.id && participant.assignedGlobalDeviceId === d.id) }))}
+                            placeholder="N/A"
+                            disabled={isReadOnly}
                           />
                         </td>
-                        <td className="px-4 py-3">
-                          <Input
-                            type="text"
-                            value={participant.lastName}
-                            onChange={(e) => handleParticipantChange(participant.id, 'lastName', e.target.value)}
-                            className="mt-1 block w-full sm:text-sm"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <Input
-                            type="text"
-                            value={participant.organization || ''}
-                            onChange={(e) => handleParticipantChange(participant.id, 'organization', e.target.value)}
-                            className="mt-1 block w-full sm:text-sm"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <Input
-                            type="text"
-                            value={participant.identificationCode || ''}
-                            onChange={(e) => handleParticipantChange(participant.id, 'identificationCode', e.target.value)}
-                            className="mt-1 block w-full sm:text-sm"
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                          />
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {participant.score !== undefined ? `${participant.score}%` : 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                          {participant.reussite === undefined ? <Badge variant="default">N/A</Badge> :
-                           participant.reussite ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Échoué</Badge>}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveParticipant(participant.id)}
-                            disabled={isOrsGeneratedAndNotEditable || isReadOnly}
-                            title="Supprimer participant"
-                          >
-                            <Trash2 size={16} className="text-red-500 hover:text-red-700" />
-                          </Button>
-                        </td>
+                        <td className="px-4 py-2"><Button variant="danger" size="sm" onClick={() => handleRemoveParticipant(p.id)} disabled={isReadOnly}><Trash2 size={14} /></Button></td>
                       </tr>
                     );
                   })}
-                  {participants.length === 0 && (
-                    <tr>
-                      <td colSpan={9} className="text-center py-10 text-sm text-gray-500 italic">
-                        Aucun participant ajouté à cette session.
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
-            {participants.length > 0 && (
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Attribution boîtiers :</strong> Lors de l'ajout d'un participant, le prochain boîtier disponible du kit sélectionné est automatiquement assigné.
-                  Vérifiez les assignations. Les participants sans boîtier valide ou avec des boîtiers dupliqués empêcheront la génération de l'ORS.
-                </p>
-              </div>
-            )}
           </Card>
         );
-      case 'resultsOrs':
+      case 'generateQuestionnaire':
         return (
-          <>
-            {currentSessionDbId && (
-          <Card title="Résultats de la Session (Import)" className="mb-6">
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
-              <Input
-                id="resultsFileInput"
-                type="file"
-                accept=".ors"
-                onChange={handleResultsFileSelect}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                disabled={!editingSessionData?.orsFilePath || isReadOnly}
-              />
-              {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
-            </div>
+               <Card title="Générer le questionnaire" className="mb-6">
             <Button
-              variant="secondary"
-              icon={<FileUp size={16} />}
-              onClick={handleImportResults}
-              disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
-            >
-              Importer les Résultats
-            </Button>
-            {!editingSessionData?.orsFilePath && !isReadOnly && (
-               <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
-            )}
-            {isReadOnly && (
-                 <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
-            )}
-            <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
-            {importSummary && (
-              <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
-              </div>
-            )}
-          </div>
-        </Card>
-            )}
-               <Card title="Génération .ORS & PPTX" className="mb-6">
-                <Button
-                    variant="primary"
-                    icon={<PackagePlus size={16} />}
-                    onClick={handleGenerateQuestionnaireAndOrs}
-                    disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
-                    title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
-                           isReadOnly ? "La session est terminée, regénération bloquée." :
-                           (!!editingSessionData?.orsFilePath) ? "Régénérer .ors & PPTX (Attention : ceci écrasera l'ORS existant)" :
-                           "Générer .ors & PPTX"}
-                  >
-                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer .ors & PPTX" : "Générer .ors & PPTX")}
-                  </Button>
-                  {isReadOnly && (
-                     <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération de l'ORS est bloquée.</p>
-                  )}
-                   {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
-                     <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
-                  )}
-                  {modifiedAfterOrsGeneration && !!editingSessionData?.orsFilePath && !isReadOnly && (
-                    <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
-                      <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
-                      <span>
-                        <strong className="font-semibold">Attention :</strong> Les informations des participants ont été modifiées après la dernière génération de l'ORS.
-                        Veuillez regénérer le fichier .ors et PPTX pour inclure ces changements.
-                      </span>
-                    </p>
-                  )}
-                  {editingSessionData?.orsFilePath && (
-                    <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
-                      <h4 className="text-md font-semibold text-gray-700 mb-2">Fichier ORS généré :</h4>
-                      <p className="text-sm text-gray-600 font-mono">{editingSessionData.orsFilePath}</p>
-                      <Button
-                        variant="link"
-                        onClick={() => window.dbAPI.openDirectoryDialog(editingSessionData.orsFilePath)}
-                        className="mt-2"
-                      >
-                        Ouvrir le dossier
-                      </Button>
+                    variant={editingSessionData?.orsFilePath ? "secondary" : "primary"}
+                icon={<PackagePlus size={16} />}
+                onClick={handleGenerateQuestionnaire}
+                disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
+                title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
+                       isReadOnly ? "La session est terminée, regénération bloquée." :
+                           (!!editingSessionData?.orsFilePath) ? "Régénérer le questionnaire (Attention : ceci écrasera l'existant)" :
+                           "Générer le questionnaire"}
+              >
+                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer le questionnaire" : "Générer le questionnaire")}
+              </Button>
+              {isReadOnly && (
+                     <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération est bloquée.</p>
+              )}
+               {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
+                 <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
+              )}
+              {modifiedAfterOrsGeneration && !!editingSessionData?.orsFilePath && !isReadOnly && (
+                <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
+                  <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+                  <span>
+                        <strong className="font-semibold">Attention :</strong> Les informations des participants ont été modifiées après la dernière génération.
+                        Veuillez regénérer le questionnaire pour inclure ces changements.
+                  </span>
+                </p>
+              )}
+                  {importSummary && activeTab === 'generateQuestionnaire' && (
+                    <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                        <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
                     </div>
                   )}
-             </Card>
-          </>
+              {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && (
+                <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                  <h4 className="text-md font-semibold text-gray-700 mb-2">Fichiers de questionnaire générés :</h4>
+                  <ul className="list-disc list-inside pl-2 space-y-1">
+                    {editingSessionData.iterations.map((iter, index) => (
+                      <li key={index} className="text-sm text-gray-600">
+                        <span className="font-medium">{iter.name}:</span>
+                        <Button
+                          variant="ghost"
+                          onClick={() => { if (iter.ors_file_path) window.dbAPI.openFile(iter.ors_file_path); }}
+                          className="ml-2"
+                        >
+                          {iter.ors_file_path}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            icon={<FileUp size={16} />}
+                            onClick={() => handleImportResults(index)}
+                            disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
+                        >
+                            Importer les Résultats
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+         </Card>
         );
+      case 'importResults':
+        return (
+            <>
+            {currentSessionDbId && (
+                <Card title="Résultats de la Session (Import)" className="mb-6">
+                    <div className="space-y-4">
+                        <div>
+                            <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
+                            <Input
+                                id="resultsFileInput"
+                                type="file"
+                                accept=".ors"
+                                onChange={handleResultsFileSelect}
+                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                                disabled={!editingSessionData?.orsFilePath || isReadOnly}
+                            />
+                            {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
+                        </div>
+                        {!editingSessionData?.orsFilePath && !isReadOnly && (
+                            <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
+                        )}
+                        {isReadOnly && (
+                            <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
+                        )}
+                        <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
+                        {importSummary && activeTab === 'importResults' && (
+                            <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
+                            </div>
+                        )}
+                    </div>
+                </Card>
+            )}
+            </>
+        )
       default:
         return null;
     }
@@ -1644,9 +1632,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
   return (
     <div>
-      {renderTabNavigation()}
-      {renderTabContent()}
-      <div className="flex justify-end items-center mt-8 py-4 border-t border-gray-200">
+        {renderTabNavigation()}
+        {renderTabContent()}
+      <div className="flex justify-between items-center mt-8 py-4 border-t border-gray-200">
+        <div>
+          <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleCancelSession} disabled={editingSessionData?.status === 'completed' || editingSessionData?.status === 'cancelled'}>
+            Annuler la Session
+          </Button>
+        </div>
         <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
           Enregistrer Brouillon
         </Button>

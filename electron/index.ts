@@ -1,10 +1,16 @@
-const { app, BrowserWindow, session } = require('electron');
-const path = require('path');
-const { initializeIpcHandlers } = require('./ipcHandlers.js');
-const { initializeDatabase, getDb } = require('./db');
+import { app, BrowserWindow, session } from 'electron';
+import path from 'path';
+import { initializeIpcHandlers } from './ipcHandlers.js';
+import * as dbModule from './db.js';
+import { initializeLogger, getLogger, ILogger } from './utils/logger.js';
+import { setupCronJobs } from './cron.js';
 
-function createWindow() {
-  console.log('createWindow() called');
+
+
+
+
+function createWindow(logger: ILogger) {
+  logger.info('Creating main application window');
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -32,6 +38,10 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  initializeLogger(); // Initialize the logger here
+  const logger = getLogger(); // Get the initialized logger instance
+
+  logger.info('App is ready, initializing...');
   // Set a Content Security Policy
   session.defaultSession.webRequest.onHeadersReceived((details: any, callback: any) => {
     callback({
@@ -44,24 +54,30 @@ app.whenReady().then(async () => {
     });
   });
   try {
-    initializeDatabase();
-    initializeIpcHandlers();
-    createWindow();
+    logger.info('Initializing database...');
+    dbModule.initializeDatabase(logger);
+    logger.info('Initializing IPC handlers...');
+    initializeIpcHandlers(logger);
+    logger.info('Setting up CRON jobs...');
+    setupCronJobs(logger);
+    createWindow(logger);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
+        createWindow(logger);
       }
     });
   } catch (error) {
-    console.error('[Main] Failed to initialize application:', error);
+    logger.error(`[Main] Failed to initialize application: ${error}`);
     app.quit(); // Quit on critical error
   }
 });
 
 app.on('window-all-closed', () => {
+  const logger = getLogger();
+  logger.info('All windows closed, quitting application...');
   if (process.platform !== 'darwin') {
-    getDb().close();
+    dbModule.getDb().close();
     app.quit();
   }
 });

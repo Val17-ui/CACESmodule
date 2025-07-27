@@ -110,7 +110,7 @@ const ParticipantReport = () => {
       session.participants?.forEach((p, index) => {
         const participantKeyPart = p.assignedGlobalDeviceId ? p.assignedGlobalDeviceId.toString() : `paridx-${index}`;
         participations.push({
-          key: `sess-${session.id}-part-${participantKeyPart}`,
+          key: `sess-${session.id}-part-${p.id || index}`,
           participantRef: p,
           participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId === null ? undefined : p.assignedGlobalDeviceId) || 'N/A'}`,
           sessionName: session.nomSession,

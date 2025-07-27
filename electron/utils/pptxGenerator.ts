@@ -1,5 +1,7 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { getLogger } from './logger';
+const logger = getLogger();
 
 // ========== INTERFACES ==========
 interface Question {
@@ -51,7 +53,7 @@ function escapeXml(unsafe: string): string {
 
   // Journaliser si des caractères suspects sont trouvés
   if (/[:\-]|\-\-/.test(cleaned)) {
-    console.warn(`Caractères suspects détectés dans la chaîne: ${cleaned}`);
+    logger.debug(`Caractères suspects détectés dans la chaîne: ${cleaned}`);
   }
 
   // Échapper les caractères réservés XML
@@ -128,8 +130,8 @@ async function findNextAvailableSlideLayoutId(zip: JSZip): Promise<{ layoutId: n
   // SUPPRESSION de la protection rId12 - laisser PowerPoint gérer naturellement
   // Les slideLayout doivent utiliser leur rId correspondant quand possible
   
-  console.log(`Prochain layout: slideLayout${nextLayoutNum}, rId: ${nextRId}`);
-  console.log(`rIds existants dans slideMaster1.xml.rels:`, existingRIds);
+  logger.debug(`Prochain layout: slideLayout${nextLayoutNum}, rId: ${nextRId}`);
+  logger.debug(`rIds existants dans slideMaster1.xml.rels: ${existingRIds}`);
   
   return {
     layoutId: nextLayoutNum,
@@ -144,7 +146,7 @@ async function ensureOmbeaSlideLayoutExists(zip: JSZip): Promise<{ layoutFileNam
   // CHANGEMENT : Au lieu de chercher un layout existant (qui pourrait être le mauvais),
   // on va toujours créer un nouveau layout OMBEA pour être sûr qu'il soit compatible
   
-  console.log('Création d\'un layout OMBEA dédié...');
+  logger.debug('Création d\'un layout OMBEA dédié...');
   const { layoutId, layoutFileName, rId } = await findNextAvailableSlideLayoutId(zip);
   
   // Contenu du slideLayout OMBEA avec la structure spécifique pour les questions
@@ -337,7 +339,7 @@ async function ensureOmbeaSlideLayoutExists(zip: JSZip): Promise<{ layoutFileNam
   // Mettre à jour [Content_Types].xml
   await updateContentTypesForNewLayout(zip, layoutFileName);
   
-  console.log(`Layout OMBEA créé : ${layoutFileName} avec ${rId}`);
+  logger.debug(`Layout OMBEA créé : ${layoutFileName} avec ${rId}`);
   
   return {
     layoutFileName: layoutFileName,
@@ -834,9 +836,9 @@ function updatePresentationRelsWithMappings(
   
   newContent += '</Relationships>';
   
-  console.log('Nouvelle organisation des rId :');
-  console.log('- slideMaster : rId1');
-  console.log(`- slides : rId2 à rId${slideRIdCounter - 1}`);
+  logger.debug('Nouvelle organisation des rId :');
+  logger.debug('- slideMaster : rId1');
+  logger.debug(`- slides : rId2 à rId${slideRIdCounter - 1}`);
   
   return { 
     updatedContent: newContent, 
@@ -932,7 +934,7 @@ async function updateAppXml(
 ): Promise<void> {
   const appFile = zip.file('docProps/app.xml');
   if (!appFile) {
-    console.warn('app.xml non trouvé, création d\'un nouveau fichier');
+    logger.debug('app.xml non trouvé, création d\'un nouveau fichier');
     createNewAppXml(zip, metadata);
     return;
   }
@@ -1020,11 +1022,11 @@ function updateHeadingPairsAndTitles(content: string, metadata: AppXmlMetadata):
   const allSlideTitles = [...existingSlideTitles, ...metadata.slideTitles];
   
   // Pour debug
-  console.log('Fonts trouvées:', fonts);
-  console.log('Thèmes trouvés:', themes);
-  console.log('Titres slides existantes:', existingSlideTitles);
-  console.log('Nouveaux titres:', metadata.slideTitles);
-  console.log('Total titres slides:', allSlideTitles.length);
+  logger.debug(`Fonts trouvées: ${fonts}`);
+  logger.debug(`Thèmes trouvés: ${themes}`);
+  logger.debug(`Titres slides existantes: ${existingSlideTitles}`);
+  logger.debug(`Nouveaux titres: ${metadata.slideTitles}`);
+  logger.debug(`Total titres slides: ${allSlideTitles.length}`);
 
    // Construire la nouvelle structure HeadingPairs
   const headingPairs = buildHeadingPairs(nonSlideTitles, allSlideTitles);
@@ -1204,28 +1206,28 @@ export async function generatePPTX(
   try {
     // DEBUG: Générer un ID unique pour cette exécution
     const executionId = Date.now();
-    console.log(`\n=== DÉBUT GÉNÉRATION ${executionId} ===`);
+    logger.debug(`\n=== DÉBUT GÉNÉRATION ${executionId} ===`);
     
     // DEBUG: Afficher la taille du template
-    console.log(`Template: ${templateFile.name}, taille: ${templateFile.size} octets`);
+    logger.debug(`Template: ${templateFile.name}, taille: ${templateFile.size} octets`);
     
     // DEBUG: Calculer un hash simple des questions
     const questionsHash = questions.map(q => q.question).join('|');
-    console.log(`Hash questions: ${questionsHash.substring(0, 50)}...`);
+    logger.debug(`Hash questions: ${questionsHash.substring(0, 50)}...`);
     
-    console.log('Validation des données...');
+    logger.debug('Validation des données...');
     validateQuestions(questions);
 
-    console.log('Chargement du modèle...');
+    logger.debug('Chargement du modèle...');
     const templateZip = await JSZip.loadAsync(templateFile);
     
     // DEBUG: Vérifier l'intégrité du ZIP chargé
     let fileCount = 0;
     templateZip.forEach(() => fileCount++);
-    console.log(`Fichiers dans le template: ${fileCount}`);
+    logger.debug(`Fichiers dans le template: ${fileCount}`);
     const existingSlideCount = countExistingSlides(templateZip);
-    console.log(`Slides existantes dans le modèle: ${existingSlideCount}`);
-    console.log(`Nouvelles slides à créer: ${questions.length}`);
+    logger.debug(`Slides existantes dans le modèle: ${existingSlideCount}`);
+    logger.debug(`Nouvelles slides à créer: ${questions.length}`);
 
     let totalTagsCreated = 0;
 
@@ -1240,14 +1242,14 @@ export async function generatePPTX(
       }
     });
     await Promise.all(copyPromises);
-    console.log('Modèle copié');
+    logger.debug('Modèle copié');
 
     const { layoutFileName, layoutRId } = await ensureOmbeaSlideLayoutExists(outputZip);
-    console.log(`Layout OMBEA: ${layoutFileName} (${layoutRId})`);
+    logger.debug(`Layout OMBEA: ${layoutFileName} (${layoutRId})`);
 
     outputZip.folder('ppt/tags');
 
-    console.log('Création des nouvelles slides OMBEA...');
+    logger.debug('Création des nouvelles slides OMBEA...');
     for (let i = 0; i < questions.length; i++) {
       const slideNumber = existingSlideCount + i + 1;
       const question = questions[i];
@@ -1266,10 +1268,10 @@ export async function generatePPTX(
         totalTagsCreated = Math.max(totalTagsCreated, tag.tagNumber);
       });
 
-      console.log(`Slide OMBEA ${slideNumber} créée: ${question.question.substring(0, 50)}...`);
+      logger.debug(`Slide OMBEA ${slideNumber} créée: ${question.question.substring(0, 50)}...`);
     }
 
-    console.log(`Total des tags créés: ${totalTagsCreated}`);
+    logger.debug(`Total des tags créés: ${totalTagsCreated}`);
 
     const contentTypesFile = outputZip.file('[Content_Types].xml');
     if (contentTypesFile) {
@@ -1306,7 +1308,7 @@ export async function generatePPTX(
     const appMetadata = calculateAppXmlMetadata(existingSlideCount, questions);
     await updateAppXml(outputZip, appMetadata);
 
-    console.log('Génération du fichier final...');
+    logger.debug('Génération du fichier final...');
 const outputBlob = await outputZip.generateAsync({
   type: 'blob',
   mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -1317,23 +1319,23 @@ const outputBlob = await outputZip.generateAsync({
 const fileName = options.fileName || `Questions_OMBEA_${new Date().toISOString().slice(0, 10)}.pptx`;
     saveAs(outputBlob, fileName);
 
-    console.log(`Fichier OMBEA généré avec succès: ${fileName}`);
-    console.log(`Total des slides: ${existingSlideCount + questions.length}`);
-    console.log(`Total des tags: ${totalTagsCreated}`);
-    console.log(`=== FIN GÉNÉRATION ${executionId} - SUCCÈS ===`);
+    logger.debug(`Fichier OMBEA généré avec succès: ${fileName}`);
+    logger.debug(`Total des slides: ${existingSlideCount + questions.length}`);
+    logger.debug(`Total des tags: ${totalTagsCreated}`);
+    logger.debug(`=== FIN GÉNÉRATION ${executionId} - SUCCÈS ===`);
     
   } catch (error: any) {
-    console.error(`=== ERREUR GÉNÉRATION ===`);
-    console.error('Stack trace complet:', error.stack);
+    logger.debug(`=== ERREUR GÉNÉRATION ===`);
+    logger.debug(`Stack trace complet: ${error.stack}`);
     throw error;
   }
 }
 export async function testConsistency(templateFile: File, questions: Question[]): Promise<void> {
-  console.log('=== TEST DE COHÉRENCE ===');
+  logger.debug('=== TEST DE COHÉRENCE ===');
   const results = [];
   
   for (let i = 0; i < 5; i++) {
-    console.log(`\nTest ${i + 1}/5...`);
+    logger.debug(`\nTest ${i + 1}/5...`);
     try {
       // Créer une copie du template pour éviter toute modification
       const templateCopy = new File([await templateFile.arrayBuffer()], templateFile.name, {
@@ -1350,9 +1352,9 @@ export async function testConsistency(templateFile: File, questions: Question[])
     }
   }
   
-  console.log('\n=== RÉSULTATS ===');
+  logger.debug('\n=== RÉSULTATS ===');
   results.forEach((result, i) => {
-    console.log(`Test ${i + 1}: ${result}`);
+    logger.debug(`Test ${i + 1}: ${result}`);
   });
 }
 // Exemple d'utilisation avec les nouvelles options
@@ -1362,8 +1364,8 @@ export const handleGeneratePPTX = async (templateFile: File, questions: Question
       fileName: 'Quiz_OMBEA_Interactif.pptx'
     });
   } catch (error: any) {
-    console.error('Erreur:', error);
-    alert(`Erreur lors de la génération: ${error.message}`);
+    logger.debug(`Erreur: ${error}`);
+    logger.debug(`Erreur lors de la génération: ${error.message}`);
   }
 };
 

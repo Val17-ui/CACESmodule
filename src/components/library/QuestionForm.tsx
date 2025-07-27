@@ -4,7 +4,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import { QuestionType, CACESReferential, Referential, Theme, Bloc, QuestionWithId } from '../../types';
+import { QuestionType, CACESReferential, Referential, Theme, Bloc, QuestionWithId } from '../../types/index.ts';
 import { StorageManager } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
 
@@ -159,24 +159,26 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
                 setSelectedBlocId('');
             }
 
-            if (typeof existingQuestion.image === 'string') {
-              // It's a file path, use IPC to read it
-              window.electron.readImageFile(existingQuestion.image).then(buffer => {
-                const blob = new Blob([buffer]);
+            if (existingQuestion.image) {
+              if (typeof existingQuestion.image === 'string') {
+                try {
+                  const imageBase64 = await window.electron.readImageFile(existingQuestion.image);
+                  const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
+                  if (imagePreview) URL.revokeObjectURL(imagePreview);
+                  setHasImage(true);
+                  setImageFile(blob);
+                  setImagePreview(URL.createObjectURL(blob));
+                } catch (error) {
+                  logger.error("Failed to load image from path:", existingQuestion.image, error);
+                  if (imagePreview) URL.revokeObjectURL(imagePreview);
+                  setHasImage(false); setImageFile(null); setImagePreview(null);
+                }
+              } else if (existingQuestion.image instanceof Blob) {
                 if (imagePreview) URL.revokeObjectURL(imagePreview);
                 setHasImage(true);
-                setImageFile(blob);
-                setImagePreview(URL.createObjectURL(blob));
-              }).catch(err => {
-                logger.error(`Failed to read image from path: ${existingQuestion.image}`, err);
-                if (imagePreview) URL.revokeObjectURL(imagePreview);
-                setHasImage(false); setImageFile(null); setImagePreview(null);
-              });
-            } else if (existingQuestion.image instanceof Blob) {
-              if (imagePreview) URL.revokeObjectURL(imagePreview);
-              setHasImage(true);
-              setImageFile(existingQuestion.image);
-              setImagePreview(URL.createObjectURL(existingQuestion.image));
+                setImageFile(existingQuestion.image);
+                setImagePreview(URL.createObjectURL(existingQuestion.image));
+              }
             } else {
               if (imagePreview) URL.revokeObjectURL(imagePreview);
               setHasImage(false); setImageFile(null); setImagePreview(null);
@@ -210,10 +212,29 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
         if (imagePreview) URL.revokeObjectURL(imagePreview);
 
-        if (newInitialState.image instanceof Blob) {
-          setHasImage(true); setImageFile(newInitialState.image); setImagePreview(URL.createObjectURL(newInitialState.image));
+        if (newInitialState.image) {
+          if (typeof newInitialState.image === 'string') {
+            try {
+              const imageBase64 = await window.electron.readImageFile(newInitialState.image);
+              const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
+              setHasImage(true);
+              setImageFile(blob);
+              setImagePreview(URL.createObjectURL(blob));
+            } catch (error) {
+              logger.error("Failed to load initial image from path:", newInitialState.image, error);
+              setHasImage(false);
+              setImageFile(null);
+              setImagePreview(null);
+            }
+          } else if (newInitialState.image instanceof Blob) {
+            setHasImage(true);
+            setImageFile(newInitialState.image);
+            setImagePreview(URL.createObjectURL(newInitialState.image));
+          }
         } else {
-          setHasImage(false); setImageFile(null); setImagePreview(null);
+          setHasImage(false);
+          setImageFile(null);
+          setImagePreview(null);
         }
       }
     };
@@ -278,7 +299,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
   const removeOption = (index: number) => {
     if ((question.options?.length || 0) > 2) {
-      const newOptions = (question.options || []).filter((_: string, i: number) => i !== index);
+      const newOptions = (question.options || []).filter((_opt: string, i: number) => i !== index);
       setQuestion((prev: QuestionWithId) => ({ ...prev, options: newOptions }));
       if (Number(question.correctAnswer) === index) {
         setQuestion((prev: QuestionWithId) => ({...prev, correctAnswer: '0'}));
@@ -403,7 +424,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     addOption();
   };
 
-  // Define useMemo hooks at the top level of the component body
   const themeOptions = useMemo(() => {
     return themes.map(t => ({ value: t.id!.toString(), label: t.nom_complet }));
   }, [themes]);
