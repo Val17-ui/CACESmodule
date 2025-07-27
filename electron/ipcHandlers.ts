@@ -76,18 +76,41 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
       if (!sessionQuestions || sessionQuestions.length === 0) throw new Error(`No questions found for session ${sessionId}`);
 
       const questionIds = sessionQuestions.map(q => q.dbQuestionId);
+      logger.debug(`[IPC] session-finalize-import: Found ${questionIds.length} question IDs for session ${sessionId}.`);
       const questions = await dbModule.getQuestionsByIds(questionIds);
+      logger.debug(`[IPC] session-finalize-import: Retrieved ${questions.length} full question objects.`);
+
+      // Ensure questions have all necessary properties for score calculation
+      const questionsForCalculation = questions.map(q => ({
+        ...q,
+        isEliminatory: q.isEliminatory || false, // Default to false if not set
+        blocId: q.blocId || null, // Default to null if not set
+      }));
+      logger.debug(`[IPC] session-finalize-import: Questions for calculation prepared. Example: ${JSON.stringify(questionsForCalculation[0])}`);
+
+      const allVotingDevices = await dbModule.getAllVotingDevices();
+      logger.debug(`[IPC] session-finalize-import: Retrieved ${allVotingDevices.length} voting devices.`);
+
+      const { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } = require('./utils/reportCalculators');
 
       // 3. Calculate scores and success for each participant
       const updatedParticipants = session.participants.map(participant => {
-        const participantResults = results.filter(r => r.participantIdBoitier === participant.identificationCode);
-        const score = 0; // Replace with actual score calculation
-        const success = false; // Replace with actual success calculation
+        const assignedDevice = allVotingDevices.find(device => device.id === participant.assignedGlobalDeviceId);
+        const participantSerialNumber = assignedDevice ? assignedDevice.serialNumber : participant.identificationCode; // Fallback to identificationCode
+        logger.debug(`[IPC] session-finalize-import: Processing participant ${participant.nom} ${participant.prenom} (SN: ${participantSerialNumber}).`);
+
+        const participantResults = results.filter(r => r.participantIdBoitier === participantSerialNumber);
+        logger.debug(`[IPC] session-finalize-import: Found ${participantResults.length} results for participant ${participant.nom} ${participant.prenom}.`);
+        
+        const score = calculateParticipantScore(participantResults, questionsForCalculation);
+        const themeScores = calculateThemeScores(participantResults, questionsForCalculation);
+        const success = determineIndividualSuccess(score, themeScores);
+        logger.debug(`[IPC] session-finalize-import: Participant ${participant.nom} ${participant.prenom} - Score: ${score}, Success: ${success}, Theme Scores: ${JSON.stringify(themeScores)}`);
         return { ...participant, score, reussite: success };
       });
 
       // 4. Update the session
-      await dbModule.updateSession(sessionId, { participants: updatedParticipants, status: 'completed' });
+      await dbModule.updateSession(sessionId, { participants: updatedParticipants, status: 'completed', resultsImportedAt: new Date().toISOString() });
 
       // 5. Return the updated session
       return dbModule.getSessionById(sessionId);
@@ -344,6 +367,10 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
   ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referentiel: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
     logger.info('[IPC] pptx-generate handler triggered.');
     logger.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
+    logger.debug(`[IPC] pptx-generate: Participants: ${JSON.stringify(participants)}`);
+    logger.debug(`[IPC] pptx-generate: Questions: ${JSON.stringify(questions.map(q => q.id))}`);
+    logger.debug(`[IPC] pptx-generate: Template type: ${typeof template}`);
+    logger.debug(`[IPC] pptx-generate: Admin Settings: ${JSON.stringify(adminSettings)}`);
     let templateArrayBuffer: ArrayBuffer;
 
     if (template === 'tool_default_template') {

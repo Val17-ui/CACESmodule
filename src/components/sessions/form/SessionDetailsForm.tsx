@@ -126,13 +126,18 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
               setIterationCount(count);
               const newIterationNames = Array.from({ length: count }, (_, i) => `Session_${i + 1}`);
               setIterationNames(newIterationNames);
-              setParticipantAssignments((prev: any) => {
+              setParticipantAssignments(prev => {
                 const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+                // Preserve existing assignments for iterations that still exist
                 for (let i = 0; i < count; i++) {
-                  if (prev[i]) {
-                    newAssignments[i] = prev[i];
-                  } else {
-                    newAssignments[i] = [];
+                  newAssignments[i] = prev[i] || [];
+                }
+                // If reducing iteration count, reassign participants from removed iterations to the first remaining iteration
+                if (count < prev.length) {
+                  for (let i = count; i < prev.length; i++) {
+                    if (prev[i]) {
+                      newAssignments[0] = [...newAssignments[0], ...prev[i]];
+                    }
                   }
                 }
                 return newAssignments;

@@ -89,7 +89,7 @@ const archiveOldSessions = async (): Promise<void> => {
         SET archived_at = ?
         WHERE status = 'completed'
           AND archived_at IS NULL
-          AND date(resultsImportedAt) < date(?)
+          AND substr(resultsImportedAt, 1, 10) < date(?)
       `);
       stmt.run(new Date().toISOString(), sevenDaysAgo.toISOString());
     } catch (error) {

@@ -282,11 +282,19 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }, [editingSessionData, editingSessionData?.selectedBlocIds, allThemesData, allBlocsData]);
 
   useEffect(() => {
-    // Only default all participants to the first iteration for NEW sessions.
-    if (!sessionIdToLoad && iterationCount === 1) {
-        setParticipantAssignments({
-            0: participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null }))
-        });
+    // Default all participants to the first iteration for NEW sessions or when iterationCount changes.
+    // This ensures all participants are assigned to an iteration.
+    const currentAssignmentsCount = Object.keys(participantAssignments).length;
+    if (!sessionIdToLoad || (iterationCount > 1 && currentAssignmentsCount === 0)) {
+        const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+        for (let i = 0; i < iterationCount; i++) {
+            newAssignments[i] = [];
+        }
+        // Assign all current participants to the first iteration by default if no assignments exist
+        if (participants.length > 0 && Object.values(participantAssignments).every(arr => arr.length === 0)) {
+            newAssignments[0] = participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null }));
+        }
+        setParticipantAssignments(newAssignments);
     }
 }, [participants, iterationCount, sessionIdToLoad]);
 
@@ -717,12 +725,12 @@ const handleGenerateQuestionnaire = async () => {
 
       const iterationsToGenerate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: iterationCount }, (_, i) => i);
       for (const i of iterationsToGenerate) {
-        const iterationName = iterationNames[i];
+        const iterationName = iterationNames[i] || `Iteration_${i + 1}`; // Fallback if name is undefined
         const assignedParticipantIds = (participantAssignments[i] || []).map(p => p.id);
         const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.id));
         const participantsForGenerator = participantsForIteration.map(p => {
           const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
-          return { idBoitier: device?.serialNumber || '', nom: p.lastName, prenom: p.firstName, identificationCode: p.identificationCode };
+          return { idBoitier: device?.serialNumber || '', nom: p.lastName, prenom: p.firstName, identificationCode: p.identificationCode || p.id }; // Fallback for identificationCode
         });
 
         const templateFile = await getActivePptxTemplateFile();
