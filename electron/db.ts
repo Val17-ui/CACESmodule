@@ -836,11 +836,25 @@ const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefi
   });
 };
 
-const getAllSessions = async (): Promise<Session[]> => {
+const getAllSessions = async (filter?: 'archived' | 'active'): Promise<Session[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = getDb().prepare("SELECT * FROM sessions ORDER BY dateSession DESC, createdAt DESC");
-      const rows = stmt.all() as any[];
+      let query = "SELECT * FROM sessions";
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const sevenDaysAgoISO = sevenDaysAgo.toISOString();
+
+      if (filter === 'archived') {
+        query += " WHERE (date(dateSession) <= date(?) OR status = 'cancelled')";
+      } else if (filter === 'active') {
+        query += " WHERE date(dateSession) > date(?) AND status != 'cancelled'";
+      }
+
+      query += " ORDER BY dateSession DESC, createdAt DESC";
+
+      const stmt = getDb().prepare(query);
+      const rows = filter ? stmt.all(sevenDaysAgoISO) : stmt.all();
+
       return rows.map(rowToSession);
     } catch (error) {
       _logger.debug(`[DB Sessions] Error getting all sessions: ${error}`);

@@ -204,7 +204,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
         </label>
       </div>
       {showArchived ? (
-        renderSessionTable(sessionsArchivees, "Sessions archivées")
+        renderSessionTable(sessions.filter(s => s.archived_at).sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()), "Sessions archivées")
       ) : (
         <>
           {renderSessionTable(sessionsDuJour, "Sessions du jour")}
