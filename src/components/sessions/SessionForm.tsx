@@ -1075,9 +1075,11 @@ const handleGenerateQuestionnaire = async () => {
         try {
             await StorageManager.updateSession(currentSessionDbId, { participants: updatedParticipantsList, updatedAt: new Date().toISOString() });
             const reloadedSessionForUI = await StorageManager.getSessionById(currentSessionDbId);
-            if (reloadedSessionForUI) {
+            if (reloadedSessionForUI && reloadedSessionForUI.iterations) {
                 setEditingSessionData(reloadedSessionForUI);
-                const formParticipantsToUpdate: FormParticipant[] = reloadedSessionForUI.participants.map((p_db_updated: DBParticipantType, index: number) => {
+                const allParticipantsFromIterations = reloadedSessionForUI.iterations.flatMap(iter => iter.participants || []);
+                const uniqueParticipants = Array.from(new Map(allParticipantsFromIterations.map(p => [p.identificationCode, p])).values());
+                const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
                     const visualDeviceId = index + 1;
                     const currentFormParticipantState = participants[index];
                     return {
@@ -1122,12 +1124,13 @@ const handleGenerateQuestionnaire = async () => {
         await StorageManager.updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
         message += "\nStatut session: 'Terminée'.";
         const finalSessionDataForScores = await StorageManager.getSessionById(currentSessionDbId);
-        if (finalSessionDataForScores && finalSessionDataForScores.questionMappings) {
+            if (finalSessionDataForScores && finalSessionDataForScores.questionMappings && finalSessionDataForScores.iterations) {
             const questionDbIds = finalSessionDataForScores.questionMappings.map(qm => qm.dbQuestionId).filter(id => id != null) as number[];
             const questionsForScoreCalc = await StorageManager.getQuestionsByIds(questionDbIds);
             const allResultsForScoreCalc = await StorageManager.getResultsForSession(currentSessionDbId);
             if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
-                const participantsWithScores = finalSessionDataForScores.participants.map((p: DBParticipantType) => {
+                    const allParticipantsFromIterations = finalSessionDataForScores.iterations.flatMap(iter => iter.participants || []);
+                    const participantsWithScores = allParticipantsFromIterations.map((p: DBParticipantType) => {
                     const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
                     const participantSerialNumber = device ? device.serialNumber : p.identificationCode?.startsWith('NEW_') ? p.identificationCode.substring(4) : null;
                     if (!participantSerialNumber) return { ...p, score: p.score || 0, reussite: p.reussite || false };
@@ -1156,9 +1159,11 @@ const handleGenerateQuestionnaire = async () => {
                   resolutions: anomaliesAuditData
                 });
                 const finalUpdatedSessionWithScores = await StorageManager.getSessionById(currentSessionDbId);
-                 if (finalUpdatedSessionWithScores) {
+                     if (finalUpdatedSessionWithScores && finalUpdatedSessionWithScores.iterations) {
                     setEditingSessionData(finalUpdatedSessionWithScores);
-                    const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSessionWithScores.participants.map((p_db_updated: DBParticipantType, index: number) => {
+                        const allParticipantsFromIterations = finalUpdatedSessionWithScores.iterations.flatMap(iter => iter.participants || []);
+                        const uniqueParticipants = Array.from(new Map(allParticipantsFromIterations.map(p => [p.identificationCode, p])).values());
+                        const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
                         const visualDeviceId = index + 1;
                         const currentFormParticipantState = participants[index];
                         return {
