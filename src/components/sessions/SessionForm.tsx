@@ -158,7 +158,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setNotes('');
     setParticipants([]);
     setDisplayedBlockDetails([]);
-    setResultsFile(null);
     setImportSummary(null);
     setEditingSessionData(null);
     setActiveTab('details');
@@ -1001,7 +1000,6 @@ const handleGenerateQuestionnaire = async () => {
             } catch (processingError: any) { sessionProcessError = processingError.message; }
             if(sessionProcessError) { message += `\nErreur post-traitement: ${sessionProcessError}`; }
             setImportSummary(message);
-            setResultsFile(null);
             logger.info(`Résultats importés pour la session ID ${currentSessionDbId}`, {
               eventType: 'RESULTS_IMPORTED',
               sessionId: currentSessionDbId,
@@ -1259,7 +1257,6 @@ const handleGenerateQuestionnaire = async () => {
             } else { message += "\nImpossible de charger données pour scores."; }
         } else { message += "\nImpossible calculer scores (données session manquantes)."; }
         setImportSummary(message);
-        setResultsFile(null);
         logger.info(`Résultats importés et résolus pour session ID ${currentSessionDbId}.`, { /* ... */ });
       } else {
         setImportSummary("Aucun résultat à sauvegarder après résolution.");
@@ -1276,7 +1273,6 @@ const handleGenerateQuestionnaire = async () => {
     setDetectedAnomalies(null);
     setPendingValidResults([]);
     setImportSummary("Importation des résultats annulée par l'utilisateur en raison d'anomalies.");
-    setResultsFile(null);
   };
 
   const renderTabNavigation = () => {
@@ -1581,15 +1577,6 @@ const handleGenerateQuestionnaire = async () => {
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
-                            <Input
-                                id="resultsFileInput"
-                                type="file"
-                                accept=".ors"
-                                onChange={handleResultsFileSelect}
-                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                                disabled={!editingSessionData?.orsFilePath || isReadOnly}
-                            />
-                            {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
                         </div>
                         {!editingSessionData?.orsFilePath && !isReadOnly && (
                             <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
