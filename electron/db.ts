@@ -2068,7 +2068,7 @@ const importAllData = async (data: any) => {
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console _logger.debugs with prefixes for easier debugging of setup and stub calls.
 
-export = {
+export default {
     initializeDatabase,
     getDb,
     createSchema,

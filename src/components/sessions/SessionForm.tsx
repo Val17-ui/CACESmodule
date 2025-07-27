@@ -236,7 +236,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                       fp => fp.identificationCode === p_iter.identificationCode
                     );
                     if (matchingFormParticipant) {
-                      participantIdsForIter.push({ id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId });
+                      participantIdsForIter.push({ id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null });
                     }
                   });
                 }
@@ -284,7 +284,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     // Only default all participants to the first iteration for NEW sessions.
     if (!sessionIdToLoad && iterationCount === 1) {
         setParticipantAssignments({
-            0: participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId }))
+            0: participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null }))
         });
     }
 }, [participants, iterationCount, sessionIdToLoad]);
@@ -364,7 +364,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         if (!newAssignments[newIterationIndex]) {
             newAssignments[newIterationIndex] = [];
         }
-        newAssignments[newIterationIndex].push({ id: participantToMove.id, assignedGlobalDeviceId: participantToMove.assignedGlobalDeviceId });
+        newAssignments[newIterationIndex].push({ id: participantToMove.id, assignedGlobalDeviceId: participantToMove.assignedGlobalDeviceId || null });
         return newAssignments;
     });
   };
@@ -457,7 +457,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           if (!newAssignments[iterationIndex]) {
             newAssignments[iterationIndex] = [];
           }
-          newAssignments[iterationIndex].push({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId });
+          newAssignments[iterationIndex].push({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null });
         });
         setParticipantAssignments(newAssignments);
         return updatedParticipants;
@@ -467,6 +467,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       setImportSummary(`Aucun participant valide trouvé dans ${fileName}.`);
     }
   };
+
+const handleGenerateQuestionnaire = async () => {
+    const sessionData = await prepareSessionDataForDb();
+    if (sessionData) {
+        const savedId = await handleSaveSession(sessionData);
+        if (savedId) {
+            handleGenerateQuestionnaireAndOrs(savedId);
+        }
+    }
+};
 
   const handleParticipantFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1508,7 +1518,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             <Button
                     variant={editingSessionData?.orsFilePath ? "secondary" : "primary"}
                 icon={<PackagePlus size={16} />}
-                onClick={() => handleGenerateQuestionnaireAndOrs()}
+                onClick={handleGenerateQuestionnaire}
                 disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
                 title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
                        isReadOnly ? "La session est terminée, regénération bloquée." :
@@ -1551,6 +1561,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                         >
                           {iter.ors_file_path}
                         </Button>
+                        <Button
+                            variant="secondary"
+                            icon={<FileUp size={16} />}
+                            onClick={() => handleImportResults(index)}
+                            disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
+                        >
+                            Importer les Résultats
+                        </Button>
                       </li>
                     ))}
                   </ul>
@@ -1576,14 +1594,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                             />
                             {resultsFile && <p className="mt-1 text-xs text-green-600">Fichier: {resultsFile.name}</p>}
                         </div>
-                        <Button
-                            variant="secondary"
-                            icon={<FileUp size={16} />}
-                            onClick={() => handleImportResults(activeIteration)}
-                            disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
-                        >
-                            Importer les Résultats
-                        </Button>
                         {!editingSessionData?.orsFilePath && !isReadOnly && (
                             <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
                         )}

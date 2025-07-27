@@ -6,9 +6,9 @@
   "main": "dist-electron/electron/index.js",
   "scripts": {
     "clean-electron": "rimraf dist-electron",
-    "compile-electron": "npm run clean-electron && tsc -p electron/tsconfig.json --listFiles --traceResolution && ls -R dist-electron",
+    "compile-electron": "npm run clean-electron && tsc -p electron/tsconfig.json --listFiles --traceResolution && dir /s /b dist-electron",
     "dev": "npm run compile-electron && npx vite",
-    "electron-watch": "npm run clean-electron && wait-on tcp:5173 -t 30000 && cd electron && tsc -p tsconfig.json --listFiles --traceResolution && cd .. && ls -R dist-electron",
+    "electron-watch": "npm run clean-electron && wait-on tcp:5173 -t 30000 && cd electron && tsc -p tsconfig.json --listFiles --traceResolution && cd .. && dir /s /b dist-electron",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "build": "tsc && vite build && electron-builder",
     "electron-dev": "electron .",

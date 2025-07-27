@@ -1,9 +1,9 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
-const { initializeIpcHandlers } = require('./ipcHandlers');
-const dbModule = require('./db');
-import { initializeLogger, getLogger, ILogger } from './utils/logger';
-import { setupCronJobs } from './cron';
+import { initializeIpcHandlers } from './ipcHandlers.js';
+import * as dbModule from './db.js';
+import { initializeLogger, getLogger, ILogger } from './utils/logger.js';
+import { setupCronJobs } from './cron.js';
 
 
 

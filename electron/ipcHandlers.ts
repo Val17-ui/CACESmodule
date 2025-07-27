@@ -62,11 +62,6 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
     return dbModule.getResultsForSession(sessionId);
   });
 
-  ipcMain.handle('db-delete-results-for-iteration', async (event: IpcMainInvokeEvent, iterationId: number) => {
-    logger.debug(`[IPC] db-delete-results-for-iteration: ${iterationId}`);
-    return dbModule.deleteResultsForIteration(iterationId);
-  });
-
   // VotingDevices
   ipcMain.handle('db-get-all-voting-devices', async () => {
     logger.debug('[IPC] db-get-all-voting-devices');
@@ -414,37 +409,31 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
     return { canceled: false, path: filePaths[0] };
   });
 
-  ipcMain.handle('open-results-file', async (event: IpcMainInvokeEvent, filePath?: string) => {
-    logger.debug(`[IPC] open-results-file, path: ${filePath}`);
-    let finalFilePath = filePath;
+  ipcMain.handle('open-results-file', async (event: IpcMainInvokeEvent) => {
+    logger.debug('[IPC] open-results-file');
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        { name: 'Fichiers ORS', extensions: ['ors'] },
+        { name: 'Tous les fichiers', extensions: ['*'] }
+      ]
+    });
 
-    if (!finalFilePath) {
-      const { canceled, filePaths } = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        filters: [
-          { name: 'Fichiers ORS', extensions: ['ors'] },
-          { name: 'Tous les fichiers', extensions: ['*'] }
-        ]
-      });
-
-      if (canceled || filePaths.length === 0) {
-        return { canceled: true };
-      }
-      finalFilePath = filePaths[0];
+    if (canceled || filePaths.length === 0) {
+      return { canceled: true };
     }
 
+    const filePath = filePaths[0];
     try {
-      // Always read the file in the main process to get a Buffer
-      const fileBuffer = await fs.readFile(finalFilePath);
-      // Return the buffer as a base64 string to the renderer process
+      const fileBuffer = await fs.readFile(filePath);
       return {
         canceled: false,
-        fileName: path.basename(finalFilePath),
+        fileName: filePath.split(/[\\/]/).pop(),
         fileBuffer: fileBuffer.toString('base64')
       };
     } catch (error: any) {
-      logger.error(`Failed to read file: ${finalFilePath} - ${error.message}`);
-      return { canceled: true, error: error.message };
+      logger.debug(`Failed to read file: ${error}`);
+      return { canceled: false, error: error.message };
     }
   });
 
