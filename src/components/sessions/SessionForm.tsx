@@ -68,7 +68,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
   const [displayedBlockDetails, setDisplayedBlockDetails] = useState<Array<{ themeName: string, blocName: string }>>([]);
-  const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
   const [hardwareDevices, setHardwareDevices] = useState<VotingDevice[]>([]);
@@ -761,13 +760,6 @@ const handleGenerateQuestionnaire = async () => {
     }
   };
 
-  const handleResultsFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    setResultsFile(file || null);
-    setImportSummary(null);
-    if(file) console.log("Fichier résultats sélectionné:", file.name);
-  };
-
   const handleImportResults = async (iterationIndex: number) => {
     if (!currentSessionDbId || !editingSessionData) {
       setImportSummary("Aucune session active.");
@@ -782,7 +774,9 @@ const handleGenerateQuestionnaire = async () => {
       if (!window.confirm("Les résultats pour cette itération ont déjà été importés. Voulez-vous vraiment les ré-importer et écraser les données existantes ?")) {
         return;
       }
-      await StorageManager.deleteResultsForIteration(iteration.id as number);
+      if (iteration.id) {
+        await StorageManager.deleteResultsForIteration(iteration.id);
+      }
     }
     setImportSummary(`Lecture du fichier ORS pour l'itération ${iteration.name}...`);
     try {
@@ -1610,7 +1604,7 @@ const handleGenerateQuestionnaire = async () => {
                                 variant="secondary"
                                 icon={<FileUp size={16} />}
                                 onClick={() => handleImportResults(index)}
-                                disabled={!resultsFile || !editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
+                                disabled={!editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
                             >
                                 Importer les Résultats pour {iter.name}
                             </Button>
