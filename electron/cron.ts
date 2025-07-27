@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { getDb } from './db';
+import { getDb } from './db.js';
 import { ILogger } from './utils/logger';
 
 let logger: ILogger;
