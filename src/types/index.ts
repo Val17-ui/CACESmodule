@@ -1,6 +1,13 @@
 // src/types/index.ts
 export type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
+export interface LogEntry {
+  id?: number;
+  timestamp: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
 export interface User {
   id: string;
   name: string;

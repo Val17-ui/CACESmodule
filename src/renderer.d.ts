@@ -1,4 +1,4 @@
-import { CACESReferential, Session, Participant, Question, Referential, Theme, Bloc, AdminPPTXSettings, SessionResult, SessionQuestion, SessionBoitier, DeviceKit, VotingDevice, Trainer, LogEntry } from './types';
+import { Session, Referential, Trainer, Theme, Bloc, QuestionWithId, Omit, SessionResult, VotingDevice, DeviceKit, SessionQuestion, SessionBoitier } from './types';
 
 declare global {
   interface Window {
