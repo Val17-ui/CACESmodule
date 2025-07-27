@@ -595,25 +595,13 @@ const handleGenerateQuestionnaire = async () => {
 
           const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
 
-          // Combine existing participants with new ones, ensuring no duplicates
-          const existingParticipants = existingIteration?.participants || [];
-          const combinedParticipants = [...existingParticipants];
-          const existingIdentificationCodes = new Set(existingParticipants.map(p => p.identificationCode));
-
-          for (const p of participantsForIteration) {
-            if (!existingIdentificationCodes.has(p.identificationCode)) {
-              combinedParticipants.push(p);
-              existingIdentificationCodes.add(p.identificationCode);
-            }
-          }
-
           const iterationToSave = {
             id: existingIteration?.id,
             session_id: savedId,
             iteration_index: i,
             name: iterationNames[i] || `Session_${i + 1}`,
             status: existingIteration?.status || 'planned',
-            participants: combinedParticipants,
+            participants: participantsForIteration,
             ors_file_path: existingIteration?.ors_file_path,
             question_mappings: existingIteration?.question_mappings,
             created_at: existingIteration?.created_at || new Date().toISOString(),
