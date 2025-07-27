@@ -10,15 +10,14 @@ type SessionsListProps = {
   sessions: DBSession[];
   onManageSession: (id: number) => void;
   onStartExam: (id: number) => void;
-  isArchive?: boolean;
 };
 
 const SessionsList: React.FC<SessionsListProps> = ({
   sessions,
   onManageSession,
   onStartExam,
-  isArchive = false,
 }) => {
+  const [showArchived, setShowArchived] = useState(false);
   const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
   useEffect(() => {
     const loadReferentiels = async () => {
@@ -191,16 +190,29 @@ const SessionsList: React.FC<SessionsListProps> = ({
     );
   }
 
-  if (isArchive) {
-    return renderSessionTable(sessions, "Toutes les archives");
-  }
-
   return (
     <Card>
-      {renderSessionTable(sessionsDuJour, "Sessions du jour")}
-      {renderSessionTable(sessionsPlanifiees, "Sessions planifiées")}
-      {renderSessionTable(sessionsEnAttente, "Sessions en attente")}
-      {renderSessionTable(sessionsTerminees, "Sessions terminées")}
+      <div className="flex justify-end items-center mb-4">
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={() => setShowArchived(!showArchived)}
+            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <span className="text-sm text-gray-700">Afficher les archives</span>
+        </label>
+      </div>
+      {showArchived ? (
+        renderSessionTable(sessionsArchivees, "Sessions archivées")
+      ) : (
+        <>
+          {renderSessionTable(sessionsDuJour, "Sessions du jour")}
+          {renderSessionTable(sessionsPlanifiees, "Sessions planifiées")}
+          {renderSessionTable(sessionsEnAttente, "Sessions en attente")}
+          {renderSessionTable(sessionsTerminees, "Sessions terminées")}
+        </>
+      )}
     </Card>
   );
 };

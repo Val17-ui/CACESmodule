@@ -8,7 +8,7 @@ import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez
 import fs from 'fs/promises';
 import path from 'path';
 
-const dbModule = require('./db');
+import * as dbModule from './db.js';
 
 import { getLogger, ILogger } from './utils/logger';
 
@@ -49,7 +49,7 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
 
   ipcMain.handle('db-get-session-iterations', async (event: IpcMainInvokeEvent, sessionId: number) => {
     logger.debug(`[IPC] db-get-session-iterations: for session ${sessionId}`);
-    return dbModule.getSessionIterations(sessionId);
+    return dbModule.getSessionIterationsBySessionId(sessionId);
   });
 
   // SessionResults

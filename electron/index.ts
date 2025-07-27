@@ -1,9 +1,8 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
-import { initializeIpcHandlers } from './ipcHandlers.js';
-import * as dbModule from './db.js';
+const { initializeIpcHandlers } = require('./ipcHandlers.js');
+import { initializeDatabase, getDb } from './db.js';
 import { initializeLogger, getLogger, ILogger } from './utils/logger.js';
-import { setupCronJobs } from './cron.js';
 
 
 
@@ -55,11 +54,9 @@ app.whenReady().then(async () => {
   });
   try {
     logger.info('Initializing database...');
-    dbModule.initializeDatabase(logger);
+    initializeDatabase(logger);
     logger.info('Initializing IPC handlers...');
     initializeIpcHandlers(logger);
-    logger.info('Setting up CRON jobs...');
-    setupCronJobs(logger);
     createWindow(logger);
 
     app.on('activate', () => {
@@ -77,7 +74,7 @@ app.on('window-all-closed', () => {
   const logger = getLogger();
   logger.info('All windows closed, quitting application...');
   if (process.platform !== 'darwin') {
-    dbModule.getDb().close();
+    getDb().close();
     app.quit();
   }
 });
