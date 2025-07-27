@@ -1,6 +1,6 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
-import { initializeIpcHandlers } from './ipcHandlers.js';
+const { initializeIpcHandlers } = require('./ipcHandlers.js');
 import { initializeDatabase, getDb } from './db.js';
 import { initializeLogger, getLogger, ILogger } from './utils/logger.js';
 
