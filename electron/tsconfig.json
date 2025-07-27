@@ -13,7 +13,8 @@
     "typeRoots": ["../node_modules/@types"]
   },
   "include": [
-    "./**/*.ts"
+    "./**/*.ts",
+    "../src/**/*.ts"
   ],
   "exclude": [
     "node_modules",

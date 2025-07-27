@@ -971,9 +971,9 @@ const handleGenerateQuestionnaire = async () => {
                       }
                       const participantActualSerialNumber = matchingGlobalDevice.serialNumber;
                       const participantResults = sessionResultsForScore.filter(r => r.participantIdBoitier === participantActualSerialNumber);
-                      const score = calculateParticipantScore(participantResults, sessionQuestionsDb);
+                      const score = calculateParticipantScore(participantResults, sessionQuestionsDb, p_db.score || 0);
                       const themeScores = calculateThemeScores(participantResults, sessionQuestionsDb);
-                      const reussite = determineIndividualSuccess(score, themeScores);
+                      const reussite = determineIndividualSuccess();
                       return { ...p_db, score, reussite };
                     });
                     await StorageManager.updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
@@ -1485,7 +1485,7 @@ const handleGenerateQuestionnaire = async () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {participants.map((p) => {
-                    const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.id));
+        const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex, 10)].some(pa => pa.id === p.id));
                     return (
                       <tr key={p.id}>
                         {iterationCount > 1 && (
