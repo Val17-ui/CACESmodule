@@ -169,10 +169,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   useEffect(() => {
     if (sessionIdToLoad && hardwareLoaded && referentielsData.length > 0) {
       const loadSession = async () => {
-        logger.info(`[SessionLoad] Loading session with ID: ${sessionIdToLoad}`);
+        console.log(`[SessionLoad] Loading session with ID: ${sessionIdToLoad}`);
         try {
           const sessionData = await StorageManager.getSessionById(sessionIdToLoad);
-          logger.debug('[SessionLoad] Raw data from DB:', sessionData);
+          console.log('[SessionLoad] Raw data from DB:', sessionData);
           setEditingSessionData(sessionData || null);
           if (sessionData) {
             setCurrentSessionDbId(sessionData.id ?? null);
@@ -218,7 +218,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             setModifiedAfterOrsGeneration(false);
             if (sessionData.iterations && sessionData.iterations.length > 0) {
               const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => iter.participants || []);
-              logger.debug('[SessionLoad] All participants from all iterations:', allParticipantsFromIterations);
+              console.log('[SessionLoad] All participants from all iterations:', allParticipantsFromIterations);
               const uniqueParticipants = allParticipantsFromIterations;
 
               const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
@@ -231,7 +231,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 hasSigned: (p_db as any).hasSigned || false,
               }));
               setParticipants(formParticipants);
-              logger.debug('[SessionLoad] Participants set in form state:', formParticipants);
+              console.log('[SessionLoad] Participants set in form state:', formParticipants);
 
               const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
               sessionData.iterations.forEach(iter => {
@@ -242,7 +242,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                   newAssignments[iter.iteration_index] = participantIdsForIter;
               });
               setParticipantAssignments(newAssignments);
-              logger.debug('[SessionLoad] Participant assignments reconstructed:', newAssignments);
+              console.log('[SessionLoad] Participant assignments reconstructed:', newAssignments);
             } else {
               // Fallback for sessions that might not have iterations correctly saved
               setParticipants([]);
@@ -359,12 +359,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   };
 
   const handleParticipantIterationChange = (participantId: string, newIterationIndex: number) => {
-    logger.info(`[IterationChange] participantId: ${participantId}, newIterationIndex: ${newIterationIndex}`);
+    console.log(`[IterationChange] participantId: ${participantId}, newIterationIndex: ${newIterationIndex}`);
     setParticipantAssignments(prev => {
         const newAssignments = { ...prev };
         const participantToMove = participants.find(p => p.id === participantId);
         if (!participantToMove) {
-            logger.warn(`[IterationChange] Participant with id ${participantId} not found in state.`);
+            console.warn(`[IterationChange] Participant with id ${participantId} not found in state.`);
             return prev;
         }
 
@@ -380,7 +380,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         }
         newAssignments[newIterationIndex].push({ id: participantToMove.id, assignedGlobalDeviceId: participantToMove.assignedGlobalDeviceId || null });
 
-        logger.debug('[IterationChange] New assignments state:', newAssignments);
+        console.log('[IterationChange] New assignments state:', newAssignments);
         return newAssignments;
     });
   };
@@ -572,7 +572,7 @@ const handleGenerateQuestionnaire = async () => {
   };
 
   const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
-    logger.info('[SessionSave] Starting save process...');
+    console.log('[SessionSave] Starting save process...');
     if (!sessionDataToSave) return null;
     try {
       let savedId: number | undefined;
@@ -619,7 +619,7 @@ const handleGenerateQuestionnaire = async () => {
             created_at: existingIteration?.created_at || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
-          logger.debug(`[SessionSave] Saving iteration ${i}:`, iterationToSave);
+          console.log(`[SessionSave] Saving iteration ${i}:`, iterationToSave);
           await StorageManager.addOrUpdateSessionIteration(iterationToSave);
         }
 
