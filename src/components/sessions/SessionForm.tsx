@@ -215,7 +215,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             }
 
             setModifiedAfterOrsGeneration(false);
-            const formParticipants: FormParticipant[] = sessionData.participants.map((p_db: DBParticipantType, loopIndex: number) => ({
+            const allParticipantsFromIterations = sessionData.iterations?.flatMap(iter => iter.participants || []) || [];
+            const uniqueParticipants = Array.from(new Map(allParticipantsFromIterations.map(p => [p.identificationCode, p])).values());
+
+            const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
               ...p_db,
               id: `loaded-${loopIndex}-${Date.now()}`,
               firstName: p_db.prenom,
@@ -522,15 +525,6 @@ const handleGenerateQuestionnaire = async () => {
   };
 
   const prepareSessionDataForDb = async (includeOrsBlob?: string | Blob | ArrayBuffer | null): Promise<DBSession | null> => {
-    const dbParticipants: DBParticipantType[] = participants.map((p_form: FormParticipant) => ({
-      nom: p_form.lastName,
-      prenom: p_form.firstName,
-      identificationCode: p_form.identificationCode,
-      score: p_form.score,
-      reussite: p_form.reussite,
-      assignedGlobalDeviceId: p_form.assignedGlobalDeviceId,
-      statusInSession: p_form.statusInSession,
-    }));
     let currentReferentielId: number | undefined = undefined;
     if (selectedReferentialId) {
         currentReferentielId = selectedReferentialId;
@@ -554,7 +548,6 @@ const handleGenerateQuestionnaire = async () => {
       num_session: numSession,
       num_stage: numStage,
       referentielId: currentReferentielId,
-      participants: dbParticipants,
       selectedBlocIds: editingSessionData?.selectedBlocIds || [],
       selectedKitId: selectedKitIdState,
       orsFilePath: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.orsFilePath,
@@ -569,7 +562,6 @@ const handleGenerateQuestionnaire = async () => {
       resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
       resultsImportedAt: null,
     };
-    logger.info(`[LOG][SessionForm] Session data to save: ${JSON.stringify(sessionToSave.participants.map(p => ({ nom: p.nom, prenom: p.prenom, assignedGlobalDeviceId: p.assignedGlobalDeviceId })))}`);
     return sessionToSave;
   };
 
@@ -1359,3 +1351,5 @@ const handleGenerateQuestionnaire = async () => {
 };
 
 export default SessionForm;
+
+[end of src/components/sessions/SessionForm.tsx]
