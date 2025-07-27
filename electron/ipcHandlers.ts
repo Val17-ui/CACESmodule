@@ -8,7 +8,7 @@ import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez
 import fs from 'fs/promises';
 import path from 'path';
 
-const dbModule = require('./db');
+import * as dbModule from './db.js';
 
 import { getLogger, ILogger } from './utils/logger';
 
