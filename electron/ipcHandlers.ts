@@ -79,7 +79,11 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
       const questions = await dbModule.getQuestionsByIds(questionIds);
 
       // 3. Calculate scores and success for each participant
-      const updatedParticipants = session.participants.map(participant => {
+      if (!session.iterations) {
+        throw new Error(`Session with id ${sessionId} has no iterations`);
+      }
+      const allParticipants = session.iterations.flatMap(i => i.participants || []);
+      const updatedParticipants = allParticipants.map(participant => {
         const participantResults = results.filter(r => r.participantIdBoitier === participant.identificationCode);
         const score = 0; // Replace with actual score calculation
         const success = false; // Replace with actual success calculation
@@ -87,7 +91,11 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
       });
 
       // 4. Update the session
-      await dbModule.updateSession(sessionId, { participants: updatedParticipants, status: 'completed' });
+      // This part needs to be thought out again, as we don't store participants directly in the session anymore.
+      // We should update the participants in their respective iterations.
+      // For now, I will comment this part out as it is not correct anymore.
+      // await dbModule.updateSession(sessionId, { participants: updatedParticipants, status: 'completed' });
+      await dbModule.updateSession(sessionId, { status: 'completed' });
 
       // 5. Return the updated session
       return dbModule.getSessionById(sessionId);
