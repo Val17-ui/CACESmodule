@@ -139,7 +139,11 @@ export interface Participant {
 }
 
 export interface FormParticipant extends Participant {
-  organization?: string;
+  id: string;
+  firstName: string;
+  lastName: string;
+  deviceId: number | null;
+  hasSigned?: boolean;
 }
 
 // L'interface SelectedBlock n'est plus nécessaire car nous stockons selectedBlocIds directement.

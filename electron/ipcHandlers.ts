@@ -62,6 +62,41 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
     return dbModule.getResultsForSession(sessionId);
   });
 
+  ipcMain.handle('session-finalize-import', async (event: IpcMainInvokeEvent, sessionId: number, results: SessionResult[]) => {
+    logger.debug(`[IPC] session-finalize-import: ${sessionId}`);
+    try {
+      // 1. Save the results
+      await dbModule.addBulkSessionResults(results);
+
+      // 2. Get all necessary data for calculations
+      const session = await dbModule.getSessionById(sessionId);
+      if (!session) throw new Error(`Session with id ${sessionId} not found`);
+
+      const sessionQuestions = await dbModule.getSessionQuestionsBySessionId(sessionId);
+      if (!sessionQuestions || sessionQuestions.length === 0) throw new Error(`No questions found for session ${sessionId}`);
+
+      const questionIds = sessionQuestions.map(q => q.dbQuestionId);
+      const questions = await dbModule.getQuestionsByIds(questionIds);
+
+      // 3. Calculate scores and success for each participant
+      const updatedParticipants = session.participants.map(participant => {
+        const participantResults = results.filter(r => r.participantIdBoitier === participant.identificationCode);
+        const score = 0; // Replace with actual score calculation
+        const success = false; // Replace with actual success calculation
+        return { ...participant, score, reussite: success };
+      });
+
+      // 4. Update the session
+      await dbModule.updateSession(sessionId, { participants: updatedParticipants, status: 'completed' });
+
+      // 5. Return the updated session
+      return dbModule.getSessionById(sessionId);
+    } catch (error) {
+      logger.error(`[IPC] session-finalize-import failed for session ${sessionId}: ${error}`);
+      throw error;
+    }
+  });
+
   // VotingDevices
   ipcMain.handle('db-get-all-voting-devices', async () => {
     logger.debug('[IPC] db-get-all-voting-devices');

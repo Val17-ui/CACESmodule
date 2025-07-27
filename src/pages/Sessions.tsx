@@ -115,6 +115,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [activeList, setActiveList] = useState<'sessions' | 'archives'>('sessions');
+  const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
 
   useEffect(() => {
     if (sessionId !== undefined) {
@@ -181,6 +182,22 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
       }
     }
   }, [fetchRawSessions, managingSessionId, isCreating, rawSessions.length]);
+
+  useEffect(() => {
+    const loadReferentiels = async () => {
+      if (window.dbAPI && typeof window.dbAPI.getAllReferentiels === 'function') {
+        try {
+          const refs = await window.dbAPI.getAllReferentiels();
+          setReferentielsData(refs);
+        } catch (error) {
+          console.error("Erreur chargement des référentiels pour SessionsList:", error);
+        }
+      } else {
+        console.error("dbAPI.getAllReferentiels not available");
+      }
+    };
+    loadReferentiels();
+  }, []);
 
   // Effet pour trier et filtrer les sessions
   useEffect(() => {
@@ -268,14 +285,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
       );
     }
 
-    const unarchivedSessions = sessionsToProcess.filter(session => !session.archived_at);
-    const archivedSessions = sessionsToProcess.filter(session => session.archived_at).sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime());
-
-    if (activeList === 'sessions') {
-      setProcessedSessions(unarchivedSessions);
-    } else {
-      setProcessedSessions(archivedSessions);
-    }
+    setProcessedSessions(sessionsToProcess);
 
   }, [rawSessions, searchTerm, selectedPeriod, activeList]);
 
@@ -413,7 +423,8 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
             sessions={processedSessions}
             onManageSession={handleManageSession}
             onStartExam={handleStartExam}
-            isArchive={activeList === 'archives'}
+            activeList={activeList}
+            referentiels={referentielsData} // Pass referentiels data
           />
         </>
       ) : (

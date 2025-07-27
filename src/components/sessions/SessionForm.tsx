@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import Card from '../ui/Card';
-import Input from '../ui/Input';
-import Select from '../ui/Select';
 import Button from '../ui/Button';
-import { Save, FileUp, UserPlus, Trash2, PackagePlus, AlertTriangle } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import {
   CACESReferential,
   Session as DBSession,
@@ -53,6 +50,11 @@ interface AdminPPTXSettings {
     pollCountdownStartMode: string;
     pollMultipleResponse: string;
 }
+
+import ResultsImporter from './form/ResultsImporter';
+import QuestionnaireGenerator from './form/QuestionnaireGenerator';
+import ParticipantManager from './form/ParticipantManager';
+import SessionDetailsForm from './form/SessionDetailsForm';
 
 const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [currentSessionDbId, setCurrentSessionDbId] = useState<number | null>(sessionIdToLoad || null);
@@ -288,10 +290,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
 }, [participants, iterationCount, sessionIdToLoad]);
 
-  const referentialOptionsFromData = referentielsData.map((r: Referential) => ({
-    value: r.code,
-    label: `${r.code} - ${r.nom_complet}`,
-  }));
+  
 
   const handleAddParticipant = () => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
@@ -760,12 +759,7 @@ const handleGenerateQuestionnaire = async () => {
     }
   };
 
-  const handleResultsFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    setResultsFile(file || null);
-    setImportSummary(null);
-    if(file) console.log("Fichier résultats sélectionné:", file.name);
-  };
+  
 
   const handleImportResults = async (iterationIndex: number) => {
     if (!currentSessionDbId || !editingSessionData) {
@@ -949,82 +943,18 @@ const handleGenerateQuestionnaire = async () => {
       );
       if (sessionResultsToSave.length > 0) {
         try {
-          const savedResultIds = await StorageManager.addBulkSessionResults(sessionResultsToSave);
-          if (savedResultIds && savedResultIds.length > 0) {
-            let message = `${savedResultIds.length} résultats sauvegardés !`;
-            let sessionProcessError: string | null = null;
-            try {
-              if (currentSessionDbId) {
-                await StorageManager.updateSession(currentSessionDbId, { status: 'completed', updatedAt: new Date().toISOString() });
-                message += "\nStatut session: 'Terminée'.";
-                const sessionResultsForScore: SessionResult[] = await StorageManager.getResultsForSession(currentSessionDbId);
-                let sessionDataForScores = await StorageManager.getSessionById(currentSessionDbId);
-                if (sessionDataForScores && sessionDataForScores.questionMappings && sessionResultsForScore.length > 0) {
-                  const questionIds = sessionDataForScores.questionMappings.map(q => q.dbQuestionId).filter((id): id is number => id !== null && id !== undefined);
-                  const sessionQuestionsDb = await StorageManager.getQuestionsByIds(questionIds);
-                  if (sessionQuestionsDb.length > 0) {
-                    const updatedParticipants = sessionDataForScores.participants.map((p_db: DBParticipantType) => {
-                      const matchingGlobalDevice = hardwareDevices.find(hd => hd.id === p_db.assignedGlobalDeviceId);
-                      if (!matchingGlobalDevice) {
-                        console.warn(`Participant ${p_db.nom} ${p_db.prenom} n'a pas de boîtier physique valide assigné pour le calcul des scores.`);
-                        return { ...p_db, score: p_db.score || 0, reussite: p_db.reussite || false };
-                      }
-                      const participantActualSerialNumber = matchingGlobalDevice.serialNumber;
-                      const participantResults = sessionResultsForScore.filter(r => r.participantIdBoitier === participantActualSerialNumber);
-                      const score = calculateParticipantScore(participantResults, sessionQuestionsDb);
-                      const themeScores = calculateThemeScores(participantResults, sessionQuestionsDb);
-                      const reussite = determineIndividualSuccess(score, themeScores);
-                      return { ...p_db, score, reussite };
-                    });
-                    await StorageManager.updateSession(currentSessionDbId, { participants: updatedParticipants, updatedAt: new Date().toISOString() });
-                    message += "\nScores et réussite calculés et mis à jour.";
-                    const finalUpdatedSession = await StorageManager.getSessionById(currentSessionDbId);
-                    if (finalUpdatedSession) {
-                      setEditingSessionData(finalUpdatedSession);
-                      const formParticipantsToUpdate: FormParticipant[] = finalUpdatedSession.participants.map((p_db_updated: DBParticipantType, index: number) => {
-                        const visualDeviceId = index + 1;
-                        const currentFormParticipantState = participants[index];
-                        return {
-                          nom: p_db_updated.nom,
-                          prenom: p_db_updated.prenom,
-                          identificationCode: p_db_updated.identificationCode,
-                          score: p_db_updated.score,
-                          reussite: p_db_updated.reussite,
-                          assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
-                          statusInSession: p_db_updated.statusInSession,
-                          id: currentFormParticipantState?.id || `updated-${index}-${Date.now()}`,
-                          firstName: p_db_updated.prenom,
-                          lastName: p_db_updated.nom,
-                          deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
-                          organization: currentFormParticipantState?.organization || '',
-                          hasSigned: currentFormParticipantState?.hasSigned || false,
-                        };
-                      });
-                      setParticipants(formParticipantsToUpdate);
-                    }
-                  } else { message += "\nImpossible charger questions pour scores."; }
-                } else { message += "\nImpossible calculer scores."; }
-              }
-            } catch (processingError: any) { sessionProcessError = processingError.message; }
-            if(sessionProcessError) { message += `\nErreur post-traitement: ${sessionProcessError}`; }
-            setImportSummary(message);
-            logger.info(`Résultats importés pour la session ID ${currentSessionDbId}`, {
-              eventType: 'RESULTS_IMPORTED',
-              sessionId: currentSessionDbId,
-              fileName: resultsFile?.name,
-              resultsCount: savedResultIds.length
-            });
+          const updatedSession = await window.dbAPI.sessionFinalizeImport(currentSessionDbId, sessionResultsToSave);
+          if (updatedSession) {
+            setEditingSessionData(updatedSession);
+            setImportSummary(`${sessionResultsToSave.length} résultats importés et traités avec succès.`);
           } else {
-            setImportSummary("Echec sauvegarde résultats.");
-            logger.warning(`Échec de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FAILED_DB_SAVE', sessionId: currentSessionDbId, fileName: resultsFile?.name });
+            setImportSummary("Erreur lors de la finalisation de la session.");
           }
-        } catch (dbError: any) {
-          setImportSummary(`Erreur DB sauvegarde résultats: ${dbError.message}`);
-          logger.error(`Erreur DB lors de la sauvegarde des résultats importés pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_ERROR_DB_SAVE', sessionId: currentSessionDbId, error: dbError, fileName: resultsFile?.name });
+        } catch (error: any) {
+          setImportSummary(`Erreur lors de la finalisation de la session: ${error.message}`);
         }
       } else {
-        setImportSummary("Aucun résultat transformé.");
-        logger.warning(`Aucun résultat transformé après parsing du fichier pour la session ID ${currentSessionDbId}`, {eventType: 'RESULTS_IMPORT_NO_TRANSFORMED_DATA', sessionId: currentSessionDbId, fileName: resultsFile?.name});
+        setImportSummary("Aucun résultat à importer.");
       }
     } catch (error: any) {
       setImportSummary(`Erreur traitement fichier: ${error.message}`);
@@ -1321,299 +1251,81 @@ const handleGenerateQuestionnaire = async () => {
     switch (activeTab) {
       case 'details':
         return (
-          <Card title="Informations générales" className="mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input
-                label="Nom de la session"
-                placeholder="Ex: Formation CACES R489 - Groupe A"
-                value={sessionName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionName(e.target.value)}
-                required
-                disabled={isReadOnly}
-              />
-              <Input
-                label="Date de la session"
-                type="date"
-                value={sessionDate}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)}
-                required
-                disabled={isReadOnly}
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              <Select
-                label="Référentiel"
-                options={referentialOptionsFromData}
-                value={selectedReferential}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                  const newSelectedCode = e.target.value as CACESReferential | '';
-                  setSelectedReferential(newSelectedCode);
-                  if (newSelectedCode) {
-                    const refObj = referentielsData.find(r => r.code === newSelectedCode);
-                    setSelectedReferentialId(refObj?.id || null);
-                  } else {
-                    setSelectedReferentialId(null);
-                  }
-                }}
-                placeholder="Sélectionner un référentiel"
-                required
-                disabled={!!editingSessionData?.questionMappings || isReadOnly}
-              />
-              <Select
-                label="Formateur"
-                options={trainersList.map((t: Trainer) => ({ value: t.id?.toString() || '', label: t.name }))}
-                value={selectedTrainerId?.toString() || ''}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                placeholder="Sélectionner un formateur"
-                disabled={isReadOnly}
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              <Input
-                label="Numéro de session"
-                placeholder="Ex: 2024-001"
-                value={numSession}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumSession(e.target.value)}
-                disabled={isReadOnly}
-              />
-              <Input
-                label="Numéro de stage"
-                placeholder="Ex: CACES-2024-A"
-                value={numStage}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
-                disabled={isReadOnly}
-              />
-              <Input
-                label="Nombre d’itérations"
-                type="number"
-                min={1}
-                value={iterationCount}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  const count = parseInt(e.target.value, 10);
-                  if (count > 0) {
-                    setIterationCount(count);
-                    const newIterationNames = Array.from({ length: count }, (_, i) => `Session_${i + 1}`);
-                    setIterationNames(newIterationNames);
-                    setParticipantAssignments(prev => {
-                      const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
-                      for (let i = 0; i < count; i++) {
-                        if (prev[i]) {
-                          newAssignments[i] = prev[i];
-                        } else {
-                          newAssignments[i] = [];
-                        }
-                      }
-                      return newAssignments;
-                    });
-                  }
-                }}
-                disabled={isReadOnly}
-              />
-            </div>
-            <div className="mt-4">
-              <Input
-                label="Lieu de formation"
-                placeholder="Ex: Centre de formation Paris Nord"
-                value={location}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)}
-                disabled={isReadOnly}
-              />
-            </div>
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-              <textarea
-                rows={3}
-                className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                placeholder="Informations complémentaires..."
-                value={notes}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
-                readOnly={isReadOnly}
-              />
-            </div>
-            {currentSessionDbId && displayedBlockDetails.length > 0 && (
-              <div className="mt-6 p-4 border border-gray-200 rounded-lg bg-gray-50 mb-6">
-                <h4 className="text-md font-semibold text-gray-700 mb-2">Blocs thématiques sélectionnés:</h4>
-                <ul className="list-disc list-inside pl-2 space-y-1">
-                  {displayedBlockDetails.map((detail, index) => (
-                    <li key={index} className="text-sm text-gray-600">
-                      <span className="font-medium">{detail.themeName}:</span> Bloc {detail.blocName}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </Card>
+          <SessionDetailsForm
+            isReadOnly={isReadOnly}
+            sessionName={sessionName}
+            setSessionName={setSessionName}
+            sessionDate={sessionDate}
+            setSessionDate={setSessionDate}
+            referentielsData={referentielsData}
+            selectedReferential={selectedReferential}
+            setSelectedReferential={setSelectedReferential}
+            setSelectedReferentialId={setSelectedReferentialId}
+            editingSessionData={editingSessionData}
+            trainersList={trainersList}
+            selectedTrainerId={selectedTrainerId}
+            setSelectedTrainerId={setSelectedTrainerId}
+            numSession={numSession}
+            setNumSession={setNumSession}
+            numStage={numStage}
+            setNumStage={setNumStage}
+            iterationCount={iterationCount}
+            setIterationCount={setIterationCount}
+            setIterationNames={setIterationNames}
+            setParticipantAssignments={setParticipantAssignments}
+            location={location}
+            setLocation={setLocation}
+            notes={notes}
+            setNotes={setNotes}
+            displayedBlockDetails={displayedBlockDetails}
+          />
         );
       case 'participants':
         return (
-          <Card title="Participants et Kits" className="mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <Select
-                label="Kit de boîtiers"
-                options={deviceKitsList.map(kit => ({ value: kit.id!.toString(), label: kit.name }))}
-                value={selectedKitIdState?.toString() || ''}
-                onChange={(e) => setSelectedKitIdState(e.target.value ? parseInt(e.target.value, 10) : null)}
-                placeholder="Sélectionner un kit"
-                disabled={isLoadingKits || isReadOnly}
-              />
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Actions</h4>
-                <div className="flex space-x-2">
-                  <Button onClick={handleAddParticipant} icon={<UserPlus size={16} />} disabled={isReadOnly}>Ajouter</Button>
-                  <label className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">
-                    <FileUp size={16} className="-ml-1 mr-2 h-5 w-5" />
-                    Importer
-                    <input type="file" className="hidden" onChange={handleParticipantFileSelect} accept=".csv, .xlsx, .xls" disabled={isReadOnly} />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <h3 className="text-xl font-semibold mb-4">Liste Globale des Participants</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {iterationCount > 1 && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Itération</th>}
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Prénom</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Organisation</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code Identification</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Boîtier</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {participants.map((p) => {
-                    const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.id));
-                    return (
-                      <tr key={p.id}>
-                        {iterationCount > 1 && (
-                          <td className="px-4 py-2">
-                            <Select
-                              value={assignedIteration || ''}
-                              onChange={(e) => handleParticipantIterationChange(p.id, parseInt(e.target.value, 10))}
-                              options={iterationNames.map((name, index) => ({ value: index.toString(), label: name }))}
-                              placeholder="N/A"
-                              disabled={isReadOnly}
-                            />
-                          </td>
-                        )}
-                        <td className="px-4 py-2"><Input value={p.firstName} onChange={(e) => handleParticipantChange(p.id, 'firstName', e.target.value)} disabled={isReadOnly} /></td>
-                        <td className="px-4 py-2"><Input value={p.lastName} onChange={(e) => handleParticipantChange(p.id, 'lastName', e.target.value)} disabled={isReadOnly} /></td>
-                        <td className="px-4 py-2"><Input value={p.organization || ''} onChange={(e) => handleParticipantChange(p.id, 'organization', e.target.value)} disabled={isReadOnly} /></td>
-                        <td className="px-4 py-2"><Input value={p.identificationCode || ''} onChange={(e) => handleParticipantChange(p.id, 'identificationCode', e.target.value)} disabled={isReadOnly} /></td>
-                        <td className="px-4 py-2">
-                          <Select
-                            value={p.assignedGlobalDeviceId?.toString() || ''}
-                            onChange={(e) => handleParticipantChange(p.id, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
-                            options={votingDevicesInSelectedKit.map(d => ({ value: d.id!.toString(), label: `${d.name} (${d.serialNumber})`, disabled: participants.some(participant => participant.id !== p.id && participant.assignedGlobalDeviceId === d.id) }))}
-                            placeholder="N/A"
-                            disabled={isReadOnly}
-                          />
-                        </td>
-                        <td className="px-4 py-2"><Button variant="danger" size="sm" onClick={() => handleRemoveParticipant(p.id)} disabled={isReadOnly}><Trash2 size={14} /></Button></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <ParticipantManager
+            isReadOnly={isReadOnly}
+            participants={participants}
+            setParticipants={setParticipants}
+            handleParticipantChange={handleParticipantChange}
+            handleRemoveParticipant={handleRemoveParticipant}
+            handleAddParticipant={handleAddParticipant}
+            handleParticipantFileSelect={handleParticipantFileSelect}
+            iterationCount={iterationCount}
+            iterationNames={iterationNames}
+            participantAssignments={participantAssignments}
+            handleParticipantIterationChange={handleParticipantIterationChange}
+            deviceKitsList={deviceKitsList}
+            selectedKitIdState={selectedKitIdState}
+            setSelectedKitIdState={setSelectedKitIdState}
+            votingDevicesInSelectedKit={votingDevicesInSelectedKit}
+            isLoadingKits={isLoadingKits}
+          />
         );
       case 'generateQuestionnaire':
         return (
-               <Card title="Générer le questionnaire" className="mb-6">
-            <Button
-                    variant={editingSessionData?.orsFilePath ? "secondary" : "primary"}
-                icon={<PackagePlus size={16} />}
-                onClick={handleGenerateQuestionnaire}
-                disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
-                title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
-                       isReadOnly ? "La session est terminée, regénération bloquée." :
-                           (!!editingSessionData?.orsFilePath) ? "Régénérer le questionnaire (Attention : ceci écrasera l'existant)" :
-                           "Générer le questionnaire"}
-              >
-                    {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer le questionnaire" : "Générer le questionnaire")}
-              </Button>
-              {isReadOnly && (
-                     <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération est bloquée.</p>
-              )}
-               {(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) && !isReadOnly && (
-                 <p className="mt-2 text-sm text-yellow-700">Veuillez sélectionner un référentiel pour activer la génération.</p>
-              )}
-              {modifiedAfterOrsGeneration && !!editingSessionData?.orsFilePath && !isReadOnly && (
-                <p className="mt-3 text-sm text-orange-600 bg-orange-100 p-3 rounded-md flex items-center">
-                  <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
-                  <span>
-                        <strong className="font-semibold">Attention :</strong> Les informations des participants ont été modifiées après la dernière génération.
-                        Veuillez regénérer le questionnaire pour inclure ces changements.
-                  </span>
-                </p>
-              )}
-                  {importSummary && activeTab === 'generateQuestionnaire' && (
-                    <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                        <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
-                    </div>
-                  )}
-              {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && (
-                <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
-                  <h4 className="text-md font-semibold text-gray-700 mb-2">Fichiers de questionnaire générés :</h4>
-                  <ul className="list-disc list-inside pl-2 space-y-1">
-                    {editingSessionData.iterations.map((iter, index) => (
-                      <li key={index} className="text-sm text-gray-600">
-                        <span className="font-medium">{iter.name}:</span>
-                        <Button
-                          variant="ghost"
-                          onClick={() => { if (iter.ors_file_path) window.dbAPI.openFile(iter.ors_file_path); }}
-                          className="ml-2"
-                        >
-                          {iter.ors_file_path}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-         </Card>
+          <QuestionnaireGenerator
+            isReadOnly={isReadOnly}
+            isGeneratingOrs={isGeneratingOrs}
+            handleGenerateQuestionnaire={handleGenerateQuestionnaire}
+            editingSessionData={editingSessionData}
+            modifiedAfterOrsGeneration={modifiedAfterOrsGeneration}
+            importSummary={importSummary}
+            activeTab={activeTab}
+            currentSessionDbId={currentSessionDbId}
+            selectedReferential={selectedReferential}
+          />
         );
       case 'importResults':
         return (
-            <>
-            {currentSessionDbId && (
-                <Card title="Résultats de la Session (Import)" className="mb-6">
-                    <div className="space-y-4">
-                        <div>
-                            <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
-                        </div>
-                        {!editingSessionData?.orsFilePath && !isReadOnly && (
-                            <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
-                        )}
-                        {isReadOnly && (
-                            <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
-                        )}
-                        <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
-                        {editingSessionData?.iterations?.map((iter, index) => (
-                            <Button
-                                key={index}
-                                variant="secondary"
-                                icon={<FileUp size={16} />}
-                                onClick={() => handleImportResults(index)}
-                                disabled={!editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
-                            >
-                                Importer les Résultats pour {iter.name}
-                            </Button>
-                        ))}
-                        {importSummary && activeTab === 'importResults' && (
-                            <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                                <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
-                            </div>
-                        )}
-                    </div>
-                </Card>
-            )}
-            </>
-        )
+          <ResultsImporter
+            isReadOnly={isReadOnly}
+            editingSessionData={editingSessionData}
+            handleImportResults={handleImportResults}
+            importSummary={importSummary}
+            activeTab={activeTab}
+            currentSessionDbId={currentSessionDbId}
+          />
+        );
       default:
         return null;
     }

@@ -61,6 +61,11 @@ function initializeDatabase(loggerInstance: ILogger) {
     _logger.error(`[DB SETUP] Failed to create/update global kit: ${err}`);
   });
 
+  // Archive old sessions
+  archiveOldSessions().catch(err => {
+    _logger.error(`[DB SETUP] Failed to archive old sessions: ${err}`);
+  });
+
   _logger.debug("[DB SETUP] SQLite database module loaded and initialized.");
 }
 
@@ -71,6 +76,27 @@ const getDb = () => {
         throw new Error("Database not initialized. Please call initializeDatabase first.");
     }
     return db;
+};
+
+const archiveOldSessions = async (): Promise<void> => {
+  return asyncDbRun(() => {
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const stmt = getDb().prepare(`
+        UPDATE sessions
+        SET archived_at = ?
+        WHERE status = 'completed'
+          AND archived_at IS NULL
+          AND date(resultsImportedAt) < date(?)
+      `);
+      stmt.run(new Date().toISOString(), sevenDaysAgo.toISOString());
+    } catch (error) {
+      _logger.debug(`[DB Sessions] Error archiving old sessions: ${error}`);
+      throw error;
+    }
+  });
 };
 
 const createSchema = () => {

@@ -10,30 +10,18 @@ type SessionsListProps = {
   sessions: DBSession[];
   onManageSession: (id: number) => void;
   onStartExam: (id: number) => void;
+  activeList: 'sessions' | 'archives';
+  referentiels: Referential[];
 };
 
 const SessionsList: React.FC<SessionsListProps> = ({
   sessions,
   onManageSession,
   onStartExam,
+  activeList,
+  referentiels: referentielsData,
 }) => {
-  const [showArchived, setShowArchived] = useState(false);
-  const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
-  useEffect(() => {
-    const loadReferentiels = async () => {
-      if (window.dbAPI && typeof window.dbAPI.getAllReferentiels === 'function') {
-        try {
-          const refs = await window.dbAPI.getAllReferentiels();
-          setReferentielsData(refs);
-        } catch (error) {
-          console.error("Erreur chargement des référentiels pour SessionsList:", error);
-        }
-      } else {
-        console.error("dbAPI.getAllReferentiels not available");
-      }
-    };
-    loadReferentiels();
-  }, []);
+  
 
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'Date non définie';
@@ -171,8 +159,18 @@ const SessionsList: React.FC<SessionsListProps> = ({
            (session.status === 'planned' || session.status === 'ready');
   });
 
-  const sessionsTerminees = sessions.filter(session => session.status === 'completed' && !session.archived_at);
-  const sessionsArchivees = sessions.filter(session =>  session.archived_at);
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(today.getDate() - 7);
+
+  const sessionsTerminees = sessions.filter(session => {
+    const resultsImportedDate = session.resultsImportedAt ? new Date(session.resultsImportedAt) : null;
+    return session.status === 'completed' && resultsImportedDate && resultsImportedDate >= sevenDaysAgo;
+  });
+
+  const sessionsArchivees = sessions.filter(session => {
+    const resultsImportedDate = session.resultsImportedAt ? new Date(session.resultsImportedAt) : null;
+    return session.status === 'cancelled' || (session.status === 'completed' && resultsImportedDate && resultsImportedDate < sevenDaysAgo);
+  });
 
 
   if (sessions.length === 0) {
@@ -192,18 +190,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
 
   return (
     <Card>
-      <div className="flex justify-end items-center mb-4">
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={() => setShowArchived(!showArchived)}
-            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-          <span className="text-sm text-gray-700">Afficher les archives</span>
-        </label>
-      </div>
-      {showArchived ? (
+      {activeList === 'archives' ? (
         renderSessionTable(sessionsArchivees, "Sessions archivées")
       ) : (
         <>

@@ -53,6 +53,7 @@ declare global {
       openDirectoryDialog: (filePath?: string) => Promise<void>;
       openResultsFile: () => Promise<{ canceled: boolean; fileBuffer?: ArrayBuffer }>;
       openFile: (filePath: string) => Promise<void>;
+      sessionFinalizeImport: (sessionId: number, results: SessionResult[]) => Promise<Session | undefined>;
     };
   }
 }
