@@ -70,7 +70,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
   const [displayedBlockDetails, setDisplayedBlockDetails] = useState<Array<{ themeName: string, blocName: string }>>([]);
-  const [resultsFile, setResultsFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
   const [hardwareDevices, setHardwareDevices] = useState<VotingDevice[]>([]);
@@ -215,38 +214,34 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             }
 
             setModifiedAfterOrsGeneration(false);
-            const allParticipantsFromIterations = sessionData.iterations?.flatMap(iter => iter.participants || []) || [];
-            const uniqueParticipants = Array.from(new Map(allParticipantsFromIterations.map(p => [p.identificationCode, p])).values());
-
-            const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
-              ...p_db,
-              id: `loaded-${loopIndex}-${Date.now()}`,
-              firstName: p_db.prenom,
-              lastName: p_db.nom,
-              deviceId: loopIndex + 1,
-              organization: (p_db as any).organization || '',
-              hasSigned: (p_db as any).hasSigned || false,
-            }));
-            setParticipants(formParticipants);
-
-            // Reconstruct participant assignments from loaded iteration data
             if (sessionData.iterations && sessionData.iterations.length > 0) {
+              const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => iter.participants || []);
+              const uniqueParticipants = Array.from(new Map(allParticipantsFromIterations.map(p => [p.identificationCode, p])).values());
+
+              const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
+                ...p_db,
+                id: `loaded-${loopIndex}-${Date.now()}`,
+                firstName: p_db.prenom,
+                lastName: p_db.nom,
+                deviceId: loopIndex + 1,
+                organization: (p_db as any).organization || '',
+                hasSigned: (p_db as any).hasSigned || false,
+              }));
+              setParticipants(formParticipants);
+
               const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
               sessionData.iterations.forEach(iter => {
-                const participantIdsForIter: { id: string; assignedGlobalDeviceId: number | null }[] = [];
-                if (iter.participants) {
-                  iter.participants.forEach((p_iter: DBParticipantType) => {
-                    const matchingFormParticipant = formParticipants.find(
-                      fp => fp.identificationCode === p_iter.identificationCode
-                    );
-                    if (matchingFormParticipant) {
-                      participantIdsForIter.push({ id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null });
-                    }
-                  });
-                }
-                newAssignments[iter.iteration_index] = participantIdsForIter;
+                  const participantIdsForIter = (iter.participants || []).map(p_iter => {
+                      const matchingFormParticipant = formParticipants.find(fp => fp.identificationCode === p_iter.identificationCode);
+                      return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null } : null;
+                  }).filter((p): p is { id: string; assignedGlobalDeviceId: number | null } => p !== null);
+                  newAssignments[iter.iteration_index] = participantIdsForIter;
               });
               setParticipantAssignments(newAssignments);
+            } else {
+              // Fallback for sessions that might not have iterations correctly saved
+              setParticipants([]);
+              setParticipantAssignments({});
             }
           } else {
             console.warn(`Session avec ID ${sessionIdToLoad} non trouvée.`);
@@ -540,7 +535,7 @@ const handleGenerateQuestionnaire = async () => {
     } else if (editingSessionData?.referentielId) {
         currentReferentielId = editingSessionData.referentielId;
     }
-    const sessionToSave: DBSession = {
+    const sessionToSave: Omit<DBSession, 'participants'> = {
       id: currentSessionDbId || undefined,
       iteration_count: iterationCount,
       nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
@@ -562,7 +557,7 @@ const handleGenerateQuestionnaire = async () => {
       resolvedImportAnomalies: editingSessionData?.resolvedImportAnomalies,
       resultsImportedAt: null,
     };
-    return sessionToSave;
+    return sessionToSave as DBSession;
   };
 
   const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
@@ -950,7 +945,7 @@ const handleGenerateQuestionnaire = async () => {
       }
     } catch (error: any) {
       setImportSummary(`Erreur traitement fichier: ${error.message}`);
-      logger.error(`Erreur lors du traitement du fichier de résultats pour la session ID ${currentSessionDbId}`, {eventType: 'RESULTS_IMPORT_FILE_PROCESSING_ERROR', sessionId: currentSessionDbId, error, fileName: resultsFile?.name});
+      logger.error(`Erreur lors du traitement du fichier de résultats pour la session ID ${currentSessionDbId}`, {eventType: 'RESULTS_IMPORT_FILE_PROCESSING_ERROR', sessionId: currentSessionDbId, error});
     }
   };
 
@@ -969,7 +964,7 @@ const handleGenerateQuestionnaire = async () => {
       return;
     }
     let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
-    let updatedParticipantsList: DBParticipantType[] = editingSessionData.participants ? [...editingSessionData.participants] : [];
+    let updatedParticipantsList: DBParticipantType[] = editingSessionData.iterations?.flatMap(iter => iter.participants || []) || [];
     let participantsDataChanged = false;
     const originalAnomalies = detectedAnomalies;
     if (!originalAnomalies) {
@@ -1351,5 +1346,3 @@ const handleGenerateQuestionnaire = async () => {
 };
 
 export default SessionForm;
-
-[end of src/components/sessions/SessionForm.tsx]

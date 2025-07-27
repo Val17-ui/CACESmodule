@@ -13,7 +13,7 @@ export interface Session {
   nomSession: string;
   dateSession: string; // ISO string date
   referentielId?: number; // FK vers Referential.id - Remplacer l'ancien champ 'referentiel'
-  participants: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
+  participants?: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
   // selectionBlocs: SelectedBlock[]; // Remplacé par selectedBlocIds
   selectedBlocIds?: number[]; // Liste des IDs des blocs sélectionnés pour cette session
   donneesOrs?: ArrayBuffer | Buffer | null; // Stockage du fichier .ors généré
