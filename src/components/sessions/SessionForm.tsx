@@ -782,9 +782,7 @@ const handleGenerateQuestionnaire = async () => {
       if (!window.confirm("Les résultats pour cette itération ont déjà été importés. Voulez-vous vraiment les ré-importer et écraser les données existantes ?")) {
         return;
       }
-      if (iteration?.id) {
-        await StorageManager.deleteResultsForIteration(iteration.id);
-      }
+      await StorageManager.deleteResultsForIteration(iteration.id as number);
     }
     setImportSummary(`Lecture du fichier ORS pour l'itération ${iteration.name}...`);
     try {
