@@ -264,7 +264,6 @@ const createSchema = () => {
       participants TEXT,
       question_mappings TEXT,
       created_at TEXT NOT NULL,
-      updated_at TEXT,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
       UNIQUE (session_id, iteration_index)
     );`,
@@ -409,13 +408,13 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
                 ...iteration,
                 participants: JSON.stringify(iteration.participants || []),
                 question_mappings: JSON.stringify(iteration.question_mappings || []),
-                updated_at: new Date().toISOString(),
+                created_at: iteration.created_at || new Date().toISOString(),
             };
 
             if (existing) {
                 // Update
                 const {
-                    id, session_id, iteration_index, created_at, // Exclude keys that should not be in SET clause
+                    id, session_id, iteration_index, // Exclude keys that should not be in SET clause
                     ...updates
                 } = dataToSave;
 
@@ -429,8 +428,8 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
             } else {
                 // Insert
                 const insertStmt = getDb().prepare(`
-                    INSERT INTO session_iterations (session_id, iteration_index, name, ors_file_path, status, participants, question_mappings, created_at, updated_at)
-                    VALUES (@session_id, @iteration_index, @name, @ors_file_path, @status, @participants, @question_mappings, @created_at, @updated_at)
+                    INSERT INTO session_iterations (session_id, iteration_index, name, ors_file_path, status, participants, question_mappings, created_at)
+                    VALUES (@session_id, @iteration_index, @name, @ors_file_path, @status, @participants, @question_mappings, @created_at)
                 `);
                 const result = insertStmt.run(dataToSave);
                 return result.lastInsertRowid as number;
