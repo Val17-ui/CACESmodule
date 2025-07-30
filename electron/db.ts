@@ -458,8 +458,8 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
             } else {
                 // Insert
                 const insertStmt = getDb().prepare(`
-                    INSERT INTO session_iterations (session_id, iteration_index, name, ors_file_path, status, participants, question_mappings, created_at)
-                    VALUES (@session_id, @iteration_index, @name, @ors_file_path, @status, @participants, @question_mappings, @created_at)
+                    INSERT INTO session_iterations (session_id, iteration_index, name, ors_file_path, status, question_mappings, created_at, updated_at)
+                    VALUES (@session_id, @iteration_index, @name, @ors_file_path, @status, @question_mappings, @created_at, @updated_at)
                 `);
                 const result = insertStmt.run(dataToSave);
                 return result.lastInsertRowid as number;

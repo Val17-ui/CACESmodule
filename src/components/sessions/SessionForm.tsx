@@ -615,7 +615,7 @@ const handleGenerateQuestionnaire = async () => {
             ors_file_path: existingIteration?.ors_file_path,
             question_mappings: existingIteration?.question_mappings,
             created_at: existingIteration?.created_at || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           };
           console.log(`[SessionSave] Saving iteration ${i}:`, iterationToSave);
           await StorageManager.addOrUpdateSessionIteration(iterationToSave);
