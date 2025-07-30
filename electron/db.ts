@@ -189,6 +189,7 @@ const createSchema = () => {
     `CREATE TABLE IF NOT EXISTS sessionResults (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sessionId INTEGER NOT NULL,
+      session_iteration_id INTEGER,
       questionId INTEGER NOT NULL, /* references questions.id */
       participantIdBoitier TEXT NOT NULL, /* Could be serialNumber of votingDevice or a participant identifier */
       answer TEXT, /* JSON array of selected answers or single answer */
@@ -196,9 +197,11 @@ const createSchema = () => {
       pointsObtained INTEGER,
       timestamp INTEGER NOT NULL, /* Unix timestamp (seconds since epoch) */
       FOREIGN KEY (sessionId) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (session_iteration_id) REFERENCES session_iterations(id) ON DELETE CASCADE,
       FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
     );`,
     `CREATE INDEX IF NOT EXISTS idx_sessionResults_sessionId ON sessionResults(sessionId);`,
+    `CREATE INDEX IF NOT EXISTS idx_sessionResults_session_iteration_id ON sessionResults(session_iteration_id);`,
     `CREATE INDEX IF NOT EXISTS idx_sessionResults_questionId ON sessionResults(questionId);`,
     `CREATE INDEX IF NOT EXISTS idx_sessionResults_participantIdBoitier ON sessionResults(participantIdBoitier);`,
 
@@ -256,7 +259,6 @@ const createSchema = () => {
       name TEXT NOT NULL,
       ors_file_path TEXT,
       status TEXT,
-      participants TEXT,
       question_mappings TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
@@ -348,6 +350,22 @@ const createSchema = () => {
         }
     }
 
+    // --- Migrations for 'sessionResults' table ---
+    const sessionResultsColumnsToAdd = [
+        { name: 'session_iteration_id', type: 'INTEGER' }
+    ];
+    const existingSessionResultsColumns = (db.pragma('table_info(sessionResults)') as TableInfo[]).map(col => col.name);
+    for (const column of sessionResultsColumnsToAdd) {
+        if (!existingSessionResultsColumns.includes(column.name)) {
+            try {
+                db.prepare(`ALTER TABLE sessionResults ADD COLUMN ${column.name} ${column.type}`).run();
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'sessionResults' table.`);
+            } catch (error: any) {
+                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'sessionResults': ${error}`);
+            }
+        }
+    }
+
     // --- Migrations for 'questions' table ---
     const questionsColumnsToAdd = [
         { name: 'userQuestionId', type: 'TEXT' },
@@ -402,7 +420,6 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
 
             const dataToSave = {
                 ...iteration,
-                participants: JSON.stringify(iteration.participants || []),
                 question_mappings: JSON.stringify(iteration.question_mappings || []),
                 created_at: iteration.created_at || new Date().toISOString(),
             };
@@ -432,6 +449,18 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
             }
         } catch (error) {
             _logger?.debug(`[DB SessionIterations] Error in addOrUpdateSessionIteration: ${error}`);
+            throw error;
+        }
+    });
+};
+
+const clearAssignmentsForIteration = async (iterationId: number): Promise<void> => {
+    return asyncDbRun(() => {
+        try {
+            const stmt = getDb().prepare("DELETE FROM participant_assignments WHERE session_iteration_id = ?");
+            stmt.run(iterationId);
+        } catch (error) {
+            _logger?.debug(`[DB ParticipantAssignments] Error clearing assignments for iteration ${iterationId}: ${error}`);
             throw error;
         }
     });
@@ -483,6 +512,33 @@ const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<num
         }
     });
 }
+
+const upsertParticipant = async (participant: Participant): Promise<number | undefined> => {
+    return asyncDbRun(() => {
+        try {
+            // This relies on SQLite 3.24.0+ for ON CONFLICT... DO UPDATE SET... RETURNING...
+            const stmt = getDb().prepare(`
+                INSERT INTO participants (first_name, last_name, organization, identification_code)
+                VALUES (@prenom, @nom, @organization, @identificationCode)
+                ON CONFLICT(identification_code) DO UPDATE SET
+                    first_name = excluded.first_name,
+                    last_name = excluded.last_name,
+                    organization = excluded.organization
+                RETURNING id
+            `);
+            const result = stmt.get({
+                prenom: participant.prenom,
+                nom: participant.nom,
+                organization: participant.organization,
+                identificationCode: participant.identificationCode
+            }) as { id: number };
+            return result.id;
+        } catch (error) {
+            _logger?.debug(`[DB Participants] Error upserting participant: ${error}`);
+            throw error;
+        }
+    });
+};
 
 // ParticipantAssignments
 const addParticipantAssignment = async (assignment: Omit<ParticipantAssignment, 'id'>): Promise<number | undefined> => {
@@ -926,12 +982,40 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
       const session = rowToSession(row);
 
       // Fetch and attach iterations
-      const iterations = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ?").all(id) as SessionIteration[];
-      session.iterations = iterations.map(iter => ({
-        ...iter,
-        participants: iter.participants ? JSON.parse(iter.participants as any) : [],
-        question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
-      }));
+      const iterations = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ? ORDER BY iteration_index ASC").all(id) as SessionIteration[];
+
+      session.iterations = iterations.map(iter => {
+        if (!iter.id) {
+            return {
+                ...iter,
+                participants: [],
+                question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
+            }
+        }
+        const assignments = getDb().prepare(`
+            SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
+            FROM participant_assignments pa
+            JOIN participants p ON pa.participant_id = p.id
+            WHERE pa.session_iteration_id = ?
+        `).all(iter.id) as any[];
+
+        const participantsForIter = assignments.map(a => {
+            const participant: Participant = {
+                nom: a.last_name,
+                prenom: a.first_name,
+                organization: a.organization,
+                identificationCode: a.identification_code,
+                assignedGlobalDeviceId: a.voting_device_id,
+            };
+            return participant;
+        });
+
+        return {
+            ...iter,
+                    participants: participantsForIter,
+            question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
+        };
+      });
 
       return session;
     } catch (error) {
@@ -1023,8 +1107,8 @@ const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promise<numb
   return asyncDbRun(() => {
     try {
       const stmt = getDb().prepare(`
-        INSERT INTO sessionResults (sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
-        VALUES (@sessionId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
+        INSERT INTO sessionResults (sessionId, session_iteration_id, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
+        VALUES (@sessionId, @sessionIterationId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
       `);
       const rowData = sessionResultToRow(result);
       const res = stmt.run(rowData);
@@ -1042,8 +1126,8 @@ const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Prom
   return asyncDbRun(() => {
     const insertedIds: (number | undefined)[] = [];
     const insertStmt = getDb().prepare(`
-      INSERT INTO sessionResults (sessionId, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
-      VALUES (@sessionId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
+      INSERT INTO sessionResults (sessionId, session_iteration_id, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
+      VALUES (@sessionId, @sessionIterationId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
     `);
 
     const transaction = getDb().transaction((items: Omit<SessionResult, 'id'>[]) => {
@@ -2136,4 +2220,34 @@ async function importAllData(data: unknown): Promise<void> {
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console _logger?.debugs with prefixes for easier debugging of setup and stub calls.
 
-export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData };
+const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean> => {
+    return asyncDbRun(() => {
+        try {
+            const iterations = getDb().prepare("SELECT status FROM session_iterations WHERE session_id = ?").all(sessionId) as { status: string }[];
+
+            if (iterations.length === 0) {
+                _logger?.debug(`[DB Sessions] Session ${sessionId} has no iterations, cannot finalize.`);
+                return false;
+            }
+
+            const allIterationsDone = iterations.every(
+                iter => iter.status === 'completed' || iter.status === 'cancelled'
+            );
+
+            if (allIterationsDone) {
+                _logger?.info(`[DB Sessions] All iterations for session ${sessionId} are completed/cancelled. Finalizing session.`);
+                const stmt = getDb().prepare("UPDATE sessions SET status = 'completed', resultsImportedAt = ? WHERE id = ?");
+                stmt.run(new Date().toISOString(), sessionId);
+                return true;
+            } else {
+                _logger?.debug(`[DB Sessions] Session ${sessionId} not finalized, some iterations are still pending.`);
+                return false;
+            }
+        } catch (error) {
+            _logger?.debug(`[DB Sessions] Error checking/finalizing session status for ${sessionId}: ${error}`);
+            throw error;
+        }
+    });
+};
+
+export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, clearAssignmentsForIteration,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus };

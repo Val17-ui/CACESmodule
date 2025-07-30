@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import {
   getAllSessions, getSessionById, addSession, updateSession,
-  addOrUpdateSessionIteration, getSessionIterationsBySessionId,
+  addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration,
   addBulkSessionResults, getResultsForSession, getAllResults,
   getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices,
   addBulkSessionQuestions, deleteSessionQuestionsBySessionId, getSessionQuestionsBySessionId,
@@ -18,7 +18,9 @@ import {
   addQuestion, upsertQuestion, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
   getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks,
   getAdminSetting, setAdminSetting, getAllAdminSettings,
-  exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage
+  exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
+  upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
+  checkAndFinalizeSessionStatus
 } from './db';
 
 import { getLogger, ILogger } from './utils/logger';
@@ -77,28 +79,27 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
     return getAllResults();
   });
 
-  ipcMain.handle('session-finalize-import', async (_event: IpcMainInvokeEvent, sessionId: number, results: SessionResult[]) => {
-    loggerInstance.debug(`[IPC] session-finalize-import: ${sessionId}`);
+  ipcMain.handle('import-results-for-iteration', async (_event: IpcMainInvokeEvent, iterationId: number, sessionId: number, results: SessionResult[]) => {
+    loggerInstance.debug(`[IPC] import-results-for-iteration: iterationId=${iterationId}, sessionId=${sessionId}`);
     try {
-      await addBulkSessionResults(results);
-      const session = await getSessionById(sessionId);
-      if (!session) throw new Error(`Session with id ${sessionId} not found`);
-      const sessionQuestions = await getSessionQuestionsBySessionId(sessionId);
-      if (!sessionQuestions || sessionQuestions.length === 0) throw new Error(`No questions found for session ${sessionId}`);
-      const questionIds = sessionQuestions.map(q => q.dbQuestionId);
-      const questions = await getQuestionsByIds(questionIds);
-      if (!session.iterations) throw new Error(`Session with id ${sessionId} has no iterations`);
-      const allParticipants = session.iterations.flatMap((i: SessionIteration) => i.participants || []);
-      const updatedParticipants = allParticipants.map((participant: any) => {
-        const participantResults = results.filter(r => r.participantIdBoitier === participant.identificationCode);
-        const score = 0; // Replace with actual score calculation
-        const success = false; // Replace with actual success calculation
-        return { ...participant, score, reussite: success };
-      });
-      await updateSession(sessionId, { status: 'completed' });
+        await addBulkSessionResults(results);
+        await updateSessionIteration(iterationId, { status: 'completed' });
+        await checkAndFinalizeSessionStatus(sessionId);
+        // Return the updated session object to the frontend
+        return getSessionById(sessionId);
+    } catch (error) {
+        loggerInstance.error(`[IPC] import-results-for-iteration failed for iteration ${iterationId}: ${error}`);
+        throw error;
+    }
+  });
+
+  ipcMain.handle('check-and-finalize-session', async (_event: IpcMainInvokeEvent, sessionId: number) => {
+    loggerInstance.debug(`[IPC] check-and-finalize-session: sessionId=${sessionId}`);
+    try {
+      await checkAndFinalizeSessionStatus(sessionId);
       return getSessionById(sessionId);
     } catch (error) {
-      loggerInstance.error(`[IPC] session-finalize-import failed for session ${sessionId}: ${error}`);
+      loggerInstance.error(`[IPC] check-and-finalize-session failed for session ${sessionId}: ${error}`);
       throw error;
     }
   });
@@ -332,6 +333,19 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   ipcMain.handle('db-get-questions-for-session-blocks', async (_event: IpcMainInvokeEvent, blocIds?: number[]) => {
     loggerInstance.debug(`[IPC] db-get-questions-for-session-blocks: ${blocIds?.length || 0} blocIds`);
     return getQuestionsForSessionBlocks(blocIds);
+  });
+
+  // Participants
+  ipcMain.handle('db-upsert-participant', async (_event: IpcMainInvokeEvent, participant: any) => {
+    loggerInstance.debug(`[IPC] db-upsert-participant for participant with code: ${participant.identificationCode}`);
+    return upsertParticipant(participant);
+  });
+
+  ipcMain.handle('db-set-participant-assignments-for-iteration', async (_event: IpcMainInvokeEvent, iterationId: number, assignments: any[]) => {
+      loggerInstance.debug(`[IPC] db-set-participant-assignments-for-iteration for iteration ${iterationId}`);
+      await clearAssignmentsForIteration(iterationId);
+      const promises = assignments.map(assignment => addParticipantAssignment(assignment));
+      return Promise.all(promises);
   });
 
   // AdminSettings

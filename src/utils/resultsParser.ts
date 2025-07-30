@@ -152,14 +152,15 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
 export const transformParsedResponsesToSessionResults = (
   extractedResults: ExtractedResultFromXml[],
   questionMappingsFromSession: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>,
-  currentSessionId: number
+  currentSessionId: number,
+  currentIterationId: number
 ): SessionResult[] => {
   const sessionResults: SessionResult[] = [];
 
   // logger.info("[Transform Log] Initial questionMappingsFromSession:", questionMappingsFromSession); // DEBUG
 
-  if (!currentSessionId) {
-    logger.error("ID de session manquant pour la transformation des résultats.");
+  if (!currentSessionId || !currentIterationId) {
+    logger.error("ID de session ou d'itération manquant pour la transformation des résultats.");
     return [];
   }
   if (!questionMappingsFromSession || questionMappingsFromSession.length === 0) {
@@ -207,6 +208,7 @@ export const transformParsedResponsesToSessionResults = (
 
     const sessionResult: SessionResult = {
       sessionId: currentSessionId,
+      sessionIterationId: currentIterationId,
       questionId: dbQuestionId, // Utiliser le dbQuestionId trouvé grâce au mapping
       participantIdBoitier: extResult.participantDeviceID,
       answer: extResult.answerGivenID,

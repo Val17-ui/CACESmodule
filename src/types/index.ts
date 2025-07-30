@@ -157,6 +157,7 @@ export interface FormParticipant extends Participant {
 export interface SessionResult {
   id?: number; // Auto-incremented primary key
   sessionId: number; // Clé étrangère vers Session.id
+  sessionIterationId?: number; // Clé étrangère vers SessionIteration.id
   // Doit correspondre à l'ID de la question DANS LA DB (QuestionWithId.id)
   questionId: number;
   participantIdBoitier: string; // Identifiant du boîtier du participant
@@ -430,7 +431,6 @@ export interface SessionIteration {
     name: string;
     ors_file_path?: string;
     status?: 'planned' | 'ready' | 'completed';
-    participants?: Participant[];
     question_mappings?: QuestionMapping[];
     created_at: string;
     updated_at?: string;

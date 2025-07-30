@@ -265,6 +265,17 @@ export const StorageManager = {
     return window.dbAPI.bulkAddVotingDevices(devices);
   },
 
+  // Participants
+  async upsertParticipant(participant: any) {
+    if (!window.dbAPI?.upsertParticipant) throw new Error("dbAPI.upsertParticipant is not available.");
+    return window.dbAPI.upsertParticipant(participant);
+  },
+
+  async setParticipantAssignmentsForIteration(iterationId: number, assignments: any[]) {
+    if (!window.dbAPI?.setParticipantAssignmentsForIteration) throw new Error("dbAPI.setParticipantAssignmentsForIteration is not available.");
+    return window.dbAPI.setParticipantAssignmentsForIteration(iterationId, assignments);
+  },
+
   // DeviceKits
   async addDeviceKit(kitData: Omit<DeviceKit, 'id'>): Promise<number | undefined> {
     if (!window.dbAPI?.addDeviceKit) throw new Error("dbAPI.addDeviceKit is not available.");
@@ -600,6 +611,16 @@ export const StorageManager = {
   async importAllData(data: any) {
     if (!window.dbAPI?.importAllData) throw new Error("dbAPI.importAllData is not available.");
     return window.dbAPI.importAllData(data);
+  },
+
+  async importResultsForIteration(iterationId: number, sessionId: number, results: any[]) {
+    if (!window.dbAPI?.importResultsForIteration) throw new Error("dbAPI.importResultsForIteration is not available.");
+    return window.dbAPI.importResultsForIteration(iterationId, sessionId, results);
+  },
+
+  async checkAndFinalizeSession(sessionId: number) {
+    if (!window.dbAPI?.checkAndFinalizeSession) throw new Error("dbAPI.checkAndFinalizeSession is not available.");
+    return window.dbAPI.checkAndFinalizeSession(sessionId);
   }
 };
 
