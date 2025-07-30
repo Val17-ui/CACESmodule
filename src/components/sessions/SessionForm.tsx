@@ -13,8 +13,7 @@ import {
   Bloc,
   QuestionWithId as StoredQuestion,
   VotingDevice,
-  DeviceKit,
-  SessionIteration
+  DeviceKit
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -583,12 +582,11 @@ const handleGenerateQuestionnaire = async () => {
     if (!sessionDataToSave) return null;
 
     try {
-        // First, upsert all participants from the form to get their persistent DB IDs
-        const participantDbIdMap = new Map<string, number>(); // Maps form participant ID to DB ID
+        const participantDbIdMap = new Map<string, number>();
         for (const p of participants) {
             if (!p.identificationCode) {
                 console.warn("Participant skipped due to missing identification code:", p);
-                continue; // Skip participants without an identification code
+                continue;
             }
             const dbParticipant: DBParticipantType = {
                 nom: p.lastName,
@@ -602,7 +600,6 @@ const handleGenerateQuestionnaire = async () => {
             }
         }
 
-        // Save the session shell
         let savedSessionId: number | undefined;
         if (sessionDataToSave.id) {
             await StorageManager.updateSession(sessionDataToSave.id, sessionDataToSave);
@@ -619,7 +616,6 @@ const handleGenerateQuestionnaire = async () => {
         }
 
         if (savedSessionId) {
-            // Save iterations and their assignments
             for (let i = 0; i < iterationCount; i++) {
                 const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
 
@@ -638,8 +634,7 @@ const handleGenerateQuestionnaire = async () => {
                 const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
 
                 if (savedIterationId) {
-                    // Now, create the assignments for this iteration
-                    const assignedFormParticipantIds = (participantAssignments[i] || []).map(p => p.id);
+                    const assignedFormParticipantIds = (participantAssignments[i] || []).map((p: {id: string}) => p.id);
                     const assignmentsForDb = [];
 
                     for (const formPId of assignedFormParticipantIds) {
@@ -650,7 +645,7 @@ const handleGenerateQuestionnaire = async () => {
                                 session_iteration_id: savedIterationId,
                                 participant_id: dbPId,
                                 voting_device_id: participantFormState.assignedGlobalDeviceId,
-                                kit_id: selectedKitIdState || 0, // Should have a valid kit id
+                                kit_id: selectedKitIdState || 0,
                             });
                         }
                     }
@@ -658,7 +653,6 @@ const handleGenerateQuestionnaire = async () => {
                 }
             }
 
-            // Reload data to get the latest state and update UI
             const reloadedSession = await StorageManager.getSessionById(savedSessionId);
             setEditingSessionData(reloadedSession || null);
             if (reloadedSession) {
