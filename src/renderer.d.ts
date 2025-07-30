@@ -37,6 +37,7 @@ declare global {
       getBlocById: (id: number) => Promise<Bloc | undefined>;
       getAllBlocs: () => Promise<Bloc[]>;
       addQuestion: (data: Omit<QuestionWithId, 'id'>) => Promise<number | undefined>;
+      upsertParticipant: (participant: Omit<DBParticipantType, 'id'>) => Promise<number | undefined>;
       getQuestionById: (id: number) => Promise<QuestionWithId | undefined>;
       getQuestionsByBlocId: (blocId: number) => Promise<QuestionWithId[]>;
       updateQuestion: (id: number, updates: Partial<Omit<QuestionWithId, 'id'>>) => Promise<number | undefined>;

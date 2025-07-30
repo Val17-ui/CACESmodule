@@ -574,100 +574,88 @@ const handleGenerateQuestionnaire = async () => {
     if (!sessionDataToSave) return null;
 
     try {
-      const participantDbIdMap = new Map<string, number>();
-      const updatedParticipants = [...participants]; // Create a mutable copy
-
-      for (const [index, p] of updatedParticipants.entries()) {
-        let code = p.identificationCode;
-        if (!code || code.trim() === '') {
-          code = `AUTOGEN_${p.id || Date.now()}_${index}`;
-          p.identificationCode = code; // Mutate the copy
-          console.log(`Generated identification code for participant: ${code}`);
+      // Step 1: Save session details to get a session ID.
+      let savedSessionId: number | undefined;
+      if (sessionDataToSave.id) {
+        await StorageManager.updateSession(sessionDataToSave.id, sessionDataToSave);
+        savedSessionId = sessionDataToSave.id;
+      } else {
+        const newId = await StorageManager.addSession(sessionDataToSave);
+        if (newId) {
+          setCurrentSessionDbId(newId);
+          savedSessionId = newId;
+        } else {
+          setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée.");
+          return null;
         }
+      }
+      if (!savedSessionId) {
+        setImportSummary("Erreur: Impossible d'obtenir un ID de session valide.");
+        return null;
+      }
 
-        const dbParticipant: DBParticipantType = {
+      // Step 2: Upsert all participants and get their database IDs.
+      const participantDbIdMap = new Map<string, number>(); // Maps form participant ID to DB ID
+      for (const p of participants) {
+        const dbParticipant: Omit<DBParticipantType, 'id'> = {
           nom: p.lastName,
           prenom: p.firstName,
           organization: p.organization,
-          identificationCode: code,
+          identificationCode: p.identificationCode,
         };
-
         const dbId = await StorageManager.upsertParticipant(dbParticipant);
         if (dbId) {
-          console.log(`[SessionSave] Upserted participant ${dbParticipant.prenom} ${dbParticipant.nom} (Code: ${code}). DB ID: ${dbId}`);
           participantDbIdMap.set(p.id, dbId);
-        } else {
-          console.error(`[SessionSave] Failed to upsert participant ${dbParticipant.prenom} ${dbParticipant.nom}. No DB ID returned.`);
         }
       }
 
-      // Update the state with the (potentially) modified participants
-      setParticipants(updatedParticipants);
+      // Step 3: Save iterations and their participant assignments.
+      for (let i = 0; i < iterationCount; i++) {
+        const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
+        const iterationToSave: any = {
+          id: existingIteration?.id,
+          session_id: savedSessionId,
+          iteration_index: i,
+          name: iterationNames[i] || `Session_${i + 1}`,
+          status: existingIteration?.status || 'planned',
+          ors_file_path: existingIteration?.ors_file_path,
+          question_mappings: existingIteration?.question_mappings,
+          created_at: existingIteration?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
 
-      let savedSessionId: number | undefined;
-        if (sessionDataToSave.id) {
-            await StorageManager.updateSession(sessionDataToSave.id, sessionDataToSave);
-            savedSessionId = sessionDataToSave.id;
-        } else {
-            const newId = await StorageManager.addSession(sessionDataToSave);
-            if (newId) {
-                setCurrentSessionDbId(newId);
-                savedSessionId = newId;
-            } else {
-                setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée.");
-                return null;
+        const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
+        if (savedIterationId && savedIterationId > 0) {
+          const assignedFormParticipantIds = (participantAssignments[i] || []).map(p => p.id);
+          const assignmentsForDb = [];
+          for (const formPId of assignedFormParticipantIds) {
+            const dbPId = participantDbIdMap.get(formPId);
+            const participantFormState = participants.find(p => p.id === formPId);
+            if (dbPId && participantFormState && participantFormState.assignedGlobalDeviceId) {
+              assignmentsForDb.push({
+                session_iteration_id: savedIterationId,
+                participant_id: dbPId,
+                voting_device_id: participantFormState.assignedGlobalDeviceId,
+                kit_id: selectedKitIdState || 0,
+              });
             }
+          }
+          await StorageManager.setParticipantAssignmentsForIteration(savedIterationId, assignmentsForDb);
         }
+      }
 
-        if (savedSessionId) {
-            for (let i = 0; i < iterationCount; i++) {
-                const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
+      // Step 4: Reload the session from DB to have the single source of truth.
+      const reloadedSession = await StorageManager.getSessionById(savedSessionId);
+      if (reloadedSession) {
+        populateFormFromSessionData(reloadedSession);
+        setModifiedAfterOrsGeneration(false);
+      }
 
-                const iterationToSave: any = {
-                    id: existingIteration?.id,
-                    session_id: savedSessionId,
-                    iteration_index: i,
-                    name: iterationNames[i] || `Session_${i + 1}`,
-                    status: existingIteration?.status || 'planned',
-                    ors_file_path: existingIteration?.ors_file_path,
-                    question_mappings: existingIteration?.question_mappings,
-                    created_at: existingIteration?.created_at || new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                };
-
-                const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
-
-                if (savedIterationId && savedIterationId > 0) {
-                    const assignedFormParticipantIds = (participantAssignments[i] || []).map((p: {id: string}) => p.id);
-                    const assignmentsForDb = [];
-
-                    for (const formPId of assignedFormParticipantIds) {
-                        const dbPId = participantDbIdMap.get(formPId);
-                        const participantFormState = participants.find(p => p.id === formPId);
-                        if (dbPId && participantFormState && participantFormState.assignedGlobalDeviceId) {
-                            assignmentsForDb.push({
-                                session_iteration_id: savedIterationId,
-                                participant_id: dbPId,
-                                voting_device_id: participantFormState.assignedGlobalDeviceId,
-                                kit_id: selectedKitIdState || 0,
-                            });
-                        }
-                    }
-                    await StorageManager.setParticipantAssignmentsForIteration(savedIterationId, assignmentsForDb);
-                }
-            }
-
-            const reloadedSession = await StorageManager.getSessionById(savedSessionId);
-            if (reloadedSession) {
-                populateFormFromSessionData(reloadedSession);
-                setModifiedAfterOrsGeneration(false);
-            }
-        }
-        return savedSessionId;
+      return savedSessionId;
     } catch (error: any) {
-        console.error("Erreur sauvegarde session:", error);
-        setImportSummary(`Erreur sauvegarde session: ${error.message}`);
-        return null;
+      console.error("Erreur sauvegarde session:", error);
+      setImportSummary(`Erreur sauvegarde session: ${error.message}`);
+      return null;
     }
   };
 
