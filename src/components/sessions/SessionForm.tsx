@@ -637,7 +637,7 @@ const handleGenerateQuestionnaire = async () => {
 
                 const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
 
-                if (savedIterationId) {
+                if (savedIterationId && savedIterationId > 0) {
                     const assignedFormParticipantIds = (participantAssignments[i] || []).map((p: {id: string}) => p.id);
                     const assignmentsForDb = [];
 

@@ -57,7 +57,8 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   // SessionIterations
   ipcMain.handle('db-add-or-update-session-iteration', async (_event: IpcMainInvokeEvent, iteration: any) => {
     loggerInstance.debug(`[IPC] db-add-or-update-session-iteration: iteration for session ${iteration.session_id}`);
-    return addOrUpdateSessionIteration(iteration);
+    const result = await addOrUpdateSessionIteration(iteration);
+    return result || -1; // Ensure a number is always returned.
   });
   ipcMain.handle('db-get-session-iterations', async (_event: IpcMainInvokeEvent, sessionId: number) => {
     loggerInstance.debug(`[IPC] db-get-session-iterations: for session ${sessionId}`);
