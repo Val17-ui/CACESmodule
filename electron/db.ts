@@ -261,6 +261,7 @@ const createSchema = () => {
       status TEXT,
       question_mappings TEXT,
       created_at TEXT NOT NULL,
+      updated_at TEXT,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
       UNIQUE (session_id, iteration_index)
     );`,
@@ -346,6 +347,22 @@ const createSchema = () => {
             } catch (error: any) {
                 // Catching errors here just in case, though the check should prevent duplicates.
                 _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column: ${error}`);
+            }
+        }
+    }
+
+    // --- Migrations for 'session_iterations' table ---
+    const sessionIterationsColumnsToAdd = [
+      { name: 'updated_at', type: 'TEXT' }
+    ];
+    const existingSessionIterationsColumns = (db.pragma('table_info(session_iterations)') as TableInfo[]).map(col => col.name);
+    for (const column of sessionIterationsColumnsToAdd) {
+        if (!existingSessionIterationsColumns.includes(column.name)) {
+            try {
+                db.prepare(`ALTER TABLE session_iterations ADD COLUMN ${column.name} ${column.type}`).run();
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'session_iterations' table.`);
+            } catch (error: any) {
+                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'session_iterations': ${error}`);
             }
         }
     }
