@@ -165,99 +165,91 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setModifiedAfterOrsGeneration(false);
   }, []);
 
+  const populateFormFromSessionData = useCallback((sessionData: DBSession | null) => {
+    console.log('[PopulateForm] Populating form with session data:', sessionData);
+    setEditingSessionData(sessionData || null);
+    if (sessionData) {
+      setCurrentSessionDbId(sessionData.id ?? null);
+      setSessionName(sessionData.nomSession);
+      setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
+      setNumSession(sessionData.num_session || '');
+      setNumStage(sessionData.num_stage || '');
+
+      if (sessionData.referentielId) {
+        const refObj = referentielsData.find(r => r.id === sessionData.referentielId);
+        if (refObj) {
+          setSelectedReferential(refObj.code as CACESReferential);
+          setSelectedReferentialId(refObj.id!);
+        } else {
+          console.warn(`Référentiel avec ID ${sessionData.referentielId} non trouvé.`);
+          setSelectedReferential('');
+          setSelectedReferentialId(null);
+        }
+      } else {
+        setSelectedReferential('');
+        setSelectedReferentialId(null);
+      }
+
+      setLocation(sessionData.location || '');
+      setNotes(sessionData.notes || '');
+      setSelectedTrainerId(sessionData.trainerId || null);
+      setSelectedKitIdState(sessionData.selectedKitId || null);
+
+      if (sessionData.iteration_count && sessionData.iteration_count > 1) {
+        setIterationCount(sessionData.iteration_count);
+        setIterationNames(sessionData.iterations?.map(iter => iter.name) || Array.from({ length: sessionData.iteration_count }, (_, i) => `Session_${i + 1}`));
+      } else {
+        setIterationCount(1);
+        setIterationNames(['Session_1']);
+      }
+
+      setModifiedAfterOrsGeneration(false);
+
+      if (sessionData.iterations && sessionData.iterations.length > 0) {
+        const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => (iter as any).participants || []);
+        const uniqueParticipantsMap = new Map<string, DBParticipantType>();
+        allParticipantsFromIterations.forEach((p: DBParticipantType) => {
+          if (p.identificationCode) {
+            uniqueParticipantsMap.set(p.identificationCode, p);
+          }
+        });
+        const uniqueParticipants = Array.from(uniqueParticipantsMap.values());
+
+        const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
+          ...p_db,
+          id: `loaded-${loopIndex}-${Date.now()}`,
+          firstName: p_db.prenom,
+          lastName: p_db.nom,
+          deviceId: loopIndex + 1,
+          organization: (p_db as any).organization || '',
+          hasSigned: (p_db as any).hasSigned || false,
+        }));
+        setParticipants(formParticipants);
+
+        const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+        sessionData.iterations.forEach(iter => {
+          const participantIdsForIter = ((iter as any).participants || []).map((p_iter: DBParticipantType) => {
+            const matchingFormParticipant = formParticipants.find(fp => fp.identificationCode === p_iter.identificationCode);
+            return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null } : null;
+          }).filter((p: { id: string; assignedGlobalDeviceId: number | null; } | null): p is { id: string; assignedGlobalDeviceId: number | null; } => p !== null);
+          newAssignments[iter.iteration_index] = participantIdsForIter;
+        });
+        setParticipantAssignments(newAssignments);
+      } else {
+        setParticipants([]);
+        setParticipantAssignments({});
+      }
+    } else {
+      resetFormTactic();
+    }
+  }, [referentielsData, resetFormTactic]);
+
   useEffect(() => {
     if (sessionIdToLoad && hardwareLoaded && referentielsData.length > 0) {
       const loadSession = async () => {
-        console.log(`[SessionLoad] Loading session with ID: ${sessionIdToLoad}`);
         try {
           const sessionData = await StorageManager.getSessionById(sessionIdToLoad);
-          console.log('[SessionLoad] Raw data from DB:', sessionData);
-          setEditingSessionData(sessionData || null);
-          if (sessionData) {
-            setCurrentSessionDbId(sessionData.id ?? null);
-            setSessionName(sessionData.nomSession);
-            setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
-              setNumSession(sessionData.num_session || '');
-              setNumStage(sessionData.num_stage || '');
-            if (sessionData.referentielId) {
-              const refObj = referentielsData.find(r => r.id === sessionData.referentielId);
-              if (refObj) {
-                setSelectedReferential(refObj.code as CACESReferential);
-                setSelectedReferentialId(refObj.id!);
-              } else {
-                console.warn(`Référentiel avec ID ${sessionData.referentielId} non trouvé dans referentielsData.`);
-                setSelectedReferential('');
-                setSelectedReferentialId(null);
-              }
-            } else {
-              const oldRefCode = (sessionData as any).referentiel as CACESReferential | '';
-              setSelectedReferential(oldRefCode);
-              const refObj = referentielsData.find(r => r.code === oldRefCode);
-              setSelectedReferentialId(refObj?.id || null);
-            }
-            setLocation(sessionData.location || '');
-            setNotes(sessionData.notes || '');
-            setSelectedTrainerId(sessionData.trainerId || null);
-            setSelectedKitIdState(sessionData.selectedKitId || null);
-
-            if (sessionData.iteration_count && sessionData.iteration_count > 1) {
-              setIterationCount(sessionData.iteration_count);
-              if (sessionData.iterations && sessionData.iterations.length > 0) {
-                setIterationNames(sessionData.iterations.map(iter => iter.name));
-              } else {
-                // Fallback if names are not stored in iterations
-                const newIterationNames = Array.from({ length: sessionData.iteration_count }, (_, i) => `Session_${i + 1}`);
-                setIterationNames(newIterationNames);
-              }
-            } else {
-              setIterationCount(1);
-              setIterationNames(['Session_1']);
-            }
-
-            setModifiedAfterOrsGeneration(false);
-            if (sessionData.iterations && sessionData.iterations.length > 0) {
-                const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => (iter as any).participants || []);
-                console.log('[SessionLoad] All participants from all iterations:', allParticipantsFromIterations);
-
-                const uniqueParticipantsMap = new Map<string, DBParticipantType>();
-                allParticipantsFromIterations.forEach((p: DBParticipantType) => {
-                    if (p.identificationCode) {
-                        uniqueParticipantsMap.set(p.identificationCode, p);
-                    }
-                });
-                const uniqueParticipants = Array.from(uniqueParticipantsMap.values());
-
-                const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
-                    ...p_db,
-                    id: `loaded-${loopIndex}-${Date.now()}`, // This is a temporary client-side ID
-                    firstName: p_db.prenom,
-                    lastName: p_db.nom,
-                    deviceId: loopIndex + 1, // This is just a visual index, might not be correct
-                    organization: (p_db as any).organization || '',
-                    hasSigned: (p_db as any).hasSigned || false,
-                }));
-                setParticipants(formParticipants);
-                console.log('[SessionLoad] Participants set in form state:', formParticipants);
-
-                const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
-                sessionData.iterations.forEach(iter => {
-                    const participantIdsForIter = ((iter as any).participants || []).map((p_iter: DBParticipantType) => {
-                        const matchingFormParticipant = formParticipants.find(fp => fp.identificationCode === p_iter.identificationCode);
-                        return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null } : null;
-                    }).filter((p: { id: string; assignedGlobalDeviceId: number | null; } | null): p is { id: string; assignedGlobalDeviceId: number | null; } => p !== null);
-                    newAssignments[iter.iteration_index] = participantIdsForIter;
-                });
-                setParticipantAssignments(newAssignments);
-                console.log('[SessionLoad] Participant assignments reconstructed:', newAssignments);
-            } else {
-              // Fallback for sessions that might not have iterations correctly saved
-              setParticipants([]);
-              setParticipantAssignments({});
-            }
-          } else {
-            console.warn(`Session avec ID ${sessionIdToLoad} non trouvée.`);
-            resetFormTactic();
-          }
+          populateFormFromSessionData(sessionData || null);
         } catch (error) {
             console.error("Erreur chargement session:", error);
             resetFormTactic();
@@ -267,7 +259,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     } else if (!sessionIdToLoad && referentielsData.length > 0) {
       resetFormTactic();
     }
-  }, [sessionIdToLoad, hardwareLoaded, referentielsData, resetFormTactic]);
+  }, [sessionIdToLoad, hardwareLoaded, referentielsData, resetFormTactic, populateFormFromSessionData]);
 
   useEffect(() => {
     if (editingSessionData?.selectedBlocIds && allThemesData.length > 0 && allBlocsData.length > 0) {
@@ -582,25 +574,34 @@ const handleGenerateQuestionnaire = async () => {
     if (!sessionDataToSave) return null;
 
     try {
-        const participantDbIdMap = new Map<string, number>();
-        for (const p of participants) {
-            if (!p.identificationCode) {
-                console.warn("Participant skipped due to missing identification code:", p);
-                continue;
-            }
-            const dbParticipant: DBParticipantType = {
-                nom: p.lastName,
-                prenom: p.firstName,
-                organization: p.organization,
-                identificationCode: p.identificationCode,
-            };
-            const dbId = await StorageManager.upsertParticipant(dbParticipant);
-            if (dbId) {
-                participantDbIdMap.set(p.id, dbId);
-            }
+      const participantDbIdMap = new Map<string, number>();
+      const updatedParticipants = [...participants]; // Create a mutable copy
+
+      for (const [index, p] of updatedParticipants.entries()) {
+        let code = p.identificationCode;
+        if (!code || code.trim() === '') {
+          code = `AUTOGEN_${p.id || Date.now()}_${index}`;
+          p.identificationCode = code; // Mutate the copy
+          console.log(`Generated identification code for participant: ${code}`);
         }
 
-        let savedSessionId: number | undefined;
+        const dbParticipant: DBParticipantType = {
+          nom: p.lastName,
+          prenom: p.firstName,
+          organization: p.organization,
+          identificationCode: code,
+        };
+
+        const dbId = await StorageManager.upsertParticipant(dbParticipant);
+        if (dbId) {
+          participantDbIdMap.set(p.id, dbId);
+        }
+      }
+
+      // Update the state with the (potentially) modified participants
+      setParticipants(updatedParticipants);
+
+      let savedSessionId: number | undefined;
         if (sessionDataToSave.id) {
             await StorageManager.updateSession(sessionDataToSave.id, sessionDataToSave);
             savedSessionId = sessionDataToSave.id;
@@ -654,8 +655,8 @@ const handleGenerateQuestionnaire = async () => {
             }
 
             const reloadedSession = await StorageManager.getSessionById(savedSessionId);
-            setEditingSessionData(reloadedSession || null);
             if (reloadedSession) {
+                populateFormFromSessionData(reloadedSession);
                 setModifiedAfterOrsGeneration(false);
             }
         }
