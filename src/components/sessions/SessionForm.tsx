@@ -87,7 +87,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [detectedAnomalies, setDetectedAnomalies] = useState<DetectedAnomalies | null>(null);
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
-  const [currentIterationForImport, setCurrentIterationForImport] = useState<number | null>(null);
   const [participantAssignments, setParticipantAssignments] = useState<Record<number, { id: string; assignedGlobalDeviceId: number | null }[]>>({});
 
   useEffect(() => {
@@ -216,40 +215,32 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
             setModifiedAfterOrsGeneration(false);
             if (sessionData.iterations && sessionData.iterations.length > 0) {
-                const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => iter.participants || []);
-                console.log('[SessionLoad] All participants from all iterations:', allParticipantsFromIterations);
+              const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => iter.participants || []);
+              console.log('[SessionLoad] All participants from all iterations:', allParticipantsFromIterations);
+              const uniqueParticipants = allParticipantsFromIterations;
 
-                // Deduplicate participants based on identificationCode
-                const uniqueParticipantsMap = new Map<string, DBParticipantType>();
-                allParticipantsFromIterations.forEach(p => {
-                    if (p.identificationCode) {
-                        uniqueParticipantsMap.set(p.identificationCode, p);
-                    }
-                });
-                const uniqueParticipants = Array.from(uniqueParticipantsMap.values());
+              const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
+                ...p_db,
+                id: `loaded-${loopIndex}-${Date.now()}`,
+                firstName: p_db.prenom,
+                lastName: p_db.nom,
+                deviceId: loopIndex + 1,
+                organization: (p_db as any).organization || '',
+                hasSigned: (p_db as any).hasSigned || false,
+              }));
+              setParticipants(formParticipants);
+              console.log('[SessionLoad] Participants set in form state:', formParticipants);
 
-                const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
-                    ...p_db,
-                    id: `loaded-${loopIndex}-${Date.now()}`, // This is a temporary client-side ID
-                    firstName: p_db.prenom,
-                    lastName: p_db.nom,
-                    deviceId: loopIndex + 1, // This is just a visual index, might not be correct
-                    organization: (p_db as any).organization || '',
-                    hasSigned: (p_db as any).hasSigned || false,
-                }));
-                setParticipants(formParticipants);
-                console.log('[SessionLoad] Participants set in form state:', formParticipants);
-
-                const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
-                sessionData.iterations.forEach(iter => {
-                    const participantIdsForIter = (iter.participants || []).map((p_iter: DBParticipantType) => {
-                        const matchingFormParticipant = formParticipants.find(fp => fp.identificationCode === p_iter.identificationCode);
-                        return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null } : null;
-                    }).filter((p): p is { id: string; assignedGlobalDeviceId: number | null } => p !== null);
-                    newAssignments[iter.iteration_index] = participantIdsForIter;
-                });
-                setParticipantAssignments(newAssignments);
-                console.log('[SessionLoad] Participant assignments reconstructed:', newAssignments);
+              const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+              sessionData.iterations.forEach(iter => {
+                  const participantIdsForIter = (iter.participants || []).map((p_iter: DBParticipantType) => {
+                      const matchingFormParticipant = formParticipants.find(fp => fp.identificationCode === p_iter.identificationCode);
+                      return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null } : null;
+                  }).filter((p): p is { id: string; assignedGlobalDeviceId: number | null } => p !== null);
+                  newAssignments[iter.iteration_index] = participantIdsForIter;
+              });
+              setParticipantAssignments(newAssignments);
+              console.log('[SessionLoad] Participant assignments reconstructed:', newAssignments);
             } else {
               // Fallback for sessions that might not have iterations correctly saved
               setParticipants([]);
@@ -581,97 +572,69 @@ const handleGenerateQuestionnaire = async () => {
   const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
     console.log('[SessionSave] Starting save process...');
     if (!sessionDataToSave) return null;
-
     try {
-        // First, upsert all participants from the form to get their persistent DB IDs
-        const participantDbIdMap = new Map<string, number>(); // Maps form participant ID to DB ID
-        for (const p of participants) {
-            if (!p.identificationCode) {
-                console.warn("Participant skipped due to missing identification code:", p);
-                continue; // Skip participants without an identification code
-            }
-            const dbParticipant: DBParticipantType = {
+      let savedId: number | undefined;
+      if (sessionDataToSave.id) {
+        await StorageManager.updateSession(sessionDataToSave.id, sessionDataToSave);
+        savedId = sessionDataToSave.id;
+      } else {
+        const newId = await StorageManager.addSession(sessionDataToSave);
+        if (newId) { setCurrentSessionDbId(newId); savedId = newId; }
+        else { setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée."); return null; }
+      }
+
+      if (savedId) {
+        // Save the iterations with their participant assignments
+        for (let i = 0; i < iterationCount; i++) {
+          const assignedParticipantIds = (participantAssignments[i] || []).map(p => p.id);
+          const participantsForIteration = participants
+            .filter(p => assignedParticipantIds.includes(p.id))
+            .map(p => {
+              const dbParticipant: DBParticipantType = {
                 nom: p.lastName,
                 prenom: p.firstName,
                 organization: p.organization,
                 identificationCode: p.identificationCode,
-            };
-            const dbId = await StorageManager.upsertParticipant(dbParticipant);
-            if (dbId) {
-                participantDbIdMap.set(p.id, dbId);
-            }
+                score: p.score,
+                reussite: p.reussite,
+                assignedGlobalDeviceId: p.assignedGlobalDeviceId,
+                statusInSession: p.statusInSession,
+              };
+              return dbParticipant;
+            });
+
+          const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
+
+          const iterationToSave = {
+            id: existingIteration?.id,
+            session_id: savedId,
+            iteration_index: i,
+            name: iterationNames[i] || `Session_${i + 1}`,
+            status: existingIteration?.status || 'planned',
+            participants: participantsForIteration,
+            ors_file_path: existingIteration?.ors_file_path,
+            question_mappings: existingIteration?.question_mappings,
+            created_at: existingIteration?.created_at || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          console.log(`[SessionSave] Saving iteration ${i}:`, iterationToSave);
+          await StorageManager.addOrUpdateSessionIteration(iterationToSave);
         }
 
-        // Save the session shell
-        let savedSessionId: number | undefined;
-        if (sessionDataToSave.id) {
-            await StorageManager.updateSession(sessionDataToSave.id, sessionDataToSave);
-            savedSessionId = sessionDataToSave.id;
-        } else {
-            const newId = await StorageManager.addSession(sessionDataToSave);
-            if (newId) {
-                setCurrentSessionDbId(newId);
-                savedSessionId = newId;
-            } else {
-                setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée.");
-                return null;
-            }
+        // Reload data to get the latest state and update UI
+        const reloadedSession = await StorageManager.getSessionById(savedId);
+        setEditingSessionData(reloadedSession || null);
+        if (reloadedSession) {
+          setModifiedAfterOrsGeneration(false);
+          // The participant list in the form should not change, just the assignments
+          // So, we don't need to remap the whole participant list here.
         }
-
-        if (savedSessionId) {
-            // Save iterations and their assignments
-            for (let i = 0; i < iterationCount; i++) {
-                const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
-
-                const iterationToSave: any = {
-                    id: existingIteration?.id,
-                    session_id: savedSessionId,
-                    iteration_index: i,
-                    name: iterationNames[i] || `Session_${i + 1}`,
-                    status: existingIteration?.status || 'planned',
-                    ors_file_path: existingIteration?.ors_file_path,
-                    question_mappings: existingIteration?.question_mappings,
-                    created_at: existingIteration?.created_at || new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                };
-                // Remove participants from the iteration object before saving
-                delete iterationToSave.participants;
-
-                const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
-
-                if (savedIterationId) {
-                    // Now, create the assignments for this iteration
-                    const assignedFormParticipantIds = (participantAssignments[i] || []).map(p => p.id);
-                    const assignmentsForDb = [];
-
-                    for (const formPId of assignedFormParticipantIds) {
-                        const dbPId = participantDbIdMap.get(formPId);
-                        const participantFormState = participants.find(p => p.id === formPId);
-                        if (dbPId && participantFormState && participantFormState.assignedGlobalDeviceId) {
-                            assignmentsForDb.push({
-                                session_iteration_id: savedIterationId,
-                                participant_id: dbPId,
-                                voting_device_id: participantFormState.assignedGlobalDeviceId,
-                                kit_id: selectedKitIdState || 0, // Should have a valid kit id
-                            });
-                        }
-                    }
-                    await StorageManager.setParticipantAssignmentsForIteration(savedIterationId, assignmentsForDb);
-                }
-            }
-
-            // Reload data to get the latest state and update UI
-            const reloadedSession = await StorageManager.getSessionById(savedSessionId);
-            setEditingSessionData(reloadedSession || null);
-            if (reloadedSession) {
-                setModifiedAfterOrsGeneration(false);
-            }
-        }
-        return savedSessionId;
+      }
+      return savedId;
     } catch (error: any) {
-        console.error("Erreur sauvegarde session:", error);
-        setImportSummary(`Erreur sauvegarde session: ${error.message}`);
-        return null;
+      console.error("Erreur sauvegarde session:", error);
+      setImportSummary(`Erreur sauvegarde session: ${error.message}`);
+      return null;
     }
   };
 
@@ -962,7 +925,6 @@ const handleGenerateQuestionnaire = async () => {
         setImportSummary(`Anomalies détectées: ${detectedAnomaliesData.expectedHavingIssues?.length || 0} boîtier(s) attendu(s) avec problèmes, ${detectedAnomaliesData.unknownThatResponded?.length || 0} boîtier(s) inconnu(s). Résolution nécessaire.`);
         setDetectedAnomalies(detectedAnomaliesData as DetectedAnomalies);
         setPendingValidResults(responsesFromExpectedDevices);
-        setCurrentIterationForImport(iteration.id);
         setShowAnomalyResolutionUI(true);
         logger.info("[Import Results] Des anomalies de boîtiers ont été détectées. Affichage de l'interface de résolution.");
         return;
@@ -977,20 +939,19 @@ const handleGenerateQuestionnaire = async () => {
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         responsesFromExpectedDevices,
         currentQuestionMappings,
-        currentSessionDbId,
-        iteration.id
+        currentSessionDbId
       );
       if (sessionResultsToSave.length > 0) {
         try {
-          const updatedSession = await StorageManager.importResultsForIteration(iteration.id, currentSessionDbId, sessionResultsToSave);
+          const updatedSession = await window.dbAPI?.sessionFinalizeImport(currentSessionDbId, sessionResultsToSave);
           if (updatedSession) {
             setEditingSessionData(updatedSession);
-            setImportSummary(`${sessionResultsToSave.length} résultats importés et traités avec succès pour l'itération ${iteration.name}.`);
+            setImportSummary(`${sessionResultsToSave.length} résultats importés et traités avec succès.`);
           } else {
-            setImportSummary("Erreur lors de la finalisation de l'itération.");
+            setImportSummary("Erreur lors de la finalisation de la session.");
           }
         } catch (error: any) {
-          setImportSummary(`Erreur lors de la finalisation de l'itération: ${error.message}`);
+          setImportSummary(`Erreur lors de la finalisation de la session: ${error.message}`);
         }
       } else {
         setImportSummary("Aucun résultat à importer.");
@@ -1184,61 +1145,62 @@ const handleGenerateQuestionnaire = async () => {
             setEditingSessionData(updatedSession);
             const finalSessionDataForScores = updatedSession;
             if (finalSessionDataForScores && finalSessionDataForScores.questionMappings && finalSessionDataForScores.iterations) {
-            const questionDbIds = finalSessionDataForScores.questionMappings.map(qm => qm.dbQuestionId).filter(id => id != null) as number[];
-            const questionsForScoreCalc = await StorageManager.getQuestionsByIds(questionDbIds);
-            const allResultsForScoreCalc = await StorageManager.getResultsForSession(currentSessionDbId);
-            if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
-                    const allParticipantsFromIterations = finalSessionDataForScores.iterations.flatMap(iter => iter.participants || []);
-                    
-                const anomaliesAuditData = {
-                  expectedIssues: expectedResolutions,
-                  unknownDevices: unknownResolutions,
-                  resolvedAt: new Date().toISOString(),
-                };
-                // This needs to be refactored to update participants in their respective iterations
-                // For now, just updating the session status
-                await StorageManager.updateSession(currentSessionDbId, {
-                  status: 'completed',
-                  resolvedImportAnomalies: anomaliesAuditData,
-                  updatedAt: new Date().toISOString()
-                });
-                message += "\nScores et réussite calculés. Statut session: 'Terminée', Audit des anomalies sauvegardé.";
-                logger.info(`[AnomalyResolution] Anomalies résolues et auditées pour session ID ${currentSessionDbId}`, {
-                  eventType: 'ANOMALIES_RESOLVED_AUDITED',
-                  sessionId: currentSessionDbId,
-                  sessionName: finalSessionDataForScores?.nomSession || editingSessionData.nomSession,
-                  resolutions: anomaliesAuditData
-                });
-                const finalUpdatedSessionWithScores = await StorageManager.getSessionById(currentSessionDbId);
-                     if (finalUpdatedSessionWithScores && finalUpdatedSessionWithScores.iterations) {
-                    setEditingSessionData(finalUpdatedSessionWithScores);
-                        const allParticipantsFromIterations = finalUpdatedSessionWithScores.iterations.flatMap(iter => iter.participants || []);
-                        const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode, p])).values());
-                        const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
-                        const visualDeviceId = index + 1;
-                        const currentFormParticipantState = participants[index];
-                        return {
-                          nom: p_db_updated.nom,
-                          prenom: p_db_updated.prenom,
-                          identificationCode: p_db_updated.identificationCode,
-                          score: p_db_updated.score,
-                          reussite: p_db_updated.reussite,
-                          assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
-                          statusInSession: p_db_updated.statusInSession,
-                          id: currentFormParticipantState?.id || `final-updated-${index}-${Date.now()}`,
-                          firstName: p_db_updated.prenom,
-                          lastName: p_db_updated.nom,
-                          deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
-                          organization: currentFormParticipantState?.organization || '',
-                          hasSigned: currentFormParticipantState?.hasSigned || false,
-                        };
-                    });
-                    setParticipants(formParticipantsToUpdate);
-                }
-            } else { message += "\nImpossible de charger données pour scores."; }
-        } else { message += "\nImpossible calculer scores (données session manquantes)."; }
+              const questionDbIds = finalSessionDataForScores.questionMappings.map(qm => qm.dbQuestionId).filter(id => id != null) as number[];
+              const questionsForScoreCalc = await StorageManager.getQuestionsByIds(questionDbIds);
+              const allResultsForScoreCalc = await StorageManager.getResultsForSession(currentSessionDbId);
+              if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
+                      const allParticipantsFromIterations = finalSessionDataForScores.iterations.flatMap(iter => iter.participants || []);
+
+                  const anomaliesAuditData = {
+                    expectedIssues: expectedResolutions,
+                    unknownDevices: unknownResolutions,
+                    resolvedAt: new Date().toISOString(),
+                  };
+                  // This needs to be refactored to update participants in their respective iterations
+                  // For now, just updating the session status
+                  await StorageManager.updateSession(currentSessionDbId, {
+                    // status: 'completed', // Status is now handled by checkAndFinalizeSessionStatus
+                    resolvedImportAnomalies: anomaliesAuditData,
+                    updatedAt: new Date().toISOString()
+                  });
+                  message += "\nAnomalies auditées.";
+                  logger.info(`[AnomalyResolution] Anomalies résolues et auditées pour session ID ${currentSessionDbId}`, {
+                    eventType: 'ANOMALIES_RESOLVED_AUDITED',
+                    sessionId: currentSessionDbId,
+                    sessionName: finalSessionDataForScores?.nomSession || editingSessionData.nomSession,
+                    resolutions: anomaliesAuditData
+                  });
+                  const finalUpdatedSessionWithScores = await StorageManager.getSessionById(currentSessionDbId);
+                       if (finalUpdatedSessionWithScores && finalUpdatedSessionWithScores.iterations) {
+                      setEditingSessionData(finalUpdatedSessionWithScores);
+                          const allParticipantsFromIterations = finalUpdatedSessionWithScores.iterations.flatMap(iter => iter.participants || []);
+                          const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode, p])).values());
+                          const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
+                          const visualDeviceId = index + 1;
+                          const currentFormParticipantState = participants[index];
+                          return {
+                            nom: p_db_updated.nom,
+                            prenom: p_db_updated.prenom,
+                            identificationCode: p_db_updated.identificationCode,
+                            score: p_db_updated.score,
+                            reussite: p_db_updated.reussite,
+                            assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
+                            statusInSession: p_db_updated.statusInSession,
+                            id: currentFormParticipantState?.id || `final-updated-${index}-${Date.now()}`,
+                            firstName: p_db_updated.prenom,
+                            lastName: p_db_updated.nom,
+                            deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
+                            organization: currentFormParticipantState?.organization || '',
+                            hasSigned: currentFormParticipantState?.hasSigned || false,
+                          };
+                      });
+                      setParticipants(formParticipantsToUpdate);
+                  }
+              } else { message += "\nImpossible de charger données pour scores."; }
+          } else { message += "\nImpossible de calculer les scores (données de session manquantes)."; }
+        }
         setImportSummary(message);
-        logger.info(`Résultats importés et résolus pour session ID ${currentSessionDbId}.`, { /* ... */ });
+        logger.info(`Résultats importés et résolus pour session ID ${currentSessionDbId}.`);
       } else {
         setImportSummary("Aucun résultat à sauvegarder après résolution.");
       }
