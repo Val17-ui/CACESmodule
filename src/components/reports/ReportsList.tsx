@@ -83,7 +83,7 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, refer
             <TableRow key={session.id} className="hover:bg-gray-50">
               <TableCell className="font-medium">{session.nomSession}</TableCell>
               <TableCell>
-                <Badge variant="secondary">
+                <Badge variant="default">
                   {session.referentielId ? (referentialMap.get(session.referentielId) || 'N/A') : 'N/A'}
                 </Badge>
               </TableCell>

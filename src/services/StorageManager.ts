@@ -1,5 +1,5 @@
 // src/services/StorageManager.ts
-import { QuestionWithId, Omit } from '../types'; // Importer Omit et les types nécessaires depuis ../types
+import { QuestionWithId, Omit, VotingDevice, DeviceKit, Trainer } from '../types'; // Importer Omit et les types nécessaires depuis ../types
 
 // Re-export QuestionWithId as StoredQuestion for clarity
 export type StoredQuestion = QuestionWithId;
@@ -33,6 +33,17 @@ export const StorageManager = {
       return id;
     } catch (error) {
       console.error("StorageManager: Error adding question via IPC", error);
+      throw error; // Re-throw to allow UI to handle it
+    }
+  },
+
+  async upsertQuestion(questionData: Omit<StoredQuestion, 'id'>): Promise<number | undefined> {
+    if (!window.dbAPI?.upsertQuestion) throw new Error("dbAPI.upsertQuestion is not available.");
+    try {
+      const id = await window.dbAPI.upsertQuestion(questionData);
+      return id;
+    } catch (error) {
+      console.error("StorageManager: Error upserting question via IPC", error);
       throw error; // Re-throw to allow UI to handle it
     }
   },
@@ -192,6 +203,11 @@ export const StorageManager = {
   async getResultsForSession(sessionId: number) {
     if (!window.dbAPI?.getResultsForSession) throw new Error("dbAPI.getResultsForSession is not available.");
     return window.dbAPI.getResultsForSession(sessionId);
+  },
+
+  async getAllResults() {
+    if (!window.dbAPI?.getAllResults) throw new Error("dbAPI.getAllResults is not available.");
+    return window.dbAPI.getAllResults();
   },
 
   async deleteResultsForIteration(iterationId: number): Promise<void> {
@@ -475,6 +491,22 @@ export const StorageManager = {
     }
   },
 
+  async getTrainerById(id: number): Promise<Trainer | undefined> {
+    if (!window.dbAPI?.getTrainerById) throw new Error("dbAPI.getTrainerById is not available.");
+    try {
+      const trainer = await window.dbAPI.getTrainerById(id);
+      return trainer;
+    } catch (error) {
+      console.error(`StorageManager: Error getting trainer with id ${id} via IPC`, error);
+      throw error;
+    }
+  },
+
+  async calculateBlockUsage() {
+    if (!window.dbAPI?.calculateBlockUsage) throw new Error("dbAPI.calculateBlockUsage is not available.");
+    return window.dbAPI.calculateBlockUsage();
+  },
+
   // Themes
   async addTheme(data: any) {
     if (!window.dbAPI?.addTheme) throw new Error("dbAPI.addTheme is not available.");
@@ -558,6 +590,16 @@ export const StorageManager = {
   async generatePresentation(sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) {
     if (!window.dbAPI?.generatePresentation) throw new Error("dbAPI.generatePresentation is not available.");
     return window.dbAPI.generatePresentation(sessionInfo, participants, questions, template, adminSettings);
+  },
+
+  async exportAllData() {
+    if (!window.dbAPI?.exportAllData) throw new Error("dbAPI.exportAllData is not available.");
+    return window.dbAPI.exportAllData();
+  },
+
+  async importAllData(data: any) {
+    if (!window.dbAPI?.importAllData) throw new Error("dbAPI.importAllData is not available.");
+    return window.dbAPI.importAllData(data);
   }
 };
 

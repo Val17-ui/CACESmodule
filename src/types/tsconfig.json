@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "outDir": "../../dist-types", // Output to a dedicated types directory at project root
+    "baseUrl": ".",
+    "paths": {
+      "@src/*": ["./*"]
+    }
+  },
+  "include": [
+    "./**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

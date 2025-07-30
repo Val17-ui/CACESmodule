@@ -1,365 +1,375 @@
-import { IpcMainInvokeEvent, ipcMain, dialog } from 'electron';
-import {
-    Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question
-} from '../src/types/index';
-import { AdminPPTXSettings } from './utils';
-import { generatePresentation } from './utils/pptxOrchestrator'; // <--- Ajoutez cette ligne ici
-
+// electron/IPCHandler.ts
+import { IpcMainInvokeEvent, ipcMain, dialog, shell } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
-
-import * as dbModule from './db.js';
+import {
+  getAllSessions, getSessionById, addSession, updateSession,
+  addOrUpdateSessionIteration, getSessionIterationsBySessionId,
+  addBulkSessionResults, getResultsForSession, getAllResults,
+  getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices,
+  addBulkSessionQuestions, deleteSessionQuestionsBySessionId, getSessionQuestionsBySessionId,
+  addBulkSessionBoitiers, deleteSessionBoitiersBySessionId, getSessionBoitiersBySessionId,
+  getAllDeviceKits, getDefaultDeviceKit, addDeviceKit, updateDeviceKit, deleteDeviceKit, setDefaultDeviceKit,
+  assignDeviceToKit, removeDeviceFromKit, getKitsForVotingDevice, removeAssignmentsByVotingDeviceId,
+  addReferential, getAllReferentiels, getReferentialByCode, getReferentialById,
+  getAllTrainers, addTrainer, deleteTrainer, setDefaultTrainer, updateTrainer, getTrainerById,
+  addTheme, getThemeByCodeAndReferentialId, getThemesByReferentialId, getThemeById, getAllThemes,
+  addBloc, getBlocByCodeAndThemeId, getBlocsByThemeId, getBlocById, getAllBlocs,
+  addQuestion, upsertQuestion, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
+  getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks,
+  getAdminSetting, setAdminSetting, getAllAdminSettings,
+  exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage
+} from './db';
 
 import { getLogger, ILogger } from './utils/logger';
+import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '../src/types/index';
 
 let handlerInitialized = false;
 
-module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInstance: ILogger) {
-  const logger = loggerInstance;
+export function initializeIpcHandlers(loggerInstance: ILogger) {
   if (handlerInitialized) {
-    logger.debug('[IPC Handlers] Already initialized. Skipping.');
+    loggerInstance.debug('[IPC Handlers] Already initialized. Skipping.');
     return;
   }
-  logger.debug('[IPC Handlers] Initializing IPC handlers...');
+  loggerInstance.debug('[IPC Handlers] Initializing IPC handlers...');
   handlerInitialized = true;
 
   // Sessions
   ipcMain.handle('db-get-all-sessions', async () => {
-    logger.debug('[IPC] db-get-all-sessions');
-    return dbModule.getAllSessions();
+    loggerInstance.debug('[IPC] db-get-all-sessions');
+    return getAllSessions();
   });
-  ipcMain.handle('db-get-session-by-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
-    logger.debug(`[IPC] db-get-session-by-id: ${sessionId}`);
-    return dbModule.getSessionById(sessionId);
+  ipcMain.handle('db-get-session-by-id', async (_event: IpcMainInvokeEvent, sessionId: number) => {
+    loggerInstance.debug(`[IPC] db-get-session-by-id: ${sessionId}`);
+    return getSessionById(sessionId);
   });
-  ipcMain.handle('db-add-session', async (event: IpcMainInvokeEvent, data: Session) => {
-    logger.debug('[IPC] db-add-session');
-    return dbModule.addSession(data);
+  ipcMain.handle('db-add-session', async (_event: IpcMainInvokeEvent, data: Session) => {
+    loggerInstance.debug('[IPC] db-add-session');
+    return addSession(data);
   });
-  ipcMain.handle('db-update-session', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Session>) => {
-    logger.debug(`[IPC] db-update-session: ${id}`);
-    return dbModule.updateSession(id, updates);
+  ipcMain.handle('db-update-session', async (_event: IpcMainInvokeEvent, id: number, updates: Partial<Session>) => {
+    loggerInstance.debug(`[IPC] db-update-session: ${id}`);
+    return updateSession(id, updates);
   });
 
   // SessionIterations
-  ipcMain.handle('db-add-or-update-session-iteration', async (event: IpcMainInvokeEvent, iteration: any) => {
-    logger.debug(`[IPC] db-add-or-update-session-iteration: iteration for session ${iteration.session_id}`);
-    return dbModule.addOrUpdateSessionIteration(iteration);
+  ipcMain.handle('db-add-or-update-session-iteration', async (_event: IpcMainInvokeEvent, iteration: any) => {
+    loggerInstance.debug(`[IPC] db-add-or-update-session-iteration: iteration for session ${iteration.session_id}`);
+    return addOrUpdateSessionIteration(iteration);
   });
-
-  ipcMain.handle('db-get-session-iterations', async (event: IpcMainInvokeEvent, sessionId: number) => {
-    logger.debug(`[IPC] db-get-session-iterations: for session ${sessionId}`);
-    return dbModule.getSessionIterationsBySessionId(sessionId);
+  ipcMain.handle('db-get-session-iterations', async (_event: IpcMainInvokeEvent, sessionId: number) => {
+    loggerInstance.debug(`[IPC] db-get-session-iterations: for session ${sessionId}`);
+    return getSessionIterationsBySessionId(sessionId);
   });
 
   // SessionResults
-  ipcMain.handle('db-add-bulk-session-results', async (event: IpcMainInvokeEvent, results: SessionResult[]) => {
-    logger.debug(`[IPC] db-add-bulk-session-results: adding ${results.length} results`);
-    return dbModule.addBulkSessionResults(results);
+  ipcMain.handle('db-add-bulk-session-results', async (_event: IpcMainInvokeEvent, results: SessionResult[]) => {
+    loggerInstance.debug(`[IPC] db-add-bulk-session-results: adding ${results.length} results`);
+    return addBulkSessionResults(results);
   });
-  ipcMain.handle('db-get-results-for-session', async (event: IpcMainInvokeEvent, sessionId: number) => {
-    logger.debug(`[IPC] db-get-results-for-session: ${sessionId}`);
-    return dbModule.getResultsForSession(sessionId);
+  ipcMain.handle('db-get-results-for-session', async (_event: IpcMainInvokeEvent, sessionId: number) => {
+    loggerInstance.debug(`[IPC] db-get-results-for-session: ${sessionId}`);
+    return getResultsForSession(sessionId);
   });
 
-  ipcMain.handle('session-finalize-import', async (event: IpcMainInvokeEvent, sessionId: number, results: SessionResult[]) => {
-    logger.debug(`[IPC] session-finalize-import: ${sessionId}`);
+  ipcMain.handle('db-get-all-results', async () => {
+    loggerInstance.debug('[IPC] db-get-all-results');
+    return getAllResults();
+  });
+
+  ipcMain.handle('session-finalize-import', async (_event: IpcMainInvokeEvent, sessionId: number, results: SessionResult[]) => {
+    loggerInstance.debug(`[IPC] session-finalize-import: ${sessionId}`);
     try {
-      // 1. Save the results
-      await dbModule.addBulkSessionResults(results);
-
-      // 2. Get all necessary data for calculations
-      const session = await dbModule.getSessionById(sessionId);
+      await addBulkSessionResults(results);
+      const session = await getSessionById(sessionId);
       if (!session) throw new Error(`Session with id ${sessionId} not found`);
-
-      const sessionQuestions = await dbModule.getSessionQuestionsBySessionId(sessionId);
+      const sessionQuestions = await getSessionQuestionsBySessionId(sessionId);
       if (!sessionQuestions || sessionQuestions.length === 0) throw new Error(`No questions found for session ${sessionId}`);
-
       const questionIds = sessionQuestions.map(q => q.dbQuestionId);
-      const questions = await dbModule.getQuestionsByIds(questionIds);
-
-      // 3. Calculate scores and success for each participant
-      if (!session.iterations) {
-        throw new Error(`Session with id ${sessionId} has no iterations`);
-      }
-      const allParticipants = session.iterations.flatMap(i => i.participants || []);
-      const updatedParticipants = allParticipants.map(participant => {
+      const questions = await getQuestionsByIds(questionIds);
+      if (!session.iterations) throw new Error(`Session with id ${sessionId} has no iterations`);
+      const allParticipants = session.iterations.flatMap((i: SessionIteration) => i.participants || []);
+      const updatedParticipants = allParticipants.map((participant: any) => {
         const participantResults = results.filter(r => r.participantIdBoitier === participant.identificationCode);
         const score = 0; // Replace with actual score calculation
         const success = false; // Replace with actual success calculation
         return { ...participant, score, reussite: success };
       });
-
-      // 4. Update the session
-      // This part needs to be thought out again, as we don't store participants directly in the session anymore.
-      // We should update the participants in their respective iterations.
-      // For now, I will comment this part out as it is not correct anymore.
-      // await dbModule.updateSession(sessionId, { participants: updatedParticipants, status: 'completed' });
-      await dbModule.updateSession(sessionId, { status: 'completed' });
-
-      // 5. Return the updated session
-      return dbModule.getSessionById(sessionId);
+      await updateSession(sessionId, { status: 'completed' });
+      return getSessionById(sessionId);
     } catch (error) {
-      logger.error(`[IPC] session-finalize-import failed for session ${sessionId}: ${error}`);
+      loggerInstance.error(`[IPC] session-finalize-import failed for session ${sessionId}: ${error}`);
       throw error;
     }
   });
 
   // VotingDevices
   ipcMain.handle('db-get-all-voting-devices', async () => {
-    logger.debug('[IPC] db-get-all-voting-devices');
-    return dbModule.getAllVotingDevices();
+    loggerInstance.debug('[IPC] db-get-all-voting-devices');
+    return getAllVotingDevices();
   });
-  ipcMain.handle('db-add-voting-device', async (event: IpcMainInvokeEvent, device: VotingDevice) => {
-    logger.debug('[IPC] db-add-voting-device');
-    return dbModule.addVotingDevice(device);
+  ipcMain.handle('db-add-voting-device', async (_event: IpcMainInvokeEvent, device: VotingDevice) => {
+    loggerInstance.debug('[IPC] db-add-voting-device');
+    return addVotingDevice(device);
   });
-  ipcMain.handle('db-update-voting-device', async (event: IpcMainInvokeEvent, id: number, updates: Partial<VotingDevice>) => {
-    logger.debug(`[IPC] db-update-voting-device: ${id}`);
-    return dbModule.updateVotingDevice(id, updates);
+  ipcMain.handle('db-update-voting-device', async (_event: IpcMainInvokeEvent, id: number, updates: Partial<VotingDevice>) => {
+    loggerInstance.debug(`[IPC] db-update-voting-device: ${id}`);
+    return updateVotingDevice(id, updates);
   });
-  ipcMain.handle('db-delete-voting-device', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-delete-voting-device: ${id}`);
-    return dbModule.deleteVotingDevice(id);
+  ipcMain.handle('db-delete-voting-device', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-delete-voting-device: ${id}`);
+    return deleteVotingDevice(id);
   });
-  ipcMain.handle('db-bulk-add-voting-devices', async (event: IpcMainInvokeEvent, devices: VotingDevice[]) => {
-    logger.debug(`[IPC] db-bulk-add-voting-devices: adding ${devices.length} devices`);
-    return dbModule.bulkAddVotingDevices(devices);
+  ipcMain.handle('db-bulk-add-voting-devices', async (_event: IpcMainInvokeEvent, devices: VotingDevice[]) => {
+    loggerInstance.debug(`[IPC] db-bulk-add-voting-devices: adding ${devices.length} devices`);
+    return bulkAddVotingDevices(devices);
   });
 
   // SessionQuestions
-  ipcMain.handle('db-add-bulk-session-questions', async (event: IpcMainInvokeEvent, questions: SessionQuestion[]) => {
-    logger.debug(`[IPC] db-add-bulk-session-questions: adding ${questions.length} questions`);
-    return dbModule.addBulkSessionQuestions(questions);
+  ipcMain.handle('db-add-bulk-session-questions', async (_event: IpcMainInvokeEvent, questions: SessionQuestion[]) => {
+    loggerInstance.debug(`[IPC] db-add-bulk-session-questions: adding ${questions.length} questions`);
+    return addBulkSessionQuestions(questions);
   });
-  ipcMain.handle('db-delete-session-questions-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
-    logger.debug(`[IPC] db-delete-session-questions-by-session-id: ${sessionId}`);
-    return dbModule.deleteSessionQuestionsBySessionId(sessionId);
+  ipcMain.handle('db-delete-session-questions-by-session-id', async (_event: IpcMainInvokeEvent, sessionId: number) => {
+    loggerInstance.debug(`[IPC] db-delete-session-questions-by-session-id: ${sessionId}`);
+    return deleteSessionQuestionsBySessionId(sessionId);
   });
-  ipcMain.handle('db-get-session-questions-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
-    logger.debug(`[IPC] db-get-session-questions-by-session-id: ${sessionId}`);
-    return dbModule.getSessionQuestionsBySessionId(sessionId);
+  ipcMain.handle('db-get-session-questions-by-session-id', async (_event: IpcMainInvokeEvent, sessionId: number) => {
+    loggerInstance.debug(`[IPC] db-get-session-questions-by-session-id: ${sessionId}`);
+    return getSessionQuestionsBySessionId(sessionId);
   });
 
   // SessionBoitiers
-  ipcMain.handle('db-add-bulk-session-boitiers', async (event: IpcMainInvokeEvent, boitiers: SessionBoitier[]) => {
-    logger.debug(`[IPC] db-add-bulk-session-boitiers: adding ${boitiers.length} boitiers`);
-    return dbModule.addBulkSessionBoitiers(boitiers);
+  ipcMain.handle('db-add-bulk-session-boitiers', async (_event: IpcMainInvokeEvent, boitiers: SessionBoitier[]) => {
+    loggerInstance.debug(`[IPC] db-add-bulk-session-boitiers: adding ${boitiers.length} boitiers`);
+    return addBulkSessionBoitiers(boitiers);
   });
-  ipcMain.handle('db-delete-session-boitiers-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
-    logger.debug(`[IPC] db-delete-session-boitiers-by-session-id: ${sessionId}`);
-    return dbModule.deleteSessionBoitiersBySessionId(sessionId);
+  ipcMain.handle('db-delete-session-boitiers-by-session-id', async (_event: IpcMainInvokeEvent, sessionId: number) => {
+    loggerInstance.debug(`[IPC] db-delete-session-boitiers-by-session-id: ${sessionId}`);
+    return deleteSessionBoitiersBySessionId(sessionId);
   });
-  ipcMain.handle('db-get-session-boitiers-by-session-id', async (event: IpcMainInvokeEvent, sessionId: number) => {
-    logger.debug(`[IPC] db-get-session-boitiers-by-session-id: ${sessionId}`);
-    return dbModule.getSessionBoitiersBySessionId(sessionId);
+  ipcMain.handle('db-get-session-boitiers-by-session-id', async (_event: IpcMainInvokeEvent, sessionId: number) => {
+    loggerInstance.debug(`[IPC] db-get-session-boitiers-by-session-id: ${sessionId}`);
+    return getSessionBoitiersBySessionId(sessionId);
   });
 
   // DeviceKits
-  ipcMain.handle('db-get-voting-devices-for-kit', async (event: IpcMainInvokeEvent, kitId: number) => {
-    logger.debug(`[IPC] db-get-voting-devices-for-kit: ${kitId}`);
-    return dbModule.getVotingDevicesForKit(kitId);
+  ipcMain.handle('db-get-voting-devices-for-kit', async (_event: IpcMainInvokeEvent, kitId: number) => {
+    loggerInstance.debug(`[IPC] db-get-voting-devices-for-kit: ${kitId}`);
+    return getVotingDevicesForKit(kitId);
   });
   ipcMain.handle('db-get-all-device-kits', async () => {
-    logger.debug('[IPC] db-get-all-device-kits');
-    return dbModule.getAllDeviceKits();
+    loggerInstance.debug('[IPC] db-get-all-device-kits');
+    return getAllDeviceKits();
   });
   ipcMain.handle('db-get-default-device-kit', async () => {
-    logger.debug('[IPC] db-get-default-device-kit');
-    return dbModule.getDefaultDeviceKit();
+    loggerInstance.debug('[IPC] db-get-default-device-kit');
+    return getDefaultDeviceKit();
   });
-  ipcMain.handle('db-add-device-kit', async (event: IpcMainInvokeEvent, data: DeviceKit) => {
-    logger.debug('[IPC] db-add-device-kit');
-    return dbModule.addDeviceKit(data);
+  ipcMain.handle('db-add-device-kit', async (_event: IpcMainInvokeEvent, data: DeviceKit) => {
+    loggerInstance.debug('[IPC] db-add-device-kit');
+    return addDeviceKit(data);
   });
-  ipcMain.handle('db-update-device-kit', async (event: IpcMainInvokeEvent, id: number, updates: Partial<DeviceKit>) => {
-    logger.debug(`[IPC] db-update-device-kit: ${id}`);
-    return dbModule.updateDeviceKit(id, updates);
+  ipcMain.handle('db-update-device-kit', async (_event: IpcMainInvokeEvent, id: number, updates: Partial<DeviceKit>) => {
+    loggerInstance.debug(`[IPC] db-update-device-kit: ${id}`);
+    return updateDeviceKit(id, updates);
   });
-  ipcMain.handle('db-delete-device-kit', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-delete-device-kit: ${id}`);
-    return dbModule.deleteDeviceKit(id);
+  ipcMain.handle('db-delete-device-kit', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-delete-device-kit: ${id}`);
+    return deleteDeviceKit(id);
   });
-  ipcMain.handle('db-set-default-device-kit', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-set-default-device-kit: ${id}`);
-    return dbModule.setDefaultDeviceKit(id);
+  ipcMain.handle('db-set-default-device-kit', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-set-default-device-kit: ${id}`);
+    return setDefaultDeviceKit(id);
   });
-  ipcMain.handle('db-assign-device-to-kit', async (event: IpcMainInvokeEvent, kitId: number, votingDeviceId: number) => {
-    logger.debug(`[IPC] db-assign-device-to-kit: kitId=${kitId}, deviceId=${votingDeviceId}`);
-    return dbModule.assignDeviceToKit(kitId, votingDeviceId);
+  ipcMain.handle('db-assign-device-to-kit', async (_event: IpcMainInvokeEvent, kitId: number, votingDeviceId: number) => {
+    loggerInstance.debug(`[IPC] db-assign-device-to-kit: kitId=${kitId}, deviceId=${votingDeviceId}`);
+    return assignDeviceToKit(kitId, votingDeviceId);
   });
-  ipcMain.handle('db-remove-device-from-kit', async (event: IpcMainInvokeEvent, kitId: number, votingDeviceId: number) => {
-    logger.debug(`[IPC] db-remove-device-from-kit: kitId=${kitId}, deviceId=${votingDeviceId}`);
-    return dbModule.removeDeviceFromKit(kitId, votingDeviceId);
+  ipcMain.handle('db-remove-device-from-kit', async (_event: IpcMainInvokeEvent, kitId: number, votingDeviceId: number) => {
+    loggerInstance.debug(`[IPC] db-remove-device-from-kit: kitId=${kitId}, deviceId=${votingDeviceId}`);
+    return removeDeviceFromKit(kitId, votingDeviceId);
   });
-  
-  ipcMain.handle('db-get-kits-for-voting-device', async (event: IpcMainInvokeEvent, votingDeviceId: number) => {
-    logger.debug(`[IPC] db-get-kits-for-voting-device: ${votingDeviceId}`);
-    return dbModule.getKitsForVotingDevice(votingDeviceId);
+  ipcMain.handle('db-get-kits-for-voting-device', async (_event: IpcMainInvokeEvent, votingDeviceId: number) => {
+    loggerInstance.debug(`[IPC] db-get-kits-for-voting-device: ${votingDeviceId}`);
+    return getKitsForVotingDevice(votingDeviceId);
   });
-  ipcMain.handle('db-remove-assignments-by-voting-device-id', async (event: IpcMainInvokeEvent, votingDeviceId: number) => {
-    logger.debug(`[IPC] db-remove-assignments-by-voting-device-id: ${votingDeviceId}`);
-    return dbModule.removeAssignmentsByVotingDeviceId(votingDeviceId);
+  ipcMain.handle('db-remove-assignments-by-voting-device-id', async (_event: IpcMainInvokeEvent, votingDeviceId: number) => {
+    loggerInstance.debug(`[IPC] db-remove-assignments-by-voting-device-id: ${votingDeviceId}`);
+    return removeAssignmentsByVotingDeviceId(votingDeviceId);
   });
 
   // Referentiels
-  ipcMain.handle('db-add-referential', async (event: IpcMainInvokeEvent, data: Referential) => {
-    logger.debug('[IPC] db-add-referential');
-    return dbModule.addReferential(data);
+  ipcMain.handle('db-add-referential', async (_event: IpcMainInvokeEvent, data: Referential) => {
+    loggerInstance.debug('[IPC] db-add-referential');
+    return addReferential(data);
   });
   ipcMain.handle('db-get-all-referentiels', async () => {
-    logger.debug('[IPC] db-get-all-referentiels');
-    return dbModule.getAllReferentiels();
+    loggerInstance.debug('[IPC] db-get-all-referentiels');
+    return getAllReferentiels();
   });
-  ipcMain.handle('db-get-referential-by-code', async (event: IpcMainInvokeEvent, code: string) => {
-    logger.debug(`[IPC] db-get-referential-by-code: ${code}`);
-    return dbModule.getReferentialByCode(code);
+  ipcMain.handle('db-get-referential-by-code', async (_event: IpcMainInvokeEvent, code: string) => {
+    loggerInstance.debug(`[IPC] db-get-referential-by-code: ${code}`);
+    return getReferentialByCode(code);
   });
-  ipcMain.handle('db-get-referential-by-id', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-get-referential-by-id: ${id}`);
-    return dbModule.getReferentialById(id);
+  ipcMain.handle('db-get-referential-by-id', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-get-referential-by-id: ${id}`);
+    return getReferentialById(id);
   });
 
   // Trainers
   ipcMain.handle('db-get-all-trainers', async () => {
-    logger.debug('[IPC] db-get-all-trainers');
-    return dbModule.getAllTrainers();
+    loggerInstance.debug('[IPC] db-get-all-trainers');
+    return getAllTrainers();
   });
-  ipcMain.handle('db-add-trainer', async (event: IpcMainInvokeEvent, data: Trainer) => {
-    logger.debug('[IPC] db-add-trainer');
-    return dbModule.addTrainer(data);
+  ipcMain.handle('db-add-trainer', async (_event: IpcMainInvokeEvent, data: Trainer) => {
+    loggerInstance.debug('[IPC] db-add-trainer');
+    return addTrainer(data);
   });
-  ipcMain.handle('db-delete-trainer', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-delete-trainer: ${id}`);
-    return dbModule.deleteTrainer(id);
+  ipcMain.handle('db-delete-trainer', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-delete-trainer: ${id}`);
+    return deleteTrainer(id);
   });
-  ipcMain.handle('db-set-default-trainer', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-set-default-trainer: ${id}`);
-    return dbModule.setDefaultTrainer(id);
+  ipcMain.handle('db-set-default-trainer', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-set-default-trainer: ${id}`);
+    return setDefaultTrainer(id);
   });
-  ipcMain.handle('db-update-trainer', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Trainer>) => {
-    logger.debug(`[IPC] db-update-trainer: ${id}`);
-    return dbModule.updateTrainer(id, updates);
+  ipcMain.handle('db-update-trainer', async (_event: IpcMainInvokeEvent, id: number, updates: Partial<Trainer>) => {
+    loggerInstance.debug(`[IPC] db-update-trainer: ${id}`);
+    return updateTrainer(id, updates);
+  });
+
+  ipcMain.handle('db-calculate-block-usage', async () => {
+    loggerInstance.debug('[IPC] db-calculate-block-usage');
+    return calculateBlockUsage();
   });
 
   // Themes
-  ipcMain.handle('db-add-theme', async (event: IpcMainInvokeEvent, data: Theme) => {
-    logger.debug('[IPC] db-add-theme');
-    return dbModule.addTheme(data);
+  ipcMain.handle('db-add-theme', async (_event: IpcMainInvokeEvent, data: Theme) => {
+    loggerInstance.debug('[IPC] db-add-theme');
+    return addTheme(data);
   });
-  ipcMain.handle('db-get-theme-by-code-and-referential-id', async (event: IpcMainInvokeEvent, code: string, refId: number) => {
-    logger.debug(`[IPC] db-get-theme-by-code-and-referential-id: code=${code}, refId=${refId}`);
-    return dbModule.getThemeByCodeAndReferentialId(code, refId);
+  ipcMain.handle('db-get-theme-by-code-and-referential-id', async (_event: IpcMainInvokeEvent, code: string, refId: number) => {
+    loggerInstance.debug(`[IPC] db-get-theme-by-code-and-referential-id: code=${code}, refId=${refId}`);
+    return getThemeByCodeAndReferentialId(code, refId);
   });
-  ipcMain.handle('db-get-themes-by-referential-id', async (event: IpcMainInvokeEvent, refId: number) => {
-    logger.debug(`[IPC] db-get-themes-by-referential-id: ${refId}`);
-    return dbModule.getThemesByReferentialId(refId);
+  ipcMain.handle('db-get-themes-by-referential-id', async (_event: IpcMainInvokeEvent, refId: number) => {
+    loggerInstance.debug(`[IPC] db-get-themes-by-referential-id: ${refId}`);
+    return getThemesByReferentialId(refId);
   });
-  ipcMain.handle('db-get-theme-by-id', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-get-theme-by-id: ${id}`);
-    return dbModule.getThemeById(id);
+  ipcMain.handle('db-get-theme-by-id', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-get-theme-by-id: ${id}`);
+    return getThemeById(id);
   });
   ipcMain.handle('db-get-all-themes', async () => {
-    logger.debug('[IPC] db-get-all-themes');
-    return dbModule.getAllThemes();
+    loggerInstance.debug('[IPC] db-get-all-themes');
+    return getAllThemes();
   });
 
   // Blocs
-  ipcMain.handle('db-add-bloc', async (event: IpcMainInvokeEvent, data: Bloc) => {
-    logger.debug('[IPC] db-add-bloc');
-    return dbModule.addBloc(data);
+  ipcMain.handle('db-add-bloc', async (_event: IpcMainInvokeEvent, data: Bloc) => {
+    loggerInstance.debug('[IPC] db-add-bloc');
+    return addBloc(data);
   });
-  ipcMain.handle('db-get-bloc-by-code-and-theme-id', async (event: IpcMainInvokeEvent, code: string, themeId: number) => {
-    logger.debug(`[IPC] db-get-bloc-by-code-and-theme-id: code=${code}, themeId=${themeId}`);
-    return dbModule.getBlocByCodeAndThemeId(code, themeId);
+  ipcMain.handle('db-get-bloc-by-code-and-theme-id', async (_event: IpcMainInvokeEvent, code: string, themeId: number) => {
+    loggerInstance.debug(`[IPC] db-get-bloc-by-code-and-theme-id: code=${code}, themeId=${themeId}`);
+    return getBlocByCodeAndThemeId(code, themeId);
   });
-  ipcMain.handle('db-get-blocs-by-theme-id', async (event: IpcMainInvokeEvent, themeId: number) => {
-    logger.debug(`[IPC] db-get-blocs-by-theme-id: ${themeId}`);
-    return dbModule.getBlocsByThemeId(themeId);
+  ipcMain.handle('db-get-blocs-by-theme-id', async (_event: IpcMainInvokeEvent, themeId: number) => {
+    loggerInstance.debug(`[IPC] db-get-blocs-by-theme-id: ${themeId}`);
+    return getBlocsByThemeId(themeId);
   });
-  ipcMain.handle('db-get-bloc-by-id', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-get-bloc-by-id: ${id}`);
-    return dbModule.getBlocById(id);
+  ipcMain.handle('db-get-bloc-by-id', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-get-bloc-by-id: ${id}`);
+    return getBlocById(id);
   });
   ipcMain.handle('db-get-all-blocs', async () => {
-    logger.debug('[IPC] db-get-all-blocs');
-    return dbModule.getAllBlocs();
+    loggerInstance.debug('[IPC] db-get-all-blocs');
+    return getAllBlocs();
   });
 
   // Questions
-  ipcMain.handle('db-add-question', async (event: IpcMainInvokeEvent, data: Question) => {
-    logger.debug('[IPC] db-add-question');
+  ipcMain.handle('db-add-question', async (_event: IpcMainInvokeEvent, data: Question) => {
+    loggerInstance.debug('[IPC] db-add-question');
     const questionToAdd = {
       ...data,
-      blocId: data.blocId === undefined ? null : data.blocId // Assure que blocId est number ou null
+      blocId: data.blocId === undefined ? null : data.blocId
     };
-    return dbModule.addQuestion(questionToAdd as Omit<QuestionWithId, 'id'>);
+    return addQuestion(questionToAdd as Omit<QuestionWithId, 'id'>);
   });
-  ipcMain.handle('db-get-question-by-id', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-get-question-by-id: ${id}`);
-    return dbModule.getQuestionById(id);
+  ipcMain.handle('db-upsert-question', async (_event: IpcMainInvokeEvent, data: Question) => {
+    loggerInstance.debug('[IPC] db-upsert-question');
+    const questionToUpsert = {
+      ...data,
+      blocId: data.blocId === undefined ? null : data.blocId
+    };
+    return upsertQuestion(questionToUpsert as Omit<QuestionWithId, 'id'>);
   });
-  ipcMain.handle('db-get-questions-by-bloc-id', async (event: IpcMainInvokeEvent, blocId: number) => {
-    logger.debug(`[IPC] db-get-questions-by-bloc-id: ${blocId}`);
-    return dbModule.getQuestionsByBlocId(blocId);
+  ipcMain.handle('db-get-question-by-id', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-get-question-by-id: ${id}`);
+    return getQuestionById(id);
   });
-  ipcMain.handle('db-update-question', async (event: IpcMainInvokeEvent, id: number, updates: Partial<Question>) => {
-    logger.debug(`[IPC] db-update-question: ${id}`);
-    return dbModule.updateQuestion(id, updates);
+  ipcMain.handle('db-get-questions-by-bloc-id', async (_event: IpcMainInvokeEvent, blocId: number) => {
+    loggerInstance.debug(`[IPC] db-get-questions-by-bloc-id: ${blocId}`);
+    return getQuestionsByBlocId(blocId);
   });
-  ipcMain.handle('db-delete-question', async (event: IpcMainInvokeEvent, id: number) => {
-    logger.debug(`[IPC] db-delete-question: ${id}`);
-    return dbModule.deleteQuestion(id);
+  ipcMain.handle('db-update-question', async (_event: IpcMainInvokeEvent, id: number, updates: Partial<Question>) => {
+    loggerInstance.debug(`[IPC] db-update-question: ${id}`);
+    return updateQuestion(id, updates);
+  });
+  ipcMain.handle('db-delete-question', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-delete-question: ${id}`);
+    return deleteQuestion(id);
   });
   ipcMain.handle('db-get-all-questions', async () => {
-    logger.debug('[IPC] db-get-all-questions');
-    return dbModule.getAllQuestions();
+    loggerInstance.debug('[IPC] db-get-all-questions');
+    return getAllQuestions();
   });
-  ipcMain.handle('db-get-questions-by-ids', async (event: IpcMainInvokeEvent, ids: number[]) => {
-    logger.debug(`[IPC] db-get-questions-by-ids: ${ids.length} ids`);
-    return dbModule.getQuestionsByIds(ids);
+  ipcMain.handle('db-get-questions-by-ids', async (_event: IpcMainInvokeEvent, ids: number[]) => {
+    loggerInstance.debug(`[IPC] db-get-questions-by-ids: ${ids.length} ids`);
+    return getQuestionsByIds(ids);
   });
-  ipcMain.handle('db-get-questions-for-session-blocks', async (event: IpcMainInvokeEvent, blocIds?: number[]) => {
-    logger.debug(`[IPC] db-get-questions-for-session-blocks: ${blocIds?.length || 0} blocIds`);
-    return dbModule.getQuestionsForSessionBlocks(blocIds);
+  ipcMain.handle('db-get-questions-for-session-blocks', async (_event: IpcMainInvokeEvent, blocIds?: number[]) => {
+    loggerInstance.debug(`[IPC] db-get-questions-for-session-blocks: ${blocIds?.length || 0} blocIds`);
+    return getQuestionsForSessionBlocks(blocIds);
   });
 
   // AdminSettings
-  ipcMain.handle('db-get-admin-setting', async (event: IpcMainInvokeEvent, key: string) => {
-    logger.debug(`[IPC] db-get-admin-setting: ${key}`);
-    return dbModule.getAdminSetting(key);
+  ipcMain.handle('db-get-admin-setting', async (_event: IpcMainInvokeEvent, key: string) => {
+    loggerInstance.debug(`[IPC] db-get-admin-setting: ${key}`);
+    return getAdminSetting(key);
   });
-  ipcMain.handle('db-set-admin-setting', async (event: IpcMainInvokeEvent, key: string, value: any) => {
-    logger.debug(`[IPC] db-set-admin-setting: ${key}`);
-    return dbModule.setAdminSetting(key, value);
+  ipcMain.handle('db-set-admin-setting', async (_event: IpcMainInvokeEvent, key: string, value: any) => {
+    loggerInstance.debug(`[IPC] db-set-admin-setting: ${key}`);
+    return setAdminSetting(key, value);
   });
   ipcMain.handle('db-get-all-admin-settings', async () => {
-    logger.debug('[IPC] db-get-all-admin-settings');
-    return dbModule.getAllAdminSettings();
+    loggerInstance.debug('[IPC] db-get-all-admin-settings');
+    return getAllAdminSettings();
   });
 
   // Backup/Restore
   ipcMain.handle('db-export-all-data', async () => {
-    logger.debug('[IPC] db-export-all-data');
-    return dbModule.exportAllData();
+    loggerInstance.debug('[IPC] db-export-all-data');
+    return exportAllData();
   });
-  ipcMain.handle('db-import-all-data', async (event: IpcMainInvokeEvent, data: any) => {
-    logger.debug('[IPC] db-import-all-data');
-    return dbModule.importAllData(data);
+  ipcMain.handle('db-import-all-data', async (_event: IpcMainInvokeEvent, data: any) => {
+    loggerInstance.debug('[IPC] db-import-all-data');
+    return importAllData(data);
   });
 
   // PPTX Generation
-  ipcMain.handle('pptx-generate', async (event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referentiel: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
-    logger.info('[IPC] pptx-generate handler triggered.');
-    logger.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
+  ipcMain.handle('pptx-generate', async (_event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referentiel: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
+    loggerInstance.info('[IPC] pptx-generate handler triggered.');
+    const { generatePresentation } = await import('./utils/pptxOrchestrator');
+    loggerInstance.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
     let templateArrayBuffer: ArrayBuffer;
-
     if (template === 'tool_default_template') {
       const templatePath = path.join(__dirname, '../../public/templates/default.pptx');
       try {
         templateArrayBuffer = await fs.readFile(templatePath);
       } catch (error) {
-        logger.debug(`Failed to read default PPTX template within pptx-generate: ${error}`);
+        loggerInstance.debug(`Failed to read default PPTX template within pptx-generate: ${error}`);
         throw new Error('Could not load default PPTX template.');
       }
     } else if (template && template.type === 'Buffer' && Array.isArray(template.data)) {
@@ -371,89 +381,109 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
     } else {
       throw new Error("Invalid template format provided to pptx-generate IPC handler.");
     }
-
-    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, logger);
+    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, loggerInstance);
   });
 
   ipcMain.handle('get-default-pptx-template', async () => {
-    logger.debug('[IPC] get-default-pptx-template');
+    loggerInstance.debug('[IPC] get-default-pptx-template');
     const templatePath = path.join(__dirname, '../../public/templates/default.pptx');
-    logger.debug(`[get-default-pptx-template] Calculated template path: ${templatePath}`);
+    loggerInstance.debug(`[get-default-pptx-template] Calculated template path: ${templatePath}`);
     try {
       const fileBuffer = await fs.readFile(templatePath);
-      logger.debug(`[get-default-pptx-template] Successfully read file, buffer length: ${fileBuffer.length}`);
+      loggerInstance.debug(`[get-default-pptx-template] Successfully read file, buffer length: ${fileBuffer.length}`);
       return fileBuffer;
     } catch (error) {
-      logger.debug(`[get-default-pptx-template] Failed to read default PPTX template: ${error}`);
+      loggerInstance.debug(`[get-default-pptx-template] Failed to read default PPTX template: ${error}`);
       throw new Error('Could not load default PPTX template.');
     }
   });
 
-  ipcMain.handle('save-pptx-file', async (event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
-    logger.debug(`[IPC] save-pptx-file: ${fileName}`);
+  ipcMain.handle('save-pptx-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
+    loggerInstance.debug(`[IPC] save-pptx-file: ${fileName}`);
     try {
-      const orsSavePath = await dbModule.getAdminSetting('orsSavePath');
+      const orsSavePath = await getAdminSetting('orsSavePath');
       if (!orsSavePath) {
         throw new Error("Le chemin de sauvegarde des ORS n'est pas configuré dans les paramètres techniques.");
       }
-
       const filePath = path.join(orsSavePath, fileName);
       await fs.writeFile(filePath, Buffer.from(fileBuffer));
       return { success: true, filePath };
     } catch (error: any) {
-      logger.debug(`Failed to save PPTX file: ${error}`);
+      loggerInstance.debug(`Failed to save PPTX file: ${error}`);
       return { success: false, error: error.message };
     }
   });
 
   // File Operations
-  ipcMain.handle('open-excel-file-dialog', async (event: IpcMainInvokeEvent) => {
-    logger.debug('[IPC] open-excel-file-dialog');
+  ipcMain.handle('open-file-dialog', async () => {
+    loggerInstance.debug('[IPC] open-file-dialog');
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        { name: 'Tous les fichiers', extensions: ['*'] }
+      ]
+    });
+    if (canceled || filePaths.length === 0) {
+      return { canceled: true, fileName: null, fileBuffer: null, error: null };
+    }
+    const filePath = filePaths[0];
+    try {
+      const fileBuffer = await fs.readFile(filePath);
+      return {
+        canceled: false,
+        fileName: path.basename(filePath),
+        fileBuffer: fileBuffer.toString('base64'),
+        error: null
+      };
+    } catch (error: any) {
+      loggerInstance.debug(`Failed to read file: ${error}`);
+      return { canceled: false, fileName: null, fileBuffer: null, error: error.message };
+    }
+  });
+
+  ipcMain.handle('open-excel-file-dialog', async () => {
+    loggerInstance.debug('[IPC] open-excel-file-dialog');
     const { canceled, filePaths } = await dialog.showOpenDialog({
       filters: [
         { name: 'Fichiers Excel', extensions: ['xlsx', 'xls'] },
         { name: 'Tous les fichiers', extensions: ['*'] }
       ]
     });
-
     if (canceled || filePaths.length === 0) {
-      return { canceled: true };
+      return { canceled: true, fileName: null, fileBuffer: null, error: null };
     }
-
     const filePath = filePaths[0];
     try {
       const fileBuffer = await fs.readFile(filePath);
       return {
         canceled: false,
-        fileName: filePath.split(/[\\/]/).pop(), // Get base name
-        fileBuffer: fileBuffer.toString('base64') // Send as base64 string
+        fileName: path.basename(filePath),
+        fileBuffer: fileBuffer.toString('base64'),
+        error: null
       };
     } catch (error: any) {
-      logger.debug(`Failed to read file: ${error}`);
-      return { canceled: false, error: error.message };
+      loggerInstance.debug(`Failed to read file: ${error}`);
+      return { canceled: false, fileName: null, fileBuffer: null, error: error.message };
     }
   });
 
-  ipcMain.handle('open-directory-dialogger.debug', async (event: IpcMainInvokeEvent, filePath?: string) => {
-    logger.debug(`[IPC] open-directory-dialog: ${filePath || ''}`);
+  ipcMain.handle('open-directory-dialog', async (_event: IpcMainInvokeEvent, filePath?: string) => {
+    loggerInstance.debug(`[IPC] open-directory-dialog: ${filePath || ''}`);
     if (filePath) {
-      const { shell } = require('electron');
       shell.showItemInFolder(filePath);
-      return { canceled: false, path: require('path').dirname(filePath) };
+      return { canceled: false, path: path.dirname(filePath) };
     }
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openDirectory']
     });
-
     if (canceled || filePaths.length === 0) {
       return { canceled: true };
     }
-
     return { canceled: false, path: filePaths[0] };
   });
 
-  ipcMain.handle('open-results-file', async (event: IpcMainInvokeEvent) => {
-    logger.debug('[IPC] open-results-file');
+  ipcMain.handle('open-results-file', async () => {
+    loggerInstance.debug('[IPC] open-results-file');
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [
@@ -461,47 +491,45 @@ module.exports.initializeIpcHandlers = function initializeIpcHandlers(loggerInst
         { name: 'Tous les fichiers', extensions: ['*'] }
       ]
     });
-
     if (canceled || filePaths.length === 0) {
-      return { canceled: true };
+      return { canceled: true, fileName: null, fileBuffer: null, error: null };
     }
-
     const filePath = filePaths[0];
     try {
       const fileBuffer = await fs.readFile(filePath);
       return {
         canceled: false,
-        fileName: filePath.split(/[\\/]/).pop(),
-        fileBuffer: fileBuffer.toString('base64')
+        fileName: path.basename(filePath),
+        fileBuffer: fileBuffer.toString('base64'),
+        error: null
       };
     } catch (error: any) {
-      logger.debug(`Failed to read file: ${error}`);
-      return { canceled: false, error: error.message };
+      loggerInstance.debug(`Failed to read file: ${error}`);
+      return { canceled: false, fileName: null, fileBuffer: null, error: error.message };
     }
   });
 
-  ipcMain.handle('read-image-file', async (event: IpcMainInvokeEvent, filePath: string) => {
-    logger.debug(`[IPC] read-image-file: ${filePath}`);
+  ipcMain.handle('read-image-file', async (_event: IpcMainInvokeEvent, filePath: string) => {
+    loggerInstance.debug(`[IPC] read-image-file: ${filePath}`);
     try {
       const fileBuffer = await fs.readFile(filePath);
       return fileBuffer.toString('base64');
     } catch (error: any) {
-      logger.debug(`Failed to read image file: ${error}`);
+      loggerInstance.debug(`Failed to read image file: ${error}`);
       throw new Error(`Could not read image file: ${error.message}`);
     }
   });
 
-  ipcMain.handle('open-file', async (event: IpcMainInvokeEvent, filePath: string) => {
-    logger.debug(`[IPC] open-file: ${filePath}`);
+  ipcMain.handle('open-file', async (_event: IpcMainInvokeEvent, filePath: string) => {
+    loggerInstance.debug(`[IPC] open-file: ${filePath}`);
     try {
-      const { shell } = require('electron');
       const result = shell.openPath(filePath);
       return { success: true, result };
     } catch (error: any) {
-      logger.debug(`Failed to open file ${filePath}: ${error}`);
+      loggerInstance.debug(`Failed to open file ${filePath}: ${error}`);
       return { success: false, error: error.message };
     }
   });
 
-  logger.debug('[IPC Handlers] IPC handlers registration attempt finished.');
+  loggerInstance.debug('[IPC Handlers] IPC handlers registration attempt finished.');
 }

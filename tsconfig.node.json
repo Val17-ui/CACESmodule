@@ -10,12 +10,20 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "composite": true,
+    "noEmit": true, // Added to resolve the error
 
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Paths for consistency */
+    "baseUrl": ".",
+    "paths": {
+      "@src/*": ["src/*"]
+    }
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "src/types/**/*"], // Include shared types
+  "exclude": ["node_modules", "dist"]
 }

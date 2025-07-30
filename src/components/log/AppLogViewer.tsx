@@ -20,10 +20,10 @@ const AppLogViewer: React.FC = () => {
 
   const getLogLevelColor = (level: LogEntry['level']) => {
     switch (level) {
-      case 'INFO': return 'blue';
-      case 'WARNING': return 'orange';
-      case 'ERROR': return 'red';
-      case 'SUCCESS': return 'green';
+      case 'info': return 'blue';
+      case 'warn': return 'orange';
+      case 'error': return 'red';
+      case 'success': return 'green';
       default: return 'black';
     }
   };
@@ -44,15 +44,9 @@ const AppLogViewer: React.FC = () => {
             <span style={{ color: getLogLevelColor(log.level), fontWeight: 'bold' }}>[{log.level}]</span>
             <span style={{ color: '#777', marginLeft: '5px', marginRight: '5px' }}>{log.timestamp}</span>
             <span>{log.message}</span>
-            {log.details && typeof log.details === 'object' && log.details !== null && (
+            {log.details !== undefined && log.details !== null && (
               <pre style={{ marginLeft: '10px', fontSize: '0.9em', backgroundColor: '#e0e0e0', padding: '2px' }}>
-                {((): React.ReactNode => {
-                  try {
-                    return JSON.stringify(log.details, null, 2);
-                  } catch (e) {
-                    return 'Error: Unable to serialize details';
-                  }
-                })()}
+                {typeof log.details === 'object' ? JSON.stringify(log.details, null, 2) : String(log.details)}
               </pre>
             )}
           </li>

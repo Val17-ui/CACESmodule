@@ -94,23 +94,12 @@ function generateOmbeaSessionXml(
 
 
 import { ILogger } from './logger';
-import { Participant, QuestionWithId as StoredQuestion, VotingDevice } from '../../src/types/index';
+import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '../../src/types/index';
 import {
-Val17Question,
-GenerationOptions as Val17GenerationOptions,
-ConfigOptions as Val17ConfigOptions,
-generatePPTXVal17,
-QuestionMapping,
-SessionInfo as Val17SessionInfo,
-ParticipantForGenerator
+  generatePPTXVal17,
 } from './val17PptxGenerator';
 
-
-export interface AdminPPTXSettings extends Val17ConfigOptions {
-  defaultDuration?: number;
-}
-
-export function transformQuestionsForVal17Generator(storedQuestions: StoredQuestion[], logger: ILogger): Val17Question[] {
+export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger): Val17Question[] {
   logger.info('[LOG][pptxOrchestrator] Début de transformQuestionsForVal17Generator.');
   const result = storedQuestions.map((sq) => {
     let correctAnswerIndex: number | undefined = undefined;
@@ -148,7 +137,7 @@ export function transformQuestionsForVal17Generator(storedQuestions: StoredQuest
 export async function generatePresentation(
   sessionInfo: { name: string; date: string; referentiel: string },
   participantsForGenerator: ParticipantForGenerator[],
-  storedQuestions: StoredQuestion[],
+  storedQuestions: QuestionWithId[],
   templateFile: File | ArrayBuffer | string,
   adminSettings: AdminPPTXSettings,
   logger: ILogger

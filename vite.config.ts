@@ -8,37 +8,64 @@ export default defineConfig({
     react(),
     electron([
       {
-        // Point d'entre pour le processus principal d'Electron
-        entry: 'electron/index.ts', // Changement ici: fichier source
+        entry: 'electron/index.ts',
         vite: {
           build: {
-            outDir: 'dist-electron/electron', // Répertoire de sortie pour le processus principal
+            outDir: 'dist-electron/electron',
             lib: {
-              entry: 'electron/index.ts', // Fichier source pour le processus principal
-              formats: ['cjs'], // Sortie en CommonJS
-              fileName: () => 'index.js', // Nom du fichier de sortie
+              entry: 'electron/index.ts',
+              formats: ['es'],
+              fileName: () => 'index.mjs',
             },
             rollupOptions: {
-              // Externaliser les modules Node.js et autres dépendances
-              external: ['electron', 'better-sqlite3', 'path', 'fs', 'jszip', 'image-size'],
+              external: ['electron', 'better-sqlite3'],
+            },
+          },
+          resolve: {
+            alias: {
+              '@src': path.resolve(__dirname, 'src'),
+              '@electron': path.resolve(__dirname, 'electron'),
+              '@types': path.resolve(__dirname, 'src/types'),
             },
           },
         },
       },
       {
-        // Point d'entre pour le script de preload
-        entry: path.join(__dirname, 'electron/preload.ts'),
+        entry: 'electron/preload.ts',
         vite: {
           build: {
-            outDir: 'dist-electron',
+            outDir: 'dist-electron/preload',
+            lib: {
+              entry: 'electron/preload.ts',
+              formats: ['es'],
+              fileName: () => 'preload.mjs',
+            },
+            rollupOptions: {
+              external: ['electron'],
+            },
           },
         },
       },
     ]),
   ],
+  resolve: {
+    alias: {
+      '@src': path.resolve(__dirname, 'src'),
+      '@electron': path.resolve(__dirname, 'electron'),
+    },
+  },
   build: {
-    // Configuration pour le processus de rendu (votre application React)
-    outDir: 'dist',
+    outDir: 'dist/renderer',
     assetsDir: 'assets',
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return id.toString().split('node_modules/')[1].split('/')[0].toString();
+          }
+        },
+      },
+    },
   },
 });

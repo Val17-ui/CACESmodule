@@ -13,7 +13,7 @@ type InputProps = {
   className?: string;
   required?: boolean;
   disabled?: boolean;
-  min?: number;
+  min?: number | string;
   max?: number;
   icon?: ReactNode;
   iconPosition?: 'left' | 'right';

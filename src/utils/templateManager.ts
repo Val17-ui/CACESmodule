@@ -3,7 +3,7 @@ import { logger } from './logger';
 // import { getAdminSetting } from '../db'; // Supprimé
 import { UserPptxTemplate } from '../components/settings/UserPreferences'; // Importer le type
 // Le modèle est maintenant dans le dossier `public`, donc on peut y accéder avec un chemin absolu.
-const defaultTemplateUrlPath = '/templates/default.pptx';
+
 
 export const TOOL_DEFAULT_TEMPLATE_ID = 'tool_default_template'; // ID constant pour le modèle de l'outil
 
@@ -19,7 +19,7 @@ export const TOOL_DEFAULT_TEMPLATE_ID = 'tool_default_template'; // ID constant 
  * @returns Promise<File> Le fichier de modèle à utiliser.
  * @throws Error si aucun modèle ne peut être chargé (par exemple, si le fetch du modèle par défaut de l'outil échoue).
  */
-export async function getActivePptxTemplateFile(selectedTemplateId?: string): Promise<File> {
+export async function getActivePptxTemplateFile(selectedTemplateId?: string): Promise<File | string> {
   let templateToUse: UserPptxTemplate | null = null;
   let isToolDefault = false;
 
@@ -27,7 +27,7 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
     isToolDefault = true;
   } else if (selectedTemplateId) {
     // Un modèle spécifique (personnalisé) a été demandé pour cette génération
-    const userTemplates: UserPptxTemplate[] = await window.dbAPI.getAdminSetting('userPptxTemplates') || [];
+    const userTemplates: UserPptxTemplate[] = await window.dbAPI?.getAdminSetting('userPptxTemplates') || [];
     templateToUse = userTemplates.find(t => t.id === selectedTemplateId) || null;
     if (!templateToUse) {
       logger.warning(`[templateManager] Modèle sélectionné avec ID "${selectedTemplateId}" non trouvé. Tentative avec le modèle par défaut utilisateur.`);
@@ -38,9 +38,9 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
 
   // Si aucun modèle spécifique n'a été sélectionné pour cette génération OU si le modèle sélectionné n'a pas été trouvé
   if (!isToolDefault && !templateToUse) {
-    const userDefaultId: string | null = await window.dbAPI.getAdminSetting('userDefaultPptxTemplateId');
+    const userDefaultId: string | null = await window.dbAPI?.getAdminSetting('userDefaultPptxTemplateId');
     if (userDefaultId) {
-      const userTemplates: UserPptxTemplate[] = await window.dbAPI.getAdminSetting('userPptxTemplates') || [];
+      const userTemplates: UserPptxTemplate[] = await window.dbAPI?.getAdminSetting('userPptxTemplates') || [];
       templateToUse = userTemplates.find(t => t.id === userDefaultId) || null;
       if (!templateToUse) {
         logger.warning(`[templateManager] Modèle par défaut utilisateur (ID: "${userDefaultId}") non trouvé dans la liste des modèles. Utilisation du modèle par défaut de l'outil.`);
@@ -55,7 +55,7 @@ export async function getActivePptxTemplateFile(selectedTemplateId?: string): Pr
   if (isToolDefault || !templateToUse) {
     // Utiliser le modèle par défaut de l'outil
     logger.info("[templateManager] Utilisation du modèle PowerPoint par défaut de l'outil.");
-    return Promise.resolve('tool_default_template');
+    return Promise.resolve(TOOL_DEFAULT_TEMPLATE_ID);
   } else {
     // Utiliser le modèle personnalisé (templateToUse est non null ici)
     logger.info(`[templateManager] Utilisation du modèle PowerPoint personnalisé: "${templateToUse.name}" (ID: ${templateToUse.id})`);

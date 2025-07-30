@@ -1,12 +1,13 @@
 import React from 'react';
 import { CalendarClock, ChevronRight } from 'lucide-react'; // AlertTriangle supprimé
-import { Session } from '../../types';
+import { Session, Referential } from '../../types';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 
 type DashboardSessionsOverviewProps = {
   sessions: Session[];
   onPageChange: (page: string, sessionId?: number) => void;
+  referentiels: Referential[];
 };
 
 const formatDate = (dateString: string | undefined | null): string => {
@@ -46,7 +47,8 @@ const getStatusBadge = (status: Session['status']) => {
   }
 };
 
-const SessionRow: React.FC<{session: Session, onPageChange: (page: string, sessionId?: number) => void}> = ({ session, onPageChange }) => {
+const SessionRow: React.FC<{session: Session, onPageChange: (page: string, sessionId?: number) => void, referentiels: Referential[]}> = ({ session, onPageChange, referentiels }) => {
+  const referentielCode = session.referentielId ? referentiels.find(r => r.id === session.referentielId)?.code : 'N/A';
   const handleSessionClick = () => {
     if (session.id) {
       // Pour les sessions planifiées ou en cours, on va à la page de gestion de session.
@@ -75,7 +77,7 @@ const SessionRow: React.FC<{session: Session, onPageChange: (page: string, sessi
               </span>
               <span className="text-gris-moyen hidden sm:inline">•</span>
               <span className="text-sm text-texte-principal/80 block sm:inline mt-1 sm:mt-0">
-                {session.referentiel}
+                {referentielCode}
               </span>
               <span className="text-gris-moyen hidden sm:inline">•</span>
               <span className="text-sm text-texte-principal/80 block sm:inline mt-1 sm:mt-0">
@@ -94,7 +96,7 @@ const SessionRow: React.FC<{session: Session, onPageChange: (page: string, sessi
 };
 
 
-const DashboardSessionsOverview: React.FC<DashboardSessionsOverviewProps> = ({ sessions, onPageChange }) => {
+const DashboardSessionsOverview: React.FC<DashboardSessionsOverviewProps> = ({ sessions, onPageChange, referentiels }) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0); // Normaliser à minuit pour la comparaison de dates
 
@@ -116,13 +118,13 @@ const DashboardSessionsOverview: React.FC<DashboardSessionsOverviewProps> = ({ s
     .sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()) // Plus récentes en premier
     .slice(0, 5); // Limiter aux 5 plus récentes par exemple
 
-  const renderSection = (title: string, sessionList: Session[], emptyMessage: string) => (
+  const renderSection = (title: string, sessionList: Session[], emptyMessage: string, referentiels: Referential[]) => (
     <div className="mb-6">
       <h3 className="text-lg font-medium text-texte-principal mb-2">{title}</h3>
       {sessionList.length > 0 ? (
         <div className="divide-y divide-gris-moyen/50">
           {sessionList.map(session => (
-            <SessionRow key={session.id} session={session} onPageChange={onPageChange} />
+            <SessionRow key={session.id} session={session} onPageChange={onPageChange} referentiels={referentiels} />
           ))}
         </div>
       ) : (
@@ -133,9 +135,9 @@ const DashboardSessionsOverview: React.FC<DashboardSessionsOverviewProps> = ({ s
 
   return (
     <Card className="mb-6">
-      {renderSection("Sessions du jour", sessionsDuJour, "Aucune session prévue ou en cours pour aujourd'hui.")}
-      {renderSection("Prochaines sessions planifiées", sessionsPlanifiees, "Aucune autre session planifiée pour le moment.")}
-      {renderSection("Dernières sessions terminées", sessionsTerminees, "Aucune session terminée récemment.")}
+      {renderSection("Sessions du jour", sessionsDuJour, "Aucune session prévue ou en cours pour aujourd'hui.", referentiels)}
+      {renderSection("Prochaines sessions planifiées", sessionsPlanifiees, "Aucune autre session planifiée pour le moment.", referentiels)}
+      {renderSection("Dernières sessions terminées", sessionsTerminees, "Aucune session terminée récemment.", referentiels)}
 
       <div className="mt-4 pt-4 border-t border-gris-moyen/50">
         <button

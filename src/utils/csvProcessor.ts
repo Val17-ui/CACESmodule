@@ -143,7 +143,7 @@ export function exportQuestionsToCsv(questions: Question[]): string {
       correctAnswerLetter,
       q.isEliminatory ? 'TRUE' : 'FALSE',
       q.timeLimit !== undefined ? q.timeLimit.toString() : '',
-      `"${q.image?.replace(/"/g, '""') || ''}"`, // Assuming q.image is the imageName
+      typeof q.image === 'string' ? `"${(q.image as string).replace(/"/g, '""') || ''}"` : '', // Assuming q.image is the imageName
       q.type || 'multiple-choice'
     ];
     csvRows.push(row.join(','));

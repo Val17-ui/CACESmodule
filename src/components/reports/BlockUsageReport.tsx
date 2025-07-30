@@ -38,7 +38,7 @@ const BlockUsageReport: React.FC = () => {
       // La fonction calculateBlockUsage est appelée sans arguments initiaux pour charger toutes les données
       // ou avec les dates si elles sont définies.
       // Le filtrage par référentiel se fera côté client après récupération pour ce composant.
-      const data = await StorageManager.calculateBlockUsage(
+      const data = await window.dbAPI?.calculateBlockUsage(
         startDate || undefined,
         endDate || undefined
       );
@@ -82,7 +82,7 @@ const BlockUsageReport: React.FC = () => {
     // Si calculateBlockUsage ne gérait pas les dates, il faudrait filtrer ici aussi.
 
     if (sortKey) {
-      dataToFilter.sort((a, b) => {
+      dataToFilter.sort((a: BlockUsage, b: BlockUsage) => {
         const valA = a[sortKey];
         const valB = b[sortKey];
 

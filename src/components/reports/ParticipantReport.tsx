@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import { StorageManager } from '../../services/StorageManager';
-import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails } from '../../types';
+import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails, SessionResult } from '../../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 // import { saveAs } from 'file-saver'; // Retiré car pdf.save() le gère
@@ -81,7 +81,7 @@ const ParticipantReport = () => {
         StorageManager.getAllThemes(),
         StorageManager.getAllBlocs()
       ]);
-      setSessions(fetchedSessions.sort((a, b) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
+      setSessions(fetchedSessions.sort((a: Session, b: Session) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
       setAllReferentiels(fetchedReferentiels);
       setAllVotingDevices(fetchedVotingDevices);
       setAllThemesDb(fetchedThemes);
@@ -108,9 +108,8 @@ const ParticipantReport = () => {
     filteredSessionsByDate.forEach(session => {
       if (!session.id) return;
       session.participants?.forEach((p, index) => {
-        const participantKeyPart = p.assignedGlobalDeviceId ? p.assignedGlobalDeviceId.toString() : `paridx-${index}`;
         participations.push({
-          key: `sess-${session.id}-part-${p.id || index}`,
+          key: `sess-${session.id}-part-${index}`,
           participantRef: p,
           participantDisplayId: p.identificationCode || `Boîtier ${deviceMap.get(p.assignedGlobalDeviceId === null ? undefined : p.assignedGlobalDeviceId) || 'N/A'}`,
           sessionName: session.nomSession,
@@ -137,7 +136,7 @@ const ParticipantReport = () => {
     setDetailedParticipation(null);
 
     const targetSession = sessions.find(s => s.id === participation.originalSessionId);
-    const targetParticipantRef = targetSession?.participants.find(p => p.assignedGlobalDeviceId === participation.originalParticipantAssignedGlobalDeviceId);
+    const targetParticipantRef = targetSession?.participants?.find(p => p.assignedGlobalDeviceId === participation.originalParticipantAssignedGlobalDeviceId);
 
     if (!targetSession || !targetSession.id || !targetParticipantRef || targetParticipantRef.assignedGlobalDeviceId === undefined || !deviceMap.size || !allThemesDb.length || !allBlocsDb.length) {
       console.error("Données manquantes pour traiter la participation détaillée", {targetSession, targetParticipantRef, deviceMapSize: deviceMap.size, allThemesDbL: allThemesDb.length, allBlocsDbL: allBlocsDb.length});
@@ -155,7 +154,7 @@ const ParticipantReport = () => {
       const baseSessionQuestions = await StorageManager.getQuestionsForSessionBlocks(targetSession.selectedBlocIds || []);
 
       const enrichedSessionQuestions: EnrichedQuestionForParticipantReport[] = await Promise.all(
-        baseSessionQuestions.map(async (question, index) => {
+        baseSessionQuestions.map(async (question: QuestionWithId, index: number) => {
           try {
             let resolvedThemeName = 'Thème non spécifié';
             if (question.blocId) {
@@ -166,7 +165,7 @@ const ParticipantReport = () => {
               }
             }
             const participantResult = sessionResults.find(
-              sr => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
+              (sr: SessionResult) => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
             );
             return { ...question, resolvedThemeName, participantAnswer: participantResult?.answer, pointsObtainedForAnswer: participantResult?.pointsObtained, isCorrectAnswer: participantResult?.isCorrect };
           } catch (error) {
@@ -207,7 +206,7 @@ const ParticipantReport = () => {
 
     let fetchedTrainerName = 'N/A';
     if (trainerId) {
-      const trainer = await StorageManager.getTrainerById(trainerId);
+      const trainer = await window.dbAPI?.getTrainerById(trainerId);
       if (trainer) fetchedTrainerName = trainer.name;
     }
 

@@ -3,74 +3,8 @@ import * as fs from 'fs';
 import JSZip from "jszip";
 import sizeOf from 'image-size';
 import { ILogger } from './logger';
-import { Participant, VotingDevice } from '../../src/types/index';
+import { Participant, VotingDevice, Val17SessionInfo, ParticipantForGenerator, AdminPPTXSettings, Val17GenerationOptions, Val17Question, QuestionMapping } from '../../src/types/index';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-
-// Placeholder types until the actual GenerationOptions and ConfigOptions from your project are fully integrated.
-// These should ideally come from a './val17PptxTypes' import if that file is created with your type definitions.
-
-// Basic placeholder for session information
-export interface SessionInfo {
-  title: string;
-  date?: string;
-  // other relevant fields
-}
-
-// Participant interface alignée sur src/types/index.ts Participant
-// Renommée pour éviter confusion avec le type Participant de l'orchestrateur si jamais il y avait import direct.
-export interface ParticipantForGenerator {
-  idBoitier?: string;
-  nom: string;
-  prenom: string;
-  organization?: string;
-  identificationCode?: string;
-  // Les champs comme score, reussite ne sont pas nécessaires pour la génération de la diapo liste participants
-}
-
-export interface IntroSlideLayoutNames {
-  titleLayoutName?: string;
-  participantsLayoutName?: string;
-  instructionsLayoutName?: string;
-}
-
-export interface ConfigOptions {
-  pollStartMode?: string;
-  chartValueLabelFormat?: string;
-  answersBulletStyle?: string;
-  pollTimeLimit?: number;
-  pollCountdownStartMode?: string;
-  pollMultipleResponse?: string;
-  // Add other fields as necessary based on your original types.ts
-}
-
-export interface GenerationOptions {
-  fileName?: string;
-  defaultDuration?: number;
-  ombeaConfig?: ConfigOptions;
-  introSlideLayouts?: IntroSlideLayoutNames;
-  // Add other fields as necessary
-}
-
-// Interface Question for this generator, adapted from your description
-export interface Val17Question {
-  dbQuestionId: number; // ID de la question depuis la base de données
-  question: string;
-  options: string[];
-  correctAnswerIndex?: number; // 0-based index
-  imageUrl?: string;
-  points?: number; // Corresponds to timeLimit from StoredQuestion, used for duration
-  theme: string; // AJOUTÉ - pour stocker le thème original complet (ex: "securite_A")
-}
-
-// Structure pour le mappage retourné - Assurer l'export
-export interface QuestionMapping { // Déjà exporté, c'est bien.
-  dbQuestionId: number;
-  slideGuid: string | null;
-  orderInPptx: number;
-  theme: string;   // AJOUTÉ (sera le thème de base, ex: "securite")
-  blockId: string; // AJOUTÉ (sera l'ID du bloc, ex: "A")
-  // title?: string; // Optionnel pour debug, peut être retiré
-}
 
 interface TagInfo {
   tagNumber: number;
@@ -471,7 +405,7 @@ async function updateContentTypesForNewLayout(
 }
 
 function createIntroTitleSlideXml(
-  sessionInfo: SessionInfo,
+  sessionInfo: Val17SessionInfo,
   slideNumber: number,
   logger: ILogger
 ): string {
@@ -685,7 +619,7 @@ function createSlideXml(
   duration: number = 30,
   logger: ILogger,
   imageDimensions?: ImageDimensions,
-  ombeaConfig?: ConfigOptions
+  ombeaConfig?: AdminPPTXSettings
 ): string {
   logger.info(`[LOG][val17PptxGenerator] Début de createSlideXml pour la slide ${slideNumber}.`);
   const slideComment = `<!-- Slide ${slideNumber} -->`;
@@ -871,7 +805,7 @@ function createSlideTagFiles(
   options: string[],
   correctAnswerIndex: number | undefined,
   duration: number,
-  ombeaConfig: ConfigOptions | undefined,
+  ombeaConfig: AdminPPTXSettings | undefined,
   logger: ILogger,
   tagOffset: number = 0
 ): TagInfo[] {
@@ -1673,9 +1607,9 @@ export async function generatePPTXVal17(
   templateFile: any,
   questions: Val17Question[],
   participants: ParticipantForGenerator[],
-  options: GenerationOptions = {},
+  options: Val17GenerationOptions = {},
   logger: ILogger,
-  sessionInfo?: SessionInfo
+  sessionInfo?: Val17SessionInfo
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
   logger.debug(`[LOG][val17PptxGenerator] Final participants for generator: ${JSON.stringify(participants)}`);
   logger.debug(`  - Nombre de questions: ${questions.length}`);

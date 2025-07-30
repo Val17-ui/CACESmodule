@@ -5,7 +5,6 @@ import {
   CACESReferential,
   Session as DBSession,
   Participant as DBParticipantType,
-  SessionResult,
   Trainer,
   SessionQuestion,
   SessionBoitier,
@@ -19,7 +18,6 @@ import {
 import { StorageManager } from '../../services/StorageManager';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { getActivePptxTemplateFile } from '../../utils/templateManager';
-import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import { logger } from '../../utils/logger';
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
@@ -104,8 +102,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
           StorageManager.getAllDeviceKits(),
           StorageManager.getDefaultDeviceKit()
         ]);
-        setHardwareDevices(devices.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)));
-        setTrainersList(trainers.sort((a, b) => a.name.localeCompare(b.name)));
+        setHardwareDevices(devices.sort((a: VotingDevice, b: VotingDevice) => (a.id ?? 0) - (b.id ?? 0)));
+        setTrainersList(trainers.sort((a: Trainer, b: Trainer) => a.name.localeCompare(b.name)));
         setReferentielsData(refs);
         setAllThemesData(themes);
         setAllBlocsData(blocs);
@@ -235,7 +233,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
               const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
               sessionData.iterations.forEach(iter => {
-                  const participantIdsForIter = (iter.participants || []).map(p_iter => {
+                  const participantIdsForIter = (iter.participants || []).map((p_iter: DBParticipantType) => {
                       const matchingFormParticipant = formParticipants.find(fp => fp.identificationCode === p_iter.identificationCode);
                       return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null } : null;
                   }).filter((p): p is { id: string; assignedGlobalDeviceId: number | null } => p !== null);
@@ -728,14 +726,14 @@ const handleGenerateQuestionnaire = async () => {
         });
 
         const templateFile = await getActivePptxTemplateFile();
-        const { orsBlob, questionMappings } = await window.dbAPI.generatePresentation(
+        const { orsBlob, questionMappings } = await window.dbAPI?.generatePresentation(
           { name: `${sessionName} - ${iterationName}`, date: sessionDate, referential: refCodeToUse as CACESReferential },
           participantsForGenerator, allSelectedQuestionsForPptx, templateFile, {} as AdminPPTXSettings
         );
 
         if (orsBlob) {
           const fileName = `${sessionName.replace(/ /g, '_')}_${iterationName.replace(/ /g, '_')}.ors`;
-          const saveResult = await window.dbAPI.savePptxFile(orsBlob, fileName);
+          const saveResult = await window.dbAPI?.savePptxFile(orsBlob, fileName);
           if (saveResult.success) {
             const iterToUpdate = upToDateSessionData.iterations?.find(it => it.iteration_index === i) || { created_at: new Date().toISOString() };
             await StorageManager.addOrUpdateSessionIteration({
@@ -783,7 +781,7 @@ const handleGenerateQuestionnaire = async () => {
     }
     setImportSummary(`Lecture du fichier ORS pour l'itération ${iteration.name}...`);
     try {
-      const fileData = await window.dbAPI.openResultsFile();
+      const fileData = await window.dbAPI?.openResultsFile();
       if (fileData.canceled || !fileData.fileBuffer) {
         setImportSummary("Aucun fichier sélectionné ou lecture annulée.");
         return;
@@ -879,7 +877,7 @@ const handleGenerateQuestionnaire = async () => {
         const respondedGuidsForThisExpected = new Set(responsesForThisExpectedDevice.map((r: ExtractedResultFromXml) => r.questionSlideGuid));
         const missedGuidsForThisExpected: string[] = [];
         if (totalRelevantQuestionsCount > 0) {
-          relevantSessionQuestionGuids.forEach((guid: string) => {
+          relevantSessionQuestionGuids.forEach((guid: string, _key: string, _set: Set<string>) => {
             if (!respondedGuidsForThisExpected.has(guid)) {
               missedGuidsForThisExpected.push(guid);
             }
@@ -945,7 +943,7 @@ const handleGenerateQuestionnaire = async () => {
       );
       if (sessionResultsToSave.length > 0) {
         try {
-          const updatedSession = await window.dbAPI.sessionFinalizeImport(currentSessionDbId, sessionResultsToSave);
+          const updatedSession = await window.dbAPI?.sessionFinalizeImport(currentSessionDbId, sessionResultsToSave);
           if (updatedSession) {
             setEditingSessionData(updatedSession);
             setImportSummary(`${sessionResultsToSave.length} résultats importés et traités avec succès.`);
@@ -1093,7 +1091,7 @@ const handleGenerateQuestionnaire = async () => {
             if (reloadedSessionForUI && reloadedSessionForUI.iterations) {
                 setEditingSessionData(reloadedSessionForUI);
                 const allParticipantsFromIterations = reloadedSessionForUI.iterations.flatMap(iter => iter.participants || []);
-                const uniqueParticipants = Array.from(new Map(allParticipantsFromIterations.map(p => [p.identificationCode, p])).values());
+                const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode, p])).values());
                 const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
                     const visualDeviceId = index + 1;
                     const currentFormParticipantState = participants[index];
@@ -1145,16 +1143,7 @@ const handleGenerateQuestionnaire = async () => {
             const allResultsForScoreCalc = await StorageManager.getResultsForSession(currentSessionDbId);
             if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
                     const allParticipantsFromIterations = finalSessionDataForScores.iterations.flatMap(iter => iter.participants || []);
-                    const participantsWithScores = allParticipantsFromIterations.map((p: DBParticipantType) => {
-                    const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
-                    const participantSerialNumber = device ? device.serialNumber : p.identificationCode?.startsWith('NEW_') ? p.identificationCode.substring(4) : null;
-                    if (!participantSerialNumber) return { ...p, score: p.score || 0, reussite: p.reussite || false };
-                    const participantResults = allResultsForScoreCalc.filter((r: SessionResult) => r.participantIdBoitier === participantSerialNumber);
-                    const score = calculateParticipantScore(participantResults, questionsForScoreCalc);
-                    const themeScores = calculateThemeScores(participantResults, questionsForScoreCalc);
-                    const reussite = determineIndividualSuccess(score, themeScores);
-                    return { ...p, score, reussite };
-                });
+                    
                 const anomaliesAuditData = {
                   expectedIssues: expectedResolutions,
                   unknownDevices: unknownResolutions,
@@ -1178,7 +1167,7 @@ const handleGenerateQuestionnaire = async () => {
                      if (finalUpdatedSessionWithScores && finalUpdatedSessionWithScores.iterations) {
                     setEditingSessionData(finalUpdatedSessionWithScores);
                         const allParticipantsFromIterations = finalUpdatedSessionWithScores.iterations.flatMap(iter => iter.participants || []);
-                        const uniqueParticipants = Array.from(new Map(allParticipantsFromIterations.map(p => [p.identificationCode, p])).values());
+                        const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode, p])).values());
                         const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
                         const visualDeviceId = index + 1;
                         const currentFormParticipantState = participants[index];

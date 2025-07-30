@@ -54,7 +54,7 @@ const CustomReport = () => {
         StorageManager.getAllReferentiels(),
       ]);
       setSessions(fetchedSessions);
-      setAllReferentielsDb(fetchedReferentiels.sort((a, b) => a.code.localeCompare(b.code)));
+      setAllReferentielsDb(fetchedReferentiels.sort((a: Referential, b: Referential) => a.code.localeCompare(b.code)));
     };
     loadData();
   }, []);

@@ -62,7 +62,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
     { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
     { id: 'trainers', label: 'Formateurs', icon: <Users2 size={20} /> },
     { id: 'backup', label: 'Sauvegarde & Restauration', icon: <Database size={20} /> },
-    { id: 'systemLog', label: 'Journal Système', icon: <LogIcon size={20} /> }, // Nouvel onglet Journal Système
+    
     { id: 'technical', label: 'Paramètres Techniques', icon: <Wrench size={20} /> },
   ];
 

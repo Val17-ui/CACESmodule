@@ -14,7 +14,7 @@ export interface Session {
   dateSession: string; // ISO string date
   referentielId?: number; // FK vers Referential.id - Remplacer l'ancien champ 'referentiel'
   participants?: Participant[]; // Utilise la nouvelle interface Participant ci-dessous
-  // selectionBlocs: SelectedBlock[]; // Remplacé par selectedBlocIds
+  sselectionBlocs?: { themeId: number; blocId: number }[]; // Remplacé par selectedBlocIds
   selectedBlocIds?: number[]; // Liste des IDs des blocs sélectionnés pour cette session
   donneesOrs?: ArrayBuffer | Buffer | null; // Stockage du fichier .ors généré
   orsFilePath?: string | Blob | ArrayBuffer | null; // Chemin d'accès au fichier .ors
@@ -121,13 +121,13 @@ export interface QuestionMapping {
   dbQuestionId: number;
   slideGuid: string | null;
   orderInPptx: number;
-  theme: string;   // AJOUTÉ - thème de base de la question (ex: "securite")
-  blockId: string; // AJOUTÉ - ID du bloc de la question (ex: "A")
+  theme: string;
+  blockId: string;
 }
 
 // Nouvelle interface Participant pour les listes dans une Session
 export interface Participant {
-  // idBoitier: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
+  idBoitier?: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
   nom: string;
   prenom: string;
   organization?: string;
@@ -171,18 +171,22 @@ export enum QuestionType {
   QCU = 'single-choice',
   TrueFalse = 'true-false'
 }
-
+export interface LogEntry {
+  level: 'info' | 'warn' | 'error' | 'success';
+  message: string;
+  details?: any;
+  timestamp?: string;
+}
 // Interface pour les questions telles qu'elles pourraient être définies initialement
 export interface Question {
-  id: string; // ID original de la question
+  id?: number; // Changed to optional number for DB ID
+  userQuestionId?: string; // New: User-defined ID for upserting
   text: string;
   type: QuestionType;
   options: string[];
   correctAnswer: string;
   timeLimit?: number;
   isEliminatory: boolean;
-  // referentiel: CACESReferential; // Remplacé par blocId
-  // theme: string; // Remplacé par blocId
   blocId?: number; // Clé étrangère vers la table Blocs
   image?: Blob;
   createdAt?: string;
@@ -190,7 +194,11 @@ export interface Question {
   lastUsedAt?: string;
   usageCount?: number;
   correctResponseRate?: number;
-  slideGuid?: string; // Ajout du SlideGUID
+  slideGuid?: string;
+  imageName?: string;
+  version?: number; // New: Version number for the question
+  theme?: string; // Added
+  referential?: string; // Added
 }
 
 // Nouvelles interfaces pour la structure dynamique
@@ -293,6 +301,57 @@ export const questionCategories: Record<QuestionCategory, string> = {
   eliminatory: 'Éliminatoire'
 };
 
+export interface AdminSettings {
+    id?: number;
+    key: string;
+    value: any;
+    createdAt?: string;
+    updatedAt?: string;
+  }
+
+  export interface AdminPPTXSettings {
+    defaultDuration?: number;
+    pollStartMode?: string;
+    chartValueLabelFormat?: string;
+    answersBulletStyle?: string;
+    pollTimeLimit?: number;
+    pollCountdownStartMode?: string;
+    pollMultipleResponse?: string;
+  }
+
+  export interface Val17Question {
+    dbQuestionId: number;
+    question: string;
+    options: string[];
+    correctAnswerIndex?: number;
+    imageUrl?: string;
+    points?: number;
+    theme: string;
+  }
+
+  export interface Val17GenerationOptions {
+    fileName?: string;
+    defaultDuration?: number;
+    ombeaConfig?: AdminPPTXSettings;
+    introSlideLayouts?: {
+      titleLayoutName?: string;
+      participantsLayoutName?: string;
+    };
+  }
+
+  export interface Val17SessionInfo {
+    title: string;
+    date?: string;
+  }
+
+  export interface ParticipantForGenerator {
+    idBoitier?: string;
+    nom: string;
+    prenom: string;
+    organization?: string;
+    identificationCode?: string;
+  }
+  
 export interface PPTXQuestion {
   question: string;
   correctAnswer: boolean;
@@ -314,6 +373,7 @@ export interface ThemeScoreDetails {
 // Déplacé depuis db.ts
 export interface QuestionWithId {
   id?: number;
+  userQuestionId?: string; // New: User-defined ID for upserting
   text: string;
   // type: 'multiple-choice' | 'true-false'; // Remplacé par QuestionType enum
   type: QuestionType;
@@ -329,8 +389,9 @@ export interface QuestionWithId {
   correctResponseRate?: number;
   slideGuid?: string;
   imageName?: string;
-  version_questionnaire?: number;
-  updated_at?: string;
+  version?: number; // New: Version number for the question
+  theme?: string; // Added
+  referential?: string; // Added
 }
 
 // Déplacé depuis db.ts
@@ -381,4 +442,11 @@ export interface ParticipantAssignment {
     participant_id: number;
     voting_device_id: number;
     kit_id: number;
+}
+
+export interface BlockUsage {
+  referentiel: string;
+  theme: string;
+  blockId: string;
+  usageCount: number;
 }

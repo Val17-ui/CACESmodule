@@ -3,7 +3,7 @@ import Card from '../ui/Card';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
-import { Save, UploadCloud, Trash2, Star, FileText, CheckCircle } from 'lucide-react'; // Ajout des icônes
+import { Save, Trash2, Star, FileText, CheckCircle } from 'lucide-react'; // Ajout des icônes
 import { StorageManager } from '../../services/StorageManager';
 
 // Définition des types pour les préférences existantes

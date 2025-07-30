@@ -4,11 +4,9 @@ import DashboardCards from '../components/dashboard/DashboardCards';
 import DashboardSessionsOverview from '../components/dashboard/DashboardSessionsOverview';
 import AlertsNotifications from '../components/dashboard/AlertsNotifications'; // Ajout de l'import
 // import QuickActions from '../components/dashboard/QuickActions'; // Supprimé
-import Button from '../components/ui/Button';
-import { Plus } from 'lucide-react';
 // import { mockSessions } from '../data/mockData'; // Plus besoin des mocks ici directement
 // import { getAllSessions } from '../db'; // Supprimé
-import { Session } from '../types';
+import { Session, Referential } from '../types';
 
 type DashboardProps = {
   activePage: string;
@@ -18,37 +16,32 @@ type DashboardProps = {
 const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [referentiels, setReferentiels] = useState<Referential[]>([]);
 
   useEffect(() => {
-    const fetchSessions = async () => {
+    const fetchSessionsAndReferentiels = async () => {
       setLoading(true);
       try {
-        if (window.dbAPI && typeof window.dbAPI.getAllSessions === 'function') {
-          const allSessions = await window.dbAPI.getAllSessions();
+        if (window.dbAPI?.getAllSessions && window.dbAPI?.getAllReferentiels) {
+          const [allSessions, allReferentiels] = await Promise.all([
+            window.dbAPI.getAllSessions(),
+            window.dbAPI.getAllReferentiels(),
+          ]);
           setSessions(allSessions);
+          setReferentiels(allReferentiels);
         } else {
-          console.error("[Dashboard Page] dbAPI.getAllSessions is not available on window object.");
-          // Gérer l'erreur, par exemple afficher un message à l'utilisateur
+          console.error("[Dashboard Page] dbAPI.getAllSessions or getAllReferentiels is not available on window object.");
         }
       } catch (error) {
-        console.error("Erreur lors de la récupération des sessions via IPC:", error);
-        // Gérer l'erreur, par exemple afficher un message à l'utilisateur
+        console.error("Erreur lors de la récupération des données via IPC:", error);
       }
       setLoading(false);
     };
 
-    fetchSessions();
+    fetchSessionsAndReferentiels();
   }, []);
 
-  const headerActions = (
-    <Button 
-      variant="primary"
-      icon={<Plus size={16} />}
-      onClick={() => onPageChange('sessions')} // Reste pour créer une nouvelle session
-    >
-      Nouvelle session
-    </Button>
-  );
+  
 
   // TODO: Trier et filtrer les sessions pour UpcomingSessions
   // Pour l'instant, passons toutes les sessions, UpcomingSessions devra filtrer
@@ -79,7 +72,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
       <DashboardCards sessions={sessions} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-2">
-          <DashboardSessionsOverview sessions={sessions} onPageChange={onPageChange} />
+          <DashboardSessionsOverview sessions={sessions} onPageChange={onPageChange} referentiels={referentiels} />
         </div>
         <div className="lg:col-span-1">
           <AlertsNotifications />

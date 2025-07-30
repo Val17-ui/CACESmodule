@@ -101,7 +101,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           if (questionIds.length > 0) {
             const baseQuestions = await StorageManager.getQuestionsByIds(questionIds);
             const enrichedQuestions = await Promise.all(
-              baseQuestions.map(async (question) => {
+              baseQuestions.map(async (question: QuestionWithId) => {
                 let resolvedThemeName = 'Thème non spécifié';
                 if (question.blocId) {
                   const bloc = allBlocsDb.find(b => b.id === question.blocId); // Use preloaded allBlocsDb

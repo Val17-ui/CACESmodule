@@ -1,81 +1,74 @@
-import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { app } from 'electron';
 import type {
     QuestionWithId, Session, SessionResult, Trainer,
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
     VotingDevice, DeviceKit, DeviceKitAssignment,
     SessionIteration, Participant, ParticipantAssignment
-  } from '../src/types/index';
+  } from '@src/types/index';
 import { getLogger, ILogger } from './utils/logger';
+import type { Database } from 'better-sqlite3';
+
+let _db: Database;
+let _logger: ILogger;
 
 // Déterminer le chemin de la base de données de manière plus robuste
 const appName = 'easycertif'; // Nom de votre application
-let userDataPath;
-if (process.env.APPDATA) { // Windows
-  userDataPath = process.env.APPDATA;
-} else if (process.platform === 'darwin') { // macOS
-  userDataPath = path.join(process.env.HOME || '', 'Library', 'Application Support');
-} else { // Linux et autres
-  userDataPath = path.join(process.env.HOME || '', '.config');
-}
-const dbDir = path.join(userDataPath, appName, 'db_data');
+const dbDir = path.join(app.getPath('userData'), appName, 'db_data');
+const dbPath = process.env.NODE_ENV === 'development'
+  ? path.join(process.cwd(), 'src/db_data/database.sqlite3')
+  : path.join(dbDir, 'database.sqlite3');
 
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-const dbPath = path.join(dbDir, 'database.sqlite3');
-
-let db: import('better-sqlite3').Database;
-let _logger: ILogger;
-
-function initializeDatabase(loggerInstance: ILogger) {
+async function initializeDatabase(loggerInstance: ILogger) {
   _logger = loggerInstance;
-  if (db) {
-    _logger.debug('[DB SETUP] Database already initialized.');
+  if (_db) {
+    _logger?.debug('[DB SETUP] Database already initialized.');
     return;
   }
-  _logger.debug('[DB SETUP] Initializing database...');
-  db = new Database(dbPath);
-  _logger.debug(`[DB SETUP] SQLite database connection established.`);
-
+  _logger?.debug('[DB SETUP] Initializing database...');
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) {
+    await fs.promises.mkdir(dbDir, { recursive: true });
+  }
+  const BetterSqlite3Module = (await import('better-sqlite3')).default;
+  _db = new BetterSqlite3Module(dbPath);
+  _logger?.debug(`[DB SETUP] SQLite database connection established.`);
   // Activer les clés étrangères
   try {
     getDb().pragma('foreign_keys = ON');
-    _logger.debug("[DB SETUP] Foreign key support enabled.");
+    _logger?.debug("[DB SETUP] Foreign key support enabled.");
   } catch (error) {
-    _logger.debug(`[DB SETUP] Failed to enable foreign keys: ${error}`);
+    _logger?.error(`[DB SETUP] Failed to enable foreign keys: ${String(error)}`);
   }
 
   // Créer le schéma
   try {
     createSchema();
   } catch (error) {
-    _logger.debug(`[DB SETUP] FATAL: Failed to create/verify database schema. Application might not work correctly. ${error}`);
+    _logger?.debug(`[DB SETUP] FATAL: Failed to create/verify database schema. Application might not work correctly. ${error}`);
     // Envisager de quitter l'application si le schéma est critique et ne peut être créé
     // process.exit(1);
   }
 
   // Create or update the global kit
-  createOrUpdateGlobalKit().catch(err => {
-    _logger.error(`[DB SETUP] Failed to create/update global kit: ${err}`);
+  await createOrUpdateGlobalKit().catch(err => {
+    _logger?.error(`[DB SETUP] Failed to create/update global kit: ${err}`);
   });
 
   // Archive old sessions
-  archiveOldSessions().catch(err => {
-    _logger.error(`[DB SETUP] Failed to archive old sessions: ${err}`);
+  await archiveOldSessions().catch(err => {
+    _logger?.error(`[DB SETUP] Failed to archive old sessions: ${err}`);
   });
 
-  _logger.debug("[DB SETUP] SQLite database module loaded and initialized.");
+  _logger?.debug("[DB SETUP] SQLite database module loaded and initialized.");
 }
 
-
-// Schéma de la base de données
-const getDb = () => {
-    if (!db) {
+const getDb = (): Database => {
+    if (!_db) {
         throw new Error("Database not initialized. Please call initializeDatabase first.");
     }
-    return db;
+    return _db;
 };
 
 const archiveOldSessions = async (): Promise<void> => {
@@ -93,14 +86,14 @@ const archiveOldSessions = async (): Promise<void> => {
       `);
       stmt.run(new Date().toISOString(), sevenDaysAgo.toISOString());
     } catch (error) {
-      _logger.debug(`[DB Sessions] Error archiving old sessions: ${error}`);
+      _logger?.debug(`[DB Sessions] Error archiving old sessions: ${error}`);
       throw error;
     }
   });
 };
 
 const createSchema = () => {
-  _logger.debug("[DB SCHEMA] Attempting to create/verify schema...");
+  _logger?.debug("[DB SCHEMA] Attempting to create/verify schema...");
   const DDL_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS referentiels (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,6 +121,7 @@ const createSchema = () => {
 
     `CREATE TABLE IF NOT EXISTS questions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userQuestionId TEXT UNIQUE, /* New column for user-defined ID */
       blocId INTEGER,
       text TEXT NOT NULL,
       type TEXT NOT NULL,
@@ -139,11 +133,12 @@ const createSchema = () => {
       correctResponseRate REAL DEFAULT 0,
       slideGuid TEXT,
       options TEXT, /* JSON array of strings */
-      version_questionnaire INTEGER,
+      version INTEGER, /* New column for version */
       updated_at TEXT,
       FOREIGN KEY (blocId) REFERENCES blocs(id) ON DELETE SET NULL
     );`,
     `CREATE INDEX IF NOT EXISTS idx_questions_blocId ON questions(blocId);`,
+    `CREATE INDEX IF NOT EXISTS idx_questions_userQuestionId ON questions(userQuestionId);`,
 
     `CREATE TABLE IF NOT EXISTS trainers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -297,7 +292,7 @@ const createSchema = () => {
       try {
         getDb().prepare(stmt).run();
       } catch (error) {
-        _logger.debug(`[DB SCHEMA] Failed to execute DDL: ${stmt.substring(0,60)}... ${error}`);
+        _logger?.debug(`[DB SCHEMA] Failed to execute DDL: ${stmt.substring(0,60)}... ${error}`);
         // En cas d'erreur, la transaction sera automatiquement annulée par better-sqlite3
         throw error;
       }
@@ -306,7 +301,7 @@ const createSchema = () => {
 
   try {
     transaction();
-    _logger.debug("[DB SCHEMA] Database schema created/verified successfully.");
+    _logger?.debug("[DB SCHEMA] Database schema created/verified successfully.");
 
     // --- Migrations for 'sessions' table ---
     const db = getDb();
@@ -321,11 +316,11 @@ const createSchema = () => {
 
         if (hasDonneesOrs && !hasOrsFilePath) {
             db.prepare("ALTER TABLE sessions RENAME COLUMN donneesOrs TO orsFilePath").run();
-            _logger.debug("[DB MIGRATION] Renamed column 'donneesOrs' to 'orsFilePath'.");
+            _logger?.debug("[DB MIGRATION] Renamed column 'donneesOrs' to 'orsFilePath'.");
         }
     } catch (error) {
-        // This might fail for other reasons, _logger.debug it but proceed.
-        _logger.debug(`[DB MIGRATION] Error during rename check/operation for 'donneesOrs': ${error}`);
+        // This might fail for other reasons, _logger?.debug it but proceed.
+        _logger?.debug(`[DB MIGRATION] Error during rename check/operation for 'donneesOrs': ${error}`);
     }
 
     // Migration step 2: Add new columns if they don't exist
@@ -345,16 +340,17 @@ const createSchema = () => {
         if (!existingColumns.includes(column.name)) {
             try {
                 db.prepare(`ALTER TABLE sessions ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger.debug(`[DB MIGRATION] Added '${column.name}' column to 'sessions' table.`);
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'sessions' table.`);
             } catch (error: any) {
                 // Catching errors here just in case, though the check should prevent duplicates.
-                _logger.debug(`[DB MIGRATION] Error adding '${column.name}' column: ${error}`);
+                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column: ${error}`);
             }
         }
     }
 
     // --- Migrations for 'questions' table ---
     const questionsColumnsToAdd = [
+        { name: 'userQuestionId', type: 'TEXT' },
         { name: 'version_questionnaire', type: 'INTEGER' },
         { name: 'updated_at', type: 'TEXT' }
     ];
@@ -365,9 +361,9 @@ const createSchema = () => {
         if (!existingQuestionsColumns.includes(column.name)) {
             try {
                 db.prepare(`ALTER TABLE questions ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger.debug(`[DB MIGRATION] Added '${column.name}' column to 'questions' table.`);
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'questions' table.`);
             } catch (error: any) {
-                _logger.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'questions': ${error}`);
+                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'questions': ${error}`);
             }
         }
     }
@@ -383,15 +379,15 @@ const createSchema = () => {
         if (!existingDeviceKitsColumns.includes(column.name)) {
             try {
                 db.prepare(`ALTER TABLE deviceKits ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger.debug(`[DB MIGRATION] Added '${column.name}' column to 'deviceKits' table.`);
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'deviceKits' table.`);
             } catch (error: any) {
-                _logger.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'deviceKits': ${error}`);
+                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'deviceKits': ${error}`);
             }
         }
     }
 
   } catch(error) {
-    _logger.debug(`[DB SCHEMA] Transaction failed during schema creation. No changes were applied. ${error}`);
+    _logger?.debug(`[DB SCHEMA] Transaction failed during schema creation. No changes were applied. ${error}`);
     throw error; // Renvoyer l'erreur pour indiquer l'échec de createSchema
   }
 };
@@ -435,7 +431,7 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
                 return result.lastInsertRowid as number;
             }
         } catch (error) {
-            _logger.debug(`[DB SessionIterations] Error in addOrUpdateSessionIteration: ${error}`);
+            _logger?.debug(`[DB SessionIterations] Error in addOrUpdateSessionIteration: ${error}`);
             throw error;
         }
     });
@@ -447,7 +443,7 @@ const getSessionIterationsBySessionId = async (sessionId: number): Promise<Sessi
             const stmt = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ?");
             return stmt.all(sessionId) as SessionIteration[];
         } catch (error) {
-            _logger.debug(`[DB SessionIterations] Error getting session iterations for session ${sessionId}: ${error}`);
+            _logger?.debug(`[DB SessionIterations] Error getting session iterations for session ${sessionId}: ${error}`);
             throw error;
         }
     });
@@ -465,7 +461,7 @@ const updateSessionIteration = async (id: number, updates: Partial<Omit<SessionI
             const result = stmt.run({ ...updates, id });
             return result.changes;
         } catch (error) {
-            _logger.debug(`[DB SessionIterations] Error updating session iteration ${id}: ${error}`);
+            _logger?.debug(`[DB SessionIterations] Error updating session iteration ${id}: ${error}`);
             throw error;
         }
     });
@@ -482,7 +478,7 @@ const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<num
             const result = stmt.run(participant);
             return result.lastInsertRowid as number;
         } catch (error) {
-            _logger.debug(`[DB Participants] Error adding participant: ${error}`);
+            _logger?.debug(`[DB Participants] Error adding participant: ${error}`);
             throw error;
         }
     });
@@ -499,7 +495,7 @@ const addParticipantAssignment = async (assignment: Omit<ParticipantAssignment, 
             const result = stmt.run(assignment);
             return result.lastInsertRowid as number;
         } catch (error) {
-            _logger.debug(`[DB ParticipantAssignments] Error adding participant assignment: ${error}`);
+            _logger?.debug(`[DB ParticipantAssignments] Error adding participant assignment: ${error}`);
             throw error;
         }
     });
@@ -511,7 +507,7 @@ const getParticipantAssignmentsByIterationId = async (iterationId: number): Prom
             const stmt = getDb().prepare("SELECT * FROM participant_assignments WHERE session_iteration_id = ?");
             return stmt.all(iterationId) as ParticipantAssignment[];
         } catch (error) {
-            _logger.debug(`[DB ParticipantAssignments] Error getting participant assignments for iteration ${iterationId}: ${error}`);
+            _logger?.debug(`[DB ParticipantAssignments] Error getting participant assignments for iteration ${iterationId}: ${error}`);
             throw error;
         }
     });
@@ -521,30 +517,27 @@ const getParticipantAssignmentsByIterationId = async (iterationId: number): Prom
 // This helps maintain an async API similar to Dexie, minimizing changes in consuming code.
 async function asyncDbRun<T>(fn: () => T): Promise<T> {
   try {
-    // For potentially long-running synchronous operations,
-    // consider setImmediate or process.nextTick to yield to the event loop,
-    // though better-sqlite3 operations are generally very fast.
-    // For now, a direct Promise.resolve/reject is fine.
-    const result = fn();
-    return Promise.resolve(result);
-  } catch (error) {
-    _logger.debug(`[ASYNC DB RUNNER] SQLite operation failed: ${error}`);
-    return Promise.reject(error);
+    return Promise.resolve(fn());
+  } catch (error: any) {
+    const errorMessage = error.code === 'SQLITE_CONSTRAINT'
+      ? `[ASYNC DB RUNNER] SQLite constraint violation: ${String(error)}`
+      : `[ASYNC DB RUNNER] SQLite operation failed: ${String(error)}`;
+    _logger?.error(errorMessage);
+    throw error;
   }
 }
 
-// --- CRUD Function Placeholders (to be implemented with SQLite _logger.debugic) ---
+// --- CRUD Function Placeholders (to be implemented with SQLite _logger?.debugic) ---
 
 // Questions
 
 // Helper pour transformer une ligne de DB en QuestionWithId (gère JSON et booléens)
-const rowToQuestion = (row: any): QuestionWithId => {
-  if (!row) return undefined as any; // Should not happen if called correctly
+const rowToQuestion = (row: any): QuestionWithId | undefined => {
+  if (!row) return undefined;
   return {
     ...row,
     options: row.options ? JSON.parse(row.options) : [],
     isEliminatory: row.isEliminatory === 1,
-    // createdAt devrait déjà être un string ISO, pas de transformation nécessaire a priori
   };
 };
 
@@ -555,6 +548,15 @@ const questionToRow = (question: Partial<Omit<QuestionWithId, 'id'> | QuestionWi
   }
   if (question.isEliminatory !== undefined) {
     rowData.isEliminatory = question.isEliminatory ? 1 : 0;
+  }
+  if (question.userQuestionId !== undefined) {
+    rowData.userQuestionId = question.userQuestionId;
+  }
+  if (question.version !== undefined) {
+    rowData.version = question.version;
+  }
+  if (question.updatedAt !== undefined) {
+    rowData.updated_at = question.updatedAt;
   }
   // Supprimer 'id' si présent et qu'on ne veut pas l'utiliser dans un SET par exemple
   if ('id' in rowData && !Object.prototype.hasOwnProperty.call(question, 'id')) {
@@ -567,7 +569,7 @@ const questionToRow = (question: Partial<Omit<QuestionWithId, 'id'> | QuestionWi
 const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version_questionnaire, updated_at } = question;
+      const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updatedAt } = question;
       const stmt = getDb().prepare(`
         INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version_questionnaire, updated_at)
         VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version_questionnaire, @updated_at)
@@ -580,13 +582,55 @@ const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number
         correctResponseRate: correctResponseRate ?? 0,
         slideGuid,
         options, // Sera stringifié par questionToRow
-        version_questionnaire,
-        updated_at
+        version,
+        updatedAt
       });
       const result = stmt.run(rowData);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB Questions] Error adding question: ${error}`);
+      _logger?.debug(`[DB Questions] Error adding question: ${error}`);
+      throw error;
+    }
+  });
+};
+
+const upsertQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number | undefined> => {
+  return asyncDbRun(() => {
+    try {
+      const { userQuestionId, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updatedAt } = question;
+      const finalUpdatedAt = updatedAt || new Date().toISOString();
+      const stmt = getDb().prepare(`
+        INSERT INTO questions (userQuestionId, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updated_at)
+        VALUES (@userQuestionId, @blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version, @updated_at)
+        ON CONFLICT(userQuestionId) DO UPDATE SET
+          blocId = excluded.blocId,
+          text = excluded.text,
+          type = excluded.type,
+          correctAnswer = excluded.correctAnswer,
+          timeLimit = excluded.timeLimit,
+          isEliminatory = excluded.isEliminatory,
+          usageCount = excluded.usageCount,
+          correctResponseRate = excluded.correctResponseRate,
+          slideGuid = excluded.slideGuid,
+          options = excluded.options,
+          version = excluded.version,
+          updated_at = excluded.updated_at
+      `);
+      const rowData = questionToRow({
+        userQuestionId, blocId, text, type, correctAnswer, timeLimit,
+        isEliminatory, 
+        createdAt,
+        usageCount: usageCount ?? 0,
+        correctResponseRate: correctResponseRate ?? 0,
+        slideGuid,
+        options, 
+        version,
+        updatedAt: finalUpdatedAt
+      });
+      const result = stmt.run(rowData);
+      return result.lastInsertRowid as number;
+    } catch (error) {
+      _logger?.debug(`[DB Questions] Error upserting question: ${error}`);
       throw error;
     }
   });
@@ -597,9 +641,11 @@ const getAllQuestions = async (): Promise<QuestionWithId[]> => {
     try {
       const stmt = getDb().prepare("SELECT * FROM questions");
       const rows = stmt.all() as any[];
-      return rows.map(rowToQuestion);
+      return rows
+        .map(rowToQuestion)
+        .filter((item): item is QuestionWithId => item !== undefined);
     } catch (error) {
-      _logger.debug(`[DB Questions] Error getting all questions: ${error}`);
+      _logger?.debug(`[DB Questions] Error getting all questions: ${error}`);
       throw error;
     }
   });
@@ -612,7 +658,7 @@ const getQuestionById = async (id: number): Promise<QuestionWithId | undefined> 
       const row = stmt.get(id) as any;
       return row ? rowToQuestion(row) : undefined;
     } catch (error) {
-      _logger.debug(`[DB Questions] Error getting question by id ${id}: ${error}`);
+      _logger?.debug(`[DB Questions] Error getting question by id ${id}: ${error}`);
       throw error;
     }
   });
@@ -622,17 +668,18 @@ const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
   if (!ids || ids.length === 0) return Promise.resolve([]);
   return asyncDbRun(() => {
     try {
-      // SQLite ne supporte pas directement un array dans `IN (?)`. Il faut générer les placeholders.
       const placeholders = ids.map(() => '?').join(',');
       const stmt = getDb().prepare(`SELECT * FROM questions WHERE id IN (${placeholders})`);
       const rows = stmt.all(...ids) as any[];
-      return rows.map(rowToQuestion);
+      return rows
+        .map(rowToQuestion)
+        .filter((item): item is QuestionWithId => item !== undefined);
     } catch (error) {
-      _logger.debug(`[DB Questions] Error getting questions by ids: ${error}`);
+      _logger?.debug(`[DB Questions] Error getting questions by ids: ${error}`);
       throw error;
     }
   });
-}
+};
 
 const updateQuestion = async (id: number, updates: Partial<Omit<QuestionWithId, 'id'>>): Promise<number | undefined> => {
   return asyncDbRun(() => {
@@ -647,7 +694,7 @@ const updateQuestion = async (id: number, updates: Partial<Omit<QuestionWithId, 
       const result = stmt.run({ ...rowUpdates, id });
       return result.changes;
     } catch (error) {
-      _logger.debug(`[DB Questions] Error updating question ${id}: ${error}`);
+      _logger?.debug(`[DB Questions] Error updating question ${id}: ${error}`);
       throw error;
     }
   });
@@ -659,7 +706,7 @@ const deleteQuestion = async (id: number): Promise<void> => {
       const stmt = getDb().prepare("DELETE FROM questions WHERE id = ?");
       stmt.run(id);
     } catch (error) {
-      _logger.debug(`[DB Questions] Error deleting question ${id}: ${error}`);
+      _logger?.debug(`[DB Questions] Error deleting question ${id}: ${error}`);
       throw error;
     }
   });
@@ -670,44 +717,47 @@ const getQuestionsByBlocId = async (blocId: number): Promise<QuestionWithId[]> =
     try {
       const stmt = getDb().prepare("SELECT * FROM questions WHERE blocId = ?");
       const rows = stmt.all(blocId) as any[];
-      return rows.map(rowToQuestion);
+      return rows
+        .map(rowToQuestion)
+        .filter((item): item is QuestionWithId => item !== undefined);
     } catch (error) {
-      _logger.debug(`[DB Questions] Error getting questions by blocId ${blocId}: ${error}`);
+      _logger?.debug(`[DB Questions] Error getting questions by blocId ${blocId}: ${error}`);
       throw error;
     }
   });
-}
+};
+
 
 const getQuestionsForSessionBlocks = async (selectedBlocIds?: number[]): Promise<QuestionWithId[]> => {
   if (!selectedBlocIds || selectedBlocIds.length === 0) {
-    // Si aucun blocId n'est sélectionné, doit-on retourner toutes les questions SANS blocId (orphelines)
-    // ou toutes les questions de l'application ? La _logger.debugique Dexie d'origine serait à vérifier.
-    // Pour l'instant, si selectedBlocIds est vide ou non fourni, on retourne les questions sans blocId.
-    // Si une _logger.debugique différente est attendue, il faudra ajuster.
     return asyncDbRun(() => {
       try {
         const stmt = getDb().prepare("SELECT * FROM questions WHERE blocId IS NULL");
         const rows = stmt.all() as any[];
-        return rows.map(rowToQuestion);
+        return rows
+          .map(rowToQuestion)
+          .filter((item): item is QuestionWithId => item !== undefined);
       } catch (error) {
-        _logger.debug(`[DB Questions] Error getting questions with no blocId: ${error}`);
+        _logger?.debug(`[DB Questions] Error getting questions with no blocId: ${error}`);
         throw error;
       }
     });
   }
-
+  // Ajoute la logique pour selectedBlocIds non vide si nécessaire
   return asyncDbRun(() => {
     try {
       const placeholders = selectedBlocIds.map(() => '?').join(',');
       const stmt = getDb().prepare(`SELECT * FROM questions WHERE blocId IN (${placeholders})`);
       const rows = stmt.all(...selectedBlocIds) as any[];
-      return rows.map(rowToQuestion);
+      return rows
+        .map(rowToQuestion)
+        .filter((item): item is QuestionWithId => item !== undefined);
     } catch (error) {
-      _logger.debug(`[DB Questions] Error getting questions for session blocks: ${error}`);
+      _logger?.debug(`[DB Questions] Error getting questions for session blocks: ${error}`);
       throw error;
     }
   });
-}
+};
 
 // AdminSettings
 
@@ -729,7 +779,7 @@ const getAdminSetting = async (key: string): Promise<any> => {
       const row = stmt.get(key) as { value: string } | undefined;
       return row ? parseAdminSettingValue(row.value) : undefined;
     } catch (error) {
-      _logger.debug(`[DB AdminSettings] Error getting setting ${key}: ${error}`);
+      _logger?.debug(`[DB AdminSettings] Error getting setting ${key}: ${error}`);
       throw error;
     }
   });
@@ -748,7 +798,7 @@ const setAdminSetting = async (key: string, value: any): Promise<void> => {
       const valueToStore = typeof value === 'string' ? value : (value === null || value === undefined ? null : JSON.stringify(value));
       stmt.run({ key, value: valueToStore });
     } catch (error) {
-      _logger.debug(`[DB AdminSettings] Error setting setting ${key}: ${error}`);
+      _logger?.debug(`[DB AdminSettings] Error setting setting ${key}: ${error}`);
       throw error;
     }
   });
@@ -764,22 +814,20 @@ const getAllAdminSettings = async (): Promise<{ key: string; value: any }[]> => 
         value: parseAdminSettingValue(row.value),
       }));
     } catch (error) {
-      _logger.debug(`[DB AdminSettings] Error getting all settings: ${error}`);
+      _logger?.debug(`[DB AdminSettings] Error getting all settings: ${error}`);
       throw error;
     }
   });
 };
 
-const getGlobalPptxTemplate = async (): Promise<File | null> => {
-  _logger.debug("[DB AdminSettings] getGlobalPptxTemplate: Returning null. Logic to fetch/construct File object from path/blob is outside direct DB scope for now.");
-  // Potentiellement:
-  // const filePath = await getAdminSetting('globalPptxTemplatePath');
-  // if (filePath && typeof filePath === 'string') {
-  //   // Logique pour créer un objet File ou retourner le chemin
-  //   // Pour l'instant, on ne fait rien de plus.
-  // }
-  return Promise.resolve(null);
-};
+async function getGlobalPptxTemplate(): Promise<string | null> {
+  _logger?.debug('[DB AdminSettings] Fetching global PPTX template path.');
+  const filePath = await getAdminSetting('globalPptxTemplatePath');
+  if (filePath && typeof filePath === 'string' && fs.existsSync(filePath)) {
+    return filePath;
+  }
+  return null;
+}
 
 // Sessions
 
@@ -796,7 +844,7 @@ const rowToSession = (row: any): Session => {
 		try {
 		  session[field] = JSON.parse(session[field]);
 		} catch (e) {
-		  _logger.debug(`[DB Sessions] Failed to parse JSON field ${field} for session id ${row.id}: ${e}`);
+		  _logger?.debug(`[DB Sessions] Failed to parse JSON field ${field} for session id ${row.id}: ${e}`);
 		  // Conserver la chaîne brute ou mettre à null/undefined selon la politique de gestion d'erreur
 		  // Pour l'instant, on garde la chaîne brute si le parsing échoue, mais idéalement, ça ne devrait pas arriver.
 		}
@@ -827,7 +875,7 @@ const rowToSession = (row: any): Session => {
   };
 
 const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
-  _logger.info(`[DB] Adding new session: ${JSON.stringify(session)}`);
+  _logger?.info(`[DB] Adding new session: ${JSON.stringify(session)}`);
   return asyncDbRun(() => {
     try {
       const stmt = getDb().prepare(`
@@ -845,10 +893,10 @@ const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefi
       `);
       const rowData = sessionToRow(session);
       const result = stmt.run(rowData);
-      _logger.info(`[DB] New session added with ID: ${result.lastInsertRowid}`);
+      _logger?.info(`[DB] New session added with ID: ${result.lastInsertRowid}`);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB Sessions] Error adding session: ${error}`);
+      _logger?.debug(`[DB Sessions] Error adding session: ${error}`);
       throw error;
     }
   });
@@ -861,7 +909,7 @@ const getAllSessions = async (): Promise<Session[]> => {
       const rows = stmt.all() as any[];
       return rows.map(rowToSession);
     } catch (error) {
-      _logger.debug(`[DB Sessions] Error getting all sessions: ${error}`);
+      _logger?.debug(`[DB Sessions] Error getting all sessions: ${error}`);
       throw error;
     }
   });
@@ -872,7 +920,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
     try {
       const stmt = getDb().prepare("SELECT * FROM sessions WHERE id = ?");
       const row = stmt.get(id) as any;
-      _logger.debug(`[DB Sessions] getSessionById: Raw row for session ${id}: ${JSON.stringify(row)}`);
+      _logger?.debug(`[DB Sessions] getSessionById: Raw row for session ${id}: ${JSON.stringify(row)}`);
       if (!row) return undefined;
 
       const session = rowToSession(row);
@@ -887,14 +935,14 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 
       return session;
     } catch (error) {
-      _logger.debug(`[DB Sessions] Error getting session by id ${id}: ${error}`);
+      _logger?.debug(`[DB Sessions] Error getting session by id ${id}: ${error}`);
       throw error;
     }
   });
 };
 
 const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>): Promise<number | undefined> => {
-  _logger.info(`[DB] Updating session ${id} with: ${JSON.stringify(updates)}`);
+  _logger?.info(`[DB] Updating session ${id} with: ${JSON.stringify(updates)}`);
   return asyncDbRun(() => {
     try {
       // Ensure 'iteration_count' is included if it's in the updates
@@ -914,10 +962,10 @@ const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>):
       const stmt = getDb().prepare(`UPDATE sessions SET ${setClause} WHERE id = @id`);
 
       const result = stmt.run({ ...rowUpdates, id });
-      _logger.info(`[DB] Session ${id} update result: ${JSON.stringify(result)}`);
+      _logger?.info(`[DB] Session ${id} update result: ${JSON.stringify(result)}`);
       return result.changes;
     } catch (error) {
-      _logger.debug(`[DB Sessions] Error updating session ${id}: ${error}`);
+      _logger?.debug(`[DB Sessions] Error updating session ${id}: ${error}`);
       throw error;
     }
   });
@@ -931,7 +979,7 @@ const deleteSession = async (id: number): Promise<void> => {
       const stmt = getDb().prepare("DELETE FROM sessions WHERE id = ?");
       stmt.run(id);
     } catch (error) {
-      _logger.debug(`[DB Sessions] Error deleting session ${id}: ${error}`);
+      _logger?.debug(`[DB Sessions] Error deleting session ${id}: ${error}`);
       throw error;
     }
   });
@@ -982,7 +1030,7 @@ const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promise<numb
       const res = stmt.run(rowData);
       return res.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB SessionResults] Error adding session result: ${error}`);
+      _logger?.debug(`[DB SessionResults] Error adding session result: ${error}`);
       throw error;
     }
   });
@@ -1005,10 +1053,10 @@ const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Prom
           const res = insertStmt.run(rowData);
           insertedIds.push(res.lastInsertRowid as number);
         } catch (error) {
-          _logger.debug(`[DB SessionResults] Error in bulk adding session result for item: ${result}, ${error}`);
+          _logger?.debug(`[DB SessionResults] Error in bulk adding session result for item: ${result}, ${error}`);
           // En cas d'erreur sur un item, on peut choisir d'arrêter ou de continuer.
           // Ici, la transaction sera annulée par défaut si une erreur est levée.
-          // Si on veut continuer et juste _logger.debugger l'erreur, il faudrait un try/catch interne.
+          // Si on veut continuer et juste _logger?.debugger l'erreur, il faudrait un try/catch interne.
           // Pour l'instant, on laisse la transaction échouer en cas d'erreur.
           insertedIds.push(undefined); // Marquer l'échec pour cet item
           throw error; // Important pour annuler la transaction
@@ -1020,14 +1068,14 @@ const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Prom
       transaction(results);
       return insertedIds;
     } catch (error) {
-      // L'erreur a déjà été _logger.debuggée dans la transaction ou par asyncDbRun
+      // L'erreur a déjà été _logger?.debuggée dans la transaction ou par asyncDbRun
       // Retourner un tableau avec des undefined pour les échecs si la transaction a été partiellement tentée
       // ou simplement undefined si la transaction entière a échoué tôt.
       // Étant donné que la transaction s'annule, il est plus probable que rien ne soit réellement inséré.
       // Dexie retournait `Promise<Key[] | undefined>`, donc `undefined` est une option.
       // Pour être plus précis, on pourrait retourner un tableau de la même longueur que `results`
       // avec `undefined` pour chaque item si la transaction échoue.
-      _logger.debug(`[DB SessionResults] Bulk add transaction failed.`);
+      _logger?.debug(`[DB SessionResults] Bulk add transaction failed.`);
       return undefined;
     }
   });
@@ -1040,7 +1088,7 @@ const getAllResults = async (): Promise<SessionResult[]> => {
       const rows = stmt.all() as any[];
       return rows.map(rowToSessionResult);
     } catch (error) {
-      _logger.debug(`[DB SessionResults] Error getting all results: ${error}`);
+      _logger?.debug(`[DB SessionResults] Error getting all results: ${error}`);
       throw error;
     }
   });
@@ -1053,7 +1101,7 @@ const getResultsForSession = async (sessionId: number): Promise<SessionResult[]>
       const rows = stmt.all(sessionId) as any[];
       return rows.map(rowToSessionResult);
     } catch (error) {
-      _logger.debug(`[DB SessionResults] Error getting results for session ${sessionId}: ${error}`);
+      _logger?.debug(`[DB SessionResults] Error getting results for session ${sessionId}: ${error}`);
       throw error;
     }
   });
@@ -1066,7 +1114,7 @@ const getResultBySessionAndQuestion = async (sessionId: number, questionId: numb
       const row = stmt.get(sessionId, questionId, participantIdBoitier) as any;
       return row ? rowToSessionResult(row) : undefined;
     } catch (error) {
-      _logger.debug(`[DB SessionResults] Error getting result for session ${sessionId}, question ${questionId}, boitier ${participantIdBoitier}: ${error}`);
+      _logger?.debug(`[DB SessionResults] Error getting result for session ${sessionId}, question ${questionId}, boitier ${participantIdBoitier}: ${error}`);
       throw error;
     }
   });
@@ -1085,7 +1133,7 @@ const updateSessionResult = async (id: number, updates: Partial<Omit<SessionResu
       const result = stmt.run({ ...rowUpdates, id });
       return result.changes;
     } catch (error) {
-      _logger.debug(`[DB SessionResults] Error updating session result ${id}: ${error}`);
+      _logger?.debug(`[DB SessionResults] Error updating session result ${id}: ${error}`);
       throw error;
     }
   });
@@ -1097,7 +1145,7 @@ const deleteResultsForSession = async (sessionId: number): Promise<void> => {
       const stmt = getDb().prepare("DELETE FROM sessionResults WHERE sessionId = ?");
       stmt.run(sessionId);
     } catch (error) {
-      _logger.debug(`[DB SessionResults] Error deleting results for session ${sessionId}: ${error}`);
+      _logger?.debug(`[DB SessionResults] Error deleting results for session ${sessionId}: ${error}`);
       throw error;
     }
   });
@@ -1112,7 +1160,7 @@ const deleteResultsForIteration = async (iterationId: number): Promise<void> => 
         stmt.run(iteration.session_id);
       }
     } catch (error) {
-      _logger.debug(`[DB SessionResults] Error deleting results for iteration ${iterationId}: ${error}`);
+      _logger?.debug(`[DB SessionResults] Error deleting results for iteration ${iterationId}: ${error}`);
       throw error;
     }
   });
@@ -1126,7 +1174,7 @@ const addVotingDevice = async (device: Omit<VotingDevice, 'id'>): Promise<number
       const result = stmt.run(device);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB VotingDevices] Error adding voting device: ${error}`);
+      _logger?.debug(`[DB VotingDevices] Error adding voting device: ${error}`);
       if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new Error(`Voting device with serial number ${device.serialNumber} already exists.`);
       }
@@ -1142,10 +1190,10 @@ const getAllVotingDevices = async (): Promise<VotingDevice[]> => {
     try {
       const stmt = getDb().prepare("SELECT * FROM votingDevices ORDER BY name ASC, serialNumber ASC");
       const devices = stmt.all() as VotingDevice[];
-      _logger.debug(`[DB VotingDevices] getAllVotingDevices returned: ${devices.length} devices`);
+      _logger?.debug(`[DB VotingDevices] getAllVotingDevices returned: ${devices.length} devices`);
       return devices;
     } catch (error) {
-      _logger.debug(`[DB VotingDevices] Error getting all voting devices: ${error}`);
+      _logger?.debug(`[DB VotingDevices] Error getting all voting devices: ${error}`);
       throw error;
     }
   });
@@ -1168,7 +1216,7 @@ const updateVotingDevice = async (id: number, updates: Partial<Omit<VotingDevice
       const result = stmt.run(params);
       return result.changes;
     } catch (error) {
-      _logger.debug(`[DB VotingDevices] Error updating voting device ${id}: ${error}`);
+      _logger?.debug(`[DB VotingDevices] Error updating voting device ${id}: ${error}`);
       if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && updates.serialNumber) {
         throw new Error(`Voting device with serial number ${updates.serialNumber} already exists.`);
       }
@@ -1184,7 +1232,7 @@ const deleteVotingDevice = async (id: number): Promise<void> => {
       const stmt = getDb().prepare("DELETE FROM votingDevices WHERE id = ?");
       stmt.run(id);
     } catch (error) {
-      _logger.debug(`[DB VotingDevices] Error deleting voting device ${id}: ${error}`);
+      _logger?.debug(`[DB VotingDevices] Error deleting voting device ${id}: ${error}`);
       throw error;
     }
   });
@@ -1207,7 +1255,7 @@ const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promis
         } catch (error) {
           // Normalement, INSERT OR IGNORE devrait prévenir les erreurs SQLITE_CONSTRAINT_UNIQUE.
           // Mais on garde un catch pour d'autres erreurs potentielles.
-          _logger.debug(`[DB VotingDevices] Error in bulk adding voting device for item: ${device}, ${error}`);
+          _logger?.debug(`[DB VotingDevices] Error in bulk adding voting device for item: ${device}, ${error}`);
           throw error; // Annule la transaction si une erreur inattendue survient.
         }
       }
@@ -1216,8 +1264,8 @@ const bulkAddVotingDevices = async (devices: Omit<VotingDevice, 'id'>[]): Promis
     try {
       transaction(devices);
     } catch (error) {
-      // L'erreur a déjà été _logger.debuggée.
-      _logger.debug(`[DB VotingDevices] Bulk add transaction failed overall.`);
+      // L'erreur a déjà été _logger?.debuggée.
+      _logger?.debug(`[DB VotingDevices] Bulk add transaction failed overall.`);
       // On ne retourne rien (void) comme spécifié, mais on propage l'erreur pour que l'appelant soit notifié.
       throw error;
     }
@@ -1238,7 +1286,7 @@ const addTrainer = async (trainer: Omit<Trainer, 'id'>): Promise<number | undefi
       const result = stmt.run({ ...trainer, isDefault });
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB Trainers] Error adding trainer: ${error}`);
+      _logger?.debug(`[DB Trainers] Error adding trainer: ${error}`);
       throw error;
     }
   });
@@ -1249,10 +1297,10 @@ const getAllTrainers = async (): Promise<Trainer[]> => {
     try {
       const stmt = getDb().prepare("SELECT * FROM trainers");
       const trainers = stmt.all() as any[];
-      // Convertir isDefault en booléen pour la _logger.debugique applicative si nécessaire (ici on garde 0/1 comme dans le schéma)
+      // Convertir isDefault en booléen pour la _logger?.debugique applicative si nécessaire (ici on garde 0/1 comme dans le schéma)
       return trainers.map(t => ({ ...t, isDefault: t.isDefault === 1 }));
     } catch (error) {
-      _logger.debug(`[DB Trainers] Error getting all trainers: ${error}`);
+      _logger?.debug(`[DB Trainers] Error getting all trainers: ${error}`);
       throw error;
     }
   });
@@ -1268,7 +1316,7 @@ const getTrainerById = async (id: number): Promise<Trainer | undefined> => {
       }
       return undefined;
     } catch (error) {
-      _logger.debug(`[DB Trainers] Error getting trainer by id ${id}: ${error}`);
+      _logger?.debug(`[DB Trainers] Error getting trainer by id ${id}: ${error}`);
       throw error;
     }
   });
@@ -1292,7 +1340,7 @@ const updateTrainer = async (id: number, updates: Partial<Omit<Trainer, 'id'>>):
       const result = stmt.run(params);
       return result.changes; // Nombre de lignes modifiées
     } catch (error) {
-      _logger.debug(`[DB Trainers] Error updating trainer ${id}: ${error}`);
+      _logger?.debug(`[DB Trainers] Error updating trainer ${id}: ${error}`);
       throw error;
     }
   });
@@ -1304,7 +1352,7 @@ const deleteTrainer = async (id: number): Promise<void> => {
       const stmt = getDb().prepare("DELETE FROM trainers WHERE id = ?");
       stmt.run(id);
     } catch (error) {
-      _logger.debug(`[DB Trainers] Error deleting trainer ${id}: ${error}`);
+      _logger?.debug(`[DB Trainers] Error deleting trainer ${id}: ${error}`);
       throw error;
     }
   });
@@ -1321,10 +1369,10 @@ const setDefaultTrainer = async (id: number): Promise<void> => {
         const result = setStmt.run(id);
 
         if (result.changes === 0) {
-          _logger.debug(`[DB Trainers] setDefaultTrainer: Trainer with id ${id} not found or no change made.`);
+          _logger?.debug(`[DB Trainers] setDefaultTrainer: Trainer with id ${id} not found or no change made.`);
         }
       } catch (error) {
-        _logger.debug(`[DB Trainers] Error setting default trainer ${id}: ${error}`);
+        _logger?.debug(`[DB Trainers] Error setting default trainer ${id}: ${error}`);
         throw error; // Annule la transaction
       }
     });
@@ -1342,7 +1390,7 @@ const getDefaultTrainer = async (): Promise<Trainer | undefined> => {
       }
       return undefined;
     } catch (error) {
-      _logger.debug(`[DB Trainers] Error getting default trainer: ${error}`);
+      _logger?.debug(`[DB Trainers] Error getting default trainer: ${error}`);
       throw error;
     }
   });
@@ -1359,7 +1407,7 @@ const addSessionQuestion = async (sq: Omit<SessionQuestion, 'id'>): Promise<numb
       const result = stmt.run(sq);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB SessionQuestions] Error adding session question: ${error}`);
+      _logger?.debug(`[DB SessionQuestions] Error adding session question: ${error}`);
       throw error;
     }
   });
@@ -1381,7 +1429,7 @@ const addBulkSessionQuestions = async (questions: Omit<SessionQuestion, 'id'>[])
           const result = insertStmt.run(question);
           insertedIds.push(result.lastInsertRowid as number);
         } catch (error) {
-          _logger.debug(`[DB SessionQuestions] Error in bulk adding session question for item: ${question}, ${error}`);
+          _logger?.debug(`[DB SessionQuestions] Error in bulk adding session question for item: ${question}, ${error}`);
           insertedIds.push(undefined);
           throw error; // Rollback transaction
         }
@@ -1392,7 +1440,7 @@ const addBulkSessionQuestions = async (questions: Omit<SessionQuestion, 'id'>[])
       transaction(questions);
       return insertedIds;
     } catch (error) {
-      _logger.debug(`[DB SessionQuestions] Bulk add transaction failed.`);
+      _logger?.debug(`[DB SessionQuestions] Bulk add transaction failed.`);
       return undefined; // Ou retourner le tableau `insertedIds` partiellement rempli si on ne relance pas l'erreur dans la boucle
     }
   });
@@ -1406,7 +1454,7 @@ const getSessionQuestionsBySessionId = async (sessionId: number): Promise<Sessio
       // Pour l'instant, pas de tri explicite.
       return stmt.all(sessionId) as SessionQuestion[];
     } catch (error) {
-      _logger.debug(`[DB SessionQuestions] Error getting session questions for session ${sessionId}: ${error}`);
+      _logger?.debug(`[DB SessionQuestions] Error getting session questions for session ${sessionId}: ${error}`);
       throw error;
     }
   });
@@ -1418,7 +1466,7 @@ const deleteSessionQuestionsBySessionId = async (sessionId: number): Promise<voi
       const stmt = getDb().prepare("DELETE FROM sessionQuestions WHERE sessionId = ?");
       stmt.run(sessionId);
     } catch (error) {
-      _logger.debug(`[DB SessionQuestions] Error deleting session questions for session ${sessionId}: ${error}`);
+      _logger?.debug(`[DB SessionQuestions] Error deleting session questions for session ${sessionId}: ${error}`);
       throw error;
     }
   });
@@ -1435,7 +1483,7 @@ const addSessionBoitier = async (sb: Omit<SessionBoitier, 'id'>): Promise<number
       const result = stmt.run(sb);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB SessionBoitiers] Error adding session boitier: ${error}`);
+      _logger?.debug(`[DB SessionBoitiers] Error adding session boitier: ${error}`);
       // Potentielle contrainte UNIQUE à vérifier si on en ajoute une sur (sessionId, serialNumber) ou (sessionId, participantId)
       throw error;
     }
@@ -1458,7 +1506,7 @@ const addBulkSessionBoitiers = async (boitiers: Omit<SessionBoitier, 'id'>[]): P
           const result = insertStmt.run(boitier);
           insertedIds.push(result.lastInsertRowid as number);
         } catch (error) {
-          _logger.debug(`[DB SessionBoitiers] Error in bulk adding session boitier for item: ${boitier}, ${error}`);
+          _logger?.debug(`[DB SessionBoitiers] Error in bulk adding session boitier for item: ${boitier}, ${error}`);
           insertedIds.push(undefined);
           throw error; // Rollback transaction
         }
@@ -1469,7 +1517,7 @@ const addBulkSessionBoitiers = async (boitiers: Omit<SessionBoitier, 'id'>[]): P
       transaction(boitiers);
       return insertedIds;
     } catch (error) {
-      _logger.debug(`[DB SessionBoitiers] Bulk add transaction failed.`);
+      _logger?.debug(`[DB SessionBoitiers] Bulk add transaction failed.`);
       return undefined;
     }
   });
@@ -1481,7 +1529,7 @@ const getSessionBoitiersBySessionId = async (sessionId: number): Promise<Session
       const stmt = getDb().prepare("SELECT * FROM sessionBoitiers WHERE sessionId = ? ORDER BY visualId ASC, participantId ASC");
       return stmt.all(sessionId) as SessionBoitier[];
     } catch (error) {
-      _logger.debug(`[DB SessionBoitiers] Error getting session boitiers for session ${sessionId}: ${error}`);
+      _logger?.debug(`[DB SessionBoitiers] Error getting session boitiers for session ${sessionId}: ${error}`);
       throw error;
     }
   });
@@ -1493,7 +1541,7 @@ const deleteSessionBoitiersBySessionId = async (sessionId: number): Promise<void
       const stmt = getDb().prepare("DELETE FROM sessionBoitiers WHERE sessionId = ?");
       stmt.run(sessionId);
     } catch (error) {
-      _logger.debug(`[DB SessionBoitiers] Error deleting session boitiers for session ${sessionId}: ${error}`);
+      _logger?.debug(`[DB SessionBoitiers] Error deleting session boitiers for session ${sessionId}: ${error}`);
       throw error;
     }
   });
@@ -1510,7 +1558,7 @@ const addReferential = async (referential: Omit<Referential, 'id'>): Promise<num
       const result = stmt.run(referential);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB Referentiels] Error adding referential: ${error}`);
+      _logger?.debug(`[DB Referentiels] Error adding referential: ${error}`);
       if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
         // Optionnel: gérer spécifiquement les erreurs d'unicité ou les laisser remonter
         throw new Error(`Referential with code ${referential.code} already exists.`);
@@ -1527,7 +1575,7 @@ const getAllReferentiels = async (): Promise<Referential[]> => {
       const referentiels = stmt.all() as Referential[];
       return referentiels;
     } catch (error) {
-      _logger.debug(`[DB Referentiels] Error getting all referentiels: ${error}`);
+      _logger?.debug(`[DB Referentiels] Error getting all referentiels: ${error}`);
       throw error;
     }
   });
@@ -1540,7 +1588,7 @@ const getReferentialByCode = async (code: string): Promise<Referential | undefin
       const referential = stmt.get(code) as Referential | undefined;
       return referential;
     } catch (error) {
-      _logger.debug(`[DB Referentiels] Error getting referential by code ${code}: ${error}`);
+      _logger?.debug(`[DB Referentiels] Error getting referential by code ${code}: ${error}`);
       throw error;
     }
   });
@@ -1553,7 +1601,7 @@ const getReferentialById = async (id: number): Promise<Referential | undefined> 
       const referential = stmt.get(id) as Referential | undefined;
       return referential;
     } catch (error) {
-      _logger.debug(`[DB Referentiels] Error getting referential by id ${id}: ${error}`);
+      _logger?.debug(`[DB Referentiels] Error getting referential by id ${id}: ${error}`);
       throw error;
     }
   });
@@ -1570,7 +1618,7 @@ const addTheme = async (theme: Omit<Theme, 'id'>): Promise<number | undefined> =
       const result = stmt.run(theme);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB Themes] Error adding theme: ${error}`);
+      _logger?.debug(`[DB Themes] Error adding theme: ${error}`);
       if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new Error(`Theme with code ${theme.code_theme} already exists for referential ${theme.referentiel_id}.`);
       }
@@ -1585,7 +1633,7 @@ const getAllThemes = async (): Promise<Theme[]> => {
       const stmt = getDb().prepare("SELECT * FROM themes");
       return stmt.all() as Theme[];
     } catch (error) {
-      _logger.debug(`[DB Themes] Error getting all themes: ${error}`);
+      _logger?.debug(`[DB Themes] Error getting all themes: ${error}`);
       throw error;
     }
   });
@@ -1597,7 +1645,7 @@ const getThemesByReferentialId = async (referentialId: number): Promise<Theme[]>
       const stmt = getDb().prepare("SELECT * FROM themes WHERE referentiel_id = ?");
       return stmt.all(referentialId) as Theme[];
     } catch (error) {
-      _logger.debug(`[DB Themes] Error getting themes by referentialId ${referentialId}: ${error}`);
+      _logger?.debug(`[DB Themes] Error getting themes by referentialId ${referentialId}: ${error}`);
       throw error;
     }
   });
@@ -1609,7 +1657,7 @@ const getThemeByCodeAndReferentialId = async (code_theme: string, referentiel_id
       const stmt = getDb().prepare("SELECT * FROM themes WHERE code_theme = ? AND referentiel_id = ?");
       return stmt.get(code_theme, referentiel_id) as Theme | undefined;
     } catch (error) {
-      _logger.debug(`[DB Themes] Error getting theme by code ${code_theme} and referentialId ${referentiel_id}: ${error}`);
+      _logger?.debug(`[DB Themes] Error getting theme by code ${code_theme} and referentialId ${referentiel_id}: ${error}`);
       throw error;
     }
   });
@@ -1621,7 +1669,7 @@ const getThemeById = async (id: number): Promise<Theme | undefined> => {
       const stmt = getDb().prepare("SELECT * FROM themes WHERE id = ?");
       return stmt.get(id) as Theme | undefined;
     } catch (error) {
-      _logger.debug(`[DB Themes] Error getting theme by id ${id}: ${error}`);
+      _logger?.debug(`[DB Themes] Error getting theme by id ${id}: ${error}`);
       throw error;
     }
   });
@@ -1638,7 +1686,7 @@ const addBloc = async (bloc: Omit<Bloc, 'id'>): Promise<number | undefined> => {
       const result = stmt.run(bloc);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB Blocs] Error adding bloc: ${error}`);
+      _logger?.debug(`[DB Blocs] Error adding bloc: ${error}`);
       if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new Error(`Bloc with code ${bloc.code_bloc} already exists for theme ${bloc.theme_id}.`);
       }
@@ -1653,7 +1701,7 @@ const getAllBlocs = async (): Promise<Bloc[]> => {
       const stmt = getDb().prepare("SELECT * FROM blocs");
       return stmt.all() as Bloc[];
     } catch (error) {
-      _logger.debug(`[DB Blocs] Error getting all blocs: ${error}`);
+      _logger?.debug(`[DB Blocs] Error getting all blocs: ${error}`);
       throw error;
     }
   });
@@ -1665,7 +1713,7 @@ const getBlocsByThemeId = async (themeId: number): Promise<Bloc[]> => {
       const stmt = getDb().prepare("SELECT * FROM blocs WHERE theme_id = ?");
       return stmt.all(themeId) as Bloc[];
     } catch (error) {
-      _logger.debug(`[DB Blocs] Error getting blocs by themeId ${themeId}: ${error}`);
+      _logger?.debug(`[DB Blocs] Error getting blocs by themeId ${themeId}: ${error}`);
       throw error;
     }
   });
@@ -1677,7 +1725,7 @@ const getBlocByCodeAndThemeId = async (code_bloc: string, theme_id: number): Pro
       const stmt = getDb().prepare("SELECT * FROM blocs WHERE code_bloc = ? AND theme_id = ?");
       return stmt.get(code_bloc, theme_id) as Bloc | undefined;
     } catch (error) {
-      _logger.debug(`[DB Blocs] Error getting bloc by code ${code_bloc} and themeId ${theme_id}: ${error}`);
+      _logger?.debug(`[DB Blocs] Error getting bloc by code ${code_bloc} and themeId ${theme_id}: ${error}`);
       throw error;
     }
   });
@@ -1689,7 +1737,7 @@ const getBlocById = async (id: number): Promise<Bloc | undefined> => {
       const stmt = getDb().prepare("SELECT * FROM blocs WHERE id = ?");
       return stmt.get(id) as Bloc | undefined;
     } catch (error) {
-      _logger.debug(`[DB Blocs] Error getting bloc by id ${id}: ${error}`);
+      _logger?.debug(`[DB Blocs] Error getting bloc by id ${id}: ${error}`);
       throw error;
     }
   });
@@ -1697,7 +1745,7 @@ const getBlocById = async (id: number): Promise<Bloc | undefined> => {
 
 // DeviceKits
 
-// Helper pour convertir la valeur de isDefault (0/1) en booléen pour la _logger.debugique applicative
+// Helper pour convertir la valeur de isDefault (0/1) en booléen pour la _logger?.debugique applicative
 const rowToDeviceKit = (row: any): DeviceKit => {
   if (!row) return undefined as any;
   return {
@@ -1710,15 +1758,15 @@ const rowToDeviceKit = (row: any): DeviceKit => {
 const addDeviceKit = async (kit: Omit<DeviceKit, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      _logger.debug(`[DB DeviceKits] Attempting to add device kit: ${kit}`);
+      _logger?.debug(`[DB DeviceKits] Attempting to add device kit: ${kit}`);
       const stmt = getDb().prepare("INSERT INTO deviceKits (name, isDefault, is_global) VALUES (@name, @isDefault, @is_global)");
       const isDefault = kit.isDefault ? 1 : 0;
       const is_global = kit.is_global ? 1 : 0;
       const result = stmt.run({ ...kit, isDefault, is_global });
-      _logger.debug(`[DB DeviceKits] Successfully added device kit with ID: ${result.lastInsertRowid}`);
+      _logger?.debug(`[DB DeviceKits] Successfully added device kit with ID: ${result.lastInsertRowid}`);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB DeviceKits] Error adding device kit: ${error}`);
+      _logger?.debug(`[DB DeviceKits] Error adding device kit: ${error}`);
       if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new Error(`Device kit with name ${kit.name} already exists.`);
       }
@@ -1734,7 +1782,7 @@ const getAllDeviceKits = async (): Promise<DeviceKit[]> => {
       const rows = stmt.all() as any[];
       return rows.map(rowToDeviceKit);
     } catch (error) {
-      _logger.debug(`[DB DeviceKits] Error getting all device kits: ${error}`);
+      _logger?.debug(`[DB DeviceKits] Error getting all device kits: ${error}`);
       throw error;
     }
   });
@@ -1747,7 +1795,7 @@ const getDeviceKitById = async (id: number): Promise<DeviceKit | undefined> => {
       const row = stmt.get(id) as any;
       return row ? rowToDeviceKit(row) : undefined;
     } catch (error) {
-      _logger.debug(`[DB DeviceKits] Error getting device kit by id ${id}: ${error}`);
+      _logger?.debug(`[DB DeviceKits] Error getting device kit by id ${id}: ${error}`);
       throw error;
     }
   });
@@ -1770,7 +1818,7 @@ const updateDeviceKit = async (id: number, updates: Partial<Omit<DeviceKit, 'id'
       const result = stmt.run(params);
       return result.changes;
     } catch (error) {
-      _logger.debug(`[DB DeviceKits] Error updating device kit ${id}: ${error}`);
+      _logger?.debug(`[DB DeviceKits] Error updating device kit ${id}: ${error}`);
       if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && updates.name) {
         throw new Error(`Device kit with name ${updates.name} already exists.`);
       }
@@ -1786,7 +1834,7 @@ const deleteDeviceKit = async (id: number): Promise<void> => {
       const stmt = getDb().prepare("DELETE FROM deviceKits WHERE id = ?");
       stmt.run(id);
     } catch (error) {
-      _logger.debug(`[DB DeviceKits] Error deleting device kit ${id}: ${error}`);
+      _logger?.debug(`[DB DeviceKits] Error deleting device kit ${id}: ${error}`);
       throw error;
     }
   });
@@ -1799,7 +1847,7 @@ const getDefaultDeviceKit = async (): Promise<DeviceKit | undefined> => {
       const row = stmt.get() as any;
       return row ? rowToDeviceKit(row) : undefined;
     } catch (error) {
-      _logger.debug(`[DB DeviceKits] Error getting default device kit: ${error}`);
+      _logger?.debug(`[DB DeviceKits] Error getting default device kit: ${error}`);
       throw error;
     }
   });
@@ -1816,13 +1864,13 @@ const setDefaultDeviceKit = async (kitId: number): Promise<void> => {
         const result = setStmt.run(kitId);
 
         if (result.changes === 0) {
-          _logger.debug(`[DB DeviceKits] setDefaultDeviceKit: Kit with id ${kitId} not found or no change made.`);
+          _logger?.debug(`[DB DeviceKits] setDefaultDeviceKit: Kit with id ${kitId} not found or no change made.`);
           // On pourrait vouloir lever une erreur ici si le kitId n'est pas trouvé,
           // mais pour l'instant, on garde un comportement silencieux si pas de changement.
         }
         // La fonction originale retournait void, donc on ne retourne rien ici non plus.
       } catch (error) {
-        _logger.debug(`[DB DeviceKits] Error setting default device kit ${kitId}: ${error}`);
+        _logger?.debug(`[DB DeviceKits] Error setting default device kit ${kitId}: ${error}`);
         throw error; // Annule la transaction
       }
     });
@@ -1853,7 +1901,7 @@ const createOrUpdateGlobalKit = async (): Promise<void> => {
 
         // Determine which devices to add and remove
         const allDeviceIds = allDevices.map((row: any) => row.id);
-        const devicesToAdd = allDeviceIds.filter(id => !currentAssignments.includes(id));
+        const devicesToAdd = allDeviceIds.filter((id: number) => !currentAssignments.includes(id));
         const devicesToRemove = currentAssignments.filter((id: number) => !allDeviceIds.includes(id));
 
         // Add new devices
@@ -1868,9 +1916,9 @@ const createOrUpdateGlobalKit = async (): Promise<void> => {
           removeStmt.run(globalKit.id, ...devicesToRemove);
         }
 
-        _logger.info(`[DB DeviceKits] Global kit updated. Added ${devicesToAdd.length}, removed ${devicesToRemove.length} devices.`);
+        _logger?.info(`[DB DeviceKits] Global kit updated. Added ${devicesToAdd.length}, removed ${devicesToRemove.length} devices.`);
       } catch (error) {
-        _logger.error(`[DB DeviceKits] Error creating/updating global kit: ${error}`);
+        _logger?.error(`[DB DeviceKits] Error creating/updating global kit: ${error}`);
         throw error;
       }
     });
@@ -1886,7 +1934,7 @@ const assignDeviceToKit = async (kitId: number, votingDeviceId: number): Promise
       const result = stmt.run(kitId, votingDeviceId);
       return result.lastInsertRowid as number;
     } catch (error) {
-      _logger.debug(`[DB DeviceKitAssignments] Error assigning device ${votingDeviceId} to kit ${kitId}: ${error}`);
+      _logger?.debug(`[DB DeviceKitAssignments] Error assigning device ${votingDeviceId} to kit ${kitId}: ${error}`);
       if ((error as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
         // Cette erreur signifie que l'assignation existe déjà.
         // On peut choisir de la retourner comme un succès silencieux ou de lever une erreur spécifique.
@@ -1904,7 +1952,7 @@ const removeDeviceFromKit = async (kitId: number, votingDeviceId: number): Promi
       const stmt = getDb().prepare("DELETE FROM deviceKitAssignments WHERE kitId = ? AND votingDeviceId = ?");
       stmt.run(kitId, votingDeviceId);
     } catch (error) {
-      _logger.debug(`[DB DeviceKitAssignments] Error removing device ${votingDeviceId} from kit ${kitId}: ${error}`);
+      _logger?.debug(`[DB DeviceKitAssignments] Error removing device ${votingDeviceId} from kit ${kitId}: ${error}`);
       throw error;
     }
   });
@@ -1922,7 +1970,7 @@ const getVotingDevicesForKit = async (kitId: number): Promise<VotingDevice[]> =>
       `);
       return stmt.all(kitId) as VotingDevice[];
     } catch (error) {
-      _logger.debug(`[DB DeviceKitAssignments] Error getting voting devices for kit ${kitId}: ${error}`);
+      _logger?.debug(`[DB DeviceKitAssignments] Error getting voting devices for kit ${kitId}: ${error}`);
       throw error;
     }
   });
@@ -1941,7 +1989,7 @@ const getKitsForVotingDevice = async (votingDeviceId: number): Promise<DeviceKit
       const rows = stmt.all(votingDeviceId) as any[];
       return rows.map(rowToDeviceKit); // Utilise le helper existant pour convertir isDefault
     } catch (error) {
-      _logger.debug(`[DB DeviceKitAssignments] Error getting kits for voting device ${votingDeviceId}: ${error}`);
+      _logger?.debug(`[DB DeviceKitAssignments] Error getting kits for voting device ${votingDeviceId}: ${error}`);
       throw error;
     }
   });
@@ -1953,7 +2001,7 @@ const removeAssignmentsByKitId = async (kitId: number): Promise<void> => {
       const stmt = getDb().prepare("DELETE FROM deviceKitAssignments WHERE kitId = ?");
       stmt.run(kitId);
     } catch (error) {
-      _logger.debug(`[DB DeviceKitAssignments] Error removing assignments by kitId ${kitId}: ${error}`);
+      _logger?.debug(`[DB DeviceKitAssignments] Error removing assignments by kitId ${kitId}: ${error}`);
       throw error;
     }
   });
@@ -1965,7 +2013,7 @@ const removeAssignmentsByVotingDeviceId = async (votingDeviceId: number): Promis
       const stmt = getDb().prepare("DELETE FROM deviceKitAssignments WHERE votingDeviceId = ?");
       stmt.run(votingDeviceId);
     } catch (error) {
-      _logger.debug(`[DB DeviceKitAssignments] Error removing assignments by votingDeviceId ${votingDeviceId}: ${error}`);
+      _logger?.debug(`[DB DeviceKitAssignments] Error removing assignments by votingDeviceId ${votingDeviceId}: ${error}`);
       throw error;
     }
   });
@@ -2008,11 +2056,11 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
         if (Array.isArray(parsedBlocIds) && parsedBlocIds.every(id => typeof id === 'number')) {
           blocIds = parsedBlocIds;
         } else {
-          _logger.debug(`[DB Reports] Session ${session.id} has malformed selectedBlocIds: ${session.selectedBlocIds}`);
+          _logger?.debug(`[DB Reports] Session ${session.id} has malformed selectedBlocIds: ${session.selectedBlocIds}`);
           continue;
         }
       } catch (e) {
-        _logger.debug(`[DB Reports] Session ${session.id} failed to parse selectedBlocIds: ${session.selectedBlocIds}, ${e}`);
+        _logger?.debug(`[DB Reports] Session ${session.id} failed to parse selectedBlocIds: ${session.selectedBlocIds}, ${e}`);
         continue;
       }
 
@@ -2048,10 +2096,10 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
           } else {
             // Ce cas peut arriver si un blocId dans selectedBlocIds n'existe plus
             // ou n'appartient pas au référentiel de la session.
-            _logger.debug(`[DB Reports] Block details not found for blocId ${blocId} in referentielId ${session.referentielId} for session ${session.id}`);
+            _logger?.debug(`[DB Reports] Block details not found for blocId ${blocId} in referentielId ${session.referentielId} for session ${session.id}`);
           }
         } catch (e) {
-            _logger.debug(`[DB Reports] Error processing blocId ${blocId} for session ${session.id}: ${e}`);
+            _logger?.debug(`[DB Reports] Error processing blocId ${blocId} for session ${session.id}: ${e}`);
         }
       }
     }
@@ -2060,13 +2108,15 @@ const calculateBlockUsage = async (startDate?: string | Date, endDate?: string |
 };
 
 // Backup and Restore
-const exportAllData = async () => {
-    // Implementation for exporting data
-};
+async function exportAllData(): Promise<unknown> {
+  _logger?.debug('[DB Backup] Exporting all data (TODO: Implement)');
+  throw new Error('exportAllData not implemented');
+}
 
-const importAllData = async (data: any) => {
-    // Implementation for importing data
-};
+async function importAllData(data: unknown): Promise<void> {
+  _logger?.debug('[DB Restore] Importing data (TODO: Implement)');
+  throw new Error('importAllData not implemented');
+}
 
 // General Notes for this file:
 // 1. Path Resolution: The database path is now more robust for typical application user data directories.
@@ -2080,10 +2130,10 @@ const importAllData = async (data: any) => {
 //    will be needed when these functions are fully implemented.
 // 4. JSON Fields: Fields like `questions.options`, `sessions.selectedBlocIds`, etc., are stored as TEXT
 //    and will contain JSON strings. Serialization/deserialization will be handled in the CRUD implementations.
-// 5. Error Handling: The current `asyncDbRun` has basic error _logger.debugging. Production code would
+// 5. Error Handling: The current `asyncDbRun` has basic error _logger?.debugging. Production code would
 //    need more robust error handling and possibly custom error types.
 // 6. Transactions: The schema creation is wrapped in a transaction. Individual CRUD operations
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
-// 7. Logging: Added more console _logger.debugs with prefixes for easier debugging of setup and stub calls.
+// 7. Logging: Added more console _logger?.debugs with prefixes for easier debugging of setup and stub calls.
 
-export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, addQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData };
+export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData };

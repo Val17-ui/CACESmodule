@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'; // Ajout useState, useEffect
-import { CalendarClock, ClipboardList, Play, Download, AlertTriangle } from 'lucide-react';
+import React from 'react';
+import { CalendarClock, ClipboardList, Download, AlertTriangle } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
@@ -9,7 +9,6 @@ import { saveAs } from 'file-saver';
 type SessionsListProps = {
   sessions: DBSession[];
   onManageSession: (id: number) => void;
-  onStartExam: (id: number) => void;
   activeList: 'sessions' | 'archives';
   referentiels: Referential[];
 };
@@ -17,7 +16,6 @@ type SessionsListProps = {
 const SessionsList: React.FC<SessionsListProps> = ({
   sessions,
   onManageSession,
-  onStartExam,
   activeList,
   referentiels: referentielsData,
 }) => {
@@ -45,7 +43,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
       case 'in-progress': return <Badge variant="warning">En cours</Badge>;
       case 'completed': return <Badge variant="success">Terminée</Badge>;
       case 'cancelled': return <Badge variant="danger">Annulée</Badge>;
-      case 'ready': return <Badge variant="info">Prête</Badge>; // Ajout pour "ready"
+      case 'ready': return <Badge variant="primary">Prête</Badge>; // Ajout pour "ready"
       default: return <Badge variant="default">Non défini</Badge>;
     }
   };
@@ -120,10 +118,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
                       {session.donneesOrs instanceof Blob && (
                         <Button variant="primary" size="sm" icon={<Download size={16} />} onClick={() => handleDownloadOrs(session)} title="Télécharger .ors">.ORS</Button>
                       )}
-                      {/* Le statut est déjà normalisé, donc !session.status n'est plus nécessaire pour 'planned' */}
-                      {/* {(session.status === 'planned' || session.status === 'ready') && session.donneesOrs instanceof Blob && (
-                        <Button variant="primary" size="sm" icon={<Play size={16} />} onClick={() => session.id && onStartExam(session.id)} title="Démarrer l'examen">Démarrer Examen</Button>
-                      )} */}
+                      
                     </div>
                   </td>
                 </tr>

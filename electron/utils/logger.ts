@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, IpcMainEvent } from 'electron';
 
 export interface ILogger {
   info(message: string): void;
@@ -60,10 +60,10 @@ export function initializeLogger() {
   console.log(`[Logger Init] Log file path: ${_logFilePath}`);
 
   // Set up IPC handlers for renderer process logs
-  ipcMain.on('log:info', (event, message) => { _loggerInstance?.info(message); });
-  ipcMain.on('log:debug', (event, message) => { _loggerInstance?.debug(message); });
-  ipcMain.on('log:warn', (event, message) => { _loggerInstance?.warn(message); });
-  ipcMain.on('log:error', (event, message) => { _loggerInstance?.error(message); });
+ipcMain.on('log:info', (event: IpcMainEvent, message: string) => { _loggerInstance?.info(message); });
+ipcMain.on('log:debug', (event: IpcMainEvent, message: string) => { _loggerInstance?.debug(message); });
+ipcMain.on('log:warn', (event: IpcMainEvent, message: string) => { _loggerInstance?.warn(message); });
+ipcMain.on('log:error', (event: IpcMainEvent, message: string) => { _loggerInstance?.error(message); });
 }
 
 export function getLogger(): ILogger {

@@ -11,9 +11,12 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
-    "noEmit": true,
+    "noEmit": false,
     "outDir": "dist_test",
+    "declaration": true,
+    "declarationMap": true,
     "jsx": "react-jsx",
+    "composite": true,
 
     /* Linting */
     "strict": true,
@@ -21,6 +24,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "src/renderer.d.ts"],
+  "include": ["src/**/*", "src/renderer.d.ts"],
   "exclude": ["electron"]
 }

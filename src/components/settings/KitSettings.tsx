@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -301,7 +301,10 @@ const KitSettings: React.FC = () => {
             <Input
               label="Nom du Kit *"
               value={kitName}
-              onChange={(e) => setKitName(e.target.value)}
+              onChange={(e) => {
+                console.log("Input changed:", e.target.value);
+                setKitName(e.target.value);
+              }}
               placeholder="Ex: Boîtiers Salle A"
               autoFocus
             />

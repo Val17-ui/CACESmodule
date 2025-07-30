@@ -1,22 +1,23 @@
 {
   "compilerOptions": {
-    "target": "es6",
+    "target": "es2022",
     "module": "commonjs",
-    "moduleResolution": "node",
-    "types": ["node", "node-cron"],
+    "outDir": "../dist-electron/electron",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "../dist-electron",
-    "rootDir": "..",
-    "typeRoots": ["../node_modules/@types"]
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@electron/*": ["./*"],
+      "@types/*": ["../src/types/*"],
+      "@src/*": ["../src/*"]
+    },
+    "rootDir": "../", // Change de "." à "../" pour inclure src/
+    "lib": ["es2022", "dom"],
+    "types": ["node", "electron", "better-sqlite3"]
   },
-  "include": [
-    "./**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "include": ["./**/*.ts", "../src/types/**/*.ts", "./global.d.ts"],
+  "exclude": ["node_modules", "dist", "dist-electron"]
 }

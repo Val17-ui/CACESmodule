@@ -1,7 +1,7 @@
 // src/utils/newLogger.ts
 import { format } from 'date-fns';
 
-export type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS';
+export type LogLevel = 'info' | 'warn' | 'error' | 'success';
 
 export interface LogEntry {
   timestamp: string;
@@ -61,38 +61,38 @@ class Logger {
   private persistLog(entry: LogEntry): void {
     // In a real implementation, this would write to a file
     switch (entry.level) {
-      case 'INFO':
-        window.electron.info(`${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
+      case 'info':
+        window.electronAPI.info(`${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
         break;
-      case 'WARNING':
-        window.electron.warn(`${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
+      case 'warn':
+        window.electronAPI.warn(`${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
         break;
-      case 'ERROR':
-        window.electron.error(`${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
+      case 'error':
+        window.electronAPI.error(`${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
         break;
-      case 'SUCCESS':
+      case 'success':
         // For SUCCESS, we can log as INFO or create a specific handler if needed
-        window.electron.info(`${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
+        window.electronAPI.info(`${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
         break;
       default:
-        window.electron.info(`${entry.level}: ${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
+        window.electronAPI.info(`${entry.level}: ${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}`);
     }
   }
 
   public info(message: string, details?: unknown): void {
-    this.addLog(this.createLogEntry('INFO', message, details));
+    this.addLog(this.createLogEntry('info', message, details));
   }
 
   public warning(message: string, details?: unknown): void {
-    this.addLog(this.createLogEntry('WARNING', message, details));
+    this.addLog(this.createLogEntry('warn', message, details));
   }
 
   public error(message: string, details?: unknown): void {
-    this.addLog(this.createLogEntry('ERROR', message, details));
+    this.addLog(this.createLogEntry('error', message, details));
   }
 
   public success(message: string, details?: unknown): void {
-    this.addLog(this.createLogEntry('SUCCESS', message, details));
+    this.addLog(this.createLogEntry('success', message, details));
   }
 
   public getLogs(): LogEntry[] {

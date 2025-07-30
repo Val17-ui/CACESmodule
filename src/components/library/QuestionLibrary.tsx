@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, ChangeEvent } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FileText, Edit, Trash2, Image, AlertTriangle, TrendingUp, TrendingDown, Upload, CheckCircle, XCircle } from 'lucide-react'; // Removed Copy
 import * as XLSX from 'xlsx';
 import Card from '../ui/Card';
@@ -8,7 +8,7 @@ import Select from '../ui/Select';
 import Input from '../ui/Input';
 // Removed CACESReferential, referentials, questionThemes from here as they will be dynamic
 // Removed QuestionTheme, CACESReferential
-import { Referential, Theme, Bloc } from '../../types'; 
+import { Referential, Theme, Bloc, QuestionType } from '../../types/index.ts'; 
 import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 type QuestionLibraryProps = {
   onEditQuestion: (id: string) => void;
@@ -131,20 +131,25 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     setImportError(null);
 
     try {
-      const result = await window.dbAPI.openExcelFileDialog();
+      const fileDialogResult = await window.dbAPI?.openExcelFileDialog();
 
-      if (result.canceled) {
+      if (fileDialogResult?.canceled) {
         setImportStatusMessage('Importation annulée.');
         setIsImporting(false);
         return;
       }
 
-      if (result.error) {
-        throw new Error(`Erreur de lecture du fichier: ${result.error}`);
+      // Ensure fileDialogResult is not null/undefined before proceeding
+      if (!fileDialogResult) {
+        throw new Error("File dialog did not return a result.");
       }
 
-      const fileBuffer = window.electronAPI.Buffer_from(result.fileBuffer, 'base64');
-      setImportStatusMessage(`Importation du fichier ${result.fileName}...`);
+      // Use fileDialogResult directly
+      if (fileDialogResult.error) {
+        throw new Error(`Erreur de lecture du fichier: ${fileDialogResult.error}`);
+      }
+      const fileBuffer = window.electronAPI?.Buffer_from(fileDialogResult.fileBuffer || '', 'base64');
+      setImportStatusMessage(`Importation du fichier ${fileDialogResult.fileName || 'inconnu'}...`);
 
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
@@ -158,6 +163,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       const headerRow = jsonRows[0] as string[];
       // Define expected headers based on user's list (keys are normalized for internal use)
       const expectedHeaders: Record<string, string> = {
+        id_question: 'userQuestionId', // Nouveau
         texte: 'texte',
         // referential: 'referential', // Remplacé
         // theme: 'theme', // Remplacé
@@ -172,6 +178,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         iseliminatory: 'isEliminatory',
         timelimit: 'timeLimit',
         imagename: 'imageName',
+        version: 'version', // Nouveau
         // type: 'type', // Type column is no longer strictly needed for import logic, will default to multiple-choice
       };
 
@@ -191,7 +198,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       });
 
       // Validate required headers (using internal keys) - 'type' is removed from here
-      const requiredImportKeys = ['texte', 'referentiel_code', 'theme_code', 'bloc_code', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory'];
+      const requiredImportKeys = ['userQuestionId', 'texte', 'referentiel_code', 'theme_code', 'bloc_code', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory', 'version'];
       for (const key of requiredImportKeys) {
         if (headerMap[key] === undefined) {
           // Try to find the display name for the error message
@@ -222,7 +229,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         }
 
         // All questions are now 'multiple-choice'
-        const StoredQuestionType: 'multiple-choice' = 'multiple-choice';
+        
         let options: string[] = [];
         let correctAnswerStr: string = '';
 
@@ -337,8 +344,9 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
         // Construire l'objet newQuestionData avec blocIdToStore
         const newQuestionData: Omit<StoredQuestion, 'id'> = {
+          userQuestionId: (row[headerMap['userQuestionId']] || '').toString().trim(), // Read userQuestionId
           text: questionText.toString(),
-          type: StoredQuestionType,
+          type: QuestionType.QCM,
           options: options,
           correctAnswer: correctAnswerStr,
           blocId: blocIdToStore, // Utiliser le blocId trouvé ou créé
@@ -351,10 +359,11 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           usageCount: 0,
           correctResponseRate: 0,
           image: undefined, // Actual image blob not handled from this import
+          version: parseInt(row[headerMap['version']], 10) || 1, // Read version
         };
 
         try {
-            await StorageManager.addQuestion(newQuestionData);
+            await StorageManager.upsertQuestion(newQuestionData);
             questionsAdded++;
         } catch (e: any) {
             errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Erreur DB - ${e.message}`);
@@ -403,20 +412,29 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     setImportReferentielsError(null);
 
     try {
-      const result = await window.dbAPI.openExcelFileDialog();
+      if (!window.dbAPI || !window.dbAPI.openExcelFileDialog) {
+        throw new Error("window.dbAPI.openExcelFileDialog is not available.");
+      }
 
-      if (result.canceled) {
+      const fileDialogResult = await window.dbAPI.openExcelFileDialog();
+
+      if (fileDialogResult?.canceled) {
         setImportReferentielsStatusMessage('Importation annulée.');
         setIsImportingReferentiels(false);
         return;
       }
 
-      if (result.error) {
-        throw new Error(`Erreur de lecture du fichier: ${result.error}`);
+      // Ensure fileDialogResult is not null/undefined before proceeding
+      if (!fileDialogResult) {
+        throw new Error("File dialog did not return a result.");
       }
 
-      const fileBuffer = window.electronAPI.Buffer_from(result.fileBuffer, 'base64');
-      setImportReferentielsStatusMessage(`Importation des référentiels du fichier ${result.fileName}...`);
+      // Use fileDialogResult directly
+      if (fileDialogResult.error) {
+        throw new Error(`Erreur de lecture du fichier: ${fileDialogResult.error}`);
+      }
+      const fileBuffer = window.electronAPI?.Buffer_from(fileDialogResult.fileBuffer || '', 'base64');
+      setImportStatusMessage(`Importation du fichier ${fileDialogResult.fileName || 'inconnu'}...`);
 
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
@@ -499,20 +517,29 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     setImportThemesError(null);
 
     try {
-      const result = await window.dbAPI.openExcelFileDialog();
+      if (!window.dbAPI || !window.dbAPI.openExcelFileDialog) {
+        throw new Error("window.dbAPI.openExcelFileDialog is not available.");
+      }
 
-      if (result.canceled) {
+      const fileDialogResult = await window.dbAPI.openExcelFileDialog();
+
+      if (fileDialogResult?.canceled) {
         setImportThemesStatusMessage('Importation annulée.');
         setIsImportingThemes(false);
         return;
       }
 
-      if (result.error) {
-        throw new Error(`Erreur de lecture du fichier: ${result.error}`);
+      // Ensure fileDialogResult is not null/undefined before proceeding
+      if (!fileDialogResult) {
+        throw new Error("File dialog did not return a result.");
       }
 
-      const fileBuffer = window.electronAPI.Buffer_from(result.fileBuffer, 'base64');
-      setImportThemesStatusMessage(`Importation des thèmes du fichier ${result.fileName}...`);
+      // Use fileDialogResult directly
+      if (fileDialogResult.error) {
+        throw new Error(`Erreur de lecture du fichier: ${fileDialogResult.error}`);
+      }
+      const fileBuffer = window.electronAPI?.Buffer_from(fileDialogResult.fileBuffer || '', 'base64');
+      setImportStatusMessage(`Importation du fichier ${fileDialogResult.fileName || 'inconnu'}...`);
 
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];

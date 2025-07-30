@@ -26,7 +26,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   const getInitialState = useCallback((): QuestionWithId => {
     let baseState: Omit<QuestionWithId, 'referential' | 'theme'> & { blocId?: number | undefined } = {
       text: '',
-      type: 'multiple-choice',
+      type: QuestionType.QCM,
       options: ['', '', '', ''],
       correctAnswer: '',
       timeLimit: 30,
@@ -36,7 +36,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
       updatedAt: new Date().toISOString(),
       usageCount: 0,
       correctResponseRate: 0,
-      blocId: undefined,
+      blocId: selectedBlocId ? parseInt(selectedBlocId, 10) : 0, // Default to 0
     };
 
     if (initialData) {
@@ -45,9 +45,9 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
       if (initialDataType !== undefined) {
         if (initialDataType === QuestionType.QCM || initialDataType === QuestionType.QCU) {
-          mappedType = 'multiple-choice';
+          mappedType = QuestionType.QCM;
         } else if (initialDataType === QuestionType.TrueFalse) {
-          mappedType = 'true-false';
+          mappedType = QuestionType.TrueFalse;
         } else {
           logger.info(`WARN: Initial data has unmapped or incompatible question type: ${initialDataType}. Using default type '${mappedType}'.`);
         }
@@ -87,7 +87,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   }, [forcedReferential]);
 
   const referentialOptions = useMemo(() => {
-    return availableReferentiels.map(r => ({
+    return availableReferentiels.map((r: Referential) => ({
       value: r.id!.toString(),
       label: r.code
     }));
@@ -122,7 +122,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   }, [selectedThemeId]);
 
   useEffect(() => {
-    setQuestion((prev: QuestionWithId) => ({ ...prev, blocId: selectedBlocId ? parseInt(selectedBlocId, 10) : undefined }));
+    setQuestion((prev: QuestionWithId) => ({ ...prev, blocId: selectedBlocId ? parseInt(selectedBlocId, 10) : prev.blocId || 0,}));
   }, [selectedBlocId]);
 
   useEffect(() => {
@@ -162,14 +162,14 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             if (existingQuestion.image) {
               if (typeof existingQuestion.image === 'string') {
                 try {
-                  const imageBase64 = await window.electron.readImageFile(existingQuestion.image);
+                  const imageBase64 = await window.electronAPI?.readImageFile(existingQuestion.image);
                   const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
                   if (imagePreview) URL.revokeObjectURL(imagePreview);
                   setHasImage(true);
                   setImageFile(blob);
                   setImagePreview(URL.createObjectURL(blob));
                 } catch (error) {
-                  logger.error("Failed to load image from path:", existingQuestion.image, error);
+                  logger.error(`Failed to load image from path: ${existingQuestion.image} - ${(error as Error).message}`);
                   if (imagePreview) URL.revokeObjectURL(imagePreview);
                   setHasImage(false); setImageFile(null); setImagePreview(null);
                 }
@@ -215,13 +215,13 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         if (newInitialState.image) {
           if (typeof newInitialState.image === 'string') {
             try {
-              const imageBase64 = await window.electron.readImageFile(newInitialState.image);
+              const imageBase64 = await window.electronAPI?.readImageFile(newInitialState.image);
               const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
               setHasImage(true);
               setImageFile(blob);
               setImagePreview(URL.createObjectURL(blob));
             } catch (error) {
-              logger.error("Failed to load initial image from path:", newInitialState.image, error);
+              logger.error(`Failed to load initial image from path: ${newInitialState.image} - ${(error as Error).message}`);
               setHasImage(false);
               setImageFile(null);
               setImagePreview(null);

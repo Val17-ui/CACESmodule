@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
 
   // Questions
   addQuestion: (data: any) => ipcRenderer.invoke('db-add-question', data),
+  upsertQuestion: (data: any) => ipcRenderer.invoke('db-upsert-question', data),
   getQuestionById: (id: number) => ipcRenderer.invoke('db-get-question-by-id', id),
   getQuestionsByBlocId: (blocId: number) => ipcRenderer.invoke('db-get-questions-by-bloc-id', blocId),
   updateQuestion: (id: number, updates: any) => ipcRenderer.invoke('db-update-question', id, updates),
@@ -105,14 +106,11 @@ contextBridge.exposeInMainWorld('dbAPI', {
   openFile: (filePath: string) => ipcRenderer.invoke('open-file', filePath),
 });
 
-contextBridge.exposeInMainWorld('electron', {
-  log: (message: string) => ipcRenderer.send('log', message), // Keep for backward compatibility
+contextBridge.exposeInMainWorld('electronAPI', {
+  readImageFile: (path: string | Blob | null) => ipcRenderer.invoke('read-image-file', path),
+  Buffer_from: (buffer: string, encoding: string) => Buffer.from(buffer, encoding as BufferEncoding),
+  openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
   info: (message: string) => ipcRenderer.send('log:info', message),
-  debug: (message: string) => ipcRenderer.send('log:debug', message),
   warn: (message: string) => ipcRenderer.send('log:warn', message),
   error: (message: string) => ipcRenderer.send('log:error', message),
-});
-
-contextBridge.exposeInMainWorld('electronAPI', {
-  Buffer_from: Buffer.from // Expose Buffer.from directly
 });

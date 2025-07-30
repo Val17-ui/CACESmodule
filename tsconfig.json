@@ -4,5 +4,14 @@
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" },
     { "path": "./electron/tsconfig.json" }
-  ]
+  ],
+  "compilerOptions": {
+    "composite": true, // Required for project references
+    "noEmit": true, // Root config doesn’t emit
+    "baseUrl": ".",
+    "paths": {
+      "@src/*": ["src/*"],
+      "@electron/*": ["electron/*"]
+    }
+  }
 }

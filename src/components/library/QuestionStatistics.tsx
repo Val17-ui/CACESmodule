@@ -1,16 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart3, TrendingUp, TrendingDown, Download, FileSpreadsheet } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Badge from '../ui/Badge';
-import { referentials, QuestionTheme, questionThemes } from '../../types'; // ReferentialType supprimé
-import { mockQuestions } from '../../data/mockData';
+import { referentials, QuestionTheme, questionThemes, QuestionWithId } from '../../types';
+import { StorageManager } from '../../services/StorageManager';
 
 const QuestionStatistics: React.FC = () => {
   const [selectedReferential, setSelectedReferential] = useState<string>('');
   const [selectedTheme, setSelectedTheme] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('usage');
+  const [questions, setQuestions] = useState<QuestionWithId[]>([]);
+
+  // Fetch questions from StorageManager
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        const fetchedQuestions = await StorageManager.getAllQuestions();
+        setQuestions(fetchedQuestions || []);
+      } catch (error) {
+        console.error("Error fetching questions for statistics:", error);
+      }
+    };
+    fetchQuestions();
+  }, []);
 
   const referentialOptions = [
     { value: '', label: 'Toutes les recommandations' },
@@ -28,20 +42,20 @@ const QuestionStatistics: React.FC = () => {
     }))
   ];
 
-  const sortOptions = [
-    { value: 'usage', label: 'Plus utilisées' },
-    { value: 'success-rate', label: 'Taux de réussite' },
-    { value: 'failure-rate', label: 'Taux d\'échec' },
-    { value: 'recent', label: 'Plus récentes' }
-  ];
+const sortOptions = [
+  { value: 'usage', label: 'Plus utilisées' },
+  { value: 'success-rate', label: 'Taux de réussite' },
+  { value: 'failure-rate', label: 'Taux d\'échec' }, // Échappement du caractère apostrophe
+  { value: 'recent', label: 'Plus récentes' }
+];
 
-  const filteredQuestions = mockQuestions.filter(question => {
-    const matchesReferential = !selectedReferential || question.referentiel === selectedReferential; // Corrigé: referential -> referentiel
+  const filteredQuestions = questions.filter((question: QuestionWithId) => {
+    const matchesReferential = !selectedReferential || question.referential === selectedReferential;
     const matchesTheme = !selectedTheme || question.theme === selectedTheme;
     return matchesReferential && matchesTheme;
   });
 
-  const sortedQuestions = [...filteredQuestions].sort((a, b) => {
+  const sortedQuestions = [...filteredQuestions].sort((a: QuestionWithId, b: QuestionWithId) => {
     switch (sortBy) {
       case 'usage':
         return (b.usageCount || 0) - (a.usageCount || 0);
@@ -56,8 +70,8 @@ const QuestionStatistics: React.FC = () => {
   });
 
   const totalQuestions = filteredQuestions.length;
-  const totalUsage = filteredQuestions.reduce((sum, q) => sum + (q.usageCount || 0), 0);
-  const averageSuccessRate = filteredQuestions.reduce((sum, q) => sum + (q.correctResponseRate || 0), 0) / totalQuestions;
+  const totalUsage = filteredQuestions.reduce((sum: number, q: QuestionWithId) => sum + (q.usageCount || 0), 0);
+  const averageSuccessRate = totalQuestions > 0 ? filteredQuestions.reduce((sum: number, q: QuestionWithId) => sum + (q.correctResponseRate || 0), 0) / totalQuestions : 0;
 
   const getSuccessRateColor = (rate: number) => {
     if (rate >= 75) return 'text-green-600';
@@ -199,7 +213,7 @@ const QuestionStatistics: React.FC = () => {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant="primary">{question.referentiel}</Badge> {/* Corrigé: referential -> referentiel */}
+                    <Badge variant="primary">{question.referential}</Badge> {/* Corrigé: referential -> referentiel */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {questionThemes[question.theme as QuestionTheme] || question.theme} {/* Corrigé: indexation avec assertion et fallback */}

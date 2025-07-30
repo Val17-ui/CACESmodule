@@ -69,7 +69,7 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
                 <span className="font-medium">{iter.name}:</span>
                 <Button
                   variant="ghost"
-                  onClick={() => { if (iter.ors_file_path) window.dbAPI.openFile(iter.ors_file_path); }}
+                  onClick={() => { if (iter.ors_file_path) window.dbAPI?.openFile(iter.ors_file_path); }}
                   className="ml-2"
                 >
                   {iter.ors_file_path}

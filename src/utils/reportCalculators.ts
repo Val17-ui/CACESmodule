@@ -161,11 +161,9 @@ export const calculateQuestionSuccessRate = (
   if (!question) return 0; // Question not found
 
   allSessions.forEach(session => {
-    if (session.status === 'completed' && session.selectionBlocs) {
+    if (session.status === 'completed' && session.selectedBlocIds) {
       // Check if this question was part of this session
-      const isQuestionInSession = session.selectionBlocs.some(block => 
-        question.theme === block.theme && question.slideGuid === block.blockId
-      );
+      const isQuestionInSession = session.selectedBlocIds.includes(question.blocId);
 
       if (isQuestionInSession) {
         // For each participant in this session, this question was presented
@@ -484,7 +482,7 @@ export const calculateBlockStats = (
 
     for (const participant of session.participants) {
       const participantResultsForThisBlock = sessionResultsForThisSession.filter(r =>
-        r.participantIdBoitier === participant.idBoitier && // idBoitier est encore utilisé dans SessionResult
+        String(r.participantIdBoitier) === String(participant.assignedGlobalDeviceId) &&
         questionsInThisBlock.some(q => q.id === r.questionId)
       );
 

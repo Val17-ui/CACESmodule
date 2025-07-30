@@ -5,7 +5,7 @@ import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
 import { Plus } from 'lucide-react';
 // import { getAllSessions, getSessionById } from '../db'; // Supprimé
-import { Session as DBSession } from '../types';
+import { Session as DBSession, Referential } from '../types';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 
@@ -123,14 +123,14 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
       setIsCreating(false);
       // Charger le nom de la session pour le titre via IPC
       if (window.dbAPI && typeof window.dbAPI.getSessionById === 'function') {
-        window.dbAPI.getSessionById(sessionId).then(session => {
+        window.dbAPI.getSessionById(sessionId).then((session: DBSession | undefined) => {
           if (session) {
             setManagingSessionName(session.nomSession);
           } else {
             setManagingSessionName(null);
             console.warn(`[Sessions Page] Session with ID ${sessionId} not found via IPC.`);
           }
-        }).catch(err => {
+        }).catch((err: Error) => {
           console.error(`[Sessions Page] Error fetching session ${sessionId} via IPC:`, err);
           setManagingSessionName(null);
         });
