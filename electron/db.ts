@@ -435,11 +435,17 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
             );
             const existing = selectStmt.get(iteration.session_id, iteration.iteration_index) as { id: number } | undefined;
 
-            const dataToSave = {
+            const dataToSave: any = {
                 ...iteration,
                 question_mappings: JSON.stringify(iteration.question_mappings || []),
                 created_at: iteration.created_at || new Date().toISOString(),
             };
+
+            // Defensive check: only include updated_at if the column exists
+            const columns = getDb().pragma('table_info(session_iterations)') as { name: string }[];
+            if (!columns.some(col => col.name === 'updated_at')) {
+                delete dataToSave.updated_at;
+            }
 
             if (existing) {
                 // Update
