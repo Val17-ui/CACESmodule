@@ -13,7 +13,8 @@ import {
   Bloc,
   QuestionWithId as StoredQuestion,
   VotingDevice,
-  DeviceKit
+  DeviceKit,
+  SessionIteration
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -768,7 +769,7 @@ const handleGenerateQuestionnaire = async () => {
         if (orsBlob) {
           const fileName = `${sessionName.replace(/ /g, '_')}_${iterationName.replace(/ /g, '_')}.ors`;
           const saveResult = await window.dbAPI?.savePptxFile(orsBlob, fileName);
-          if (saveResult.success) {
+          if (saveResult && saveResult.success) {
             const iterToUpdate = upToDateSessionData.iterations?.find(it => it.iteration_index === i) || { created_at: new Date().toISOString() };
             await StorageManager.addOrUpdateSessionIteration({
               ...iterToUpdate,
@@ -777,11 +778,10 @@ const handleGenerateQuestionnaire = async () => {
               name: iterationName,
               ors_file_path: saveResult.filePath,
               status: 'ready',
-              participants: participantsForIteration.map(p => ({ nom: p.lastName, prenom: p.firstName, identificationCode: p.identificationCode, assignedGlobalDeviceId: p.assignedGlobalDeviceId, statusInSession: 'present' })),
               question_mappings: questionMappings,
             });
             setImportSummary(`Itération ${iterationName} générée.`);
-          } else { throw new Error(`Sauvegarde échouée pour ${iterationName}: ${saveResult.error}`); }
+          } else { throw new Error(`Sauvegarde échouée pour ${iterationName}: ${saveResult?.error}`); }
         }
       }
       const finalSessionData = await StorageManager.getSessionById(currentSavedId);
