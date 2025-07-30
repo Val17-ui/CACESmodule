@@ -342,10 +342,22 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   });
 
   ipcMain.handle('db-set-participant-assignments-for-iteration', async (_event: IpcMainInvokeEvent, iterationId: number, assignments: any[]) => {
-      loggerInstance.debug(`[IPC] db-set-participant-assignments-for-iteration for iteration ${iterationId}`);
-      await clearAssignmentsForIteration(iterationId);
-      const promises = assignments.map(assignment => addParticipantAssignment(assignment));
-      return Promise.all(promises);
+      loggerInstance.info(`[IPC] Setting assignments for iteration ${iterationId}. Assignments count: ${assignments.length}`);
+      loggerInstance.debug(`[IPC] Assignments data for iteration ${iterationId}: ${JSON.stringify(assignments)}`);
+
+      try {
+        await clearAssignmentsForIteration(iterationId);
+        loggerInstance.debug(`[IPC] Cleared existing assignments for iteration ${iterationId}`);
+
+        const promises = assignments.map(assignment => addParticipantAssignment(assignment));
+        const results = await Promise.all(promises);
+
+        loggerInstance.info(`[IPC] Successfully set ${results.length} assignments for iteration ${iterationId}`);
+        return results;
+      } catch (error) {
+        loggerInstance.error(`[IPC] Failed to set assignments for iteration ${iterationId}: ${error}`);
+        throw error;
+      }
   });
 
   // AdminSettings

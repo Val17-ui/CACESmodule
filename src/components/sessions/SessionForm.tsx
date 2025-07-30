@@ -594,7 +594,10 @@ const handleGenerateQuestionnaire = async () => {
 
         const dbId = await StorageManager.upsertParticipant(dbParticipant);
         if (dbId) {
+          console.log(`[SessionSave] Upserted participant ${dbParticipant.prenom} ${dbParticipant.nom} (Code: ${code}). DB ID: ${dbId}`);
           participantDbIdMap.set(p.id, dbId);
+        } else {
+          console.error(`[SessionSave] Failed to upsert participant ${dbParticipant.prenom} ${dbParticipant.nom}. No DB ID returned.`);
         }
       }
 

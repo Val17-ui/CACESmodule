@@ -531,9 +531,9 @@ const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<num
 }
 
 const upsertParticipant = async (participant: Participant): Promise<number | undefined> => {
+    _logger?.info(`[DB Participants] Upserting participant. Data: ${JSON.stringify(participant)}`);
     return asyncDbRun(() => {
         try {
-            // This relies on SQLite 3.24.0+ for ON CONFLICT... DO UPDATE SET... RETURNING...
             const stmt = getDb().prepare(`
                 INSERT INTO participants (first_name, last_name, organization, identification_code)
                 VALUES (@prenom, @nom, @organization, @identificationCode)
@@ -543,15 +543,26 @@ const upsertParticipant = async (participant: Participant): Promise<number | und
                     organization = excluded.organization
                 RETURNING id
             `);
-            const result = stmt.get({
+
+            const params = {
                 prenom: participant.prenom,
                 nom: participant.nom,
                 organization: participant.organization,
                 identificationCode: participant.identificationCode
-            }) as { id: number };
-            return result.id;
+            };
+
+            _logger?.debug(`[DB Participants] Executing upsert with params: ${JSON.stringify(params)}`);
+            const result = stmt.get(params) as { id: number };
+
+            if (result && result.id) {
+                _logger?.info(`[DB Participants] Upsert successful. Participant ID: ${result.id}`);
+            } else {
+                _logger?.error(`[DB Participants] Upsert failed. No ID returned. Params: ${JSON.stringify(params)}`);
+            }
+
+            return result?.id;
         } catch (error) {
-            _logger?.debug(`[DB Participants] Error upserting participant: ${error}`);
+            _logger?.error(`[DB Participants] Error upserting participant: ${error}`, { participant });
             throw error;
         }
     });
@@ -997,24 +1008,24 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
       if (!row) return undefined;
 
       const session = rowToSession(row);
+      _logger?.info(`[DB Sessions] Fetched session ${id}. Fetching iterations...`);
 
-      // Fetch and attach iterations
       const iterations = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ? ORDER BY iteration_index ASC").all(id) as SessionIteration[];
+      _logger?.debug(`[DB Sessions] Found ${iterations.length} iterations for session ${id}.`);
 
       session.iterations = iterations.map(iter => {
         if (!iter.id) {
-            return {
-                ...iter,
-                participants: [],
-                question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
-            }
+            _logger?.warn(`[DB Sessions] Iteration with index ${iter.iteration_index} for session ${id} has no ID. Returning with empty participants.`);
+            return { ...iter, participants: [], question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [] };
         }
+
         const assignments = getDb().prepare(`
             SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
             FROM participant_assignments pa
             JOIN participants p ON pa.participant_id = p.id
             WHERE pa.session_iteration_id = ?
         `).all(iter.id) as any[];
+        _logger?.debug(`[DB Sessions] Found ${assignments.length} participant assignments for iteration ${iter.id}.`);
 
         const participantsForIter = assignments.map(a => {
             const participant: Participant = {
@@ -1029,11 +1040,12 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 
         return {
             ...iter,
-                    participants: participantsForIter,
+            participants: participantsForIter,
             question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
         };
       });
 
+      _logger?.info(`[DB Sessions] Finished building session object for ${id}. Final object: ${JSON.stringify(session)}`);
       return session;
     } catch (error) {
       _logger?.debug(`[DB Sessions] Error getting session by id ${id}: ${error}`);
