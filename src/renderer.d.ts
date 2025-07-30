@@ -52,9 +52,9 @@ declare global {
       savePptxFile: (fileBuffer: ArrayBuffer, fileName: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
       openExcelFileDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
       openDirectoryDialog: (filePath?: string) => Promise<void>;
-      openResultsFile: () => Promise<{ canceled: boolean; fileBuffer?: ArrayBuffer }>;
+      openResultsFile: () => Promise<{ canceled: boolean; fileName: string | null; fileBuffer: string | null; error: string | null; }>;
       openFile: (filePath: string) => Promise<void>;
-      sessionFinalizeImport: (sessionId: number, results: SessionResult[]) => Promise<Session | undefined>;
+      importResultsForIteration: (iterationId: number, sessionId: number, results: SessionResult[]) => Promise<Session | undefined>;
       addOrUpdateSessionIteration: (iteration: SessionIteration) => Promise<void>;
       getSessionIterations: (sessionId: number) => Promise<SessionIteration[]>;
       deleteResultsForIteration: (iterationId: number) => Promise<void>;
