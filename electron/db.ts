@@ -439,12 +439,13 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
                 ...iteration,
                 question_mappings: JSON.stringify(iteration.question_mappings || []),
                 created_at: iteration.created_at || new Date().toISOString(),
+                updated_at: new Date().toISOString(), // Assurons-nous que c'est toujours là
             };
 
             if (existing) {
                 // Update
                 const {
-                    id, session_id, iteration_index, // Exclude keys that should not be in SET clause
+                    id, session_id, iteration_index, created_at, // Exclude keys that should not be in SET clause
                     ...updates
                 } = dataToSave;
 
@@ -454,7 +455,7 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
                 const setClause = fields.map(field => `${field} = @${field}`).join(', ');
                 const updateStmt = getDb().prepare(`UPDATE session_iterations SET ${setClause} WHERE id = @id`);
                 updateStmt.run({ ...updates, id: existing.id });
-                return existing.id;
+                return existing.id; // RETOURNE L'ID EXISTANT
             } else {
                 // Insert
                 const insertStmt = getDb().prepare(`
@@ -462,7 +463,7 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
                     VALUES (@session_id, @iteration_index, @name, @ors_file_path, @status, @question_mappings, @created_at, @updated_at)
                 `);
                 const result = insertStmt.run(dataToSave);
-                return result.lastInsertRowid as number;
+                return result.lastInsertRowid as number; // RETOURNE LE NOUVEL ID
             }
         } catch (error) {
             _logger?.debug(`[DB SessionIterations] Error in addOrUpdateSessionIteration: ${error}`);

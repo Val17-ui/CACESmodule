@@ -577,7 +577,7 @@ const handleGenerateQuestionnaire = async () => {
     return sessionToSave as DBSession;
   };
 
-  const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
+const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
     console.log('[SessionSave] Starting save process...');
     if (!sessionDataToSave) return null;
 
@@ -631,28 +631,27 @@ const handleGenerateQuestionnaire = async () => {
                     updated_at: new Date().toISOString(),
                 };
 
-                const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
+const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
 
-                if (savedIterationId) {
-                    const assignedFormParticipantIds = (participantAssignments[i] || []).map((p: {id: string}) => p.id);
-                    const assignmentsForDb = [];
+if (savedIterationId) { // <-- On ajoute cette condition
+    const assignedFormParticipantIds = (participantAssignments[i] || []).map((p: {id: string}) => p.id);
+    const assignmentsForDb = [];
 
-                    for (const formPId of assignedFormParticipantIds) {
-                        const dbPId = participantDbIdMap.get(formPId);
-                        const participantFormState = participants.find(p => p.id === formPId);
-                        if (dbPId && participantFormState && participantFormState.assignedGlobalDeviceId) {
-                            assignmentsForDb.push({
-                                session_iteration_id: savedIterationId,
-                                participant_id: dbPId,
-                                voting_device_id: participantFormState.assignedGlobalDeviceId,
-                                kit_id: selectedKitIdState || 0,
-                            });
-                        }
-                    }
-                    await StorageManager.setParticipantAssignmentsForIteration(savedIterationId, assignmentsForDb);
-                }
-            }
-
+    for (const formPId of assignedFormParticipantIds) {
+        const dbPId = participantDbIdMap.get(formPId);
+        const participantFormState = participants.find(p => p.id === formPId);
+        if (dbPId && participantFormState && participantFormState.assignedGlobalDeviceId) {
+            assignmentsForDb.push({
+                session_iteration_id: savedIterationId, // Maintenant, c'est sûr que c'est un nombre
+                participant_id: dbPId,
+                voting_device_id: participantFormState.assignedGlobalDeviceId,
+                kit_id: selectedKitIdState || 0,
+            });
+        }
+    }
+    await StorageManager.setParticipantAssignmentsForIteration(savedIterationId, assignmentsForDb);
+}
+}
             const reloadedSession = await StorageManager.getSessionById(savedSessionId);
             setEditingSessionData(reloadedSession || null);
             if (reloadedSession) {

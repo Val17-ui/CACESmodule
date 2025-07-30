@@ -55,7 +55,7 @@ declare global {
       openResultsFile: () => Promise<{ canceled: boolean; fileName: string | null; fileBuffer: string | null; error: string | null; }>;
       openFile: (filePath: string) => Promise<void>;
       importResultsForIteration: (iterationId: number, sessionId: number, results: SessionResult[]) => Promise<Session | undefined>;
-      addOrUpdateSessionIteration: (iteration: SessionIteration) => Promise<void>;
+      addOrUpdateSessionIteration: (iteration: SessionIteration) => Promise<number | undefined>;
       getSessionIterations: (sessionId: number) => Promise<SessionIteration[]>;
       deleteResultsForIteration: (iterationId: number) => Promise<void>;
       addVotingDevice: (data: Omit<VotingDevice, 'id'>) => Promise<number | undefined>;
