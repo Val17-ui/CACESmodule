@@ -305,119 +305,93 @@ const createSchema = () => {
     transaction();
     _logger?.debug("[DB SCHEMA] Database schema created/verified successfully.");
 
-    // --- Migrations for 'sessions' table ---
+    // --- Migrations ---
     const db = getDb();
+    // Wrap all migrations in a single transaction to ensure atomicity.
+    // If any migration fails, all previous successful migrations in this block will be rolled back.
+    const migrationTransaction = db.transaction(() => {
+        interface TableInfo { name: string; type: string; cid: number; notnull: number; dflt_value: any; pk: number; }
 
-    // Migration step 1: Rename old column if it exists
-    interface TableInfo { name: string; type: string; cid: number; notnull: number; dflt_value: any; pk: number; }
-    try {
-        // Check if the old column exists before trying to rename
-        const columns: TableInfo[] = db.pragma('table_info(sessions)') as TableInfo[];
-        const hasDonneesOrs = columns.some(col => col.name === 'donneesOrs');
-        const hasOrsFilePath = columns.some(col => col.name === 'orsFilePath');
-
-        if (hasDonneesOrs && !hasOrsFilePath) {
-            db.prepare("ALTER TABLE sessions RENAME COLUMN donneesOrs TO orsFilePath").run();
-            _logger?.debug("[DB MIGRATION] Renamed column 'donneesOrs' to 'orsFilePath'.");
+        // Migration for 'sessions': Rename old column if it exists
+        try {
+            const columns: TableInfo[] = db.pragma('table_info(sessions)') as TableInfo[];
+            const hasDonneesOrs = columns.some(col => col.name === 'donneesOrs');
+            const hasOrsFilePath = columns.some(col => col.name === 'orsFilePath');
+            if (hasDonneesOrs && !hasOrsFilePath) {
+                db.prepare("ALTER TABLE sessions RENAME COLUMN donneesOrs TO orsFilePath").run();
+                _logger?.debug("[DB MIGRATION] Renamed column 'donneesOrs' to 'orsFilePath'.");
+            }
+        } catch (error) {
+            _logger?.debug(`[DB MIGRATION] Non-critical error during rename check for 'donneesOrs': ${error}`);
         }
-    } catch (error) {
-        // This might fail for other reasons, _logger?.debug it but proceed.
-        _logger?.debug(`[DB MIGRATION] Error during rename check/operation for 'donneesOrs': ${error}`);
-    }
 
-    // Migration step 2: Add new columns if they don't exist
-    const columnsToAdd = [
-        { name: 'orsFilePath', type: 'TEXT' },
-        { name: 'resultsImportedAt', type: 'TEXT' },
-        { name: 'updatedAt', type: 'TEXT' },
-        { name: 'num_session', type: 'TEXT' },
-        { name: 'num_stage', type: 'TEXT' },
-        { name: 'archived_at', type: 'TEXT' },
-        { name: 'iteration_count', type: 'INTEGER' }
-    ];
-
-    const existingColumns = (db.pragma('table_info(sessions)') as TableInfo[]).map(col => col.name);
-
-    for (const column of columnsToAdd) {
-        if (!existingColumns.includes(column.name)) {
-            try {
+        // Migration for 'sessions': Add new columns
+        const sessionsColumnsToAdd = [
+            { name: 'orsFilePath', type: 'TEXT' }, { name: 'resultsImportedAt', type: 'TEXT' },
+            { name: 'updatedAt', type: 'TEXT' }, { name: 'num_session', type: 'TEXT' },
+            { name: 'num_stage', type: 'TEXT' }, { name: 'archived_at', type: 'TEXT' },
+            { name: 'iteration_count', type: 'INTEGER' }
+        ];
+        const existingSessionsColumns = (db.pragma('table_info(sessions)') as TableInfo[]).map(c => c.name);
+        for (const column of sessionsColumnsToAdd) {
+            if (!existingSessionsColumns.includes(column.name)) {
                 db.prepare(`ALTER TABLE sessions ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'sessions' table.`);
-            } catch (error: any) {
-                // Catching errors here just in case, though the check should prevent duplicates.
-                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column: ${error}`);
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'sessions'.`);
             }
         }
-    }
 
-    // --- Migrations for 'session_iterations' table ---
-    const sessionIterationsColumnsToAdd = [
-      { name: 'updated_at', type: 'TEXT' }
-    ];
-    const existingSessionIterationsColumns = (db.pragma('table_info(session_iterations)') as TableInfo[]).map(col => col.name);
-    for (const column of sessionIterationsColumnsToAdd) {
-        if (!existingSessionIterationsColumns.includes(column.name)) {
-            try {
+        // Migration for 'session_iterations': Add new columns
+        const iterColumnsToAdd = [{ name: 'updated_at', type: 'TEXT' }];
+        const existingIterColumns = (db.pragma('table_info(session_iterations)') as TableInfo[]).map(c => c.name);
+        for (const column of iterColumnsToAdd) {
+            if (!existingIterColumns.includes(column.name)) {
                 db.prepare(`ALTER TABLE session_iterations ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'session_iterations' table.`);
-            } catch (error: any) {
-                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'session_iterations': ${error}`);
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'session_iterations'.`);
             }
         }
-    }
 
-    // --- Migrations for 'sessionResults' table ---
-    const sessionResultsColumnsToAdd = [
-        { name: 'session_iteration_id', type: 'INTEGER' }
-    ];
-    const existingSessionResultsColumns = (db.pragma('table_info(sessionResults)') as TableInfo[]).map(col => col.name);
-    for (const column of sessionResultsColumnsToAdd) {
-        if (!existingSessionResultsColumns.includes(column.name)) {
-            try {
+        // Migration for 'sessionResults': Add new columns
+        const resultsColumnsToAdd = [{ name: 'session_iteration_id', type: 'INTEGER' }];
+        const existingResultsColumns = (db.pragma('table_info(sessionResults)') as TableInfo[]).map(c => c.name);
+        for (const column of resultsColumnsToAdd) {
+            if (!existingResultsColumns.includes(column.name)) {
                 db.prepare(`ALTER TABLE sessionResults ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'sessionResults' table.`);
-            } catch (error: any) {
-                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'sessionResults': ${error}`);
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'sessionResults'.`);
             }
         }
-    }
 
-    // --- Migrations for 'questions' table ---
-    const questionsColumnsToAdd = [
-        { name: 'userQuestionId', type: 'TEXT' },
-        { name: 'version', type: 'INTEGER' },
-        { name: 'updated_at', type: 'TEXT' }
-    ];
-
-    const existingQuestionsColumns = (db.pragma('table_info(questions)') as TableInfo[]).map(col => col.name);
-
-    for (const column of questionsColumnsToAdd) {
-        if (!existingQuestionsColumns.includes(column.name)) {
-            try {
+        // Migration for 'questions': Add new columns
+        const questionsColumnsToAdd = [
+            { name: 'userQuestionId', type: 'TEXT' }, { name: 'version', type: 'INTEGER' },
+            { name: 'updated_at', type: 'TEXT' }
+        ];
+        const existingQuestionsColumns = (db.pragma('table_info(questions)') as TableInfo[]).map(c => c.name);
+        for (const column of questionsColumnsToAdd) {
+            if (!existingQuestionsColumns.includes(column.name)) {
                 db.prepare(`ALTER TABLE questions ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'questions' table.`);
-            } catch (error: any) {
-                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'questions': ${error}`);
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'questions'.`);
             }
         }
-    }
 
-    // --- Migrations for 'deviceKits' table ---
-    const deviceKitsColumnsToAdd = [
-        { name: 'is_global', type: 'INTEGER' }
-    ];
-
-    const existingDeviceKitsColumns = (db.pragma('table_info(deviceKits)') as TableInfo[]).map(col => col.name);
-
-    for (const column of deviceKitsColumnsToAdd) {
-        if (!existingDeviceKitsColumns.includes(column.name)) {
-            try {
+        // Migration for 'deviceKits': Add new columns
+        const kitsColumnsToAdd = [{ name: 'is_global', type: 'INTEGER' }];
+        const existingKitsColumns = (db.pragma('table_info(deviceKits)') as TableInfo[]).map(c => c.name);
+        for (const column of kitsColumnsToAdd) {
+            if (!existingKitsColumns.includes(column.name)) {
                 db.prepare(`ALTER TABLE deviceKits ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' column to 'deviceKits' table.`);
-            } catch (error: any) {
-                _logger?.debug(`[DB MIGRATION] Error adding '${column.name}' column to 'deviceKits': ${error}`);
+                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'deviceKits'.`);
             }
         }
+    });
+
+    // Execute the migration transaction
+    try {
+        migrationTransaction();
+        _logger?.debug("[DB MIGRATION] All migrations executed successfully within a transaction.");
+    } catch (error) {
+        _logger?.error(`[DB MIGRATION] A migration failed: ${error}. Transaction was rolled back.`);
+        // Re-throw the error to halt application startup, as the schema is inconsistent.
+        throw error;
     }
 
   } catch(error) {
