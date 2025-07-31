@@ -94,8 +94,8 @@ function generateOmbeaSessionXml(
 
 
 import { ILogger } from './logger';
-import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '../../src/types/index';
-  const { generatePPTXVal17 } = await import('./val17PptxGenerator.js');
+import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '../../src/types';
+  const { generatePPTXVal17 } = await import('./val17PptxGenerator');
 
 export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger): Val17Question[] {
   logger.info('[LOG][pptxOrchestrator] Début de transformQuestionsForVal17Generator.');
@@ -140,6 +140,7 @@ export async function generatePresentation(
   adminSettings: AdminPPTXSettings,
   logger: ILogger
 ): Promise<{ orsBlob: ArrayBuffer | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
+  console.log('pptxOrchestrator.ts: generatePresentation');
   logger.info('[LOG][pptxOrchestrator] === Début de generatePresentation ===');
   logger.info(`[LOG][pptxOrchestrator] sessionInfo: ${JSON.stringify(sessionInfo)}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de participants: ${participantsForGenerator.length}`);

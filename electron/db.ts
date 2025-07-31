@@ -550,13 +550,13 @@ const upsertParticipant = async (participant: Participant): Promise<number | und
                     WHERE id = @id
                 `);
                 stmt.run({
-                    id: participant.id,
+                    id: typeof participant.id === 'string' ? parseInt(participant.id, 10) : participant.id,
                     prenom: participant.prenom,
                     nom: participant.nom,
                     organization: participant.organization,
                     identificationCode: participant.identificationCode
                 });
-                return participant.id;
+                return typeof participant.id === 'string' ? parseInt(participant.id, 10) : participant.id;
             } else {
                 // If no ID is provided, insert a new participant
                 const stmt = getDb().prepare(`
@@ -572,7 +572,7 @@ const upsertParticipant = async (participant: Participant): Promise<number | und
                 return result.lastInsertRowid as number;
             }
         } catch (error) {
-            _logger?.error(`[DB Participants] Error upserting participant: ${error}`, { participant });
+            _logger?.error(`[DB Participants] Error upserting participant: ${error}. Participant data: ${JSON.stringify(participant)}`);
             throw error;
         }
     });

@@ -2,6 +2,7 @@
 import { IpcMainInvokeEvent, ipcMain, dialog, shell } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
+import * as pptxOrchestrator from './utils/pptxOrchestrator';
 import {
   getAllSessions, getSessionById, addSession, updateSession,
   addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration,
@@ -24,7 +25,7 @@ import {
 } from './db';
 
 import { getLogger, ILogger } from './utils/logger';
-import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '../src/types/index';
+import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '@src/types/index';
 
 let handlerInitialized = false;
 
@@ -390,31 +391,25 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   });
 
   // PPTX Generation
-  ipcMain.handle('pptx-generate', async (_event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referentiel: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
-    loggerInstance.info('[IPC] pptx-generate handler triggered.');
-    const { generatePresentation } = await import('./utils/pptxOrchestrator');
-    loggerInstance.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
-    let templateArrayBuffer: ArrayBuffer;
-    if (template === 'tool_default_template') {
-      const templatePath = path.join(__dirname, '../../public/templates/default.pptx');
-      try {
-        templateArrayBuffer = await fs.readFile(templatePath);
-      } catch (error) {
-        loggerInstance.debug(`Failed to read default PPTX template within pptx-generate: ${error}`);
-        throw new Error('Could not load default PPTX template.');
-      }
-    } else if (template && template.type === 'Buffer' && Array.isArray(template.data)) {
-      templateArrayBuffer = Buffer.from(template.data);
-    } else if (template instanceof ArrayBuffer) {
-      templateArrayBuffer = template;
-    } else if (template && typeof template.arrayBuffer === 'function') {
-      templateArrayBuffer = await template.arrayBuffer();
-    } else {
-      throw new Error("Invalid template format provided to pptx-generate IPC handler.");
+  ipcMain.handle('pptx-generate', async (event, sessionInfo, participants, storedQuestions, templateFile, adminSettings) => {
+    loggerInstance.info('[IPC Handlers] Received pptx-generate request.');
+    try {
+      const result = await pptxOrchestrator.generatePresentation(
+        sessionInfo,
+        participants,
+        storedQuestions,
+        templateFile,
+        adminSettings,
+        loggerInstance
+      );
+      loggerInstance.info('[IPC Handlers] pptx-generate completed successfully.');
+      return result;
+    } catch (error: any) {
+      loggerInstance.error(`[IPC Handlers] Error during pptx-generate: ${error.message}. Stack: ${error.stack}`);
+      dialog.showErrorBox("Erreur de génération PPTX", `Une erreur est survenue lors de la génération du fichier PPTX: ${error.message}`);
+      return null;
     }
-    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, loggerInstance);
   });
-
   ipcMain.handle('get-default-pptx-template', async () => {
     loggerInstance.debug('[IPC] get-default-pptx-template');
     const templatePath = path.join(__dirname, '../../public/templates/default.pptx');

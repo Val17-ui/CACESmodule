@@ -1,10 +1,13 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import JSZip from "jszip";
-import sizeOf from 'image-size';
+import probe from 'probe-image-size';
+import { Readable } from 'stream';
 import { ILogger } from './logger';
 import { Participant, VotingDevice, Val17SessionInfo, ParticipantForGenerator, AdminPPTXSettings, Val17GenerationOptions, Val17Question, QuestionMapping } from '../../src/types/index';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
+
+
 
 interface TagInfo {
   tagNumber: number;
@@ -185,7 +188,10 @@ async function loadLocalImageWithDimensions(filePath: string, logger: ILogger): 
   logger.info(`[LOG][val17PptxGenerator] Début de loadLocalImageWithDimensions pour ${filePath}.`);
   try {
     const imageBuffer = fs.readFileSync(filePath);
-    const dimensions = sizeOf(imageBuffer);             // Ligne modifiée
+    const stream = new Readable();
+    stream.push(imageBuffer);
+    stream.push(null); // Indicate end of stream
+    const dimensions = await probe(stream);
     const extension = path.extname(filePath).substring(1) || 'jpg';
     const result = {
       data: imageBuffer,
@@ -221,7 +227,10 @@ async function downloadImageFromCloudWithDimensions(url: string, logger: ILogger
     }
     const arrayBuffer = await response.arrayBuffer();
     const imageBuffer = Buffer.from(arrayBuffer);
-    const dimensions = sizeOf(imageBuffer);
+    const stream = new Readable();
+    stream.push(imageBuffer);
+    stream.push(null); // Indicate end of stream
+    const dimensions = await probe(stream);
     const extension = dimensions.type || 'jpg';
 
     const result = {
@@ -402,6 +411,11 @@ async function updateContentTypesForNewLayout(
     }
   }
   logger.info('[LOG][val17PptxGenerator] Fin de updateContentTypesForNewLayout.');
+}
+
+async function getImageSize(path: string) {
+  const result = await probe('file://' + path);
+  return { width: result.width, height: result.height };
 }
 
 function createIntroTitleSlideXml(
@@ -1611,6 +1625,7 @@ export async function generatePPTXVal17(
   logger: ILogger,
   sessionInfo?: Val17SessionInfo
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
+  console.log('val17PptxGenerator.ts: generatePPTXVal17');
   logger.debug(`[LOG][val17PptxGenerator] Final participants for generator: ${JSON.stringify(participants)}`);
   logger.debug(`  - Nombre de questions: ${questions.length}`);
   logger.debug(`  - Options: ${JSON.stringify(options)}`);
