@@ -6,11 +6,10 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
     "composite": true,
-    "noEmit": true, // Added to resolve the error
+    "noEmit": false,
 
     /* Linting */
     "strict": true,

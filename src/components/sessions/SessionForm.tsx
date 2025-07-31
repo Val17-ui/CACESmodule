@@ -749,7 +749,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         const themes = await StorageManager.getThemesByReferentialId(referentielObject.id);
         for (const theme of themes) {
           if (!theme.id) continue;
-          const blocs = (await StorageManager.getBlocsByThemeId(theme.id)).filter(b => b.code_bloc.match(/_([A-E])$/i));
+          const blocs = (await StorageManager.getBlocsByThemeId(theme.id)).filter(b => b.code_bloc.match(/_G\d+$/i));
           if (blocs.length > 0) {
             const chosenBloc = blocs[Math.floor(Math.random() * blocs.length)];
             if (chosenBloc.id) {

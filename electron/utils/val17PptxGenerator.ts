@@ -185,7 +185,7 @@ async function loadLocalImageWithDimensions(filePath: string, logger: ILogger): 
   logger.info(`[LOG][val17PptxGenerator] Début de loadLocalImageWithDimensions pour ${filePath}.`);
   try {
     const imageBuffer = fs.readFileSync(filePath);
-    const dimensions = sizeOf(imageBuffer);
+    const dimensions = sizeOf(imageBuffer);             // Ligne modifiée
     const extension = path.extname(filePath).substring(1) || 'jpg';
     const result = {
       data: imageBuffer,
