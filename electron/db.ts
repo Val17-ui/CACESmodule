@@ -220,7 +220,6 @@ const createSchema = () => {
       FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
     );`,
     `CREATE INDEX IF NOT EXISTS idx_sessionResults_sessionId ON sessionResults(sessionId);`,
-    `CREATE INDEX IF NOT EXISTS idx_sessionResults_session_iteration_id ON sessionResults(session_iteration_id);`,
     `CREATE INDEX IF NOT EXISTS idx_sessionResults_questionId ON sessionResults(questionId);`,
     `CREATE INDEX IF NOT EXISTS idx_sessionResults_participantIdBoitier ON sessionResults(participantIdBoitier);`,
 
@@ -363,6 +362,9 @@ const createSchema = () => {
         if (!resultsColumns.some(c => c.name === 'session_iteration_id')) {
             db.prepare(`ALTER TABLE sessionResults ADD COLUMN session_iteration_id INTEGER`).run();
             _logger.info(`[DB MIGRATION] Added column 'session_iteration_id' to 'sessionResults'.`);
+            // Now that the column is guaranteed to exist, create the index.
+            db.prepare(`CREATE INDEX IF NOT EXISTS idx_sessionResults_session_iteration_id ON sessionResults(session_iteration_id)`).run();
+            _logger.info(`[DB MIGRATION] Added index 'idx_sessionResults_session_iteration_id' to 'sessionResults'.`);
         }
 
         _logger.debug("[DB MIGRATION] Checking for 'questions' table migrations...");
