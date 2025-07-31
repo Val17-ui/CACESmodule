@@ -127,19 +127,19 @@ export interface QuestionMapping {
 
 // Nouvelle interface Participant pour les listes dans une Session
 export interface Participant {
-  idBoitier?: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
+  id?: number | string;
   nom: string;
   prenom: string;
+  identificationCode?: string;
+  score?: number;
+  reussite?: boolean;
+  assignedGlobalDeviceId?: number | null;
+  statusInSession?: 'present' | 'absent';
   organization?: string;
-  identificationCode?: string; // Code d'identification optionnel
-  score?: number; // Score total du participant pour cette session
-  reussite?: boolean; // Statut de réussite du participant pour cette session
-  assignedGlobalDeviceId?: number | null; // Référence à GlobalDevice.id (VotingDevice.id)
-  statusInSession?: 'present' | 'absent'; // Statut du participant pour cette session spécifique
 }
 
 export interface FormParticipant extends Participant {
-  id: string;
+  id: string | number; // Can be a string for new participants, number for existing
   firstName: string;
   lastName: string;
   deviceId: number | null;
@@ -189,7 +189,7 @@ export interface Question {
   timeLimit?: number;
   isEliminatory: boolean;
   blocId?: number; // Clé étrangère vers la table Blocs
-  image?: Blob;
+  image?: string | Blob | null;
   createdAt?: string;
   updatedAt?: string;
   lastUsedAt?: string;

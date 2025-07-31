@@ -13,7 +13,8 @@ import {
   Bloc,
   QuestionWithId as StoredQuestion,
   VotingDevice,
-  DeviceKit
+  DeviceKit,
+  FormParticipant
 } from '../../types';
 import { StorageManager } from '../../services/StorageManager';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -23,15 +24,6 @@ import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import AnomalyResolutionModal, { DetectedAnomalies } from './AnomalyResolutionModal';
 import { ExpectedIssueResolution, UnknownDeviceResolution } from '../../types';
-
-interface FormParticipant extends DBParticipantType {
-  id: string;
-  firstName: string;
-  lastName: string;
-  organization?: string;
-  deviceId: number | null;
-  hasSigned?: boolean;
-}
 
 interface SessionFormProps {
   sessionIdToLoad?: number;
@@ -88,7 +80,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   const [pendingValidResults, setPendingValidResults] = useState<ExtractedResultFromXml[]>([]);
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
   const [currentIterationForImport, setCurrentIterationForImport] = useState<number | null>(null);
-  const [participantAssignments, setParticipantAssignments] = useState<Record<number, { id: string; assignedGlobalDeviceId: number | null }[]>>({});
+  const [participantAssignments, setParticipantAssignments] = useState<Record<number, { id: string | number; assignedGlobalDeviceId: number | null }[]>>({});
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -114,7 +107,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
         if (!sessionIdToLoad) {
           if (trainers.length > 0) {
-            const defaultTrainer = trainers.find(t => t.isDefault === 1) || trainers[0];
+            const defaultTrainer = trainers.find(t => t.isDefault) || trainers[0];
             if (defaultTrainer?.id) setSelectedTrainerId(defaultTrainer.id);
           }
           if (defaultKitResult?.id) {
@@ -163,10 +156,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     setEditingSessionData(null);
     setActiveTab('details');
     setModifiedAfterOrsGeneration(false);
+    setIsDirty(false);
   }, []);
 
   const populateFormFromSessionData = useCallback((sessionData: DBSession | null) => {
-    console.log('[PopulateForm] Populating form with session data:', sessionData);
+    console.log('[DEBUG] populateFormFromSessionData: Received session data:', JSON.stringify(sessionData, null, 2));
     setEditingSessionData(sessionData || null);
     if (sessionData) {
       setCurrentSessionDbId(sessionData.id ?? null);
@@ -195,53 +189,59 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       setSelectedTrainerId(sessionData.trainerId || null);
       setSelectedKitIdState(sessionData.selectedKitId || null);
 
-      if (sessionData.iteration_count && sessionData.iteration_count > 1) {
-        setIterationCount(sessionData.iteration_count);
-        setIterationNames(sessionData.iterations?.map(iter => iter.name) || Array.from({ length: sessionData.iteration_count }, (_, i) => `Session_${i + 1}`));
-      } else {
-        setIterationCount(1);
-        setIterationNames(['Session_1']);
-      }
+      const iterCount = sessionData.iteration_count || 1;
+      console.log(`[DEBUG] Setting iteration count to: ${iterCount}`);
+      setIterationCount(iterCount);
+      const iterNames = sessionData.iterations?.map(iter => iter.name) || Array.from({ length: iterCount }, (_, i) => `Session_${i + 1}`);
+      console.log(`[DEBUG] Setting iteration names to:`, iterNames);
+      setIterationNames(iterNames);
 
       setModifiedAfterOrsGeneration(false);
 
       if (sessionData.iterations && sessionData.iterations.length > 0) {
         const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => (iter as any).participants || []);
+        console.log('[DEBUG] All participants from all iterations:', JSON.stringify(allParticipantsFromIterations, null, 2));
         const uniqueParticipantsMap = new Map<string, DBParticipantType>();
         allParticipantsFromIterations.forEach((p: DBParticipantType) => {
-          if (p.identificationCode) {
-            uniqueParticipantsMap.set(p.identificationCode, p);
+          const uniqueKey = `${p.prenom}-${p.nom}`.toLowerCase();
+          if (!uniqueParticipantsMap.has(uniqueKey)) {
+            uniqueParticipantsMap.set(uniqueKey, p);
           }
         });
         const uniqueParticipants = Array.from(uniqueParticipantsMap.values());
+        console.log('[DEBUG] Unique participants consolidated:', JSON.stringify(uniqueParticipants, null, 2));
 
-        const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
+        const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType) => ({
           ...p_db,
-          id: `loaded-${loopIndex}-${Date.now()}`,
+          id: p_db.id!,
           firstName: p_db.prenom,
           lastName: p_db.nom,
-          deviceId: loopIndex + 1,
+          deviceId: null, // This will be populated from assignments
           organization: (p_db as any).organization || '',
           hasSigned: (p_db as any).hasSigned || false,
         }));
+        console.log('[DEBUG] Setting form participants state:', JSON.stringify(formParticipants, null, 2));
         setParticipants(formParticipants);
 
-        const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+        const newAssignments: Record<number, { id: string | number; assignedGlobalDeviceId: number | null }[]> = {};
         sessionData.iterations.forEach(iter => {
           const participantIdsForIter = ((iter as any).participants || []).map((p_iter: DBParticipantType) => {
-            const matchingFormParticipant = formParticipants.find(fp => fp.identificationCode === p_iter.identificationCode);
-            return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null } : null;
-          }).filter((p: { id: string; assignedGlobalDeviceId: number | null; } | null): p is { id: string; assignedGlobalDeviceId: number | null; } => p !== null);
+            const matchingFormParticipant = formParticipants.find(fp => fp.id === p_iter.id);
+            return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: p_iter.assignedGlobalDeviceId || null } : null;
+          }).filter((p: { id: string | number; assignedGlobalDeviceId: number | null; } | null): p is { id: string | number; assignedGlobalDeviceId: number | null; } => p !== null);
           newAssignments[iter.iteration_index] = participantIdsForIter;
         });
+        console.log('[DEBUG] Setting participant assignments state:', JSON.stringify(newAssignments, null, 2));
         setParticipantAssignments(newAssignments);
       } else {
+        console.log('[DEBUG] No iterations found in session data, clearing participants and assignments.');
         setParticipants([]);
         setParticipantAssignments({});
       }
     } else {
       resetFormTactic();
     }
+    setIsDirty(false);
   }, [referentielsData, resetFormTactic]);
 
   useEffect(() => {
@@ -282,17 +282,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
   }, [editingSessionData, editingSessionData?.selectedBlocIds, allThemesData, allBlocsData]);
 
-  useEffect(() => {
-    // Only default all participants to the first iteration for NEW sessions.
-    if (!sessionIdToLoad && iterationCount === 1) {
-        setParticipantAssignments({
-            0: participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null }))
-        });
-    }
-}, [participants, iterationCount, sessionIdToLoad]);
-
-  
-
   const handleAddParticipant = () => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     if (!selectedKitIdState) {
@@ -306,31 +295,31 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     }
 
     const assignedDeviceIds = participants.map(p => p.assignedGlobalDeviceId).filter(id => id !== null);
-    const nextAvailableDevice = votingDevicesInSelectedKit.find(d => !assignedDeviceIds.includes(d.id));
+    const nextAvailableDevice = votingDevicesInSelectedKit.find(d => !assignedDeviceIds.includes(d.id!));
 
     const newParticipant: FormParticipant = {
+      id: Date.now().toString(),
       nom: '',
       prenom: '',
+      firstName: '',
+      lastName: '',
+      organization: '',
       identificationCode: '',
       score: undefined,
       reussite: undefined,
       assignedGlobalDeviceId: nextAvailableDevice?.id || null,
       statusInSession: 'present',
-      id: Date.now().toString(),
-      firstName: '',
-      lastName: '',
-      organization: '',
       deviceId: null,
       hasSigned: false,
     };
     setParticipants([...participants, newParticipant]);
+    setIsDirty(true);
   };
 
-  const handleRemoveParticipant = (id: string) => {
+  const handleRemoveParticipant = (id: string | number) => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     const updatedParticipants = participants.filter(p => p.id !== id);
     setParticipants(updatedParticipants);
-    // Also remove from assignments
     setParticipantAssignments(prev => {
         const newAssignments = { ...prev };
         Object.keys(newAssignments).forEach(iterIndex => {
@@ -339,9 +328,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         });
         return newAssignments;
     });
+    setIsDirty(true);
   };
 
-  const handleParticipantChange = (id: string, field: keyof FormParticipant, value: string | number | boolean | null) => {
+  const handleParticipantChange = (id: string | number, field: keyof FormParticipant, value: string | number | boolean | null) => {
     if (editingSessionData?.orsFilePath && field !== 'deviceId' && editingSessionData.status !== 'completed') {
       setModifiedAfterOrsGeneration(true);
     }
@@ -354,9 +344,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
       }
       return p;
     }));
+    setIsDirty(true);
   };
 
-  const handleParticipantIterationChange = (participantId: string, newIterationIndex: number) => {
+  const handleParticipantIterationChange = (participantId: string | number, newIterationIndex: number) => {
     console.log(`[IterationChange] participantId: ${participantId}, newIterationIndex: ${newIterationIndex}`);
     setParticipantAssignments(prev => {
         const newAssignments = { ...prev };
@@ -365,22 +356,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
             console.warn(`[IterationChange] Participant with id ${participantId} not found in state.`);
             return prev;
         }
-
-        // Remove participant from all iterations first
         Object.keys(newAssignments).forEach(iterIndex => {
             const index = parseInt(iterIndex, 10);
             newAssignments[index] = (newAssignments[index] || []).filter(p => p.id !== participantId);
         });
-
-        // Add to the new iteration
         if (!newAssignments[newIterationIndex]) {
             newAssignments[newIterationIndex] = [];
         }
         newAssignments[newIterationIndex].push({ id: participantToMove.id, assignedGlobalDeviceId: participantToMove.assignedGlobalDeviceId || null });
-
         console.log('[IterationChange] New assignments state:', newAssignments);
         return newAssignments;
     });
+    setIsDirty(true);
   };
 
   const parseCsvParticipants = (fileContent: string): Array<Partial<DBParticipantType>> => {
@@ -446,28 +433,27 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
     if (parsedData.length > 0) {
       const newFormParticipants: FormParticipant[] = parsedData.map((p, index) => ({
+        id: `imported-${Date.now()}-${index}`,
         nom: p.nom || '',
         prenom: p.prenom || '',
+        firstName: p.prenom || '',
+        lastName: p.nom || '',
+        organization: (p as any).organization || '',
         identificationCode: p.identificationCode || '',
         score: undefined,
         reussite: undefined,
         assignedGlobalDeviceId: null,
         statusInSession: 'present',
-        id: `imported-${Date.now()}-${index}`,
-        firstName: p.prenom || '',
-        lastName: p.nom || '',
-        organization: (p as any).organization || '',
         deviceId: null,
         hasSigned: false,
       }));
       setParticipants(prev => {
         const updatedParticipants = [...prev, ...newFormParticipants];
-        // Assign imported participants to iterations
         const newAssignments = { ...participantAssignments };
         newFormParticipants.forEach((p, index) => {
           const parsedInfo = parsedData[index];
-          const targetIteration = parsedInfo?.iteration || 1; // Default to 1st iteration
-          const iterationIndex = targetIteration - 1; // Convert to 0-based index
+          const targetIteration = parsedInfo?.iteration || 1;
+          const iterationIndex = targetIteration - 1;
           if (!newAssignments[iterationIndex]) {
             newAssignments[iterationIndex] = [];
           }
@@ -477,12 +463,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         return updatedParticipants;
       });
       setImportSummary(`${parsedData.length} participants importés de ${fileName}. Assignez les boîtiers.`);
-    } else {
+      setIsDirty(true);
+    }
+    else {
       setImportSummary(`Aucun participant valide trouvé dans ${fileName}.`);
     }
   };
 
-const handleGenerateQuestionnaire = async () => {
+  const handleGenerateQuestionnaire = async () => {
     const sessionData = await prepareSessionDataForDb();
     if (sessionData) {
         const savedId = await handleSaveSession(sessionData);
@@ -490,7 +478,7 @@ const handleGenerateQuestionnaire = async () => {
             handleGenerateQuestionnaireAndOrs(savedId);
         }
     }
-};
+  };
 
   const handleParticipantFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -528,7 +516,7 @@ const handleGenerateQuestionnaire = async () => {
     }
   };
 
-  const prepareSessionDataForDb = async (includeOrsBlob?: string | Blob | ArrayBuffer | null): Promise<DBSession | null> => {
+  const prepareSessionDataForDb = async (includeOrsBlob?: any): Promise<DBSession | null> => {
     let currentReferentielId: number | undefined = undefined;
     if (selectedReferentialId) {
         currentReferentielId = selectedReferentialId;
@@ -570,11 +558,44 @@ const handleGenerateQuestionnaire = async () => {
   };
 
   const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
-    console.log('[SessionSave] Starting save process...');
-    if (!sessionDataToSave) return null;
+    console.log('[DEBUG] handleSaveSession: Starting save process...');
+    if (!sessionDataToSave) {
+      console.error('[DEBUG] handleSaveSession: sessionDataToSave is null. Aborting.');
+      return null;
+    }
+
+    console.log('[DEBUG] handleSaveSession: Participants in state before save:', JSON.stringify(participants, null, 2));
+    console.log('[DEBUG] handleSaveSession: Assignments in state before save:', JSON.stringify(participantAssignments, null, 2));
+
+    for (const p of participants) {
+      if (!p.firstName || !p.lastName) {
+        alert(`Veuillez renseigner le nom et le prénom pour tous les participants.`);
+        console.error('[DEBUG] handleSaveSession: Validation failed. Missing name.', p);
+        return null;
+      }
+    }
+
+    const updatedAssignments = { ...participantAssignments };
+    let assignmentsChanged = false;
+    for (const p of participants) {
+        const isAssigned = Object.values(updatedAssignments).some(iterAssignments => iterAssignments.some(assignment => assignment.id === p.id));
+        if (!isAssigned) {
+            console.log(`[DEBUG] handleSaveSession: Participant ${p.id} is not assigned to any iteration. Assigning to iteration 0.`);
+            if (!updatedAssignments[0]) {
+                updatedAssignments[0] = [];
+            }
+            updatedAssignments[0].push({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null });
+            assignmentsChanged = true;
+        }
+    }
+    if (assignmentsChanged) {
+        console.log('[DEBUG] handleSaveSession: Assignments were changed. New assignments:', JSON.stringify(updatedAssignments, null, 2));
+        setParticipantAssignments(updatedAssignments);
+    }
+
 
     try {
-      // Step 1: Save session details to get a session ID.
+      console.log('[DEBUG] handleSaveSession: Saving session data:', JSON.stringify(sessionDataToSave, null, 2));
       let savedSessionId: number | undefined;
       if (sessionDataToSave.id) {
         await StorageManager.updateSession(sessionDataToSave.id, sessionDataToSave);
@@ -586,30 +607,34 @@ const handleGenerateQuestionnaire = async () => {
           savedSessionId = newId;
         } else {
           setImportSummary("Erreur critique : La nouvelle session n'a pas pu être créée.");
+          console.error('[DEBUG] handleSaveSession: addSession returned no ID.');
           return null;
         }
       }
       if (!savedSessionId) {
         setImportSummary("Erreur: Impossible d'obtenir un ID de session valide.");
+        console.error('[DEBUG] handleSaveSession: No valid session ID.');
         return null;
       }
+      console.log(`[DEBUG] handleSaveSession: Session saved with ID: ${savedSessionId}`);
 
-      // Step 2: Upsert all participants and get their database IDs.
-      const participantDbIdMap = new Map<string, number>(); // Maps form participant ID to DB ID
+      const participantDbIdMap = new Map<string | number, number>();
       for (const p of participants) {
-        const dbParticipant: Omit<DBParticipantType, 'id'> = {
+        const dbParticipant: DBParticipantType = {
+          id: typeof p.id === 'number' ? p.id : undefined,
           nom: p.lastName,
           prenom: p.firstName,
           organization: p.organization,
           identificationCode: p.identificationCode,
         };
+        console.log(`[DEBUG] handleSaveSession: Upserting participant:`, JSON.stringify(dbParticipant, null, 2));
         const dbId = await StorageManager.upsertParticipant(dbParticipant);
         if (dbId) {
+          console.log(`[DEBUG] handleSaveSession: Upserted participant form ID ${p.id} to DB ID ${dbId}`);
           participantDbIdMap.set(p.id, dbId);
         }
       }
 
-      // Step 3: Save iterations and their participant assignments.
       for (let i = 0; i < iterationCount; i++) {
         const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
         const iterationToSave: any = {
@@ -623,15 +648,16 @@ const handleGenerateQuestionnaire = async () => {
           created_at: existingIteration?.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
-
+        console.log(`[DEBUG] handleSaveSession: Saving iteration ${i}:`, JSON.stringify(iterationToSave, null, 2));
         const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
         if (savedIterationId && savedIterationId > 0) {
-          const assignedFormParticipantIds = (participantAssignments[i] || []).map(p => p.id);
+          console.log(`[DEBUG] handleSaveSession: Iteration ${i} saved with ID: ${savedIterationId}`);
+          const assignedFormParticipantIds = (updatedAssignments[i] || []).map(p => p.id);
           const assignmentsForDb = [];
           for (const formPId of assignedFormParticipantIds) {
             const dbPId = participantDbIdMap.get(formPId);
             const participantFormState = participants.find(p => p.id === formPId);
-            if (dbPId && participantFormState && participantFormState.assignedGlobalDeviceId) {
+            if (dbPId && participantFormState) {
               assignmentsForDb.push({
                 session_iteration_id: savedIterationId,
                 participant_id: dbPId,
@@ -640,15 +666,15 @@ const handleGenerateQuestionnaire = async () => {
               });
             }
           }
+          console.log(`[DEBUG] handleSaveSession: Setting assignments for iteration ${i}:`, JSON.stringify(assignmentsForDb, null, 2));
           await StorageManager.setParticipantAssignmentsForIteration(savedIterationId, assignmentsForDb);
         }
       }
 
-      // Step 4: Reload the session from DB to have the single source of truth.
+      console.log(`[DEBUG] handleSaveSession: Reloading session ${savedSessionId} from DB.`);
       const reloadedSession = await StorageManager.getSessionById(savedSessionId);
       if (reloadedSession) {
         populateFormFromSessionData(reloadedSession);
-        setModifiedAfterOrsGeneration(false);
       }
 
       return savedSessionId;
@@ -663,7 +689,10 @@ const handleGenerateQuestionnaire = async () => {
     const sessionData = await prepareSessionDataForDb(editingSessionData?.orsFilePath);
     if (sessionData) {
       const savedId = await handleSaveSession(sessionData);
-      if (savedId) { setImportSummary(`Session (ID: ${savedId}) sauvegardée avec succès !`); }
+      if (savedId) {
+        setImportSummary(`Session (ID: ${savedId}) sauvegardée avec succès !`);
+        setIsDirty(false);
+      }
     }
   };
 
@@ -677,7 +706,6 @@ const handleGenerateQuestionnaire = async () => {
             updatedAt: new Date().toISOString()
           });
           setImportSummary("Session annulée et archivée.");
-          // Optionnel: rediriger l'utilisateur ou rafraîchir l'état
         } catch (error) {
           console.error("Erreur lors de l'annulation de la session:", error);
           setImportSummary("Erreur lors de l'annulation de la session.");
@@ -741,6 +769,23 @@ const handleGenerateQuestionnaire = async () => {
         const iterationName = iterationNames[i];
         const assignedParticipantIds = (participantAssignments[i] || []).map(p => p.id);
         const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.id));
+
+        const deviceIdSet = new Set<number>();
+        for (const p of participantsForIteration) {
+          if (!p.assignedGlobalDeviceId) {
+            alert(`Génération annulée pour l'itération "${iterationName}": Le participant ${p.firstName} ${p.lastName} n'a pas de boîtier de vote assigné.`);
+            setIsGeneratingOrs(false);
+            return;
+          }
+          if (deviceIdSet.has(p.assignedGlobalDeviceId)) {
+            const device = hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId);
+            alert(`Génération annulée pour l'itération "${iterationName}": Le boîtier de vote "${device?.name || 'N/A'}" (SN: ${device?.serialNumber || 'N/A'}) est assigné à plusieurs participants. Veuillez assigner un boîtier unique à chaque participant.`);
+            setIsGeneratingOrs(false);
+            return;
+          }
+          deviceIdSet.add(p.assignedGlobalDeviceId);
+        }
+
         const participantsForGenerator = participantsForIteration.map(p => {
           const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
           return { idBoitier: device?.serialNumber || '', nom: p.lastName, prenom: p.firstName, identificationCode: p.identificationCode };
@@ -750,7 +795,7 @@ const handleGenerateQuestionnaire = async () => {
         const { orsBlob, questionMappings } = await window.dbAPI?.generatePresentation(
           { name: `${sessionName} - ${iterationName}`, date: sessionDate, referential: refCodeToUse as CACESReferential },
           participantsForGenerator, allSelectedQuestionsForPptx, templateFile, {} as AdminPPTXSettings
-        );
+        ) || {};
 
         if (orsBlob) {
           const fileName = `${sessionName.replace(/ /g, '_')}_${iterationName.replace(/ /g, '_')}.ors`;
@@ -779,8 +824,6 @@ const handleGenerateQuestionnaire = async () => {
     }
   };
 
-  
-
   const handleImportResults = async (iterationIndex: number) => {
     if (!currentSessionDbId || !editingSessionData) {
       setImportSummary("Aucune session active.");
@@ -797,7 +840,7 @@ const handleGenerateQuestionnaire = async () => {
       }
       await StorageManager.deleteResultsForIteration(iteration.id);
     }
-    setImportSummary(`Lecture du fichier ORS pour l'itération ${iteration.name}...`);
+    setImportSummary(`Lecture du fichier ORS pour l'itéation ${iteration.name}...`);
     try {
       const fileData = await window.dbAPI?.openResultsFile();
       if (!fileData || fileData.canceled || !fileData.fileBuffer) {
@@ -973,7 +1016,8 @@ const handleGenerateQuestionnaire = async () => {
         } catch (error: any) {
           setImportSummary(`Erreur lors de la finalisation de l'itération: ${error.message}`);
         }
-      } else {
+      }
+      else {
         setImportSummary("Aucun résultat à importer.");
       }
     } catch (error: any) {
@@ -1086,6 +1130,7 @@ const handleGenerateQuestionnaire = async () => {
             console.warn(`[AnomalyResolution] Aucun VotingDevice global pour SN ${resolution.serialNumber}. Nouveau participant sans assignedGlobalDeviceId.`);
         }
         const newParticipantEntry: DBParticipantType = {
+          id: 0, // This will be a new participant, so the ID should be handled by the DB
           nom: newParticipantName.split(' ').slice(1).join(' ') || `SN-${resolution.serialNumber.slice(-4)}`,
           prenom: newParticipantName.split(' ')[0] || 'Inconnu',
           assignedGlobalDeviceId: assignedGlobalDeviceIdForNew,
@@ -1116,13 +1161,7 @@ const handleGenerateQuestionnaire = async () => {
                     const visualDeviceId = index + 1;
                     const currentFormParticipantState = participants[index];
                     return {
-                      nom: p_db_updated.nom,
-                      prenom: p_db_updated.prenom,
-                      identificationCode: p_db_updated.identificationCode,
-                      score: p_db_updated.score,
-                      reussite: p_db_updated.reussite,
-                      assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
-                      statusInSession: p_db_updated.statusInSession,
+                      ...p_db_updated,
                       id: currentFormParticipantState?.id || `updated-${index}-${Date.now()}`,
                       firstName: p_db_updated.prenom,
                       lastName: p_db_updated.nom,
@@ -1199,13 +1238,7 @@ const handleGenerateQuestionnaire = async () => {
                           const visualDeviceId = index + 1;
                           const currentFormParticipantState = participants[index];
                           return {
-                            nom: p_db_updated.nom,
-                            prenom: p_db_updated.prenom,
-                            identificationCode: p_db_updated.identificationCode,
-                            score: p_db_updated.score,
-                            reussite: p_db_updated.reussite,
-                            assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
-                            statusInSession: p_db_updated.statusInSession,
+                            ...p_db_updated,
                             id: currentFormParticipantState?.id || `final-updated-${index}-${Date.now()}`,
                             firstName: p_db_updated.prenom,
                             lastName: p_db_updated.nom,
@@ -1236,6 +1269,17 @@ const handleGenerateQuestionnaire = async () => {
     setDetectedAnomalies(null);
     setPendingValidResults([]);
     setImportSummary("Importation des résultats annulée par l'utilisateur en raison d'anomalies.");
+  };
+
+  const handleTabChange = (tabKey: TabKey) => {
+    if (isDirty) {
+      if (window.confirm("Vous avez des modifications non sauvegardées. Voulez-vous vraiment quitter cet onglet ? Les modifications seront perdues.")) {
+        populateFormFromSessionData(editingSessionData);
+        setActiveTab(tabKey);
+      }
+    } else {
+      setActiveTab(tabKey);
+    }
   };
 
   const renderTabNavigation = () => {
@@ -1303,6 +1347,7 @@ const handleGenerateQuestionnaire = async () => {
             notes={notes}
             setNotes={setNotes}
             displayedBlockDetails={displayedBlockDetails}
+            setIsDirty={setIsDirty}
           />
         );
       case 'participants':

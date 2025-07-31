@@ -31,6 +31,7 @@ interface SessionDetailsFormProps {
   notes: string;
   setNotes: (value: string) => void;
   displayedBlockDetails: Array<{ themeName: string, blocName: string }>;
+  setIsDirty: (dirty: boolean) => void;
 }
 
 const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
@@ -44,7 +45,8 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
   iterationCount, setIterationCount, setIterationNames, setParticipantAssignments,
   location, setLocation,
   notes, setNotes,
-  displayedBlockDetails
+  displayedBlockDetails,
+  setIsDirty
 }) => {
 
   const referentialOptionsFromData = referentielsData.map((r: Referential) => ({
@@ -59,7 +61,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
           label="Nom de la session"
           placeholder="Ex: Formation CACES R489 - Groupe A"
           value={sessionName}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionName(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSessionName(e.target.value); setIsDirty(true); }}
           required
           disabled={isReadOnly}
         />
@@ -67,7 +69,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
           label="Date de la session"
           type="date"
           value={sessionDate}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSessionDate(e.target.value); setIsDirty(true); }}
           required
           disabled={isReadOnly}
         />
@@ -86,6 +88,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
             } else {
               setSelectedReferentialId(null);
             }
+            setIsDirty(true);
           }}
           placeholder="Sélectionner un référentiel"
           required
@@ -95,7 +98,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
           label="Formateur"
           options={trainersList.map((t: Trainer) => ({ value: t.id?.toString() || '', label: t.name }))}
           value={selectedTrainerId?.toString() || ''}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null); setIsDirty(true); }}
           placeholder="Sélectionner un formateur"
           disabled={isReadOnly}
         />
@@ -105,14 +108,14 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
           label="Numéro de session"
           placeholder="Ex: 2024-001"
           value={numSession}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumSession(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNumSession(e.target.value); setIsDirty(true); }}
           disabled={isReadOnly}
         />
         <Input
           label="Numéro de stage"
           placeholder="Ex: CACES-2024-A"
           value={numStage}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNumStage(e.target.value); setIsDirty(true); }}
           disabled={isReadOnly}
         />
         <Input
@@ -123,7 +126,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
             const count = parseInt(e.target.value, 10);
             if (count > 0) {
-              setIterationCount(count);
+              setIterationCount(Number(e.target.value));
               const newIterationNames = Array.from({ length: count }, (_, i) => `Session_${i + 1}`);
               setIterationNames(newIterationNames);
               setParticipantAssignments((prev: any) => {
@@ -137,6 +140,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
                 }
                 return newAssignments;
               });
+              setIsDirty(true);
             }
           }}
           disabled={isReadOnly}
@@ -147,7 +151,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
           label="Lieu de formation"
           placeholder="Ex: Centre de formation Paris Nord"
           value={location}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setLocation(e.target.value); setIsDirty(true); }}
           disabled={isReadOnly}
         />
       </div>

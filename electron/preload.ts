@@ -41,9 +41,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   setDefaultDeviceKit: (id: number) => ipcRenderer.invoke('db-set-default-device-kit', id),
   assignDeviceToKit: (kitId: number, votingDeviceId: number) => ipcRenderer.invoke('db-assign-device-to-kit', kitId, votingDeviceId),
   removeDeviceFromKit: (kitId: number, votingDeviceId: number) => ipcRenderer.invoke('db-remove-device-from-kit', kitId, votingDeviceId),
-  
-  
-  
+  getKitsForVotingDevice: (votingDeviceId: number) => ipcRenderer.invoke('db-get-kits-for-voting-device', votingDeviceId),
   removeAssignmentsByKitId: (kitId: number) => ipcRenderer.invoke('db-remove-assignments-by-kit-id', kitId),
   removeAssignmentsByVotingDeviceId: (votingDeviceId: number) => ipcRenderer.invoke('db-remove-assignments-by-voting-device-id', votingDeviceId),
 
@@ -59,6 +57,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   deleteTrainer: (id: number) => ipcRenderer.invoke('db-delete-trainer', id),
   setDefaultTrainer: (id: number) => ipcRenderer.invoke('db-set-default-trainer', id),
   updateTrainer: (id: number, updates: any) => ipcRenderer.invoke('db-update-trainer', id, updates),
+  getTrainerById: (id: number) => ipcRenderer.invoke('db-get-trainer-by-id', id),
 
   // Themes
   addTheme: (data: any) => ipcRenderer.invoke('db-add-theme', data),
@@ -106,6 +105,10 @@ contextBridge.exposeInMainWorld('dbAPI', {
   openDirectoryDialog: (filePath?: string) => ipcRenderer.invoke('open-directory-dialog', filePath),
   openResultsFile: () => ipcRenderer.invoke('open-results-file'),
   openFile: (filePath: string) => ipcRenderer.invoke('open-file', filePath),
+
+  // Finalization
+  importResultsForIteration: (iterationId: number, sessionId: number, results: any[]) => ipcRenderer.invoke('import-results-for-iteration', iterationId, sessionId, results),
+  checkAndFinalizeSession: (sessionId: number) => ipcRenderer.invoke('check-and-finalize-session', sessionId),
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {

@@ -10,14 +10,14 @@ interface ParticipantManagerProps {
   isReadOnly: boolean;
   participants: FormParticipant[];
   setParticipants: React.Dispatch<React.SetStateAction<FormParticipant[]>>;
-  handleParticipantChange: (id: string, field: keyof FormParticipant, value: any) => void;
-  handleRemoveParticipant: (id: string) => void;
+  handleParticipantChange: (id: string | number, field: keyof FormParticipant, value: any) => void;
+  handleRemoveParticipant: (id: string | number) => void;
   handleAddParticipant: () => void;
   handleParticipantFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
   iterationCount: number;
   iterationNames: string[];
-  participantAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]>;
-  handleParticipantIterationChange: (participantId: string, newIterationIndex: number) => void;
+  participantAssignments: Record<number, { id: string | number; assignedGlobalDeviceId: number | null }[]>;
+  handleParticipantIterationChange: (participantId: string | number, newIterationIndex: number) => void;
   deviceKitsList: DeviceKit[];
   selectedKitIdState: number | null;
   setSelectedKitIdState: (id: number | null) => void;
@@ -81,10 +81,10 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {participants.map((p) => {
+            {participants.map((p, index) => {
               const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.id));
               return (
-                <tr key={p.id}>
+                <tr key={p.id || index}>
                   {iterationCount > 1 && (
                     <td className="px-4 py-2">
                       <Select

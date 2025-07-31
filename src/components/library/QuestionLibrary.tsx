@@ -71,6 +71,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   }, []);
 
   const loadFilterData = async () => {
+    console.log('Loading filter data...');
     try {
       const refs = await StorageManager.getAllReferentiels();
       setReferentielsData(refs); // Used for filters and enrichment

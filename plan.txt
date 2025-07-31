@@ -1,0 +1,31 @@
+ Analyse complète du problème
+
+  En me basant sur votre description et les logs, voici la chaîne d'événements qui cause le bug :
+
+   1. La source du problème : La base de données. La fonction getSessionById dans electron/db.ts est responsable de charger une session et tous ses participants. La requête SQL qui récupère
+      les participants pour chaque itération ne sélectionne pas correctement l'ID unique de chaque participant depuis la table participants. Elle récupère le nom, le prénom, etc., mais pas
+      l'identifiant qui permet de distinguer "Johnny Bgood" (ID: 1) de "Johnny Hallyday" (ID: 5).
+
+   2. La consolidation échoue : Dans SessionForm.tsx, la fonction populateFormFromSessionData reçoit ces données incorrectes. Elle essaie ensuite de créer une liste de participants "uniques"
+      pour le formulaire. Comme les ID sont manquants, sa tentative de déduplication est défaillante.
+
+   3. L'état du formulaire est corrompu :
+       * La liste principale des participants (participants) est créée avec des ID temporaires ou incorrects.
+       * Plus grave encore, la structure qui mémorise quelle personne est dans quelle itération (participantAssignments) est construite sans les ID corrects. Les logs le montrent clairement :
+         Setting participant assignments state: { "0": [{ "assignedGlobalDeviceId": 2 }], "1": [{ "assignedGlobalDeviceId": 1 }] }. On voit bien que l'ID du participant a disparu.
+
+   4. Le bug se manifeste : Lorsque vous interagissez avec l'interface (par exemple, en changeant l'itération d'un participant), la fonction handleParticipantIterationChange est appelée. Comme
+      l'état participantAssignments est corrompu et ne contient pas d'ID de participant, la fonction reçoit participantId: undefined (comme vu dans les logs) et ne sait pas quel participant
+      déplacer. Elle applique alors le changement de manière incorrecte, ce qui donne l'impression que tous les participants changent en même temps.
+
+  Conclusion de l'analyse
+
+  Le problème n'est pas dans la logique de l'interface utilisateur (le onChange du dropdown), mais bien plus en amont, dans la requête à la base de données. Tant que les données initiales
+  chargées dans le formulaire sont incorrectes, toutes les manipulations qui en découlent échoueront.
+
+  Nouveau plan d'action
+
+   1. Correction de la source de données : Je vais modifier la requête SQL dans la fonction getSessionById du fichier electron/db.ts pour m'assurer qu'elle sélectionne et retourne l'ID de
+      chaque participant en plus de ses autres informations. C'est la correction la plus importante.
+   2. Suppression de l'avertissement de sauvegarde : Comme vous l'avez demandé, je vais annuler les modifications concernant l'état isDirty et la confirmation de sauvegarde pour la navigation
+      entre les onglets. Vous pourrez de nouveau naviguer librement à l'intérieur d'un formulaire de session.

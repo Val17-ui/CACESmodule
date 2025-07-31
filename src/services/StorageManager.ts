@@ -480,11 +480,10 @@ export const StorageManager = {
     }
   },
 
-  async setDefaultTrainer(id: number): Promise<number | undefined> {
+  async setDefaultTrainer(id: number): Promise<void> {
     if (!window.dbAPI?.setDefaultTrainer) throw new Error("dbAPI.setDefaultTrainer is not available.");
     try {
-      const result = await window.dbAPI.setDefaultTrainer(id);
-      return result;
+      await window.dbAPI.setDefaultTrainer(id);
     } catch (error) {
       console.error(`StorageManager: Error setting default trainer with id ${id} via IPC`, error);
       throw error;

@@ -34,21 +34,23 @@ async function initializeDatabase(loggerInstance: ILogger) {
   const BetterSqlite3Module = (await import('better-sqlite3')).default;
   _db = new BetterSqlite3Module(dbPath);
   _logger?.debug(`[DB SETUP] SQLite database connection established.`);
+  
+  // Toujours tenter de créer le schéma (il ne créera les tables que si elles n'existent pas)
+  try {
+    createSchema();
+    _logger?.debug("[DB SETUP] Schema creation/verification successful.");
+  } catch (error) {
+    _logger?.debug(`[DB SETUP] FATAL: Failed to create/verify database schema. Application might not work correctly. ${error}`);
+    // Envisager de quitter l'application si le schéma est critique et ne peut être créé
+    // process.exit(1);
+  }
+
   // Activer les clés étrangères
   try {
     getDb().pragma('foreign_keys = ON');
     _logger?.debug("[DB SETUP] Foreign key support enabled.");
   } catch (error) {
     _logger?.error(`[DB SETUP] Failed to enable foreign keys: ${String(error)}`);
-  }
-
-  // Créer le schéma
-  try {
-    createSchema();
-  } catch (error) {
-    _logger?.debug(`[DB SETUP] FATAL: Failed to create/verify database schema. Application might not work correctly. ${error}`);
-    // Envisager de quitter l'application si le schéma est critique et ne peut être créé
-    // process.exit(1);
   }
 
   // Create or update the global kit
@@ -272,15 +274,15 @@ const createSchema = () => {
         first_name TEXT,
         last_name TEXT,
         organization TEXT,
-        identification_code TEXT UNIQUE
+        identification_code TEXT
     );`,
 
     `CREATE TABLE IF NOT EXISTS participant_assignments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_iteration_id INTEGER NOT NULL,
         participant_id INTEGER NOT NULL,
-        voting_device_id INTEGER NOT NULL,
-        kit_id INTEGER NOT NULL,
+        voting_device_id INTEGER,
+        kit_id INTEGER,
         FOREIGN KEY (session_iteration_id) REFERENCES session_iterations(id) ON DELETE CASCADE,
         FOREIGN KEY (participant_id) REFERENCES participants(id) ON DELETE CASCADE,
         FOREIGN KEY (voting_device_id) REFERENCES votingDevices(id) ON DELETE CASCADE,
@@ -540,33 +542,35 @@ const upsertParticipant = async (participant: Participant): Promise<number | und
     _logger?.info(`[DB Participants] Upserting participant. Data: ${JSON.stringify(participant)}`);
     return asyncDbRun(() => {
         try {
-            const stmt = getDb().prepare(`
-                INSERT INTO participants (first_name, last_name, organization, identification_code)
-                VALUES (@prenom, @nom, @organization, @identificationCode)
-                ON CONFLICT(identification_code) DO UPDATE SET
-                    first_name = excluded.first_name,
-                    last_name = excluded.last_name,
-                    organization = excluded.organization
-                RETURNING id
-            `);
-
-            const params = {
-                prenom: participant.prenom,
-                nom: participant.nom,
-                organization: participant.organization,
-                identificationCode: participant.identificationCode
-            };
-
-            _logger?.debug(`[DB Participants] Executing upsert with params: ${JSON.stringify(params)}`);
-            const result = stmt.get(params) as { id: number };
-
-            if (result && result.id) {
-                _logger?.info(`[DB Participants] Upsert successful. Participant ID: ${result.id}`);
+            if (participant.id) {
+                // If an ID is provided, update the existing participant
+                const stmt = getDb().prepare(`
+                    UPDATE participants
+                    SET first_name = @prenom, last_name = @nom, organization = @organization, identification_code = @identificationCode
+                    WHERE id = @id
+                `);
+                stmt.run({
+                    id: participant.id,
+                    prenom: participant.prenom,
+                    nom: participant.nom,
+                    organization: participant.organization,
+                    identificationCode: participant.identificationCode
+                });
+                return participant.id;
             } else {
-                _logger?.error(`[DB Participants] Upsert failed. No ID returned. Params: ${JSON.stringify(params)}`);
+                // If no ID is provided, insert a new participant
+                const stmt = getDb().prepare(`
+                    INSERT INTO participants (first_name, last_name, organization, identification_code)
+                    VALUES (@prenom, @nom, @organization, @identificationCode)
+                `);
+                const result = stmt.run({
+                    prenom: participant.prenom,
+                    nom: participant.nom,
+                    organization: participant.organization,
+                    identificationCode: participant.identificationCode
+                });
+                return result.lastInsertRowid as number;
             }
-
-            return result?.id;
         } catch (error) {
             _logger?.error(`[DB Participants] Error upserting participant: ${error}`, { participant });
             throw error;
@@ -582,7 +586,11 @@ const addParticipantAssignment = async (assignment: Omit<ParticipantAssignment, 
                 INSERT INTO participant_assignments (session_iteration_id, participant_id, voting_device_id, kit_id)
                 VALUES (@session_iteration_id, @participant_id, @voting_device_id, @kit_id)
             `);
-            const result = stmt.run(assignment);
+            const result = stmt.run({
+                ...assignment,
+                voting_device_id: assignment.voting_device_id === null ? null : assignment.voting_device_id,
+                kit_id: assignment.kit_id === null ? null : assignment.kit_id
+            });
             return result.lastInsertRowid as number;
         } catch (error) {
             _logger?.debug(`[DB ParticipantAssignments] Error adding participant assignment: ${error}`);
@@ -1026,7 +1034,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
         }
 
         const assignments = getDb().prepare(`
-            SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
+            SELECT p.id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
             FROM participant_assignments pa
             JOIN participants p ON pa.participant_id = p.id
             WHERE pa.session_iteration_id = ?
@@ -1035,6 +1043,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 
         const participantsForIter = assignments.map(a => {
             const participant: Participant = {
+                id: a.id, // Ensure the participant ID is included
                 nom: a.last_name,
                 prenom: a.first_name,
                 organization: a.organization,

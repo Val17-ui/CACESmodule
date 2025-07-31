@@ -240,6 +240,10 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
     loggerInstance.debug(`[IPC] db-update-trainer: ${id}`);
     return updateTrainer(id, updates);
   });
+  ipcMain.handle('db-get-trainer-by-id', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-get-trainer-by-id: ${id}`);
+    return getTrainerById(id);
+  });
 
   ipcMain.handle('db-calculate-block-usage', async () => {
     loggerInstance.debug('[IPC] db-calculate-block-usage');
