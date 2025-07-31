@@ -1176,8 +1176,6 @@ if (savedIterationId) { // <-- On ajoute cette condition
               const questionsForScoreCalc = await StorageManager.getQuestionsByIds(questionDbIds);
               const allResultsForScoreCalc = await StorageManager.getResultsForSession(currentSessionDbId);
               if (questionsForScoreCalc.length > 0 && allResultsForScoreCalc.length > 0) {
-                      const allParticipantsFromIterations = finalSessionDataForScores.iterations.flatMap((iter: any) => (iter as any).participants || []);
-
                   const anomaliesAuditData = {
                     expectedIssues: expectedResolutions,
                     unknownDevices: unknownResolutions,
