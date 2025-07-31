@@ -23,45 +23,64 @@ const dbPath = process.env.NODE_ENV === 'development'
 async function initializeDatabase(loggerInstance: ILogger) {
   _logger = loggerInstance;
   if (_db) {
-    _logger?.debug('[DB SETUP] Database already initialized.');
+    _logger.debug('[DB SETUP] Database already initialized. Skipping.');
     return;
   }
-  _logger?.debug('[DB SETUP] Initializing database...');
+  _logger.info('[DB SETUP] Starting database initialization...');
+  _logger.debug(`[DB SETUP] Database path resolved to: ${dbPath}`);
+
   const dbDir = path.dirname(dbPath);
   if (!fs.existsSync(dbDir)) {
+    _logger.debug(`[DB SETUP] Database directory does not exist. Creating: ${dbDir}`);
     await fs.promises.mkdir(dbDir, { recursive: true });
+  } else {
+    _logger.debug(`[DB SETUP] Database directory already exists: ${dbDir}`);
   }
-  const BetterSqlite3Module = (await import('better-sqlite3')).default;
-  _db = new BetterSqlite3Module(dbPath);
-  _logger?.debug(`[DB SETUP] SQLite database connection established.`);
-  // Activer les clés étrangères
+
+  try {
+    const BetterSqlite3Module = (await import('better-sqlite3')).default;
+    _db = new BetterSqlite3Module(dbPath, { verbose: _logger.debug.bind(_logger) });
+    _logger.info('[DB SETUP] SQLite database connection established.');
+  } catch (error) {
+    _logger.error(`[DB SETUP] CRITICAL: Failed to connect to SQLite database at ${dbPath}. ${error}`);
+    throw error;
+  }
+
   try {
     getDb().pragma('foreign_keys = ON');
-    _logger?.debug("[DB SETUP] Foreign key support enabled.");
+    _logger.debug("[DB SETUP] Foreign key support enabled.");
   } catch (error) {
-    _logger?.error(`[DB SETUP] Failed to enable foreign keys: ${String(error)}`);
+    _logger.error(`[DB SETUP] Failed to enable foreign keys: ${String(error)}`);
   }
 
-  // Créer le schéma
   try {
+    _logger.info('[DB SETUP] Proceeding to schema creation and migration...');
     createSchema();
+    _logger.info('[DB SETUP] Schema creation and migration step completed.');
   } catch (error) {
-    _logger?.debug(`[DB SETUP] FATAL: Failed to create/verify database schema. Application might not work correctly. ${error}`);
-    // Envisager de quitter l'application si le schéma est critique et ne peut être créé
-    // process.exit(1);
+    _logger.error(`[DB SETUP] FATAL: Failed to create or verify database schema. Application cannot continue safely. ${error}`);
+    // In a real-world scenario, you might want to show an error dialog to the user
+    // and then exit the application.
+    throw error;
   }
 
-  // Create or update the global kit
-  await createOrUpdateGlobalKit().catch(err => {
-    _logger?.error(`[DB SETUP] Failed to create/update global kit: ${err}`);
-  });
+  try {
+    _logger.debug('[DB SETUP] Proceeding to create/update global kit...');
+    await createOrUpdateGlobalKit();
+    _logger.debug('[DB SETUP] Global kit setup completed.');
+  } catch (err) {
+    _logger.error(`[DB SETUP] Failed to create/update global kit: ${err}`);
+  }
 
-  // Archive old sessions
-  await archiveOldSessions().catch(err => {
-    _logger?.error(`[DB SETUP] Failed to archive old sessions: ${err}`);
-  });
+  try {
+    _logger.debug('[DB SETUP] Proceeding to archive old sessions...');
+    await archiveOldSessions();
+    _logger.debug('[DB SETUP] Archiving old sessions completed.');
+  } catch (err) {
+    _logger.error(`[DB SETUP] Failed to archive old sessions: ${err}`);
+  }
 
-  _logger?.debug("[DB SETUP] SQLite database module loaded and initialized.");
+  _logger.info("[DB SETUP] Database initialization process finished successfully.");
 }
 
 const getDb = (): Database => {
@@ -302,101 +321,82 @@ const createSchema = () => {
   });
 
   try {
+    _logger.info('[DB SCHEMA] Executing CREATE TABLE statements...');
     transaction();
-    _logger?.debug("[DB SCHEMA] Database schema created/verified successfully.");
+    _logger.info('[DB SCHEMA] CREATE TABLE statements executed successfully.');
 
     // --- Migrations ---
     const db = getDb();
-    // Wrap all migrations in a single transaction to ensure atomicity.
-    // If any migration fails, all previous successful migrations in this block will be rolled back.
+    _logger.info('[DB MIGRATION] Starting migration process...');
     const migrationTransaction = db.transaction(() => {
         interface TableInfo { name: string; type: string; cid: number; notnull: number; dflt_value: any; pk: number; }
 
-        // Migration for 'sessions': Rename old column if it exists
-        try {
-            const columns: TableInfo[] = db.pragma('table_info(sessions)') as TableInfo[];
-            const hasDonneesOrs = columns.some(col => col.name === 'donneesOrs');
-            const hasOrsFilePath = columns.some(col => col.name === 'orsFilePath');
-            if (hasDonneesOrs && !hasOrsFilePath) {
-                db.prepare("ALTER TABLE sessions RENAME COLUMN donneesOrs TO orsFilePath").run();
-                _logger?.debug("[DB MIGRATION] Renamed column 'donneesOrs' to 'orsFilePath'.");
-            }
-        } catch (error) {
-            _logger?.debug(`[DB MIGRATION] Non-critical error during rename check for 'donneesOrs': ${error}`);
+        _logger.debug("[DB MIGRATION] Checking for 'sessions' table migrations...");
+        const sessionsColumns = db.pragma('table_info(sessions)') as TableInfo[];
+        if (sessionsColumns.some(c => c.name === 'donneesOrs') && !sessionsColumns.some(c => c.name === 'orsFilePath')) {
+            db.prepare("ALTER TABLE sessions RENAME COLUMN donneesOrs TO orsFilePath").run();
+            _logger.info("[DB MIGRATION] Renamed 'donneesOrs' to 'orsFilePath' in 'sessions'.");
         }
-
-        // Migration for 'sessions': Add new columns
         const sessionsColumnsToAdd = [
             { name: 'orsFilePath', type: 'TEXT' }, { name: 'resultsImportedAt', type: 'TEXT' },
             { name: 'updatedAt', type: 'TEXT' }, { name: 'num_session', type: 'TEXT' },
             { name: 'num_stage', type: 'TEXT' }, { name: 'archived_at', type: 'TEXT' },
             { name: 'iteration_count', type: 'INTEGER' }
         ];
-        const existingSessionsColumns = (db.pragma('table_info(sessions)') as TableInfo[]).map(c => c.name);
+        const existingSessionsColNames = sessionsColumns.map(c => c.name);
         for (const column of sessionsColumnsToAdd) {
-            if (!existingSessionsColumns.includes(column.name)) {
+            if (!existingSessionsColNames.includes(column.name)) {
                 db.prepare(`ALTER TABLE sessions ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'sessions'.`);
+                _logger.info(`[DB MIGRATION] Added column '${column.name}' to 'sessions'.`);
             }
         }
 
-        // Migration for 'session_iterations': Add new columns
-        const iterColumnsToAdd = [{ name: 'updated_at', type: 'TEXT' }];
-        const existingIterColumns = (db.pragma('table_info(session_iterations)') as TableInfo[]).map(c => c.name);
-        for (const column of iterColumnsToAdd) {
-            if (!existingIterColumns.includes(column.name)) {
-                db.prepare(`ALTER TABLE session_iterations ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'session_iterations'.`);
-            }
+        _logger.debug("[DB MIGRATION] Checking for 'session_iterations' table migrations...");
+        const iterColumns = db.pragma('table_info(session_iterations)') as TableInfo[];
+        if (!iterColumns.some(c => c.name === 'updated_at')) {
+            db.prepare(`ALTER TABLE session_iterations ADD COLUMN updated_at TEXT`).run();
+            _logger.info(`[DB MIGRATION] Added column 'updated_at' to 'session_iterations'.`);
         }
 
-        // Migration for 'sessionResults': Add new columns
-        const resultsColumnsToAdd = [{ name: 'session_iteration_id', type: 'INTEGER' }];
-        const existingResultsColumns = (db.pragma('table_info(sessionResults)') as TableInfo[]).map(c => c.name);
-        for (const column of resultsColumnsToAdd) {
-            if (!existingResultsColumns.includes(column.name)) {
-                db.prepare(`ALTER TABLE sessionResults ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'sessionResults'.`);
-            }
+        _logger.debug("[DB MIGRATION] Checking for 'sessionResults' table migrations...");
+        const resultsColumns = db.pragma('table_info(sessionResults)') as TableInfo[];
+        if (!resultsColumns.some(c => c.name === 'session_iteration_id')) {
+            db.prepare(`ALTER TABLE sessionResults ADD COLUMN session_iteration_id INTEGER`).run();
+            _logger.info(`[DB MIGRATION] Added column 'session_iteration_id' to 'sessionResults'.`);
         }
 
-        // Migration for 'questions': Add new columns
+        _logger.debug("[DB MIGRATION] Checking for 'questions' table migrations...");
         const questionsColumnsToAdd = [
             { name: 'userQuestionId', type: 'TEXT' }, { name: 'version', type: 'INTEGER' },
             { name: 'updated_at', type: 'TEXT' }
         ];
-        const existingQuestionsColumns = (db.pragma('table_info(questions)') as TableInfo[]).map(c => c.name);
+        const existingQuestionsColNames = (db.pragma('table_info(questions)') as TableInfo[]).map(c => c.name);
         for (const column of questionsColumnsToAdd) {
-            if (!existingQuestionsColumns.includes(column.name)) {
+            if (!existingQuestionsColNames.includes(column.name)) {
                 db.prepare(`ALTER TABLE questions ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'questions'.`);
+                _logger.info(`[DB MIGRATION] Added column '${column.name}' to 'questions'.`);
             }
         }
 
-        // Migration for 'deviceKits': Add new columns
-        const kitsColumnsToAdd = [{ name: 'is_global', type: 'INTEGER' }];
-        const existingKitsColumns = (db.pragma('table_info(deviceKits)') as TableInfo[]).map(c => c.name);
-        for (const column of kitsColumnsToAdd) {
-            if (!existingKitsColumns.includes(column.name)) {
-                db.prepare(`ALTER TABLE deviceKits ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger?.debug(`[DB MIGRATION] Added '${column.name}' to 'deviceKits'.`);
-            }
+        _logger.debug("[DB MIGRATION] Checking for 'deviceKits' table migrations...");
+        const kitsColumns = db.pragma('table_info(deviceKits)') as TableInfo[];
+        if (!kitsColumns.some(c => c.name === 'is_global')) {
+            db.prepare(`ALTER TABLE deviceKits ADD COLUMN is_global INTEGER`).run();
+            _logger.info(`[DB MIGRATION] Added column 'is_global' to 'deviceKits'.`);
         }
     });
 
-    // Execute the migration transaction
     try {
         migrationTransaction();
-        _logger?.debug("[DB MIGRATION] All migrations executed successfully within a transaction.");
+        _logger.info("[DB MIGRATION] Migration transaction executed successfully.");
     } catch (error) {
-        _logger?.error(`[DB MIGRATION] A migration failed: ${error}. Transaction was rolled back.`);
-        // Re-throw the error to halt application startup, as the schema is inconsistent.
+        _logger.error(`[DB MIGRATION] A migration failed: ${error}. Transaction was rolled back.`);
         throw error;
     }
 
   } catch(error) {
-    _logger?.debug(`[DB SCHEMA] Transaction failed during schema creation. No changes were applied. ${error}`);
-    throw error; // Renvoyer l'erreur pour indiquer l'échec de createSchema
+    _logger.error(`[DB SCHEMA] Initial DDL transaction failed. No changes were applied. ${error}`);
+    throw error;
   }
 };
 
