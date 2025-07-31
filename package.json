@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist-electron/electron/index.mjs",
+  "main": "dist-electron/electron/index.cjs",
   "scripts": {
     "clean-electron": "rimraf dist-electron",
     "compile-electron": "cd electron && tsc -p tsconfig.json && cd ..",

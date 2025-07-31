@@ -14,8 +14,8 @@ export default defineConfig({
             outDir: 'dist-electron/electron',
             lib: {
               entry: 'electron/index.ts',
-              formats: ['es'],
-              fileName: () => 'index.mjs',
+              formats: ['cjs'],
+              fileName: () => 'index.cjs',
             },
             rollupOptions: {
               external: ['electron', 'better-sqlite3'],
