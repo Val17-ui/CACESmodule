@@ -261,7 +261,6 @@ const createSchema = () => {
       status TEXT,
       question_mappings TEXT,
       created_at TEXT NOT NULL,
-      updated_at TEXT,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
       UNIQUE (session_id, iteration_index)
     );`,
@@ -386,7 +385,7 @@ const createSchema = () => {
     // --- Migrations for 'questions' table ---
     const questionsColumnsToAdd = [
         { name: 'userQuestionId', type: 'TEXT' },
-        { name: 'version_questionnaire', type: 'INTEGER' },
+        { name: 'version', type: 'INTEGER' },
         { name: 'updated_at', type: 'TEXT' }
     ];
 
@@ -645,8 +644,8 @@ const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number
     try {
       const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updatedAt } = question;
       const stmt = getDb().prepare(`
-        INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version_questionnaire, updated_at)
-        VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version_questionnaire, @updated_at)
+        INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updated_at)
+        VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version, @updated_at)
       `);
       const rowData = questionToRow({
         blocId, text, type, correctAnswer, timeLimit,
