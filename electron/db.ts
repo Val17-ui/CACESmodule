@@ -998,6 +998,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 
         const participantsForIter = assignments.map(a => {
             const participant: Participant = {
+                id: a.participant_id, // Make sure to include the participant's own ID
                 nom: a.last_name,
                 prenom: a.first_name,
                 organization: a.organization,
