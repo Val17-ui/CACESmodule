@@ -604,10 +604,6 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
     try {
         const participantDbIdMap = new Map<string, number>();
         for (const p of participants) {
-            if (!p.identificationCode) {
-                console.warn("Participant skipped due to missing identification code:", p);
-                continue;
-            }
             const dbParticipant: DBParticipantType = {
                 nom: p.lastName,
                 prenom: p.firstName,
