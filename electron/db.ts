@@ -39,7 +39,8 @@ async function initializeDatabase(loggerInstance: ILogger) {
 
   try {
     const BetterSqlite3Module = (await import('better-sqlite3')).default;
-    _db = new BetterSqlite3Module(dbPath, { verbose: _logger.debug.bind(_logger) });
+    // Correctly wrap the logger function to match the expected signature for 'verbose'
+    _db = new BetterSqlite3Module(dbPath, { verbose: (message) => _logger.debug(String(message)) });
     _logger.info('[DB SETUP] SQLite database connection established.');
   } catch (error) {
     _logger.error(`[DB SETUP] CRITICAL: Failed to connect to SQLite database at ${dbPath}. ${error}`);
@@ -385,6 +386,15 @@ const createSchema = () => {
         if (!kitsColumns.some(c => c.name === 'is_global')) {
             db.prepare(`ALTER TABLE deviceKits ADD COLUMN is_global INTEGER`).run();
             _logger.info(`[DB MIGRATION] Added column 'is_global' to 'deviceKits'.`);
+        }
+
+        // Attempt to drop the unique index on participants.identification_code if it exists from a previous schema
+        try {
+            _logger.debug("[DB MIGRATION] Attempting to drop old unique index on participants.identification_code...");
+            db.prepare(`DROP INDEX IF EXISTS sqlite_autoindex_participants_1`).run();
+            _logger.info("[DB MIGRATION] Successfully dropped old unique index on participants.identification_code (if it existed).");
+        } catch (error) {
+            _logger.warn(`[DB MIGRATION] Could not drop unique index on participants (this is likely okay if it never existed): ${error}`);
         }
     });
 
@@ -1015,7 +1025,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 
       session.iterations = iterationsWithParticipants;
 
-      _logger.debug(`[DB Sessions] Final session object being returned for ID ${id}:`, JSON.stringify(session, null, 2));
+      _logger.debug(`[DB Sessions] Final session object being returned for ID ${id}: ${JSON.stringify(session, null, 2)}`);
 
       return session;
     } catch (error) {
