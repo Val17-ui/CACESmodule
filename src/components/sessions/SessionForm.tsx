@@ -605,6 +605,18 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
     console.log('[SessionSave] Starting save process...');
     if (!sessionDataToSave) return null;
 
+    // Check for unassigned participants
+    const assignedParticipantIds = new Set(Object.values(participantAssignments).flat().map(p => p.id));
+    const unassignedParticipants = participants.filter(p => !assignedParticipantIds.has(p.id));
+
+    if (unassignedParticipants.length > 0) {
+        const unassignedNames = unassignedParticipants.map(p => `${p.firstName} ${p.lastName}`).join(', ');
+        const warningMessage = `Attention : Le(s) participant(s) suivant(s) ne sont assignés à aucune itération et ne seront pas sauvegardés : ${unassignedNames}. Voulez-vous continuer quand même ?`;
+        if (!window.confirm(warningMessage)) {
+            return null; // Abort save
+        }
+    }
+
     try {
         const participantDbIdMap = new Map<string, number>();
         for (const p of participants) {
