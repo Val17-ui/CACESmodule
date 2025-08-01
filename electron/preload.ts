@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('dbAPI', {
   addOrUpdateSessionIteration: (iteration: any) => ipcRenderer.invoke('db-add-or-update-session-iteration', iteration),
   getSessionIterations: (sessionId: number) => ipcRenderer.invoke('db-get-session-iterations', sessionId),
 
+  // Participants
+  upsertParticipant: (participant: any) => ipcRenderer.invoke('db-upsert-participant', participant),
+  setParticipantAssignmentsForIteration: (iterationId: number, assignments: any[]) => ipcRenderer.invoke('db-set-participant-assignments-for-iteration', iterationId, assignments),
+
   // SessionResults
   addBulkSessionResults: (results: any) => ipcRenderer.invoke('db-add-bulk-session-results', results),
   getResultsForSession: (sessionId: number) => ipcRenderer.invoke('db-get-results-for-session', sessionId),

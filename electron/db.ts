@@ -289,7 +289,7 @@ const createSchema = () => {
         first_name TEXT,
         last_name TEXT,
         organization TEXT,
-        identification_code TEXT UNIQUE
+        identification_code TEXT
     );`,
 
     `CREATE TABLE IF NOT EXISTS participant_assignments (
@@ -508,28 +508,32 @@ const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<num
 
 const upsertParticipant = async (participant: Participant): Promise<number | undefined> => {
     return asyncDbRun(() => {
-        try {
-            // This relies on SQLite 3.24.0+ for ON CONFLICT... DO UPDATE SET... RETURNING...
-            const stmt = getDb().prepare(`
-                INSERT INTO participants (first_name, last_name, organization, identification_code)
-                VALUES (@prenom, @nom, @organization, @identificationCode)
-                ON CONFLICT(identification_code) DO UPDATE SET
-                    first_name = excluded.first_name,
-                    last_name = excluded.last_name,
-                    organization = excluded.organization
-                RETURNING id
-            `);
-            const result = stmt.get({
-                prenom: participant.prenom,
-                nom: participant.nom,
-                organization: participant.organization,
-                identificationCode: participant.identificationCode
-            }) as { id: number };
-            return result.id;
-        } catch (error) {
-            _logger?.debug(`[DB Participants] Error upserting participant: ${error}`);
-            throw error;
+        const { prenom, nom, organization, identificationCode } = participant;
+
+        // If an identification code is provided, try to find an existing participant.
+        if (identificationCode) {
+            const existingStmt = getDb().prepare('SELECT id FROM participants WHERE identification_code = ?');
+            const existing = existingStmt.get(identificationCode) as { id: number } | undefined;
+
+            if (existing) {
+                // Update existing participant
+                const updateStmt = getDb().prepare(`
+                    UPDATE participants
+                    SET first_name = ?, last_name = ?, organization = ?
+                    WHERE id = ?
+                `);
+                updateStmt.run(prenom, nom, organization, existing.id);
+                return existing.id;
+            }
         }
+
+        // If no code is provided, or if no participant was found with the code, insert a new one.
+        const insertStmt = getDb().prepare(`
+            INSERT INTO participants (first_name, last_name, organization, identification_code)
+            VALUES (?, ?, ?, ?)
+        `);
+        const result = insertStmt.run(prenom, nom, organization, identificationCode);
+        return result.lastInsertRowid as number;
     });
 };
 
