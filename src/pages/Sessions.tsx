@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Layout from '../components/layout/Layout';
 import SessionsList from '../components/sessions/SessionsList';
 import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
-import { Plus } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 // import { getAllSessions, getSessionById } from '../db'; // Supprimé
 import { Session as DBSession, Referential } from '../types';
 import Input from '../components/ui/Input';
@@ -107,6 +107,8 @@ const periodFilters = [
 
 const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId }) => {
   const [isCreating, setIsCreating] = useState(false);
+  const [sessionToImport, setSessionToImport] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [managingSessionId, setManagingSessionId] = useState<number | null>(null);
   const [managingSessionName, setManagingSessionName] = useState<string | null>(null); // Nouvel état pour le nom
   const [rawSessions, setRawSessions] = useState<DBSession[]>([]);
@@ -291,7 +293,24 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
 
   const handleCreateNew = () => {
     setIsCreating(true);
+    setSessionToImport(null);
     setManagingSessionId(null);
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSessionToImport(file);
+      setIsCreating(true);
+      setManagingSessionId(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
   };
 
   const handleManageSession = (id: number) => {
@@ -308,6 +327,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   const handleBackToList = () => {
     setIsCreating(false);
     setManagingSessionId(null);
+    setSessionToImport(null);
     onPageChange(activePage, undefined); // Notifier App.tsx qu'on n'est plus sur une session spécifique
     fetchRawSessions(); // Recharger la liste au cas où des modifs auraient été faites
   };
@@ -315,13 +335,29 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   const headerActions = (
     <div className="flex items-center space-x-3">
       {!isCreating && !managingSessionId && (
-        <Button
-          variant="primary"
-          icon={<Plus size={16} />}
-          onClick={handleCreateNew}
-        >
-          Nouvelle session
-        </Button>
+        <>
+          <Button
+            variant="outline"
+            icon={<Upload size={16} />}
+            onClick={handleImportClick}
+          >
+            Importer une session
+          </Button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            className="hidden"
+            accept=".xlsx"
+          />
+          <Button
+            variant="primary"
+            icon={<Plus size={16} />}
+            onClick={handleCreateNew}
+          >
+            Nouvelle session
+          </Button>
+        </>
       )}
       {(isCreating || managingSessionId) && (
         <Button
@@ -428,7 +464,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
           />
         </>
       ) : (
-        <SessionForm sessionIdToLoad={managingSessionId ?? undefined} />
+        <SessionForm sessionIdToLoad={managingSessionId ?? undefined} sessionToImport={sessionToImport} />
       )}
     </Layout>
   );

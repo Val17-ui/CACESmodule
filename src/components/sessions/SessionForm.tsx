@@ -33,8 +33,11 @@ interface FormParticipant extends DBParticipantType {
   hasSigned?: boolean;
 }
 
+import { parseFullSessionExcel } from '../../utils/excelProcessor';
+
 interface SessionFormProps {
   sessionIdToLoad?: number;
+  sessionToImport?: File | null;
 }
 
 type TabKey = 'details' | 'participants' | 'generateQuestionnaire' | 'importResults';
@@ -54,7 +57,7 @@ import QuestionnaireGenerator from './form/QuestionnaireGenerator';
 import ParticipantManager from './form/ParticipantManager';
 import SessionDetailsForm from './form/SessionDetailsForm';
 
-const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
+const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImport }) => {
   const [currentSessionDbId, setCurrentSessionDbId] = useState<number | null>(sessionIdToLoad || null);
   const [sessionName, setSessionName] = useState('');
   const [sessionDate, setSessionDate] = useState('');
@@ -166,7 +169,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }, []);
 
   useEffect(() => {
-    if (sessionIdToLoad && hardwareLoaded && referentielsData.length > 0) {
+    if (sessionIdToLoad && !sessionToImport && hardwareLoaded && referentielsData.length > 0) {
       const loadSession = async () => {
         console.log(`[SessionLoad] Loading session with ID: ${sessionIdToLoad}`);
         try {
@@ -285,10 +288,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         }
       };
       loadSession();
-    } else if (!sessionIdToLoad && referentielsData.length > 0) {
+    } else if (!sessionIdToLoad && !sessionToImport && referentielsData.length > 0) {
       resetFormTactic();
     }
-  }, [sessionIdToLoad, hardwareLoaded, referentielsData, resetFormTactic]);
+  }, [sessionIdToLoad, sessionToImport, hardwareLoaded, referentielsData, resetFormTactic]);
 
   useEffect(() => {
     if (editingSessionData?.selectedBlocIds && allThemesData.length > 0 && allBlocsData.length > 0) {
@@ -322,6 +325,103 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
         }
     }
   }, [participants, iterationCount, participantAssignments]);
+
+  useEffect(() => {
+    if (sessionToImport) {
+        const processImport = async () => {
+            try {
+                const { details, participants: parsedParticipants } = await parseFullSessionExcel(sessionToImport);
+
+                // Populate session details
+                if (details.nomSession) setSessionName(details.nomSession.toString());
+                if (details.dateSession) setSessionDate(details.dateSession.toString());
+                if (details.numSession) setNumSession(details.numSession.toString());
+                if (details.numStage) setNumStage(details.numStage.toString());
+                if (details.location) setLocation(details.location.toString());
+                if (details.notes) setNotes(details.notes.toString());
+
+                // Lookups
+                if (details.referentielCode) {
+                    const ref = referentielsData.find(r => r.code === details.referentielCode);
+                    if (ref) {
+                        setSelectedReferentialId(ref.id!);
+                        setSelectedReferential(ref.code as CACESReferential);
+                    } else {
+                        console.warn(`Referential with code ${details.referentielCode} not found.`);
+                    }
+                }
+                if (details.trainerName) {
+                    const trainer = trainersList.find(t => t.name === details.trainerName);
+                    if (trainer) {
+                        setSelectedTrainerId(trainer.id!);
+                    } else {
+                        console.warn(`Trainer with name ${details.trainerName} not found.`);
+                    }
+                }
+                if (details.kitName) {
+                    const kit = deviceKitsList.find(k => k.name === details.kitName);
+                    if (kit) {
+                        setSelectedKitIdState(kit.id!);
+                    } else {
+                        console.warn(`Kit with name ${details.kitName} not found.`);
+                    }
+                }
+
+                // Iterations
+                const iterationCount = parseInt(details.iterationCount?.toString() || '1', 10);
+                setIterationCount(iterationCount);
+                if (details.iterationNames) {
+                    setIterationNames(details.iterationNames.toString().split(',').map(name => name.trim()));
+                } else {
+                    setIterationNames(Array.from({ length: iterationCount }, (_, i) => `Session_${i + 1}`));
+                }
+
+                // Populate participants
+                const newFormParticipants: FormParticipant[] = parsedParticipants.map((p, index) => {
+                    const device = hardwareDevices.find(d => d.name === p.deviceName);
+                    return {
+                        id: `imported-${Date.now()}-${index}`,
+                        firstName: p.prenom,
+                        lastName: p.nom,
+                        organization: p.organization,
+                        identificationCode: p.identificationCode,
+                        deviceId: null, // This is a visual ID, not the hardware ID. Let's see how it's used.
+                        assignedGlobalDeviceId: device ? device.id! : null,
+                        hasSigned: false,
+                        // DBParticipantType fields
+                        nom: p.nom,
+                        prenom: p.prenom,
+                        score: undefined,
+                        reussite: undefined,
+                        statusInSession: 'present',
+                    };
+                });
+                setParticipants(newFormParticipants);
+
+                // Populate participant assignments
+                const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+                newFormParticipants.forEach((fp, index) => {
+                    const parsedP = parsedParticipants[index];
+                    const iterationIndex = parsedP.iterationNumber - 1; // 0-based index
+                    if (!newAssignments[iterationIndex]) {
+                        newAssignments[iterationIndex] = [];
+                    }
+                    newAssignments[iterationIndex].push({
+                        id: fp.id,
+                        assignedGlobalDeviceId: fp.assignedGlobalDeviceId,
+                    });
+                });
+                setParticipantAssignments(newAssignments);
+
+                setImportSummary(`${parsedParticipants.length} participants et les détails de la session ont été importés avec succès.`);
+            } catch (error) {
+                console.error("Error processing imported session file:", error);
+                setImportSummary(`Erreur lors de l'importation du fichier de session: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+            }
+        };
+        processImport();
+    }
+}, [sessionToImport, referentielsData, trainersList, deviceKitsList, hardwareDevices]); // Dependencies are important!
 
   
 

@@ -81,6 +81,76 @@ export async function parseQuestionsExcel(file: File): Promise<{ data: RawExcelQ
   return { data, errors, columnHeaders };
 }
 
+export interface SessionDetails {
+  [key: string]: string | number;
+}
+
+export interface ParsedParticipant {
+  prenom: string;
+  nom: string;
+  organization: string;
+  identificationCode: string;
+  iterationNumber: number;
+  deviceName: string;
+}
+
+export async function parseFullSessionExcel(file: File): Promise<{ details: SessionDetails; participants: ParsedParticipant[] }> {
+  const details: SessionDetails = {};
+  const participants: ParsedParticipant[] = [];
+
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(arrayBuffer);
+
+  // Parse SessionDetails sheet
+  const sessionDetailsSheet = workbook.getWorksheet('SessionDetails');
+  if (sessionDetailsSheet) {
+    sessionDetailsSheet.eachRow((row) => {
+      const key = row.getCell(1).value?.toString();
+      const value = row.getCell(2).value?.toString();
+      if (key) {
+        details[key] = value || '';
+      }
+    });
+  } else {
+    throw new Error("La feuille 'SessionDetails' est introuvable dans le fichier Excel.");
+  }
+
+  // Parse Participants sheet
+  const participantsSheet = workbook.getWorksheet('Participants');
+  if (participantsSheet) {
+    const headerRow = participantsSheet.getRow(1).values as string[];
+    const prenomIndex = headerRow.indexOf('prenom');
+    const nomIndex = headerRow.indexOf('nom');
+    const organizationIndex = headerRow.indexOf('organization');
+    const identificationCodeIndex = headerRow.indexOf('identificationCode');
+    const iterationNumberIndex = headerRow.indexOf('iterationNumber');
+    const deviceNameIndex = headerRow.indexOf('deviceName');
+
+    participantsSheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) { // Skip header row
+        const prenom = row.getCell(prenomIndex).value?.toString() || '';
+        const nom = row.getCell(nomIndex).value?.toString() || '';
+        if (prenom || nom) {
+          participants.push({
+            prenom,
+            nom,
+            organization: row.getCell(organizationIndex).value?.toString() || '',
+            identificationCode: row.getCell(identificationCodeIndex).value?.toString() || '',
+            iterationNumber: parseInt(row.getCell(iterationNumberIndex).value?.toString() || '1', 10),
+            deviceName: row.getCell(deviceNameIndex).value?.toString() || '',
+          });
+        }
+      }
+    });
+  } else {
+    throw new Error("La feuille 'Participants' est introuvable dans le fichier Excel.");
+  }
+
+  return { details, participants };
+}
+
+
 export async function exportQuestionsToExcel(questions: Question[]): Promise<Blob> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Questions');
