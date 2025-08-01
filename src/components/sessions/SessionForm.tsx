@@ -58,14 +58,21 @@ import ParticipantManager from './form/ParticipantManager';
 import SessionDetailsForm from './form/SessionDetailsForm';
 
 const parseFrenchDate = (dateValue: string | Date | number): string => {
+  console.log('--- Debugging Date ---');
+  console.log('Original value from Excel:', dateValue);
+  console.log('Type of value:', typeof dateValue);
+
   if (!dateValue) return '';
 
   // Handle Date object directly
   if (dateValue instanceof Date) {
+    console.log('Handler: Date object');
     // Adjust for timezone offset to prevent off-by-one day errors
     const timezoneOffset = dateValue.getTimezoneOffset() * 60000;
     const adjustedDate = new Date(dateValue.getTime() - timezoneOffset);
-    return adjustedDate.toISOString().split('T')[0];
+    const result = adjustedDate.toISOString().split('T')[0];
+    console.log('Parsed result:', result);
+    return result;
   }
 
   const dateString = dateValue.toString();
@@ -73,11 +80,14 @@ const parseFrenchDate = (dateValue: string | Date | number): string => {
   // Handle Excel serial date number (passed as a string or number)
   const numericDate = Number(dateString);
   if (!isNaN(numericDate) && numericDate > 25569) { // 25569 is roughly 1970-01-01 in Excel
+    console.log('Handler: Excel serial number');
     const jsTimestamp = (numericDate - 25569) * 86400 * 1000;
     const date = new Date(jsTimestamp);
     const timezoneOffset = date.getTimezoneOffset() * 60000;
     const adjustedDate = new Date(date.getTime() + timezoneOffset);
-    return adjustedDate.toISOString().split('T')[0];
+    const result = adjustedDate.toISOString().split('T')[0];
+    console.log('Parsed result:', result);
+    return result;
   }
 
   const formattedString = dateString.replace(/\//g, '-');
@@ -87,18 +97,25 @@ const parseFrenchDate = (dateValue: string | Date | number): string => {
     const [p1, p2, p3] = parts;
     // DD-MM-YYYY
     if (p1.length <= 2 && p2.length <= 2 && p3.length === 4) {
+        console.log('Handler: DD-MM-YYYY string');
         const day = p1.padStart(2, '0');
         const month = p2.padStart(2, '0');
-        return `${p3}-${month}-${day}`;
+        const result = `${p3}-${month}-${day}`;
+        console.log('Parsed result:', result);
+        return result;
     }
     // YYYY-MM-DD
     if (p1.length === 4 && p2.length <= 2 && p3.length <= 2) {
+        console.log('Handler: YYYY-MM-DD string');
         const month = p2.padStart(2, '0');
         const day = p3.padStart(2, '0');
-        return `${p1}-${month}-${day}`;
+        const result = `${p1}-${month}-${day}`;
+        console.log('Parsed result:', result);
+        return result;
     }
   }
 
+  console.log('Handler: Fallback');
   return dateString; // Fallback
 };
 
