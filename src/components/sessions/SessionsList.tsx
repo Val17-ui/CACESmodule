@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarClock, ClipboardList, Download, AlertTriangle } from 'lucide-react';
+import { CalendarClock, ClipboardList, Download, AlertTriangle, Play } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
@@ -9,6 +9,7 @@ import { saveAs } from 'file-saver';
 type SessionsListProps = {
   sessions: DBSession[];
   onManageSession: (id: number) => void;
+  onStartExam: (id: number) => void;
   activeList: 'sessions' | 'archives';
   referentiels: Referential[];
 };
@@ -16,6 +17,7 @@ type SessionsListProps = {
 const SessionsList: React.FC<SessionsListProps> = ({
   sessions,
   onManageSession,
+  onStartExam,
   activeList,
   referentiels: referentielsData,
 }) => {
@@ -114,11 +116,13 @@ const SessionsList: React.FC<SessionsListProps> = ({
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end space-x-2">
+                      {(session.status === 'ready' || session.status === 'in-progress' || session.status === 'planned') && (
+                        <Button variant="success" size="sm" icon={<Play size={16} />} onClick={() => session.id && onStartExam(session.id)} title="Démarrer l'examen">Démarrer</Button>
+                      )}
                       <Button variant="outline" size="sm" icon={<ClipboardList size={16} />} onClick={() => session.id && onManageSession(session.id)} title="Gérer la session">Gérer</Button>
                       {session.donneesOrs instanceof Blob && (
                         <Button variant="primary" size="sm" icon={<Download size={16} />} onClick={() => handleDownloadOrs(session)} title="Télécharger .ors">.ORS</Button>
                       )}
-                      
                     </div>
                   </td>
                 </tr>
