@@ -244,14 +244,30 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
                 const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
                 sessionData.iterations.forEach(iter => {
-                    const participantIdsForIter = ((iter as any).participants || []).map((p_iter: DBParticipantType) => {
-                        const matchingFormParticipant = formParticipants.find(fp => fp.identificationCode === p_iter.identificationCode);
-                        return matchingFormParticipant ? { id: matchingFormParticipant.id, assignedGlobalDeviceId: matchingFormParticipant.assignedGlobalDeviceId || null } : null;
-                    }).filter((p: { id: string; assignedGlobalDeviceId: number | null; } | null): p is { id: string; assignedGlobalDeviceId: number | null; } => p !== null);
-                    newAssignments[iter.iteration_index] = participantIdsForIter;
+                    if (!iter.id) return;
+                    const participantsForThisIter = (iter as any).participants || [];
+                    console.log(`[SessionLoad] Processing iteration ${iter.iteration_index} which has ${participantsForThisIter.length} participants.`);
+
+                    const assignmentsForThisIter = participantsForThisIter
+                        .map((p_iter: DBParticipantType) => {
+                            if (!p_iter.id) return null;
+                            // The formParticipant's ID is a string version of the DB ID.
+                            const matchingFormParticipant = formParticipants.find(fp => fp.id === p_iter.id!.toString());
+                            if (matchingFormParticipant) {
+                                return {
+                                    id: matchingFormParticipant.id,
+                                    assignedGlobalDeviceId: p_iter.assignedGlobalDeviceId || null
+                                };
+                            }
+                            console.warn(`[SessionLoad] Could not find a matching form participant for DB participant ID: ${p_iter.id}`);
+                            return null;
+                        })
+                        .filter((p: { id: string; assignedGlobalDeviceId: number | null } | null): p is { id: string; assignedGlobalDeviceId: number | null } => p !== null);
+
+                    newAssignments[iter.iteration_index] = assignmentsForThisIter;
                 });
                 setParticipantAssignments(newAssignments);
-                console.log('[SessionLoad] Participant assignments reconstructed:', newAssignments);
+                console.log('[SessionLoad] Final reconstructed participant assignments:', newAssignments);
             } else {
               // Fallback for sessions that might not have iterations correctly saved
               setParticipants([]);
