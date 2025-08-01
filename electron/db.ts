@@ -287,10 +287,11 @@ const createSchema = () => {
 
     `CREATE TABLE IF NOT EXISTS participants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT,
-        last_name TEXT,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
         organization TEXT,
-        identification_code TEXT
+        identification_code TEXT,
+        UNIQUE(first_name, last_name, organization)
     );`,
 
     `CREATE TABLE IF NOT EXISTS participant_assignments (
@@ -519,31 +520,24 @@ const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<num
 const upsertParticipant = async (participant: Participant): Promise<number | undefined> => {
     return asyncDbRun(() => {
         const { prenom, nom, organization, identificationCode } = participant;
-
-        // If an identification code is provided, try to find an existing participant.
-        if (identificationCode) {
-            const existingStmt = getDb().prepare('SELECT id FROM participants WHERE identification_code = ?');
-            const existing = existingStmt.get(identificationCode) as { id: number } | undefined;
-
-            if (existing) {
-                // Update existing participant
-                const updateStmt = getDb().prepare(`
-                    UPDATE participants
-                    SET first_name = ?, last_name = ?, organization = ?
-                    WHERE id = ?
-                `);
-                updateStmt.run(prenom, nom, organization, existing.id);
-                return existing.id;
-            }
-        }
-
-        // If no code is provided, or if no participant was found with the code, insert a new one.
-        const insertStmt = getDb().prepare(`
+        // Use ON CONFLICT with the composite unique key to atomically insert or update.
+        // The RETURNING clause gives us back the ID in either case.
+        const stmt = getDb().prepare(`
             INSERT INTO participants (first_name, last_name, organization, identification_code)
-            VALUES (?, ?, ?, ?)
+            VALUES (@prenom, @nom, @organization, @identificationCode)
+            ON CONFLICT(first_name, last_name, organization) DO UPDATE SET
+                identification_code = excluded.identification_code
+            RETURNING id
         `);
-        const result = insertStmt.run(prenom, nom, organization, identificationCode);
-        return result.lastInsertRowid as number;
+
+        const result = stmt.get({
+            prenom,
+            nom,
+            organization: organization || null, // Ensure organization is null if undefined
+            identificationCode: identificationCode || null,
+        }) as { id: number };
+
+        return result.id;
     });
 };
 
