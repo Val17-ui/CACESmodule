@@ -319,11 +319,6 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     onPageChange(activePage, id); // S'assurer que App.tsx est au courant de la session gérée
   };
 
-  const handleStartExam = (id: number) => {
-    console.log(`Démarrage de l'examen pour la session ID: ${id}`);
-    onPageChange('exams', id); // Navigue vers la page des examens avec l'ID de session
-  };
-
   const handleBackToList = () => {
     setIsCreating(false);
     setManagingSessionId(null);
@@ -458,7 +453,6 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
           <SessionsList
             sessions={processedSessions}
             onManageSession={handleManageSession}
-            onStartExam={handleStartExam}
             activeList={activeList}
             referentiels={referentielsData} // Pass referentiels data
           />
