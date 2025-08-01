@@ -57,6 +57,35 @@ import QuestionnaireGenerator from './form/QuestionnaireGenerator';
 import ParticipantManager from './form/ParticipantManager';
 import SessionDetailsForm from './form/SessionDetailsForm';
 
+const parseFrenchDate = (dateString: string): string => {
+  if (!dateString) return '';
+
+  // Check if the date is a number (Excel serial date)
+  if (!isNaN(Number(dateString))) {
+    const excelEpoch = new Date(1899, 11, 30);
+    const excelDate = new Date(excelEpoch.getTime() + Number(dateString) * 24 * 60 * 60 * 1000);
+    if (!isNaN(excelDate.getTime())) {
+      return excelDate.toISOString().split('T')[0];
+    }
+  }
+
+  const formattedString = dateString.replace(/\//g, '-');
+  const parts = formattedString.split('-');
+  if (parts.length === 3) {
+      const [day, month, year] = parts;
+      if (day.length === 2 && month.length === 2 && year.length === 4) {
+          return `${year}-${month}-${day}`;
+      }
+      // Handle YYYY-MM-DD
+      const [y, m, d] = parts;
+       if (y.length === 4 && m.length === 2 && d.length === 2) {
+          return formattedString;
+      }
+  }
+  return dateString; // Fallback
+};
+
+
 const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImport }) => {
   const [currentSessionDbId, setCurrentSessionDbId] = useState<number | null>(sessionIdToLoad || null);
   const [sessionName, setSessionName] = useState('');
@@ -334,7 +363,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
 
                 // Populate session details
                 if (details.nomSession) setSessionName(details.nomSession.toString());
-                if (details.dateSession) setSessionDate(details.dateSession.toString());
+                if (details.dateSession) setSessionDate(parseFrenchDate(details.dateSession.toString()));
                 if (details.numSession) setNumSession(details.numSession.toString());
                 if (details.numStage) setNumStage(details.numStage.toString());
                 if (details.location) setLocation(details.location.toString());
