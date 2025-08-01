@@ -1544,12 +1544,12 @@ if (savedIterationId) { // <-- On ajoute cette condition
         {renderTabContent()}
       <div className="flex justify-between items-center mt-8 py-4 border-t border-gray-200">
         <div>
-          <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleCancelSession} disabled={editingSessionData?.status === 'completed' || editingSessionData?.status === 'cancelled'}>
-            Annuler la Session
+          <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
+            Enregistrer Brouillon
           </Button>
         </div>
-        <Button variant="outline" icon={<Save size={16} />} onClick={handleSaveDraft} disabled={editingSessionData?.status === 'completed' || isGeneratingOrs}>
-          Enregistrer Brouillon
+        <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleCancelSession} disabled={editingSessionData?.status === 'completed' || editingSessionData?.status === 'cancelled'}>
+          Annuler la Session
         </Button>
       </div>
       {showAnomalyResolutionUI && detectedAnomalies && (

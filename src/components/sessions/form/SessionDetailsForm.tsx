@@ -115,6 +115,15 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
           disabled={isReadOnly}
         />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        <Input
+          label="Lieu de formation"
+          placeholder="Ex: Centre de formation Paris Nord"
+          value={location}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)}
+          disabled={isReadOnly}
+        />
         <Input
           label="Nombre d’itérations"
           type="number"
@@ -139,15 +148,6 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
               });
             }
           }}
-          disabled={isReadOnly}
-        />
-      </div>
-      <div className="mt-4">
-        <Input
-          label="Lieu de formation"
-          placeholder="Ex: Centre de formation Paris Nord"
-          value={location}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)}
           disabled={isReadOnly}
         />
       </div>
