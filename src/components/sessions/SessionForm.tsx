@@ -60,28 +60,33 @@ import SessionDetailsForm from './form/SessionDetailsForm';
 const parseFrenchDate = (dateString: string): string => {
   if (!dateString) return '';
 
-  // Check if the date is a number (Excel serial date)
-  if (!isNaN(Number(dateString))) {
-    const excelEpoch = new Date(1899, 11, 30);
-    const excelDate = new Date(excelEpoch.getTime() + Number(dateString) * 24 * 60 * 60 * 1000);
-    if (!isNaN(excelDate.getTime())) {
-      return excelDate.toISOString().split('T')[0];
-    }
+  // Handle Excel serial date (which might be passed as a string)
+  const numericDate = Number(dateString);
+  if (!isNaN(numericDate) && numericDate > 25569) { // 25569 is 1970-01-01
+    // This is a simple conversion from Excel date number to JS timestamp
+    const jsTimestamp = (numericDate - 25569) * 86400 * 1000;
+    const date = new Date(jsTimestamp);
+    // Adjust for timezone offset to prevent day-off errors
+    const timezoneOffset = date.getTimezoneOffset() * 60000;
+    const adjustedDate = new Date(date.getTime() + timezoneOffset);
+    return adjustedDate.toISOString().split('T')[0];
   }
 
   const formattedString = dateString.replace(/\//g, '-');
   const parts = formattedString.split('-');
+
   if (parts.length === 3) {
-      const [day, month, year] = parts;
-      if (day.length === 2 && month.length === 2 && year.length === 4) {
-          return `${year}-${month}-${day}`;
-      }
-      // Handle YYYY-MM-DD
-      const [y, m, d] = parts;
-       if (y.length === 4 && m.length === 2 && d.length === 2) {
-          return formattedString;
-      }
+    const [part1, part2, part3] = parts;
+    // Check for DD-MM-YYYY
+    if (part1.length === 2 && part2.length === 2 && part3.length === 4) {
+      return `${part3}-${part2}-${part1}`;
+    }
+    // Check for YYYY-MM-DD
+    if (part1.length === 4 && part2.length === 2 && part3.length === 2) {
+      return formattedString; // Already correct
+    }
   }
+
   return dateString; // Fallback
 };
 
@@ -121,6 +126,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   const [showAnomalyResolutionUI, setShowAnomalyResolutionUI] = useState<boolean>(false);
   const [currentIterationForImport, setCurrentIterationForImport] = useState<number | null>(null);
   const [participantAssignments, setParticipantAssignments] = useState<Record<number, { id: string; assignedGlobalDeviceId: number | null }[]>>({});
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -198,7 +204,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   }, []);
 
   useEffect(() => {
-    if (sessionIdToLoad && !sessionToImport && hardwareLoaded && referentielsData.length > 0) {
+    if (sessionIdToLoad && !isImporting && hardwareLoaded && referentielsData.length > 0) {
       const loadSession = async () => {
         console.log(`[SessionLoad] Loading session with ID: ${sessionIdToLoad}`);
         try {
@@ -317,10 +323,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
         }
       };
       loadSession();
-    } else if (!sessionIdToLoad && !sessionToImport && referentielsData.length > 0) {
+    } else if (!sessionIdToLoad && !isImporting && referentielsData.length > 0) {
       resetFormTactic();
     }
-  }, [sessionIdToLoad, sessionToImport, hardwareLoaded, referentielsData, resetFormTactic]);
+  }, [sessionIdToLoad, isImporting, hardwareLoaded, referentielsData, resetFormTactic]);
 
   useEffect(() => {
     if (editingSessionData?.selectedBlocIds && allThemesData.length > 0 && allBlocsData.length > 0) {
@@ -357,6 +363,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
 
   useEffect(() => {
     if (sessionToImport) {
+        setIsImporting(true);
         const processImport = async () => {
             try {
                 const { details, participants: parsedParticipants } = await parseFullSessionExcel(sessionToImport);
@@ -446,6 +453,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
             } catch (error) {
                 console.error("Error processing imported session file:", error);
                 setImportSummary(`Erreur lors de l'importation du fichier de session: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+            } finally {
+                setIsImporting(false);
             }
         };
         processImport();
