@@ -312,13 +312,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
   }, [editingSessionData, editingSessionData?.selectedBlocIds, allThemesData, allBlocsData]);
 
   useEffect(() => {
-    // Only default all participants to the first iteration for NEW sessions.
-    if (!sessionIdToLoad && iterationCount === 1) {
-        setParticipantAssignments({
-            0: participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null }))
-        });
+    // If there is only one iteration, all participants should be assigned to it by default.
+    // This is crucial because the iteration selection dropdown is not shown in the UI for single-iteration sessions.
+    if (iterationCount === 1) {
+        const allParticipantIds = participants.map(p => ({ id: p.id, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null }));
+        // Only update the state if it's different to avoid an infinite loop.
+        if (JSON.stringify(participantAssignments[0] || []) !== JSON.stringify(allParticipantIds)) {
+            setParticipantAssignments({ 0: allParticipantIds });
+        }
     }
-}, [participants, iterationCount, sessionIdToLoad]);
+  }, [participants, iterationCount, participantAssignments]);
 
   
 
