@@ -290,8 +290,7 @@ const createSchema = () => {
         first_name TEXT NOT NULL,
         last_name TEXT NOT NULL,
         organization TEXT,
-        identification_code TEXT,
-        UNIQUE(first_name, last_name, organization)
+        identification_code TEXT
     );`,
 
     `CREATE TABLE IF NOT EXISTS participant_assignments (
@@ -520,24 +519,31 @@ const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<num
 const upsertParticipant = async (participant: Participant): Promise<number | undefined> => {
     return asyncDbRun(() => {
         const { prenom, nom, organization, identificationCode } = participant;
-        // Use ON CONFLICT with the composite unique key to atomically insert or update.
-        // The RETURNING clause gives us back the ID in either case.
-        const stmt = getDb().prepare(`
+
+        // If a non-empty identification code is provided, try to find an existing participant.
+        if (identificationCode && identificationCode.trim() !== '') {
+            const existingStmt = getDb().prepare('SELECT id FROM participants WHERE identification_code = ?');
+            const existing = existingStmt.get(identificationCode) as { id: number } | undefined;
+
+            if (existing) {
+                // Update existing participant if found
+                const updateStmt = getDb().prepare(`
+                    UPDATE participants
+                    SET first_name = ?, last_name = ?, organization = ?
+                    WHERE id = ?
+                `);
+                updateStmt.run(prenom, nom, organization, existing.id);
+                return existing.id;
+            }
+        }
+
+        // In all other cases (no code, or code not found), insert a new participant.
+        const insertStmt = getDb().prepare(`
             INSERT INTO participants (first_name, last_name, organization, identification_code)
-            VALUES (@prenom, @nom, @organization, @identificationCode)
-            ON CONFLICT(first_name, last_name, organization) DO UPDATE SET
-                identification_code = excluded.identification_code
-            RETURNING id
+            VALUES (?, ?, ?, ?)
         `);
-
-        const result = stmt.get({
-            prenom,
-            nom,
-            organization: organization || null, // Ensure organization is null if undefined
-            identificationCode: identificationCode || null,
-        }) as { id: number };
-
-        return result.id;
+        const result = insertStmt.run(prenom, nom, organization, identificationCode);
+        return result.lastInsertRowid as number;
     });
 };
 
