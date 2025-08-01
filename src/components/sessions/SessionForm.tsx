@@ -220,7 +220,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => (iter as any).participants || []);
                 console.log('[SessionLoad-LOG] Step 2: Flattened list of all participants from all iterations:', JSON.parse(JSON.stringify(allParticipantsFromIterations)));
 
-                const uniqueParticipantsMap = new Map<number, DBParticipantType>();
+                const uniqueParticipantsMap = new Map<string | number, DBParticipantType>();
                 allParticipantsFromIterations.forEach((p: DBParticipantType) => {
                     if (p.id) {
                         uniqueParticipantsMap.set(p.id, p);
