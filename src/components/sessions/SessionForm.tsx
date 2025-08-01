@@ -366,6 +366,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
 
   useEffect(() => {
     if (sessionToImport) {
+        if (referentielsData.length === 0 || trainersList.length === 0 || deviceKitsList.length === 0) {
+            // Data is not ready yet, wait for the next run of the effect.
+            return;
+        }
         setIsImporting(true);
         const processImport = async () => {
             try {
