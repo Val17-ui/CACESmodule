@@ -242,10 +242,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 setParticipants(formParticipants);
 
                 const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+                console.log('[FINAL_DEBUG] Form Participants State before assignment:', JSON.parse(JSON.stringify(formParticipants)));
                 sessionData.iterations.forEach(iter => {
                     if (!iter.id) return;
                     const participantsForThisIter = (iter as any).participants || [];
-                    console.log(`[SessionLoad-LOG] Step 5a: Processing assignments for iteration index ${iter.iteration_index}. Found ${participantsForThisIter.length} participants.`);
+                    console.log(`[FINAL_DEBUG] Iteration ${iter.iteration_index} - Participants from DB:`, JSON.parse(JSON.stringify(participantsForThisIter)));
 
                     const assignmentsForThisIter = participantsForThisIter
                         .map((p_iter: DBParticipantType) => {
