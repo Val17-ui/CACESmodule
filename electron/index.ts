@@ -1,21 +1,17 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { initializeIpcHandlers } from './ipcHandlers';
 import { initializeDatabase, getDb } from './db';
 import { initializeLogger, getLogger } from './utils/logger';
 
 import { ILogger } from './utils/logger';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 function createWindow(logger: ILogger) {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
-      preload: path.join(app.getAppPath(), 'dist-electron', 'preload', 'preload.mjs'),
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,

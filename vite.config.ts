@@ -34,11 +34,11 @@ export default defineConfig({
         entry: 'electron/preload.ts',
         vite: {
           build: {
-            outDir: 'dist-electron/preload',
+            outDir: 'dist-electron/electron', // Output to the same dir as main
             lib: {
               entry: 'electron/preload.ts',
-              formats: ['es'],
-              fileName: () => 'preload.mjs',
+              formats: ['cjs'],
+              fileName: () => 'preload.cjs',
             },
             rollupOptions: {
               external: ['electron'],
