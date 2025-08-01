@@ -978,42 +978,44 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 
       const session = rowToSession(row);
 
-      // Fetch and attach iterations
-      const iterations = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ? ORDER BY iteration_index ASC").all(id) as SessionIteration[];
+      const iterationsFromDb = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ? ORDER BY iteration_index ASC").all(id) as SessionIteration[];
 
-      session.iterations = iterations.map(iter => {
+      const iterationsWithParticipants = iterationsFromDb.map(iter => {
         if (!iter.id) {
-            return {
-                ...iter,
-                participants: [],
-                question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
-            }
+          return {
+            ...iter,
+            participants: [],
+            question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
+          };
         }
+
         const assignments = getDb().prepare(`
-            SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
-            FROM participant_assignments pa
-            JOIN participants p ON pa.participant_id = p.id
-            WHERE pa.session_iteration_id = ?
+          SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
+          FROM participant_assignments pa
+          JOIN participants p ON pa.participant_id = p.id
+          WHERE pa.session_iteration_id = ?
         `).all(iter.id) as any[];
 
-        const participantsForIter = assignments.map(a => {
-            const participant: Participant = {
-                id: a.participant_id, // Make sure to include the participant's own ID
-                nom: a.last_name,
-                prenom: a.first_name,
-                organization: a.organization,
-                identificationCode: a.identification_code,
-                assignedGlobalDeviceId: a.voting_device_id,
-            };
-            return participant;
-        });
+        const participantsForIter: Participant[] = assignments.map(a => ({
+          id: a.participant_id,
+          nom: a.last_name,
+          prenom: a.first_name,
+          organization: a.organization,
+          identificationCode: a.identification_code,
+          assignedGlobalDeviceId: a.voting_device_id,
+        }));
 
+        // Return a well-defined object, ensuring 'participants' is always an array.
         return {
-            ...iter,
-                    participants: participantsForIter,
-            question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
+          ...iter,
+          participants: participantsForIter,
+          question_mappings: iter.question_mappings ? JSON.parse(iter.question_mappings as any) : [],
         };
       });
+
+      session.iterations = iterationsWithParticipants;
+
+      _logger.debug(`[DB Sessions] Final session object being returned for ID ${id}:`, JSON.stringify(session, null, 2));
 
       return session;
     } catch (error) {
