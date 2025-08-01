@@ -216,42 +216,43 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
 
             setModifiedAfterOrsGeneration(false);
             if (sessionData.iterations && sessionData.iterations.length > 0) {
+                console.log('[SessionLoad-LOG] Step 1: Raw sessionData.iterations received from DB:', JSON.parse(JSON.stringify(sessionData.iterations)));
                 const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => (iter as any).participants || []);
-                console.log('[SessionLoad] All participants from all iterations:', allParticipantsFromIterations);
+                console.log('[SessionLoad-LOG] Step 2: Flattened list of all participants from all iterations:', JSON.parse(JSON.stringify(allParticipantsFromIterations)));
 
-                // Use the participant's database ID as the unique key.
                 const uniqueParticipantsMap = new Map<number, DBParticipantType>();
                 allParticipantsFromIterations.forEach((p: DBParticipantType) => {
-                    if (p.id) { // Only consider participants that have a database ID
+                    if (p.id) {
                         uniqueParticipantsMap.set(p.id, p);
                     }
                 });
                 const uniqueParticipants = Array.from(uniqueParticipantsMap.values());
+                console.log('[SessionLoad-LOG] Step 3: De-duplicated list of unique participants:', JSON.parse(JSON.stringify(uniqueParticipants)));
 
                 const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType) => ({
                     ...p_db,
-                    // Use the stable database ID as the key for React.
-                    // Convert to string to match the type of newly created (unsaved) participants.
                     id: p_db.id!.toString(),
                     firstName: p_db.prenom,
                     lastName: p_db.nom,
                     deviceId: p_db.assignedGlobalDeviceId || null,
                     organization: p_db.organization || '',
-                    hasSigned: false, // This should probably be determined by another field if needed
+                    hasSigned: false,
                 }));
+                console.log('[SessionLoad-LOG] Step 4: Mapped participants to FormParticipant shape:', JSON.parse(JSON.stringify(formParticipants)));
                 setParticipants(formParticipants);
-                console.log('[SessionLoad] Participants set in form state:', formParticipants);
 
                 const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
                 sessionData.iterations.forEach(iter => {
                     if (!iter.id) return;
                     const participantsForThisIter = (iter as any).participants || [];
-                    console.log(`[SessionLoad] Processing iteration ${iter.iteration_index} which has ${participantsForThisIter.length} participants.`);
+                    console.log(`[SessionLoad-LOG] Step 5a: Processing assignments for iteration index ${iter.iteration_index}. Found ${participantsForThisIter.length} participants.`);
 
                     const assignmentsForThisIter = participantsForThisIter
                         .map((p_iter: DBParticipantType) => {
-                            if (!p_iter.id) return null;
-                            // The formParticipant's ID is a string version of the DB ID.
+                            if (!p_iter.id) {
+                                console.warn('[SessionLoad-LOG] Iteration participant missing ID:', p_iter);
+                                return null;
+                            };
                             const matchingFormParticipant = formParticipants.find(fp => fp.id === p_iter.id!.toString());
                             if (matchingFormParticipant) {
                                 return {
@@ -259,17 +260,17 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                                     assignedGlobalDeviceId: p_iter.assignedGlobalDeviceId || null
                                 };
                             }
-                            console.warn(`[SessionLoad] Could not find a matching form participant for DB participant ID: ${p_iter.id}`);
+                            console.warn(`[SessionLoad-LOG] Could not find a matching form participant for DB participant ID: ${p_iter.id}`);
                             return null;
                         })
                         .filter((p: { id: string; assignedGlobalDeviceId: number | null } | null): p is { id: string; assignedGlobalDeviceId: number | null } => p !== null);
 
                     newAssignments[iter.iteration_index] = assignmentsForThisIter;
                 });
+                console.log('[SessionLoad-LOG] Step 5b: Final reconstructed participant assignments object:', JSON.parse(JSON.stringify(newAssignments)));
                 setParticipantAssignments(newAssignments);
-                console.log('[SessionLoad] Final reconstructed participant assignments:', newAssignments);
             } else {
-              // Fallback for sessions that might not have iterations correctly saved
+              console.log('[SessionLoad-LOG] No iterations found in sessionData, setting participants and assignments to empty.');
               setParticipants([]);
               setParticipantAssignments({});
             }
