@@ -58,65 +58,39 @@ import ParticipantManager from './form/ParticipantManager';
 import SessionDetailsForm from './form/SessionDetailsForm';
 
 const parseFrenchDate = (dateValue: string | Date | number): string => {
-  console.log('--- Debugging Date ---');
-  console.log('Original value from Excel:', dateValue);
-  console.log('Type of value:', typeof dateValue);
-
   if (!dateValue) return '';
 
-  // Handle Date object directly
-  if (dateValue instanceof Date) {
-    console.log('Handler: Date object');
-    // Adjust for timezone offset to prevent off-by-one day errors
-    const timezoneOffset = dateValue.getTimezoneOffset() * 60000;
-    const adjustedDate = new Date(dateValue.getTime() - timezoneOffset);
-    const result = adjustedDate.toISOString().split('T')[0];
-    console.log('Parsed result:', result);
-    return result;
+  // The new Date() constructor can handle many formats, including ISO strings,
+  // timestamps (numbers), and the long string format from the logs.
+  // It is, however, unreliable for DD/MM/YYYY formats, which must be handled manually.
+
+  if (typeof dateValue === 'string') {
+    const parts = dateValue.replace(/\//g, '-').split('-');
+    if (parts.length === 3) {
+      const [p1, p2, p3] = parts;
+      // DD-MM-YYYY
+      if (p1.length <= 2 && p2.length <= 2 && p3.length === 4) {
+        // new Date(year, monthIndex, day)
+        const date = new Date(Number(p3), Number(p2) - 1, Number(p1));
+        if (!isNaN(date.getTime())) {
+          const timezoneOffset = date.getTimezoneOffset() * 60000;
+          const adjustedDate = new Date(date.getTime() - timezoneOffset);
+          return adjustedDate.toISOString().split('T')[0];
+        }
+      }
+    }
   }
 
-  const dateString = dateValue.toString();
-
-  // Handle Excel serial date number (passed as a string or number)
-  const numericDate = Number(dateString);
-  if (!isNaN(numericDate) && numericDate > 25569) { // 25569 is roughly 1970-01-01 in Excel
-    console.log('Handler: Excel serial number');
-    const jsTimestamp = (numericDate - 25569) * 86400 * 1000;
-    const date = new Date(jsTimestamp);
+  // For all other cases (Date object, timestamp, YYYY-MM-DD string, long string)
+  // use the new Date() constructor which is more robust for these formats.
+  const date = new Date(dateValue as any);
+  if (!isNaN(date.getTime())) {
     const timezoneOffset = date.getTimezoneOffset() * 60000;
-    const adjustedDate = new Date(date.getTime() + timezoneOffset);
-    const result = adjustedDate.toISOString().split('T')[0];
-    console.log('Parsed result:', result);
-    return result;
+    const adjustedDate = new Date(date.getTime() - timezoneOffset);
+    return adjustedDate.toISOString().split('T')[0];
   }
 
-  const formattedString = dateString.replace(/\//g, '-');
-  const parts = formattedString.split('-');
-
-  if (parts.length === 3) {
-    const [p1, p2, p3] = parts;
-    // DD-MM-YYYY
-    if (p1.length <= 2 && p2.length <= 2 && p3.length === 4) {
-        console.log('Handler: DD-MM-YYYY string');
-        const day = p1.padStart(2, '0');
-        const month = p2.padStart(2, '0');
-        const result = `${p3}-${month}-${day}`;
-        console.log('Parsed result:', result);
-        return result;
-    }
-    // YYYY-MM-DD
-    if (p1.length === 4 && p2.length <= 2 && p3.length <= 2) {
-        console.log('Handler: YYYY-MM-DD string');
-        const month = p2.padStart(2, '0');
-        const day = p3.padStart(2, '0');
-        const result = `${p1}-${month}-${day}`;
-        console.log('Parsed result:', result);
-        return result;
-    }
-  }
-
-  console.log('Handler: Fallback');
-  return dateString; // Fallback
+  return dateValue.toString(); // Fallback
 };
 
 

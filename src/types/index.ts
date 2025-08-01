@@ -127,7 +127,6 @@ export interface QuestionMapping {
 
 // Nouvelle interface Participant pour les listes dans une Session
 export interface Participant {
-  id?: string | number;
   idBoitier?: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
   nom: string;
   prenom: string;
