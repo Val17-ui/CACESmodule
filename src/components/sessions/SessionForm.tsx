@@ -219,22 +219,25 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad }) => {
                 const allParticipantsFromIterations = sessionData.iterations.flatMap(iter => (iter as any).participants || []);
                 console.log('[SessionLoad] All participants from all iterations:', allParticipantsFromIterations);
 
-                const uniqueParticipantsMap = new Map<string, DBParticipantType>();
+                // Use the participant's database ID as the unique key.
+                const uniqueParticipantsMap = new Map<number, DBParticipantType>();
                 allParticipantsFromIterations.forEach((p: DBParticipantType) => {
-                    if (p.identificationCode) {
-                        uniqueParticipantsMap.set(p.identificationCode, p);
+                    if (p.id) { // Only consider participants that have a database ID
+                        uniqueParticipantsMap.set(p.id, p);
                     }
                 });
                 const uniqueParticipants = Array.from(uniqueParticipantsMap.values());
 
-                const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType, loopIndex: number) => ({
+                const formParticipants: FormParticipant[] = uniqueParticipants.map((p_db: DBParticipantType) => ({
                     ...p_db,
-                    id: `loaded-${loopIndex}-${Date.now()}`, // This is a temporary client-side ID
+                    // Use the stable database ID as the key for React.
+                    // Convert to string to match the type of newly created (unsaved) participants.
+                    id: p_db.id!.toString(),
                     firstName: p_db.prenom,
                     lastName: p_db.nom,
-                    deviceId: loopIndex + 1, // This is just a visual index, might not be correct
-                    organization: (p_db as any).organization || '',
-                    hasSigned: (p_db as any).hasSigned || false,
+                    deviceId: p_db.assignedGlobalDeviceId || null,
+                    organization: p_db.organization || '',
+                    hasSigned: false, // This should probably be determined by another field if needed
                 }));
                 setParticipants(formParticipants);
                 console.log('[SessionLoad] Participants set in form state:', formParticipants);
