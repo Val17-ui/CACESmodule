@@ -57,16 +57,24 @@ import QuestionnaireGenerator from './form/QuestionnaireGenerator';
 import ParticipantManager from './form/ParticipantManager';
 import SessionDetailsForm from './form/SessionDetailsForm';
 
-const parseFrenchDate = (dateString: string): string => {
-  if (!dateString) return '';
+const parseFrenchDate = (dateValue: string | Date | number): string => {
+  if (!dateValue) return '';
 
-  // Handle Excel serial date (which might be passed as a string)
+  // Handle Date object directly
+  if (dateValue instanceof Date) {
+    // Adjust for timezone offset to prevent off-by-one day errors
+    const timezoneOffset = dateValue.getTimezoneOffset() * 60000;
+    const adjustedDate = new Date(dateValue.getTime() - timezoneOffset);
+    return adjustedDate.toISOString().split('T')[0];
+  }
+
+  const dateString = dateValue.toString();
+
+  // Handle Excel serial date number (passed as a string or number)
   const numericDate = Number(dateString);
-  if (!isNaN(numericDate) && numericDate > 25569) { // 25569 is 1970-01-01
-    // This is a simple conversion from Excel date number to JS timestamp
+  if (!isNaN(numericDate) && numericDate > 25569) { // 25569 is roughly 1970-01-01 in Excel
     const jsTimestamp = (numericDate - 25569) * 86400 * 1000;
     const date = new Date(jsTimestamp);
-    // Adjust for timezone offset to prevent day-off errors
     const timezoneOffset = date.getTimezoneOffset() * 60000;
     const adjustedDate = new Date(date.getTime() + timezoneOffset);
     return adjustedDate.toISOString().split('T')[0];
@@ -76,14 +84,18 @@ const parseFrenchDate = (dateString: string): string => {
   const parts = formattedString.split('-');
 
   if (parts.length === 3) {
-    const [part1, part2, part3] = parts;
-    // Check for DD-MM-YYYY
-    if (part1.length === 2 && part2.length === 2 && part3.length === 4) {
-      return `${part3}-${part2}-${part1}`;
+    const [p1, p2, p3] = parts;
+    // DD-MM-YYYY
+    if (p1.length <= 2 && p2.length <= 2 && p3.length === 4) {
+        const day = p1.padStart(2, '0');
+        const month = p2.padStart(2, '0');
+        return `${p3}-${month}-${day}`;
     }
-    // Check for YYYY-MM-DD
-    if (part1.length === 4 && part2.length === 2 && part3.length === 2) {
-      return formattedString; // Already correct
+    // YYYY-MM-DD
+    if (p1.length === 4 && p2.length <= 2 && p3.length <= 2) {
+        const month = p2.padStart(2, '0');
+        const day = p3.padStart(2, '0');
+        return `${p1}-${month}-${day}`;
     }
   }
 

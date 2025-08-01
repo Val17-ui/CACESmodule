@@ -65,7 +65,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
         />
         <Input
           label="Date de la session"
-          type="text"
+          type="date"
           value={sessionDate}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)}
           required

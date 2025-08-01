@@ -82,7 +82,7 @@ export async function parseQuestionsExcel(file: File): Promise<{ data: RawExcelQ
 }
 
 export interface SessionDetails {
-  [key: string]: string | number;
+  [key: string]: any;
 }
 
 export interface ParsedParticipant {
@@ -107,7 +107,7 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
   if (sessionDetailsSheet) {
     sessionDetailsSheet.eachRow((row) => {
       const key = row.getCell(1).value?.toString();
-      const value = row.getCell(2).value?.toString();
+      const value = row.getCell(2).value;
       if (key) {
         details[key] = value || '';
       }
