@@ -51,6 +51,23 @@ export default defineConfig({
           },
         },
       },
+      {
+        entry: 'electron/utils/val17PptxGenerator.ts',
+        vite: {
+          build: {
+            target: 'node18',
+            outDir: 'dist-electron/electron/utils',
+            lib: {
+              entry: 'electron/utils/val17PptxGenerator.ts',
+              formats: ['cjs'],
+              fileName: () => 'val17PptxGenerator.cjs',
+            },
+            rollupOptions: {
+              external: ['electron', 'better-sqlite3', 'jszip', 'fast-xml-parser', 'image-size'],
+            },
+          },
+        },
+      },
     ]),
   ],
   resolve: {
