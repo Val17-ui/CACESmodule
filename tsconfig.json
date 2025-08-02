@@ -3,7 +3,8 @@
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" },
-    { "path": "./electron/tsconfig.json" }
+    { "path": "./electron/tsconfig.json" },
+    { "path": "./common/types/tsconfig.json" }
   ],
   "compilerOptions": {
     "composite": true, // Required for project references
@@ -11,7 +12,9 @@
     "baseUrl": ".",
     "paths": {
       "@src/*": ["src/*"],
-      "@electron/*": ["electron/*"]
+      "@electron/*": ["electron/*"],
+      "@common/*": ["common/*"],
+      "@types/*": ["common/types/*"]
     }
   }
 }

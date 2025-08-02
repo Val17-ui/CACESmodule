@@ -11,13 +11,13 @@
     "baseUrl": ".",
     "paths": {
       "@electron/*": ["./*"],
-      "@types/*": ["../src/types/*"],
-      "@src/*": ["../src/*"]
+      "@common/*": ["../common/*"],
+      "@types/*": ["../common/types/*"]
     },
-    "rootDir": ".", // Change de "." à "../" pour inclure src/
+    "rootDir": ".",
     "lib": ["es2022", "dom"],
     "types": ["node", "electron", "better-sqlite3"]
   },
-  "include": ["./**/*.ts", "../src/types/**/*.ts", "./global.d.ts"],
+  "include": ["./**/*.ts", "./global.d.ts"],
   "exclude": ["node_modules", "dist", "dist-electron"]
 }

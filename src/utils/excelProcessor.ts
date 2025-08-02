@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { Question, QuestionType } from '../types'; // CACESReferential, QuestionTheme, referentials, questionThemes removed
+import { Question, QuestionType } from '@types/index';
 
 export interface RawExcelQuestion {
   text?: string;

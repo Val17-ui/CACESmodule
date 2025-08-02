@@ -24,7 +24,7 @@ import {
 } from './db';
 
 import { getLogger, ILogger } from './utils/logger';
-import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '../src/types/index';
+import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '@types/index';
 
 let handlerInitialized = false;
 

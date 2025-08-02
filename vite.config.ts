@@ -8,9 +8,12 @@ export default defineConfig({
     react(),
     electron([
       {
+        // Main process entry file
         entry: 'electron/index.ts',
         vite: {
           build: {
+            // Set the target environment for the build
+            target: 'node18', // Or a version that matches your Electron's Node.js
             outDir: 'dist-electron/electron',
             lib: {
               entry: 'electron/index.ts',
@@ -18,28 +21,25 @@ export default defineConfig({
               fileName: () => 'index.cjs',
             },
             rollupOptions: {
-              external: ['electron', 'better-sqlite3'],
-              output: {
-                entryFileNames: 'index.cjs',
-                chunkFileNames: '[name].cjs',
-                assetFileNames: '[name].[ext]',
-              },
+              // Externalize dependencies that should not be bundled
+              external: ['electron', 'better-sqlite3', 'node-cron', 'serialport'],
             },
           },
           resolve: {
             alias: {
-              '@src': path.resolve(__dirname, 'src'),
               '@electron': path.resolve(__dirname, 'electron'),
-              '@types': path.resolve(__dirname, 'src/types'),
-              '@electron/utils': path.resolve(__dirname, 'electron/utils'),
+              '@common': path.resolve(__dirname, 'common'),
+              '@types': path.resolve(__dirname, 'common/types'),
             },
           },
         },
       },
       {
+        // Preload script entry file
         entry: 'electron/preload.ts',
         vite: {
           build: {
+            target: 'node18',
             outDir: 'dist-electron/electron',
             lib: {
               entry: 'electron/preload.ts',
@@ -48,98 +48,6 @@ export default defineConfig({
             },
             rollupOptions: {
               external: ['electron'],
-              output: {
-                entryFileNames: 'preload.cjs',
-                chunkFileNames: '[name].cjs',
-                assetFileNames: '[name].[ext]',
-              },
-            },
-          },
-          resolve: {
-            alias: {
-              '@electron': path.resolve(__dirname, 'electron'),
-              '@electron/utils': path.resolve(__dirname, 'electron/utils'),
-            },
-          },
-        },
-      },
-      {
-        entry: 'electron/ipcHandlers.ts',
-        vite: {
-          build: {
-            outDir: 'dist-electron/electron',
-            lib: {
-              entry: 'electron/ipcHandlers.ts',
-              formats: ['cjs'],
-              fileName: () => 'ipcHandlers.cjs',
-            },
-            rollupOptions: {
-              external: ['electron', 'better-sqlite3'],
-              output: {
-                entryFileNames: 'ipcHandlers.cjs',
-                chunkFileNames: '[name].cjs',
-                assetFileNames: '[name].[ext]',
-              },
-            },
-          },
-          resolve: {
-            alias: {
-              '@electron': path.resolve(__dirname, 'electron'),
-              '@electron/utils': path.resolve(__dirname, 'electron/utils'),
-            },
-          },
-        },
-      },
-      {
-        entry: 'electron/utils/pptxOrchestrator.ts',
-        vite: {
-          build: {
-            outDir: 'dist-electron/electron/utils',
-            lib: {
-              entry: 'electron/utils/pptxOrchestrator.ts',
-              formats: ['cjs'],
-              fileName: () => 'pptxOrchestrator.cjs',
-            },
-            rollupOptions: {
-              external: ['electron', 'better-sqlite3', 'jszip', 'fast-xml-parser', 'image-size'],
-              output: {
-                entryFileNames: 'pptxOrchestrator.cjs',
-                chunkFileNames: '[name].cjs',
-                assetFileNames: '[name].[ext]',
-              },
-            },
-          },
-          resolve: {
-            alias: {
-              '@electron': path.resolve(__dirname, 'electron'),
-              '@electron/utils': path.resolve(__dirname, 'electron/utils'),
-            },
-          },
-        },
-      },
-      {
-        entry: 'electron/utils/val17PptxGenerator.ts',
-        vite: {
-          build: {
-            outDir: 'dist-electron/electron/utils',
-            lib: {
-              entry: 'electron/utils/val17PptxGenerator.ts',
-              formats: ['cjs'],
-              fileName: () => 'val17PptxGenerator.cjs',
-            },
-            rollupOptions: {
-              external: ['electron', 'better-sqlite3', 'jszip', 'fast-xml-parser', 'image-size'],
-              output: {
-                entryFileNames: 'val17PptxGenerator.cjs',
-                chunkFileNames: '[name].cjs',
-                assetFileNames: '[name].[ext]',
-              },
-            },
-          },
-          resolve: {
-            alias: {
-              '@electron': path.resolve(__dirname, 'electron'),
-              '@electron/utils': path.resolve(__dirname, 'electron/utils'),
             },
           },
         },
@@ -150,8 +58,8 @@ export default defineConfig({
     alias: {
       '@src': path.resolve(__dirname, 'src'),
       '@electron': path.resolve(__dirname, 'electron'),
-      '@types': path.resolve(__dirname, 'src/types'),
-      '@electron/utils': path.resolve(__dirname, 'electron/utils'),
+      '@common': path.resolve(__dirname, 'common'),
+      '@types': path.resolve(__dirname, 'common/types'),
     },
   },
   build: {

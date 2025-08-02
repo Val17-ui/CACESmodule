@@ -1,5 +1,5 @@
 // src/renderer.d.ts
-import { Session, Referential, Trainer, Theme, Bloc, QuestionWithId, Omit, SessionResult, VotingDevice, DeviceKit, SessionQuestion, SessionBoitier, BlockUsage } from './types/index';
+import { Session, Referential, Trainer, Theme, Bloc, QuestionWithId, Omit, SessionResult, VotingDevice, DeviceKit, SessionQuestion, SessionBoitier, BlockUsage } from '@types/index';
 
 declare global {
   interface Window {

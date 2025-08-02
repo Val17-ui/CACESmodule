@@ -92,7 +92,7 @@ function generateOmbeaSessionXml(
 
 
 import { ILogger } from './logger';
-import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '../../src/types/index';
+import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '@types/index';
 
 export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger): Val17Question[] {
   logger.info('[LOG][pptxOrchestrator] Début de transformQuestionsForVal17Generator.');

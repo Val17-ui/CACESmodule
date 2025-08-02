@@ -6,7 +6,7 @@ import type {
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
     VotingDevice, DeviceKit, DeviceKitAssignment,
     SessionIteration, Participant, ParticipantAssignment
-  } from '@src/types/index';
+  } from '@types/index';
 import { getLogger, ILogger } from './utils/logger';
 import type { Database } from 'better-sqlite3';
 
