@@ -8,21 +8,21 @@ export default defineConfig({
     react(),
     electron([
       {
-        // Main process entry file
         entry: 'electron/index.ts',
         vite: {
           build: {
-            // Set the target environment for the build
-            target: 'node18', // Or a version that matches your Electron's Node.js
+            target: 'node18',
             outDir: 'dist-electron/electron',
             lib: {
               entry: 'electron/index.ts',
               formats: ['cjs'],
-              fileName: () => 'index.cjs',
             },
             rollupOptions: {
-              // Externalize dependencies that should not be bundled
               external: ['electron', 'better-sqlite3', 'node-cron', 'serialport'],
+              output: {
+                preserveModules: true,
+                entryFileNames: '[name].cjs',
+              },
             },
           },
           resolve: {
@@ -35,7 +35,6 @@ export default defineConfig({
         },
       },
       {
-        // Preload script entry file
         entry: 'electron/preload.ts',
         vite: {
           build: {
@@ -44,7 +43,7 @@ export default defineConfig({
             lib: {
               entry: 'electron/preload.ts',
               formats: ['cjs'],
-              fileName: () => 'preload.cjs',
+              fileName: () => 'preload.cjs', // Preload script should be a single file
             },
             rollupOptions: {
               external: ['electron'],
