@@ -92,6 +92,7 @@ function generateOmbeaSessionXml(
 
 
 import { ILogger } from './logger';
+import { generatePPTXVal17 } from './val17PptxGenerator';
 import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '@types/index';
 
 export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger): Val17Question[] {
@@ -199,13 +200,16 @@ export async function generatePresentation(
 
 // ... (rest of the file)
 
+// ... (other imports)
+
+// ... (rest of the file)
+
 // In generatePresentation function:
   try {
-    const { generatePPTXVal17 } = await import('./val17PptxGenerator');
-    logger.info('[pptxOrchestrator] Using dynamically imported val17PptxGenerator.');
+    logger.info('[pptxOrchestrator] Using statically imported val17PptxGenerator.');
 
     logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
-    const generatedData = await generatePPTXVal17(
+    const generatedData = generatePPTXVal17(
       templateBuffer,
       transformedQuestions,
       participantsForGenerator,

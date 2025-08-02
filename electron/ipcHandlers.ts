@@ -375,7 +375,7 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   // PPTX Generation
   ipcMain.handle('pptx-generate', async (_event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referentiel: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
     loggerInstance.info('[IPC] pptx-generate handler triggered.');
-    const { generatePresentation } = await import('@electron/utils/pptxOrchestrator');
+    const { generatePresentation } = await import('./utils/pptxOrchestrator');
     loggerInstance.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
     let templateArrayBuffer: ArrayBuffer;
     if (template === 'tool_default_template') {
