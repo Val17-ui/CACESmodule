@@ -14,7 +14,7 @@
       "@types/*": ["../src/types/*"],
       "@src/*": ["../src/*"]
     },
-    "rootDir": "../", // Change de "." à "../" pour inclure src/
+    "rootDir": ".", // Change de "." à "../" pour inclure src/
     "lib": ["es2022", "dom"],
     "types": ["node", "electron", "better-sqlite3"]
   },

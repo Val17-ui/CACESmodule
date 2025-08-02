@@ -19,10 +19,14 @@ function createWindow(logger: ILogger) {
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
+    logger.debug('[Main] Loading dev server URL: ' + process.env.VITE_DEV_SERVER_URL);
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
     win.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(__dirname, '../renderer/index.html'));
+    // Chemin corrigé pour pointer vers dist/renderer/index.html
+    const indexPath = path.join(__dirname, '../../dist/renderer/index.html');
+    logger.debug(`[Main] Loading index.html from: ${indexPath}`);
+    win.loadFile(indexPath);
   }
 }
 

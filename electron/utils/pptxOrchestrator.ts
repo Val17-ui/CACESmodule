@@ -8,8 +8,6 @@ import path from 'path';
 
 // Ré-exporter QuestionMapping pour qu'il soit utilisable par d'autres modules
 
-
-
 function generateOmbeaSessionXml(
   sessionInfo: Val17SessionInfo,
   participants: ParticipantForGenerator[],
@@ -95,9 +93,6 @@ function generateOmbeaSessionXml(
 
 import { ILogger } from './logger';
 import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '../../src/types/index';
-import {
-  generatePPTXVal17,
-} from './val17PptxGenerator';
 
 export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger): Val17Question[] {
   logger.info('[LOG][pptxOrchestrator] Début de transformQuestionsForVal17Generator.');
@@ -147,8 +142,7 @@ export async function generatePresentation(
   logger.info(`[LOG][pptxOrchestrator] Nombre de participants: ${participantsForGenerator.length}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de questions: ${storedQuestions.length}`);
   logger.info(`[LOG][pptxOrchestrator] adminSettings: ${JSON.stringify(adminSettings)}`);
-
-
+  
   let templateBuffer: Buffer;
   if (templateFile) {
     logger.info('[LOG][pptxOrchestrator] Un fichier template a été fourni.');
@@ -180,7 +174,7 @@ export async function generatePresentation(
   logger.info('[LOG][pptxOrchestrator] Questions transformées pour le générateur Val17.');
 
   const generationOptions: Val17GenerationOptions = {
-    fileName: `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}_OMBEA.pptx`,
+    fileName: `Session_${sessionInfo.name.replace(/[^a-z0-9]/gi, '_')}.pptx`,
     defaultDuration: adminSettings.defaultDuration || 30,
     ombeaConfig: {
       pollStartMode: adminSettings.pollStartMode,
@@ -195,13 +189,15 @@ export async function generatePresentation(
       participantsLayoutName: "Participants Slide Layout",
     }
   };
+  const val17SessionInfo: Val17SessionInfo = {
+    title: sessionInfo.name,
+    date: sessionInfo.date,
+  };
   logger.info(`[LOG][pptxOrchestrator] Options de génération créées: ${JSON.stringify(generationOptions)}`);
 
   try {
-    const val17SessionInfo: Val17SessionInfo = {
-      title: sessionInfo.name,
-      date: sessionInfo.date,
-    };
+    const { generatePPTXVal17 } = await import('@electron/utils/val17PptxGenerator');
+    logger.info('[pptxOrchestrator] Importation de val17PptxGenerator réussie');
 
     logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
     const generatedData = await generatePPTXVal17(

@@ -375,7 +375,7 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   // PPTX Generation
   ipcMain.handle('pptx-generate', async (_event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referentiel: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
     loggerInstance.info('[IPC] pptx-generate handler triggered.');
-    const { generatePresentation } = await import('./utils/pptxOrchestrator');
+    const { generatePresentation } = await import('@electron/utils/pptxOrchestrator');
     loggerInstance.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
     let templateArrayBuffer: ArrayBuffer;
     if (template === 'tool_default_template') {
@@ -431,16 +431,16 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   // File Operations
   ipcMain.handle('open-file-dialog', async () => {
     loggerInstance.debug('[IPC] open-file-dialog');
-    const { canceled, filePaths } = await dialog.showOpenDialog({
+   const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [
         { name: 'Tous les fichiers', extensions: ['*'] }
       ]
     });
-    if (canceled || filePaths.length === 0) {
+    if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true, fileName: null, fileBuffer: null, error: null };
     }
-    const filePath = filePaths[0];
+    const filePath = result.filePaths[0];
     try {
       const fileBuffer = await fs.readFile(filePath);
       return {
@@ -457,16 +457,17 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
 
   ipcMain.handle('open-excel-file-dialog', async () => {
     loggerInstance.debug('[IPC] open-excel-file-dialog');
-    const { canceled, filePaths } = await dialog.showOpenDialog({
+    const result = await dialog.showOpenDialog({
       filters: [
         { name: 'Fichiers Excel', extensions: ['xlsx', 'xls'] },
         { name: 'Tous les fichiers', extensions: ['*'] }
-      ]
+      ],
+      properties: ['openFile']
     });
-    if (canceled || filePaths.length === 0) {
+    if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true, fileName: null, fileBuffer: null, error: null };
     }
-    const filePath = filePaths[0];
+    const filePath = result.filePaths[0];
     try {
       const fileBuffer = await fs.readFile(filePath);
       return {
@@ -487,28 +488,28 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
       shell.showItemInFolder(filePath);
       return { canceled: false, path: path.dirname(filePath) };
     }
-    const { canceled, filePaths } = await dialog.showOpenDialog({
+    const result = await dialog.showOpenDialog({
       properties: ['openDirectory']
     });
-    if (canceled || filePaths.length === 0) {
+    if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true };
     }
-    return { canceled: false, path: filePaths[0] };
+    return { canceled: false, path: result.filePaths[0] };
   });
 
   ipcMain.handle('open-results-file', async () => {
     loggerInstance.debug('[IPC] open-results-file');
-    const { canceled, filePaths } = await dialog.showOpenDialog({
+    const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [
         { name: 'Fichiers ORS', extensions: ['ors'] },
         { name: 'Tous les fichiers', extensions: ['*'] }
       ]
     });
-    if (canceled || filePaths.length === 0) {
+    if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true, fileName: null, fileBuffer: null, error: null };
     }
-    const filePath = filePaths[0];
+    const filePath = result.filePaths[0];
     try {
       const fileBuffer = await fs.readFile(filePath);
       return {
