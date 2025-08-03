@@ -464,7 +464,7 @@ ipcMain.handle(
       ]
     });
     if (result.canceled || result.filePaths.length === 0) {
-      return { canceled: true, fileName: null, fileBuffer: null, error: null };
+      return { canceled: true, filePaths: [], fileName: null, fileBuffer: null, error: null };
     }
     const filePath = result.filePaths[0];
     try {
@@ -491,7 +491,7 @@ ipcMain.handle(
       properties: ['openFile']
     });
     if (result.canceled || result.filePaths.length === 0) {
-      return { canceled: true, fileName: null, fileBuffer: null, error: null };
+      return { canceled: true, filePaths: [], fileName: null, fileBuffer: null, error: null };
     }
     const filePath = result.filePaths[0];
     try {
@@ -533,7 +533,7 @@ ipcMain.handle(
       ]
     });
     if (result.canceled || result.filePaths.length === 0) {
-      return { canceled: true, fileName: null, fileBuffer: null, error: null };
+      return { canceled: true, filePaths: [], fileName: null, fileBuffer: null, error: null };
     }
     const filePath = result.filePaths[0];
     try {

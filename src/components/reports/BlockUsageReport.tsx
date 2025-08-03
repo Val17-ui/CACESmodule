@@ -38,11 +38,8 @@ const BlockUsageReport: React.FC = () => {
       // La fonction calculateBlockUsage est appelée sans arguments initiaux pour charger toutes les données
       // ou avec les dates si elles sont définies.
       // Le filtrage par référentiel se fera côté client après récupération pour ce composant.
-      const data = await window.dbAPI?.calculateBlockUsage(
-        startDate || undefined,
-        endDate || undefined
-      );
-      setBlockUsageData(data);
+      const data = await window.dbAPI?.calculateBlockUsage();
+      setBlockUsageData(data || []);
     } catch (error) {
       console.error("Erreur lors de la récupération des données d'utilisation des blocs:", error);
       setBlockUsageData([]);
