@@ -1035,6 +1035,18 @@ if (savedIterationId) { // <-- On ajoute cette condition
       }
       logger.info(`[Import Results] ${extractedResultsFromXml.length} réponses initialement extraites du XML pour l'itération ${iteration.id}.`);
 
+      const slideGuidsToIgnore = editingSessionData.ignoredSlideGuids;
+      if (slideGuidsToIgnore && slideGuidsToIgnore.length > 0) {
+        const countBeforeFiltering = extractedResultsFromXml.length;
+        extractedResultsFromXml = extractedResultsFromXml.filter(
+          (result) => !slideGuidsToIgnore.includes(result.questionSlideGuid)
+        );
+        const countAfterFiltering = extractedResultsFromXml.length;
+        if (countBeforeFiltering > countAfterFiltering) {
+          logger.info(`[Import Results] ${countBeforeFiltering - countAfterFiltering} réponses correspondant à des GUIDs ignorés ont été filtrées.`);
+        }
+      }
+
       // Deduplication
       const latestResultsMap = new Map<string, ExtractedResultFromXml>();
       for (const result of extractedResultsFromXml) {
