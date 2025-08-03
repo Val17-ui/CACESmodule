@@ -12,7 +12,6 @@ import {
   TableHead,
   TableCell,
 } from '../ui/Table';
-import { calculateSessionStats } from '../../utils/reportCalculators';
 import { StorageManager } from '../../services/StorageManager';
 
 type ReportsListProps = {
@@ -22,24 +21,6 @@ type ReportsListProps = {
 };
 
 const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, referentialMap }) => {
-  const [sessionStats, setSessionStats] = useState<{[sessionId: number]: { averageScore: number, successRate: number }}>({});
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      const stats: {[sessionId: number]: { averageScore: number, successRate: number }} = {};
-      for (const session of sessions) {
-        if (session.id && session.status === 'completed') {
-          const results = await StorageManager.getResultsForSession(session.id);
-          // Utiliser session.selectedBlocIds au lieu de session.selectionBlocs
-          const questions = await StorageManager.getQuestionsForSessionBlocks(session.selectedBlocIds || []);
-          stats[session.id] = calculateSessionStats(session, results, questions);
-        }
-      }
-      setSessionStats(stats);
-    };
-    fetchStats();
-  }, [sessions]);
-
   const formatDate = (dateString: string | undefined | null): string => {
     if (!dateString) {
       return 'Date non spécifiée';
@@ -74,7 +55,7 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, refer
             <TableHead>Référentiel</TableHead>
             <TableHead>Date</TableHead>
             <TableHead className="text-center">Participants</TableHead>
-            <TableHead className="text-center">Taux de réussite</TableHead>
+            <TableHead className="text-center">Score moyen</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -89,8 +70,10 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, refer
               </TableCell>
               <TableCell>{formatDate(session.dateSession)}</TableCell>
               <TableCell className="text-center">{session.participantCount || 0}</TableCell>
-              <TableCell className="text-center font-medium text-green-600">
-                {session.id && sessionStats[session.id] ? `${sessionStats[session.id].successRate.toFixed(0)}%` : 'N/A'}
+              <TableCell className="text-center font-medium text-blue-600">
+                {session.averageScore !== null && session.averageScore !== undefined
+                  ? `${session.averageScore.toFixed(1)}%`
+                  : 'N/A'}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end space-x-2">

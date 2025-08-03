@@ -39,6 +39,7 @@ export interface Session {
   iteration_count?: number;
   iterations?: SessionIteration[];
   participantCount?: number;
+  averageScore?: number;
 }
 
 // --- Nouveaux types pour la gestion des Kits de Boîtiers ---

@@ -969,21 +969,26 @@ const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefi
 const getAllSessions = async (): Promise<Session[]> => {
   return asyncDbRun(() => {
     try {
-      // Compter les participants uniques par session
       const stmt = getDb().prepare(`
         SELECT
           s.*,
           (SELECT COUNT(DISTINCT pa.participant_id)
            FROM participant_assignments pa
            JOIN session_iterations si ON pa.session_iteration_id = si.id
-           WHERE si.session_id = s.id) as participantCount
+           WHERE si.session_id = s.id) as participantCount,
+          (SELECT AVG(sr.isCorrect) * 100
+           FROM sessionResults sr
+           WHERE sr.sessionId = s.id) as averageScore
         FROM sessions s
         ORDER BY s.dateSession DESC, s.createdAt DESC
       `);
       const rows = stmt.all() as any[];
-      // La fonction rowToSession gère déjà la conversion de base de la ligne de session
-      // Le champ participantCount est un simple nombre, donc pas de traitement spécial nécessaire
-      return rows.map(rowToSession);
+      return rows.map(row => {
+        const session = rowToSession(row);
+        // Assurer que averageScore est un nombre, ou null si aucune donnée.
+        session.averageScore = row.averageScore === null ? null : Number(row.averageScore);
+        return session;
+      });
     } catch (error) {
       _logger?.debug(`[DB Sessions] Error getting all sessions: ${error}`);
       throw error;

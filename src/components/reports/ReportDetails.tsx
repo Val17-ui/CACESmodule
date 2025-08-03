@@ -128,7 +128,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       }
     };
     fetchData();
-  }, [session, allBlocsDb, allThemesDb]); // Added allBlocsDb and allThemesDb as they are used in enrichment
+  }, [session]); // Dependency on session only, to re-fetch when the session prop changes.
 
   useEffect(() => {
     if (
