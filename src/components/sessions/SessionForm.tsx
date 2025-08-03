@@ -244,7 +244,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
             if (sessionData.iteration_count && sessionData.iteration_count > 0) {
               const count = sessionData.iteration_count;
               setIterationCount(count);
-              let names = sessionData.iterations?.map((iter: { name: any; }) => iter.name) || [];
+              let names = sessionData.iterations?.map((iter: { name: any; }, index: number) => iter.name || `Session_${index + 1}`) || [];
               if (names.length < count) {
                 const additionalNames = Array.from({ length: count - names.length }, (_, i) => `Session_${names.length + i + 1}`);
                 names = [...names, ...additionalNames];
@@ -940,7 +940,9 @@ if (savedIterationId) { // <-- On ajoute cette condition
         );
 
         if (orsBlob) {
-          const fileName = `${sessionName.replace(/ /g, '_')}_${iterationName.replace(/ /g, '_')}.ors`;
+          const safeSessionName = (sessionName || 'Session').replace(/ /g, '_');
+          const safeIterationName = (iterationName || 'Iteration').replace(/ /g, '_');
+          const fileName = `${safeSessionName}_${safeIterationName}.ors`;
           const saveResult = await window.dbAPI?.savePptxFile(orsBlob, fileName);
           if (saveResult && saveResult.success) {
             const iterToUpdate = upToDateSessionData.iterations?.find(it => it.iteration_index === i) || { created_at: new Date().toISOString() };
