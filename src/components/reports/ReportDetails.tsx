@@ -191,7 +191,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       return [];
     }
 
-    const themesWithBlocks = new Map<number, { theme: Theme; blocks: Bloc[] }>();
+    const themesWithBlocks = new Map<number, { theme: Theme; blocks: { bloc: Bloc; version?: number }[] }>();
 
     session.selectedBlocIds.forEach(blocId => {
       const bloc = allBlocsDb.find(b => b.id === blocId);
@@ -201,13 +201,17 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           if (!themesWithBlocks.has(theme.id)) {
             themesWithBlocks.set(theme.id, { theme, blocks: [] });
           }
-          themesWithBlocks.get(theme.id)!.blocks.push(bloc);
+          // Find the version from the first question associated with this block
+          const questionInBlock = questionsForThisSession.find(q => q.blocId === blocId);
+          const version = questionInBlock?.version;
+
+          themesWithBlocks.get(theme.id)!.blocks.push({ bloc, version });
         }
       }
     });
 
     return Array.from(themesWithBlocks.values());
-  }, [session.selectedBlocIds, allThemesDb, allBlocsDb]);
+  }, [session.selectedBlocIds, allThemesDb, allBlocsDb, questionsForThisSession]);
 
   const handleExportPDF = () => { // Export PDF de la session (vue actuelle)
     if (reportRef.current) {
@@ -423,24 +427,26 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           </div>
         </Card>
 
-        {questionnaireDraw.length > 0 && (
-          <Card title="Résultat du tirage du questionnaire" className="mb-6">
+        <Card title="Résultat du tirage du questionnaire" className="mb-6">
+          {questionnaireDraw.length > 0 ? (
             <div className="space-y-4">
               {questionnaireDraw.map(({ theme, blocks }) => (
                 <div key={theme.id}>
                   <h4 className="font-semibold text-gray-700">{theme.nom_complet}</h4>
                   <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
-                    {blocks.map(block => (
-                      <li key={block.id} className="text-sm text-gray-600">
-                        Bloc: {block.code_bloc}
+                    {blocks.map(({ bloc, version }) => (
+                      <li key={bloc.id} className="text-sm text-gray-600">
+                        Bloc: {bloc.code_bloc} - Version: {version !== undefined ? version : 'N/A'}
                       </li>
                     ))}
                   </ul>
                 </div>
               ))}
             </div>
-          </Card>
-        )}
+          ) : (
+            <p className="text-sm text-gray-500">Aucun bloc de questions n'a été sélectionné pour cette session.</p>
+          )}
+        </Card>
         
         <Card title="Résultats par participant" className="mb-6">
           <div className="overflow-x-auto">
