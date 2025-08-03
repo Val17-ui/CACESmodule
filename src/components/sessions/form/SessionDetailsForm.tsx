@@ -1,5 +1,5 @@
 import React from 'react';
-import { CACESReferential, Referential, Trainer } from '../../../types';
+import { CACESReferential, Referential, Trainer } from '@common/types';
 import Card from '../../ui/Card';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';

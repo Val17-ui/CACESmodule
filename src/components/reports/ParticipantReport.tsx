@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import { StorageManager } from '../../services/StorageManager';
-import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails, SessionResult } from '../../types';
+import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails, SessionResult } from '@common/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 // import { saveAs } from 'file-saver'; // Retiré car pdf.save() le gère

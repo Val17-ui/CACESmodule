@@ -1,4 +1,4 @@
-import { Question } from '../types'; // Assuming Question type is available
+import { Question } from '@common/types'; // Assuming Question type is available
 
 export interface RawCsvQuestion {
   text?: string;

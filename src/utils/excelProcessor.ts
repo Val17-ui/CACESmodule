@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { Question, QuestionType } from '@types';
+import { Question, QuestionType } from '@common/types';
 
 export interface RawExcelQuestion {
   text?: string;

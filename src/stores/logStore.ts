@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { logger } from "../utils/logger";
-import { LogEntry } from '../types';
+import { LogEntry } from '@common/types';
 
 interface LogStore {
   logs: LogEntry[];

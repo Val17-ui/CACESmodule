@@ -3,7 +3,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { Plus, Upload, Trash2, Save, AlertCircle } from 'lucide-react';
-import { VotingDevice } from '../../types'; // VotingDevice importé depuis types
+import { VotingDevice } from '@common/types'; // VotingDevice importé depuis types
 import { StorageManager } from '../../services/StorageManager';
 import * as XLSX from 'xlsx';
 

@@ -32,7 +32,7 @@ import {
   UnknownDeviceAction,
   ExpectedIssueResolution,
   UnknownDeviceResolution
-} from '@types';
+} from '@common/types';
 
 // Structure pour les anomalies détectées
 export interface DetectedAnomalies {

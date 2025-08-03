@@ -3,7 +3,7 @@ import { Download, Eye, Printer, FileText } from 'lucide-react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import { Session } from '../../types'; // Referential enlevé
+import { Session } from '@common/types'; // Referential enlevé
 import {
   Table,
   TableHeader,

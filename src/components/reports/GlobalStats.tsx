@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
 import { Users, CheckCircle, BarChart2, PieChart } from 'lucide-react';
-import { Session } from '../../types';
+import { Session } from '@common/types';
 import { calculateSessionStats } from '../../utils/reportCalculators';
 import { StorageManager } from '../../services/StorageManager';
 

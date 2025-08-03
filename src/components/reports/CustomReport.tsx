@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import { StorageManager } from '../../services/StorageManager';
-import { Session, Referential } from '../../types'; // Ajout de Referential, CACESReferential enlevé
+import { Session, Referential } from '@common/types'; // Ajout de Referential, CACESReferential enlevé
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';

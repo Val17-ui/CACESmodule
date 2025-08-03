@@ -14,7 +14,7 @@ import {
   QuestionWithId as StoredQuestion,
   VotingDevice,
   DeviceKit
-} from '../../types';
+} from '@common/types';
 import { StorageManager } from '../../services/StorageManager';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
 import { getActivePptxTemplateFile } from '../../utils/templateManager';
@@ -22,16 +22,15 @@ import { logger } from '../../utils/logger';
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import AnomalyResolutionModal, { DetectedAnomalies } from './AnomalyResolutionModal';
-import { ExpectedIssueResolution, UnknownDeviceResolution } from '../../types';
+import { ExpectedIssueResolution, UnknownDeviceResolution } from '@common/types';
 
-interface FormParticipant extends DBParticipantType {
+type FormParticipant = DBParticipantType & {
   id: string;
   firstName: string;
   lastName: string;
-  organization?: string;
   deviceId: number | null;
   hasSigned?: boolean;
-}
+};
 
 import { parseFullSessionExcel } from '../../utils/excelProcessor';
 
@@ -769,11 +768,11 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
         const participantDbIdMap = new Map<string, number>();
         for (const p of participants) {
             const dbParticipant: DBParticipantType = {
-                nom: p.lastName,
-                prenom: p.firstName,
-                organization: p.organization,
-                identificationCode: p.identificationCode,
-            };
+    nom: p.lastName,
+    prenom: p.firstName,
+    organization: p.organization,
+    identificationCode: p.identificationCode,
+};
             const dbId = await StorageManager.upsertParticipant(dbParticipant);
             if (dbId) {
                 participantDbIdMap.set(p.id, dbId);

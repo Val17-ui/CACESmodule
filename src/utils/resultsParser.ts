@@ -1,7 +1,7 @@
 // src/utils/resultsParser.ts
 
 // import { QuestionWithId } from '../db'; // Unused
-import { SessionResult } from '../types';
+import { SessionResult } from '@common/types';
 import { logger } from './logger';
 
 // Nouvelle interface pour les données extraites et prétraitées du XML

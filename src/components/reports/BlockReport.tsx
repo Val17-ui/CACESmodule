@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 import { StorageManager } from '../../services/StorageManager';
-import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, CalculatedBlockOverallStats } from '../../types'; // QuestionWithId et CalculatedBlockOverallStats importés de types
+import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, CalculatedBlockOverallStats } from '@common/types'; // QuestionWithId et CalculatedBlockOverallStats importés de types
 import {
   Table,
   TableHeader,

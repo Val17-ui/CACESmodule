@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { BlockUsage } from '../../types';
+import { BlockUsage } from '@common/types';
 import { StorageManager } from '../../services/StorageManager';
-import { Referential } from '../../types'; // Removed CACESReferential
+import { Referential } from '@common/types'; // Removed CACESReferential
 
 // Importer les composants UI réutilisables
 import Card from '../ui/Card';

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Users, Calendar, CheckCircle, Clock } from 'lucide-react';
 import Card from '../ui/Card';
-import { Session } from '../../types';
+import { Session } from '@common/types';
 
 type DashboardCardsProps = {
   sessions: Session[];

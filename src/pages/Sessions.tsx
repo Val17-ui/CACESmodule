@@ -5,7 +5,7 @@ import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
 import { Plus, Upload } from 'lucide-react';
 // import { getAllSessions, getSessionById } from '../db'; // Supprimé
-import { Session as DBSession, Referential } from '../types';
+import { Session as DBSession, Referential } from '@common/types';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { FileUp, Trash2, UserPlus } from 'lucide-react';
-import { FormParticipant, VotingDevice, DeviceKit } from '../../../types';
+import { FormParticipant, VotingDevice, DeviceKit } from '@common/types';
 import Button from '../../ui/Button';
 import Card from '../../ui/Card';
 import Input from '../../ui/Input';

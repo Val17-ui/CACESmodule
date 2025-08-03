@@ -4,7 +4,7 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { Plus, Edit3, Trash2, Star } from 'lucide-react';
 import { StorageManager } from '../../services/StorageManager';
-import { DeviceKit, VotingDevice } from '../../types';
+import { DeviceKit, VotingDevice } from '@common/types';
 
 const KitSettings: React.FC = () => {
   const [kits, setKits] = useState<DeviceKit[]>([]);

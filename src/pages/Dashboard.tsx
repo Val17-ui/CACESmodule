@@ -6,7 +6,7 @@ import AlertsNotifications from '../components/dashboard/AlertsNotifications'; /
 // import QuickActions from '../components/dashboard/QuickActions'; // Supprimé
 // import { mockSessions } from '../data/mockData'; // Plus besoin des mocks ici directement
 // import { getAllSessions } from '../db'; // Supprimé
-import { Session, Referential } from '../types';
+import { Session, Referential } from '@common/types';
 
 type DashboardProps = {
   activePage: string;

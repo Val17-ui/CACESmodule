@@ -1,7 +1,7 @@
 import {
   Session, SessionResult, QuestionWithId, Referential, Theme, Bloc, // SelectedBlock removed
   ThemeScoreDetails, CalculatedBlockOverallStats, OverallThemeStats // Types maintenant importés
-} from '../types';
+} from '@common/types';
 
 /**
  * Calcule la note globale d'un participant pour une session spécifique.

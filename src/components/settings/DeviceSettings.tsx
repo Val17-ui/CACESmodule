@@ -3,7 +3,7 @@ import { Plus, Trash2, CheckCircle, XCircle } from 'lucide-react'; // Usb remove
 // import Card from '../ui/Card'; // Card removed
 import Button from '../ui/Button';
 import Input from '../ui/Input';
-import { DeviceMapping } from '../../types';
+import { DeviceMapping } from 'common/types';
 
 const DeviceSettings: React.FC = () => {
   const [maxDevices, setMaxDevices] = useState(20);

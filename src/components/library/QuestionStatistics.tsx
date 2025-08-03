@@ -4,7 +4,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Badge from '../ui/Badge';
-import { referentials, QuestionTheme, questionThemes, QuestionWithId } from '../../types';
+import { referentials, QuestionTheme, questionThemes, QuestionWithId } from '@common/types';
 import { StorageManager } from '../../services/StorageManager';
 
 const QuestionStatistics: React.FC = () => {

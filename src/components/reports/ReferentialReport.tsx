@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../ui/Card';
 // getQuestionsForSessionBlocks retiré, getAllQuestions retiré car non utilisé
 import { StorageManager } from '../../services/StorageManager';
-import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, OverallThemeStats } from '../../types';
+import { Session, SessionResult, Referential, Theme, Bloc, QuestionWithId, OverallThemeStats } from '@common/types';
 import {
   Table,
   TableHeader,

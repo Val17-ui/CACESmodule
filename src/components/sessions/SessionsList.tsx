@@ -3,7 +3,7 @@ import { CalendarClock, ClipboardList, Download, AlertTriangle } from 'lucide-re
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import { Session as DBSession, Referential } from '../../types'; // Ajout Referential
+import { Session as DBSession, Referential } from '@common/types'; // Ajout Referential
 import { saveAs } from 'file-saver';
 
 type SessionsListProps = {

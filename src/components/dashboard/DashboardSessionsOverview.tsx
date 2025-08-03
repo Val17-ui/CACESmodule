@@ -1,6 +1,6 @@
 import React from 'react';
 import { CalendarClock, ChevronRight } from 'lucide-react'; // AlertTriangle supprimé
-import { Session, Referential } from '../../types';
+import { Session, Referential } from '@common/types';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 

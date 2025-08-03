@@ -1,5 +1,5 @@
 // src/services/StorageManager.ts
-import { QuestionWithId, Omit, VotingDevice, DeviceKit, Trainer } from '../types'; // Importer Omit et les types nécessaires depuis ../types
+import { QuestionWithId, Omit, VotingDevice, DeviceKit, Trainer } from '@common/types'; // Importer Omit et les types nécessaires depuis ../types
 
 // Re-export QuestionWithId as StoredQuestion for clarity
 export type StoredQuestion = QuestionWithId;
