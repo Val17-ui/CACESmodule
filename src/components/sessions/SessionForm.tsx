@@ -1072,10 +1072,10 @@ if (savedIterationId) { // <-- On ajoute cette condition
         if (expectedSerialNumbers.has(result.participantDeviceID)) {
           responsesFromExpectedDevices.push(result);
         } else {
-          let unknown = detectedAnomaliesData.unknownThatResponded?.find(u => u.serialNumber === result.participantDeviceID);
+          let unknown = detectedAnomaliesData.unknownThatResponded.find(u => u.serialNumber === result.participantDeviceID);
           if (!unknown) {
             unknown = { serialNumber: result.participantDeviceID, responses: [] };
-            detectedAnomaliesData.unknownThatResponded?.push(unknown);
+            detectedAnomaliesData.unknownThatResponded.push(unknown);
           }
           unknown.responses.push(result);
         }
@@ -1085,7 +1085,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
         const respondedGuids = new Set(finalExtractedResults.filter(r => r.participantDeviceID === boitier.serialNumber).map(r => r.questionSlideGuid));
         const missedGuids = [...relevantSessionQuestionGuids].filter(guid => !respondedGuids.has(guid as string));
         if (missedGuids.length > 0) {
-          detectedAnomaliesData.expectedHavingIssues?.push({
+          detectedAnomaliesData.expectedHavingIssues.push({
             serialNumber: boitier.serialNumber,
             participantName: boitier.participantName,
             responseInfo: {
@@ -1098,8 +1098,8 @@ if (savedIterationId) { // <-- On ajoute cette condition
         }
       });
 
-      if ((detectedAnomaliesData.expectedHavingIssues?.length || 0) > 0 || (detectedAnomaliesData.unknownThatResponded?.length || 0) > 0) {
-        setImportSummary(`Anomalies détectées: ${detectedAnomaliesData.expectedHavingIssues?.length || 0} boîtier(s) attendu(s) avec problèmes, ${detectedAnomaliesData.unknownThatResponded?.length || 0} boîtier(s) inconnu(s). Résolution nécessaire.`);
+      if ((detectedAnomaliesData.expectedHavingIssues.length || 0) > 0 || (detectedAnomaliesData.unknownThatResponded.length || 0) > 0) {
+        setImportSummary(`Anomalies détectées: ${detectedAnomaliesData.expectedHavingIssues.length || 0} boîtier(s) attendu(s) avec problèmes, ${detectedAnomaliesData.unknownThatResponded.length || 0} boîtier(s) inconnu(s). Résolution nécessaire.`);
         setDetectedAnomalies(detectedAnomaliesData);
         setPendingValidResults(responsesFromExpectedDevices);
         setCurrentIterationForImport(iteration.id);
@@ -1128,8 +1128,14 @@ if (savedIterationId) { // <-- On ajoute cette condition
         setImportSummary("Aucun résultat à importer.");
       }
     } catch (error: any) {
-      setImportSummary(`Erreur traitement fichier: ${error.message}`);
-      logger.error(`Erreur lors du traitement du fichier de résultats pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FILE_PROCESSING_ERROR', sessionId: currentSessionDbId, error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setImportSummary(`Erreur traitement fichier: ${errorMessage}`);
+      logger.error(`Erreur lors du traitement du fichier de résultats pour la session ID ${currentSessionDbId}`, {
+        eventType: 'RESULTS_IMPORT_FILE_PROCESSING_ERROR',
+        sessionId: currentSessionDbId,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : 'No stack available'
+      });
     }
   };
 
