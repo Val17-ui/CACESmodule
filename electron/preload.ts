@@ -109,6 +109,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   openDirectoryDialog: (filePath?: string) => ipcRenderer.invoke('open-directory-dialog', filePath),
   openResultsFile: () => ipcRenderer.invoke('open-results-file'),
   openFile: (filePath: string) => ipcRenderer.invoke('open-file', filePath),
+  readFileBuffer: (filePath: string) => ipcRenderer.invoke('read-file-buffer', filePath),
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {
