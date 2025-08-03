@@ -6,8 +6,6 @@ import {
   Session as DBSession,
   Participant as DBParticipantType,
   Trainer,
-  SessionQuestion,
-  SessionBoitier,
   Referential,
   Theme,
   Bloc,
@@ -907,7 +905,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
       setImportSummary("Erreur lors de la sauvegarde de la session avant la génération.");
       setIsGeneratingOrs(false); return;
     }
-    const upToDateSessionData = await StorageManager.getSessionById(currentSavedId);
+    let upToDateSessionData = await StorageManager.getSessionById(currentSavedId);
     if (!upToDateSessionData) {
       setImportSummary("Erreur lors du rechargement de la session après sauvegarde.");
       setIsGeneratingOrs(false); return;
@@ -1026,7 +1024,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
 
     setImportSummary(`Lecture du fichier ORS pour l'itération ${iteration.name}...`);
     try {
-      const fileData = await window.dbAPI?.readFileBuffer(iteration.ors_file_path);
+      const fileData = await window.electronAPI?.readFileBuffer(iteration.ors_file_path);
       if (!fileData || !fileData.fileBuffer) {
         setImportSummary(`Lecture du fichier ORS échouée: ${fileData?.error || 'Buffer vide.'}`);
         return;
@@ -1079,9 +1077,10 @@ if (savedIterationId) { // <-- On ajoute cette condition
         return;
       }
 
-      const sessionBoitiers = iteration.participants?.map((p: any) => ({
+      const sessionBoitiers = iteration.participants?.map((p: any, index: number) => ({
         serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
         participantName: `${p.prenom} ${p.nom}`,
+        visualId: index + 1, // Utiliser l'index comme ID visuel
       })).filter((b: any) => b.serialNumber);
 
       if (!sessionBoitiers || sessionBoitiers.length === 0) {
@@ -1115,6 +1114,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
           detectedAnomaliesData.expectedHavingIssues.push({
             serialNumber: boitier.serialNumber,
             participantName: boitier.participantName,
+            visualId: boitier.visualId,
             responseInfo: {
               respondedToQuestionsGuids: [...respondedGuids],
               missedQuestionsGuids: missedGuids,

@@ -437,6 +437,7 @@ export interface SessionIteration {
     question_mappings?: QuestionMapping[];
     created_at: string;
     updated_at?: string;
+    participants?: Participant[];
 }
 
 export interface ParticipantAssignment {
