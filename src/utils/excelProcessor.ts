@@ -106,6 +106,7 @@ export interface ParsedParticipant {
 }
 
 export async function parseFullSessionExcel(file: File): Promise<{ details: SessionDetails; participants: ParsedParticipant[] }> {
+  console.log(`[Excel Import] Starting to parse full session from file: ${file.name}`);
   const details: SessionDetails = {};
   const participants: ParsedParticipant[] = [];
 
@@ -113,9 +114,22 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(arrayBuffer);
 
+  // Log all available sheet names for debugging
+  const availableSheetNames = workbook.worksheets.map(ws => ws.name);
+  console.log(`[Excel Import] Sheets found in the workbook: [${availableSheetNames.join(', ')}]`);
+
+  // Helper to find a sheet by name, case-insensitively
+  const findSheet = (name: string) => {
+    const lowerCaseName = name.toLowerCase();
+    const sheet = workbook.worksheets.find(ws => ws.name.toLowerCase() === lowerCaseName);
+    console.log(`[Excel Import] Searching for sheet "${name}" (case-insensitive)... ${sheet ? `Found sheet named "${sheet.name}"` : 'Not found.'}`);
+    return sheet;
+  };
+
   // Parse SessionDetails sheet
-  const sessionDetailsSheet = workbook.getWorksheet('SessionDetails');
+  const sessionDetailsSheet = findSheet('SessionDetails');
   if (sessionDetailsSheet) {
+    console.log(`[Excel Import] Parsing sheet: "${sessionDetailsSheet.name}" for session details.`);
     const keyMapping: { [key: string]: string } = {
       'nom de la session': 'nomSession',
       'nomsession': 'nomSession',
@@ -153,19 +167,25 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
         details[mappedKey] = value || '';
       }
     });
+    console.log('[Excel Import] Parsed session details:', details);
   } else {
-    throw new Error("La feuille 'SessionDetails' est introuvable dans le fichier Excel.");
+    throw new Error("La feuille 'SessionDetails' (ou 'sessiondetails') est introuvable dans le fichier Excel.");
   }
 
   // Parse Participants sheet
-  const participantsSheet = workbook.getWorksheet('Participants');
+  const participantsSheet = findSheet('Participants');
   if (participantsSheet) {
-    const headerRow = (participantsSheet.getRow(1).values as string[]).map(h => h.toLowerCase().trim());
+    console.log(`[Excel Import] Parsing sheet: "${participantsSheet.name}" for participants.`);
+    const headerRowValues = participantsSheet.getRow(1).values;
+    const headerRow = Array.isArray(headerRowValues)
+      ? headerRowValues.map(h => (h ? h.toString().toLowerCase().trim() : ''))
+      : [];
+    console.log('[Excel Import] Found participant headers:', headerRow);
 
     const findIndex = (aliases: string[]) => {
       for (const alias of aliases) {
         const index = headerRow.indexOf(alias);
-        if (index !== -1) return index;
+        if (index !== -1) return index + 1; // ExcelJS cell indices are 1-based
       }
       return -1;
     };
@@ -179,22 +199,23 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
 
     participantsSheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) { // Skip header row
-        const prenom = row.getCell(prenomIndex).value?.toString() || '';
-        const nom = row.getCell(nomIndex).value?.toString() || '';
+        const prenom = prenomIndex !== -1 ? row.getCell(prenomIndex).value?.toString() || '' : '';
+        const nom = nomIndex !== -1 ? row.getCell(nomIndex).value?.toString() || '' : '';
         if (prenom || nom) {
           participants.push({
             prenom,
             nom,
-            organization: row.getCell(organizationIndex).value?.toString() || '',
-            identificationCode: row.getCell(identificationCodeIndex).value?.toString() || '',
-            iterationNumber: parseInt(row.getCell(iterationNumberIndex).value?.toString() || '1', 10),
-            deviceName: row.getCell(deviceNameIndex).value?.toString() || '',
+            organization: organizationIndex !== -1 ? row.getCell(organizationIndex).value?.toString() || '' : '',
+            identificationCode: identificationCodeIndex !== -1 ? row.getCell(identificationCodeIndex).value?.toString() || '' : '',
+            iterationNumber: iterationNumberIndex !== -1 ? parseInt(row.getCell(iterationNumberIndex).value?.toString() || '1', 10) : 1,
+            deviceName: deviceNameIndex !== -1 ? row.getCell(deviceNameIndex).value?.toString() || '' : '',
           });
         }
       }
     });
+    console.log(`[Excel Import] Parsed ${participants.length} participants.`);
   } else {
-    throw new Error("La feuille 'Participants' est introuvable dans le fichier Excel.");
+    throw new Error("La feuille 'Participants' (ou 'participants') est introuvable dans le fichier Excel.");
   }
 
   return { details, participants };
