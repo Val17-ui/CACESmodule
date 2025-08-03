@@ -11,6 +11,7 @@ export interface ILogger {
 
 let _loggerInstance: Logger | null = null;
 let _logFilePath: string | undefined;
+let _logStream: fs.WriteStream | null = null; // Use a persistent write stream
 
 class Logger implements ILogger {
   public info(message: string) { this.writeToLogFile('INFO', message); }
@@ -19,22 +20,20 @@ class Logger implements ILogger {
   public error(message: string) { this.writeToLogFile('ERROR', message); }
 
   private writeToLogFile(level: string, message: string) {
-    if (!_logFilePath) {
-      console.error('Logger not initialized. Log file path is not set. Message:', message);
+    if (!_logStream) {
+      console.error('Logger not initialized. Log stream is not available. Message:', message);
       return;
     }
     const timestamp = new Date().toISOString();
     const formattedMessage = `[${timestamp}] [${level}] ${message}\n`;
 
     console.log(formattedMessage); // Always log to console for live debugging
-    console.log(`Attempting to write to log file: ${_logFilePath}`); // Add this line
 
-    fs.appendFile(_logFilePath, formattedMessage, (err) => {
+    // Write to the persistent stream
+    _logStream.write(formattedMessage, (err) => {
       if (err) {
+        // Avoid using the logger here to prevent a potential infinite loop
         console.error(`Failed to write to log file ${_logFilePath}:`, err);
-        console.error('Error object details:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
-      } else {
-        console.log(`Successfully wrote to log file: ${_logFilePath}`);
       }
     });
   }
@@ -48,22 +47,42 @@ export function initializeLogger() {
   _loggerInstance = new Logger();
   const logDirectory = path.join(app.getPath('userData'), 'logs');
   console.log(`[Logger Init] Log directory: ${logDirectory}`);
+
   if (!fs.existsSync(logDirectory)) {
     try {
       fs.mkdirSync(logDirectory, { recursive: true });
       console.log(`[Logger Init] Log directory created: ${logDirectory}`);
     } catch (err) {
       console.error(`[Logger Init] Failed to create log directory ${logDirectory}:`, err);
+      // If we can't create the directory, we can't create the log file, so we stop.
+      return;
     }
   }
+
   _logFilePath = path.join(logDirectory, `log-${new Date().toISOString().replace(/:/g, '-')}.txt`);
   console.log(`[Logger Init] Log file path: ${_logFilePath}`);
 
+  // Create a writable stream in append mode
+  _logStream = fs.createWriteStream(_logFilePath, { flags: 'a' });
+
+  _logStream.on('error', (err) => {
+    console.error(`[Logger] Log stream error:`, err);
+  });
+
+  // Ensure the stream is closed when the application quits
+  app.on('will-quit', () => {
+    if (_logStream) {
+      console.log('[Logger] Closing log stream.');
+      _logStream.end();
+      _logStream = null;
+    }
+  });
+
   // Set up IPC handlers for renderer process logs
-ipcMain.on('log:info', (event: IpcMainEvent, message: string) => { _loggerInstance?.info(message); });
-ipcMain.on('log:debug', (event: IpcMainEvent, message: string) => { _loggerInstance?.debug(message); });
-ipcMain.on('log:warn', (event: IpcMainEvent, message: string) => { _loggerInstance?.warn(message); });
-ipcMain.on('log:error', (event: IpcMainEvent, message: string) => { _loggerInstance?.error(message); });
+  ipcMain.on('log:info', (event: IpcMainEvent, message: string) => { _loggerInstance?.info(message); });
+  ipcMain.on('log:debug', (event: IpcMainEvent, message: string) => { _loggerInstance?.debug(message); });
+  ipcMain.on('log:warn', (event: IpcMainEvent, message: string) => { _loggerInstance?.warn(message); });
+  ipcMain.on('log:error', (event: IpcMainEvent, message: string) => { _loggerInstance?.error(message); });
 }
 
 export function getLogger(): ILogger {

@@ -969,8 +969,20 @@ const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefi
 const getAllSessions = async (): Promise<Session[]> => {
   return asyncDbRun(() => {
     try {
-      const stmt = getDb().prepare("SELECT * FROM sessions ORDER BY dateSession DESC, createdAt DESC");
+      // Compter les participants uniques par session
+      const stmt = getDb().prepare(`
+        SELECT
+          s.*,
+          (SELECT COUNT(DISTINCT pa.participant_id)
+           FROM participant_assignments pa
+           JOIN session_iterations si ON pa.session_iteration_id = si.id
+           WHERE si.session_id = s.id) as participantCount
+        FROM sessions s
+        ORDER BY s.dateSession DESC, s.createdAt DESC
+      `);
       const rows = stmt.all() as any[];
+      // La fonction rowToSession gère déjà la conversion de base de la ligne de session
+      // Le champ participantCount est un simple nombre, donc pas de traitement spécial nécessaire
       return rows.map(rowToSession);
     } catch (error) {
       _logger?.debug(`[DB Sessions] Error getting all sessions: ${error}`);
@@ -1025,6 +1037,20 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
       });
 
       session.iterations = iterationsWithParticipants;
+
+      // Agréger tous les participants de toutes les itérations dans un tableau unique au niveau de la session
+      const allParticipants = new Map<number, Participant>();
+      iterationsWithParticipants.forEach(iter => {
+        if (iter.participants) {
+          iter.participants.forEach(p => {
+            if (p.id) { // Assurer que le participant a un ID pour la déduplication
+              allParticipants.set(p.id, p);
+            }
+          });
+        }
+      });
+      session.participants = Array.from(allParticipants.values());
+
 
       _logger.debug(`[DB Sessions] Final session object being returned for ID ${id}: ${JSON.stringify(session, null, 2)}`);
 

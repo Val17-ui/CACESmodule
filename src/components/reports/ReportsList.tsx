@@ -88,7 +88,7 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, refer
                 </Badge>
               </TableCell>
               <TableCell>{formatDate(session.dateSession)}</TableCell>
-              <TableCell className="text-center">{session.participants?.length || 0}</TableCell>
+              <TableCell className="text-center">{session.participantCount || 0}</TableCell>
               <TableCell className="text-center font-medium text-green-600">
                 {session.id && sessionStats[session.id] ? `${sessionStats[session.id].successRate.toFixed(0)}%` : 'N/A'}
               </TableCell>
