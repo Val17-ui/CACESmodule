@@ -11,7 +11,7 @@ export default defineConfig({
         entry: 'electron/index.ts',
         vite: {
           build: {
-            target: 'node18',
+            target: 'node20',
             outDir: 'dist-electron/electron',
             lib: {
               entry: 'electron/index.ts',

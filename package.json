@@ -9,7 +9,7 @@
   "scripts": {
     "clean-electron": "rimraf dist-electron",
     "compile-electron": "echo 'Compilation handled by Vite' && exit 0",
-    "dev": "vite",
+    "dev": "vite build && electron .",
     "electron-watch": "npm run clean-electron && wait-on tcp:5173 -t 30000 && vite build --config vite.config.ts && electron .",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "build": "npm run clean-electron && vite build && electron-builder",

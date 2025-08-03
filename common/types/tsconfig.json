@@ -1,14 +1,11 @@
 {
   "compilerOptions": {
     "composite": true,
-    "declaration": true,
-    "outDir": "../dist-types",
-    "baseUrl": "."
+    "noEmit": true,
+    "baseUrl": "../",
+    "paths": {
+      "@types/*": ["./*"]
+    }
   },
-  "include": [
-    "./**/*"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["./**/*.ts"]
 }

@@ -91,8 +91,7 @@ function generateOmbeaSessionXml(
 }
 
 
-import { ILogger } from './logger';
-import { generatePPTXVal17 } from './val17PptxGenerator';
+import { ILogger } from '@electron/utils/logger';
 import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '@types/index';
 
 export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger): Val17Question[] {
@@ -196,20 +195,12 @@ export async function generatePresentation(
   };
   logger.info(`[LOG][pptxOrchestrator] Options de génération créées: ${JSON.stringify(generationOptions)}`);
 
-// ... (other imports)
-
-// ... (rest of the file)
-
-// ... (other imports)
-
-// ... (rest of the file)
-
-// In generatePresentation function:
   try {
-    logger.info('[pptxOrchestrator] Using statically imported val17PptxGenerator.');
+    const { generatePPTXVal17 } = await import('@electron/utils/val17PptxGenerator');
+    logger.info('[pptxOrchestrator] Importation de val17PptxGenerator réussie');
 
     logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
-    const generatedData = generatePPTXVal17(
+    const generatedData = await generatePPTXVal17(
       templateBuffer,
       transformedQuestions,
       participantsForGenerator,

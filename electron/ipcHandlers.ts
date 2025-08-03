@@ -21,9 +21,9 @@ import {
   exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
   checkAndFinalizeSessionStatus
-} from './db';
+} from '@electron/db';
 
-import { getLogger, ILogger } from './utils/logger';
+import { getLogger, ILogger } from '@electron/utils/logger';
 import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '@types/index';
 
 let handlerInitialized = false;
@@ -375,7 +375,7 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   // PPTX Generation
   ipcMain.handle('pptx-generate', async (_event: IpcMainInvokeEvent, sessionInfo: { name: string; date: string; referentiel: string }, participants: Participant[], questions: QuestionWithId[], template: any, adminSettings: AdminPPTXSettings) => {
     loggerInstance.info('[IPC] pptx-generate handler triggered.');
-    const { generatePresentation } = await import('./utils/pptxOrchestrator');
+    const { generatePresentation } = await import('@electron/utils/pptxOrchestrator');
     loggerInstance.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
     let templateArrayBuffer: ArrayBuffer;
     if (template === 'tool_default_template') {
