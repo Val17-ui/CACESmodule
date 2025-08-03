@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import JSZip from "jszip";
 import sizeOf from 'image-size';
 import { ILogger } from './logger';
-import { Participant, VotingDevice, Val17SessionInfo, ParticipantForGenerator, AdminPPTXSettings, Val17GenerationOptions, Val17Question, QuestionMapping } from '@types/index';
+import { Participant, VotingDevice, Val17SessionInfo, ParticipantForGenerator, AdminPPTXSettings, Val17GenerationOptions, Val17Question, QuestionMapping } from '@types';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 interface TagInfo {

@@ -8,7 +8,7 @@ import Select from '../ui/Select';
 import Input from '../ui/Input';
 // Removed CACESReferential, referentials, questionThemes from here as they will be dynamic
 // Removed QuestionTheme, CACESReferential
-import { Referential, Theme, Bloc, QuestionType } from '@types/index';
+import { Referential, Theme, Bloc, QuestionType } from '@types';
 import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 type QuestionLibraryProps = {
   onEditQuestion: (id: string) => void;
