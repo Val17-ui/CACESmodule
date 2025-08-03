@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   deleteTrainer: (id: number) => ipcRenderer.invoke('db-delete-trainer', id),
   setDefaultTrainer: (id: number) => ipcRenderer.invoke('db-set-default-trainer', id),
   updateTrainer: (id: number, updates: any) => ipcRenderer.invoke('db-update-trainer', id, updates),
+  getTrainerById: (id: number) => ipcRenderer.invoke('db-get-trainer-by-id', id),
 
   // Themes
   addTheme: (data: any) => ipcRenderer.invoke('db-add-theme', data),
