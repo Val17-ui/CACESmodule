@@ -662,7 +662,7 @@ const handleGenerateQuestionnaire = async () => {
     if (sessionData) {
         const savedId = await handleSaveSession(sessionData);
         if (savedId) {
-            handleGenerateQuestionnaireAndOrs(savedId);
+            handleGenerateQuestionnaireAndOrs();
         }
     }
 };
