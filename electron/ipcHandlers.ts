@@ -2,6 +2,10 @@
 import { IpcMainInvokeEvent, ipcMain, dialog, shell } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import {
   getAllSessions, getSessionById, addSession, updateSession,
   addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration,
@@ -390,9 +394,10 @@ ipcMain.handle(
     let templateArrayBuffer: ArrayBuffer;
 
     if (template === 'tool_default_template') {
-      const templatePath = path.join(__dirname, '..', '..', 'public', 'templates', 'default.pptx'); // Chemin corrigé
+      // This path is relative to the location of the compiled ipcHandlers.js file
+      const templatePath = path.resolve(__dirname, '../../dist/templates/default.pptx');
       try {
-        const buffer = await fs.readFile(templatePath); // Retourne un Buffer
+        const buffer = await fs.readFile(templatePath); // Returns a Buffer
         // Conversion en ArrayBuffer
         templateArrayBuffer = new ArrayBuffer(buffer.length);
         const uint8Array = new Uint8Array(templateArrayBuffer);
@@ -421,7 +426,7 @@ ipcMain.handle(
 
   ipcMain.handle('get-default-pptx-template', async () => {
     loggerInstance.debug('[IPC] get-default-pptx-template');
-    const templatePath = path.join(__dirname, '@public/templates/default.pptx');
+    const templatePath = path.resolve(__dirname, '../../dist/templates/default.pptx');
     loggerInstance.debug(`[get-default-pptx-template] Calculated template path: ${templatePath}`);
     try {
       const fileBuffer = await fs.readFile(templatePath);
