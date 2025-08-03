@@ -121,6 +121,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   const [currentIterationForImport, setCurrentIterationForImport] = useState<number | null>(null);
   const [participantAssignments, setParticipantAssignments] = useState<Record<number, { id: string; assignedGlobalDeviceId: number | null }[]>>({});
   const [isImporting, setIsImporting] = useState(false);
+  const [importCompleted, setImportCompleted] = useState(false);
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -320,10 +321,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
         }
       };
       loadSession();
-    } else if (!sessionIdToLoad && !isImporting && referentielsData.length > 0) {
+    } else if (!sessionIdToLoad && !isImporting && !importCompleted && referentielsData.length > 0) {
       resetFormTactic();
     }
-  }, [sessionIdToLoad, isImporting, hardwareLoaded, referentielsData, resetFormTactic]);
+  }, [sessionIdToLoad, isImporting, importCompleted, hardwareLoaded, referentielsData, resetFormTactic]);
 
   useEffect(() => {
     if (editingSessionData?.selectedBlocIds && allThemesData.length > 0 && allBlocsData.length > 0) {
@@ -458,6 +459,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 setImportSummary(`Erreur lors de l'importation du fichier de session: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
             } finally {
                 setIsImporting(false);
+                setImportCompleted(true);
             }
         };
         processImport();
