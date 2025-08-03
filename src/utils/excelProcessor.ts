@@ -105,11 +105,41 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
   // Parse SessionDetails sheet
   const sessionDetailsSheet = workbook.getWorksheet('SessionDetails');
   if (sessionDetailsSheet) {
+    const keyMapping: { [key: string]: string } = {
+      'nom de la session': 'nomSession',
+      'nomsession': 'nomSession',
+      'nom session': 'nomSession',
+      'date de la session': 'dateSession',
+      'datesession': 'dateSession',
+      'date session': 'dateSession',
+      'code du référentiel': 'referentielCode',
+      'référentiel': 'referentielCode',
+      'referentiel': 'referentielCode',
+      'referentielcode': 'referentielCode',
+      'nom du formateur': 'trainerName',
+      'formateur': 'trainerName',
+      'trainername': 'trainerName',
+      'nom du kit': 'kitName',
+      'kit': 'kitName',
+      'kitname': 'kitName',
+      'nombre d\'itérations': 'iterationCount',
+      'iterationcount': 'iterationCount',
+      'noms des itérations': 'iterationNames',
+      'iterationnames': 'iterationNames',
+      'lieu': 'location',
+      'notes': 'notes',
+      'numéro de session': 'numSession',
+      'numsession': 'numSession',
+      'numéro de stage': 'numStage',
+      'numstage': 'numStage',
+    };
+
     sessionDetailsSheet.eachRow((row) => {
-      const key = row.getCell(1).value?.toString();
+      const rawKey = row.getCell(1).value?.toString().toLowerCase().trim();
       const value = row.getCell(2).value;
-      if (key) {
-        details[key] = value || '';
+      if (rawKey) {
+        const mappedKey = keyMapping[rawKey] || rawKey;
+        details[mappedKey] = value || '';
       }
     });
   } else {
@@ -119,13 +149,22 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
   // Parse Participants sheet
   const participantsSheet = workbook.getWorksheet('Participants');
   if (participantsSheet) {
-    const headerRow = participantsSheet.getRow(1).values as string[];
-    const prenomIndex = headerRow.indexOf('prenom');
-    const nomIndex = headerRow.indexOf('nom');
-    const organizationIndex = headerRow.indexOf('organization');
-    const identificationCodeIndex = headerRow.indexOf('identificationCode');
-    const iterationNumberIndex = headerRow.indexOf('iterationNumber');
-    const deviceNameIndex = headerRow.indexOf('deviceName');
+    const headerRow = (participantsSheet.getRow(1).values as string[]).map(h => h.toLowerCase().trim());
+
+    const findIndex = (aliases: string[]) => {
+      for (const alias of aliases) {
+        const index = headerRow.indexOf(alias);
+        if (index !== -1) return index;
+      }
+      return -1;
+    };
+
+    const prenomIndex = findIndex(['prénom', 'prenom', 'firstname', 'first name']);
+    const nomIndex = findIndex(['nom', 'lastname', 'last name']);
+    const organizationIndex = findIndex(['organisation', 'organization', 'société', 'societe']);
+    const identificationCodeIndex = findIndex(['code identification', 'identificationcode', 'code']);
+    const iterationNumberIndex = findIndex(['itération', 'iteration', 'iterationnumber']);
+    const deviceNameIndex = findIndex(['boîtier', 'boitier', 'devicename']);
 
     participantsSheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) { // Skip header row
