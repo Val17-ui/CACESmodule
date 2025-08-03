@@ -26,6 +26,16 @@ import AnomalyResolutionModal, { DetectedAnomalies } from './AnomalyResolutionMo
 import { ExpectedIssueResolution, UnknownDeviceResolution } from '@common/types';
 import { parseFullSessionExcel } from '../../utils/excelProcessor';
 
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
 interface SessionFormProps {
   sessionIdToLoad?: number;
   sessionToImport?: File | null;
@@ -996,7 +1006,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
         setImportSummary("Aucun fichier sélectionné ou lecture annulée.");
         return;
       }
-      const arrayBuffer = Buffer.from(fileData.fileBuffer, 'base64');
+      const arrayBuffer = base64ToArrayBuffer(fileData.fileBuffer);
 
       const zip = await JSZip.loadAsync(arrayBuffer);
       const orSessionXmlFile = zip.file("ORSession.xml");

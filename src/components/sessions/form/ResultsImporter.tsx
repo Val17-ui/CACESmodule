@@ -36,15 +36,16 @@ const ResultsImporter: React.FC<ResultsImporterProps> = ({
             )}
             <p className="text-xs text-gray-500">Importez le fichier .zip contenant ORSession.xml après le vote.</p>
             {editingSessionData?.iterations?.map((iter: any, index: number) => (
-              <Button
-                key={index}
-                variant="secondary"
-                icon={<FileUp size={16} />}
-                onClick={() => handleImportResults(index)}
-                disabled={iter.status === 'completed' || !iter.ors_file_path}
-              >
-                Importer les Résultats pour {iter.name}
-              </Button>
+              <div key={index} className="pt-2">
+                <Button
+                  variant="secondary"
+                  icon={<FileUp size={16} />}
+                  onClick={() => handleImportResults(index)}
+                  disabled={iter.status === 'completed' || !iter.ors_file_path}
+                >
+                  Importer les Résultats pour {iter.name}
+                </Button>
+              </div>
             ))}
             {importSummary && activeTab === 'importResults' && (
               <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
