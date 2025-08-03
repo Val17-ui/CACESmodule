@@ -186,6 +186,29 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     ? participantCalculatedData.reduce((sum, p) => sum + (p.score || 0), 0) / participants.length
     : 0;
 
+  const questionnaireDraw = useMemo(() => {
+    if (!session.selectedBlocIds || !allThemesDb.length || !allBlocsDb.length) {
+      return [];
+    }
+
+    const themesWithBlocks = new Map<number, { theme: Theme; blocks: Bloc[] }>();
+
+    session.selectedBlocIds.forEach(blocId => {
+      const bloc = allBlocsDb.find(b => b.id === blocId);
+      if (bloc && bloc.theme_id) {
+        const theme = allThemesDb.find(t => t.id === bloc.theme_id);
+        if (theme) {
+          if (!themesWithBlocks.has(theme.id)) {
+            themesWithBlocks.set(theme.id, { theme, blocks: [] });
+          }
+          themesWithBlocks.get(theme.id)!.blocks.push(bloc);
+        }
+      }
+    });
+
+    return Array.from(themesWithBlocks.values());
+  }, [session.selectedBlocIds, allThemesDb, allBlocsDb]);
+
   const handleExportPDF = () => { // Export PDF de la session (vue actuelle)
     if (reportRef.current) {
       html2canvas(reportRef.current, { scale: 2, useCORS: true }).then((canvas: HTMLCanvasElement) => {
@@ -351,6 +374,18 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                     <span>Lieu : {session.location}</span>
                   </div>
                 )}
+                {session.num_stage && (
+                  <div className="flex items-center text-sm">
+                    <span className="text-gray-400 mr-2 w-18 font-semibold">N° Stage :</span>
+                    <span>{session.num_stage}</span>
+                  </div>
+                )}
+                {session.num_session && (
+                  <div className="flex items-center text-sm">
+                    <span className="text-gray-400 mr-2 w-18 font-semibold">N° Session :</span>
+                    <span>{session.num_session}</span>
+                  </div>
+                )}
               </div>
             </div>
             
@@ -387,6 +422,25 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
             </div>
           </div>
         </Card>
+
+        {questionnaireDraw.length > 0 && (
+          <Card title="Résultat du tirage du questionnaire" className="mb-6">
+            <div className="space-y-4">
+              {questionnaireDraw.map(({ theme, blocks }) => (
+                <div key={theme.id}>
+                  <h4 className="font-semibold text-gray-700">{theme.nom_complet}</h4>
+                  <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
+                    {blocks.map(block => (
+                      <li key={block.id} className="text-sm text-gray-600">
+                        Bloc: {block.code_bloc}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
         
         <Card title="Résultats par participant" className="mb-6">
           <div className="overflow-x-auto">
@@ -394,6 +448,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
               <thead className="bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Identification</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score Global Session</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Session</th>
                 </tr>
@@ -403,6 +459,12 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <tr key={participantData.assignedGlobalDeviceId || `pd-${index}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{participantData.nom} {participantData.prenom}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-700">{participantData.organization || '-'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-700">{participantData.identificationCode || '-'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">

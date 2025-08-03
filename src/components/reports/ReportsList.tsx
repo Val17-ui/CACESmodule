@@ -72,7 +72,7 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, refer
               <TableCell className="text-center">{session.participantCount || 0}</TableCell>
               <TableCell className="text-center font-medium text-blue-600">
                 {session.averageScore !== null && session.averageScore !== undefined
-                  ? `${session.averageScore.toFixed(1)}%`
+                  ? `${session.averageScore.toFixed(0)}/100`
                   : 'N/A'}
               </TableCell>
               <TableCell className="text-right">
