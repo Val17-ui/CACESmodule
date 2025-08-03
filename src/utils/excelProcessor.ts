@@ -167,7 +167,7 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
         details[mappedKey] = value || '';
       }
     });
-    console.log('[Excel Import] Parsed session details:', details);
+    console.log('[Excel Import] Parsed session details:', JSON.stringify(details, null, 2));
   } else {
     throw new Error("La feuille 'SessionDetails' (ou 'sessiondetails') est introuvable dans le fichier Excel.");
   }
@@ -213,7 +213,7 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
         }
       }
     });
-    console.log(`[Excel Import] Parsed ${participants.length} participants.`);
+    console.log(`[Excel Import] Parsed ${participants.length} participants.`, JSON.stringify(participants, null, 2));
   } else {
     throw new Error("La feuille 'Participants' (ou 'participants') est introuvable dans le fichier Excel.");
   }

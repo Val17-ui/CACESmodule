@@ -368,6 +368,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
         const processImport = async () => {
             try {
                 const { details, participants: parsedParticipants } = await parseFullSessionExcel(sessionToImport);
+                console.log('[SessionForm Import] Received data from parseFullSessionExcel. Details:', JSON.stringify(details, null, 2));
+                console.log('[SessionForm Import] Received data from parseFullSessionExcel. Participants:', JSON.stringify(parsedParticipants, null, 2));
 
                 // Populate session details
                 if (details.nomSession) setSessionName(details.nomSession.toString());
