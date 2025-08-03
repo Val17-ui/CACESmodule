@@ -1077,7 +1077,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
         return;
       }
 
-      const sessionBoitiers = iteration.participants?.map((p: any, index: number) => ({
+      const sessionBoitiers = (iteration.participants || []).map((p: any, index: number) => ({
         serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
         participantName: `${p.prenom} ${p.nom}`,
         visualId: index + 1, // Utiliser l'index comme ID visuel

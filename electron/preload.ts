@@ -116,6 +116,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
 
 contextBridge.exposeInMainWorld('electronAPI', {
   readImageFile: (path: string | Blob | null) => ipcRenderer.invoke('read-image-file', path),
+  readFileBuffer: (filePath: string) => ipcRenderer.invoke('read-file-buffer', filePath),
   Buffer_from: (buffer: string, encoding: string) => Buffer.from(buffer, encoding as BufferEncoding),
   openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
   info: (message: string) => ipcRenderer.send('log:info', message),
