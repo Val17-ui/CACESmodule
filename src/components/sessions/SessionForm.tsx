@@ -108,6 +108,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
+  const [selectedBlocIds, setSelectedBlocIds] = useState<number[]>([]);
   const [displayedBlockDetails, setDisplayedBlockDetails] = useState<Array<{ themeName: string, blocName: string }>>([]);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [editingSessionData, setEditingSessionData] = useState<DBSession | null>(null);
@@ -201,6 +202,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
     setLocation('');
     setNotes('');
     setParticipants([]);
+    setSelectedBlocIds([]);
     setDisplayedBlockDetails([]);
     setImportSummary(null);
     setEditingSessionData(null);
@@ -241,6 +243,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
             setLocation(sessionData.location || '');
             setNotes(sessionData.notes || '');
             setSelectedTrainerId(sessionData.trainerId || null);
+            setSelectedBlocIds(sessionData.selectedBlocIds || []);
             setSelectedKitIdState(sessionData.selectedKitId || null);
 
             if (sessionData.iteration_count && sessionData.iteration_count > 0) {
@@ -737,7 +740,7 @@ const handleGenerateQuestionnaire = async () => {
       num_session: numSession,
       num_stage: numStage,
       referentielId: currentReferentielId,
-      selectedBlocIds: editingSessionData?.selectedBlocIds || [],
+      selectedBlocIds: selectedBlocIds,
       selectedKitId: selectedKitIdState,
       orsFilePath: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.orsFilePath,
       status: editingSessionData?.status || 'planned',
@@ -913,6 +916,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
 
     try {
       let allSelectedQuestionsForPptx: StoredQuestion[] = [];
+      const newlySelectedBlocIds: number[] = [];
       if (!upToDateSessionData.questionMappings || upToDateSessionData.questionMappings.length === 0) {
         const referentielObject = await StorageManager.getReferentialByCode(refCodeToUse as string);
         if (!referentielObject?.id) throw new Error(`Référentiel non trouvé: ${refCodeToUse}`);
@@ -923,11 +927,13 @@ if (savedIterationId) { // <-- On ajoute cette condition
           if (blocs.length > 0) {
             const chosenBloc = blocs[Math.floor(Math.random() * blocs.length)];
             if (chosenBloc.id) {
+              newlySelectedBlocIds.push(chosenBloc.id);
               const questions = await StorageManager.getQuestionsForBloc(chosenBloc.id);
               allSelectedQuestionsForPptx.push(...questions);
             }
           }
         }
+        setSelectedBlocIds(newlySelectedBlocIds); // Mettre à jour l'état
         if (allSelectedQuestionsForPptx.length === 0) throw new Error("Aucune question sélectionnée.");
       } else {
         const questionIds = upToDateSessionData.questionMappings.map((q: any) => q.dbQuestionId).filter((id: number): id is number => id != null);
