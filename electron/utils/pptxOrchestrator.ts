@@ -93,7 +93,7 @@ function generateOmbeaSessionXml(
 
 import { ILogger } from '@electron/utils/logger';
 import { generatePPTXVal17 } from '@electron/utils/val17PptxGenerator';
-import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '../../common/types';
+import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '@common/types';
 
 export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger): Val17Question[] {
   logger.info('[LOG][pptxOrchestrator] Début de transformQuestionsForVal17Generator.');
@@ -137,7 +137,7 @@ export async function generatePresentation(
   templateFile: File | ArrayBuffer | string,
   adminSettings: AdminPPTXSettings,
   logger: ILogger
-): Promise<{ orsBlob: ArrayBuffer | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
+): Promise<{ orsBlob: ArrayBufferLike | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
   logger.info('[LOG][pptxOrchestrator] === Début de generatePresentation ===');
   logger.info(`[LOG][pptxOrchestrator] sessionInfo: ${JSON.stringify(sessionInfo)}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de participants: ${participantsForGenerator.length}`);

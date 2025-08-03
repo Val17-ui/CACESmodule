@@ -1,24 +1,24 @@
 {
   "compilerOptions": {
-    "target": "es2022",
-    "module": "commonjs",
-    "outDir": "../dist-electron/electron",
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "node",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "composite": true,
     "baseUrl": ".",
     "paths": {
       "@electron/*": ["./*"],
       "@common/*": ["../common/*"],
       "@types/*": ["../common/types/*"]
     },
-    "rootDir": "../",
-    "lib": ["es2022", "dom"],
-    "types": ["node", "electron", "better-sqlite3"],
-    "isolatedModules": true
+    "outDir": "../dist-electron/electron"
   },
-  "include": ["./**/*.ts", "../common/types/**/*.ts", "./global.d.ts"],
-  "exclude": ["node_modules", "dist", "dist-electron"]
+  "include": [
+    "./**/*.ts",
+    "./utils/**/*.ts",
+    "../common/**/*.ts",
+    "../common/types/**/*.ts"
+  ],
+  "exclude": ["../node_modules", "../dist", "../dist-electron"]
 }

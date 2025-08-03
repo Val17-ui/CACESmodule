@@ -6,8 +6,8 @@ import type {
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
     VotingDevice, DeviceKit, DeviceKitAssignment,
     SessionIteration, Participant, ParticipantAssignment
-  } from '../common/types';
-import { getLogger, ILogger } from './utils/logger';
+  } from '@common/types';
+import { getLogger, ILogger } from '@electron/utils/logger';
 import type { Database } from 'better-sqlite3';
 
 let _db: Database;

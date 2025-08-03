@@ -2,8 +2,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSZip from "jszip";
 import sizeOf from 'image-size';
-import { ILogger } from './logger';
-import { Participant, VotingDevice, Val17SessionInfo, ParticipantForGenerator, AdminPPTXSettings, Val17GenerationOptions, Val17Question, QuestionMapping } from '../../common/types';
+import { ILogger } from '@electron/utils/logger';
+import { Participant, VotingDevice, Val17SessionInfo, ParticipantForGenerator, AdminPPTXSettings, Val17GenerationOptions, Val17Question, QuestionMapping } from '@common/types';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 interface TagInfo {

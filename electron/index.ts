@@ -1,17 +1,21 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
-import { initializeIpcHandlers } from './ipcHandlers';
-import { initializeDatabase, getDb } from './db';
-import { initializeLogger, getLogger } from './utils/logger';
+import { initializeIpcHandlers } from '@electron/ipcHandlers';
+import { initializeDatabase, getDb } from '@electron/db';
+import { initializeLogger, getLogger } from '@electron/utils/logger';
+import { generatePPTXVal17 } from '@electron/utils/val17PptxGenerator';
+import { generatePresentation } from '@electron/utils/pptxOrchestrator';
 
-import { ILogger } from './utils/logger';
-
+import { ILogger } from '@electron/utils/logger';
+const __dirname = process.platform === 'win32'
+  ? path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1'))
+  : path.dirname(new URL(import.meta.url).pathname);
 function createWindow(logger: ILogger) {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
@@ -24,7 +28,7 @@ function createWindow(logger: ILogger) {
     win.webContents.openDevTools();
   } else {
     // Chemin corrigé pour pointer vers dist/renderer/index.html
-    const indexPath = path.join(__dirname, '../../dist/renderer/index.html');
+    const indexPath = path.resolve(__dirname, '..', '..', 'dist', 'index.html')
     logger.debug(`[Main] Loading index.html from: ${indexPath}`);
     win.loadFile(indexPath);
   }
@@ -69,3 +73,4 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+export { generatePresentation, generatePPTXVal17 };
