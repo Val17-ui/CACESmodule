@@ -422,9 +422,10 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
 
             const dataToSave = {
                 ...iteration,
+                name: iteration.name || `Itération ${iteration.iteration_index + 1}`, // Fallback name
                 question_mappings: JSON.stringify(iteration.question_mappings || []),
                 created_at: iteration.created_at || new Date().toISOString(),
-                updated_at: new Date().toISOString(), // Assurons-nous que c'est toujours là
+                updated_at: new Date().toISOString(),
             };
 
             if (existing) {
