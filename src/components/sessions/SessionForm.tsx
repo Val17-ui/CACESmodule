@@ -933,7 +933,16 @@ if (savedIterationId) { // <-- On ajoute cette condition
             }
           }
         }
-        setSelectedBlocIds(newlySelectedBlocIds); // Mettre à jour l'état
+        if (newlySelectedBlocIds.length > 0) {
+          setSelectedBlocIds(newlySelectedBlocIds);
+          await StorageManager.updateSession(currentSavedId, { selectedBlocIds: newlySelectedBlocIds });
+          const reloadedSessionWithBlocks = await StorageManager.getSessionById(currentSavedId);
+          if (!reloadedSessionWithBlocks) {
+            throw new Error("Impossible de recharger la session après la sauvegarde des blocs.");
+          }
+          upToDateSessionData = reloadedSessionWithBlocks;
+          setEditingSessionData(reloadedSessionWithBlocks);
+        }
         if (allSelectedQuestionsForPptx.length === 0) throw new Error("Aucune question sélectionnée.");
       } else {
         const questionIds = upToDateSessionData.questionMappings.map((q: any) => q.dbQuestionId).filter((id: number): id is number => id != null);
