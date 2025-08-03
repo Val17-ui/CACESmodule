@@ -19,6 +19,7 @@ type InputProps = {
   iconPosition?: 'left' | 'right';
   autoFocus?: boolean;
   accept?: string; // Ajout de la prop accept
+  readOnly?: boolean;
 };
 
 const Input: React.FC<InputProps> = ({
@@ -40,6 +41,7 @@ const Input: React.FC<InputProps> = ({
   iconPosition = 'left',
   autoFocus = false,
   accept, // Ajout de accept aux props déstructurées
+  readOnly = false,
 }) => {
   const inputId = id || name;
 
@@ -82,6 +84,7 @@ const Input: React.FC<InputProps> = ({
           max={max}
           autoFocus={autoFocus}
           accept={accept} // Utilisation de la prop accept
+          readOnly={readOnly}
         />
         {icon && iconPosition === 'right' && (
           <span className="absolute right-3 inset-y-0 flex items-center justify-center">

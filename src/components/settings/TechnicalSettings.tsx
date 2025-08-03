@@ -61,6 +61,10 @@ const TechnicalSettings: React.FC = () => {
   };
 
   const handleBrowseOrsSavePath = async () => {
+    if (!window.dbAPI) {
+      console.error("dbAPI not available");
+      return;
+    }
     try {
       const result = await window.dbAPI.openDirectoryDialog();
       if (!result.canceled && result.path) {

@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
 
   // DeviceKits
   getAllDeviceKits: () => ipcRenderer.invoke('db-get-all-device-kits'),
+  getDeviceKitById: (id: number) => ipcRenderer.invoke('db-get-device-kit-by-id', id),
   getDefaultDeviceKit: () => ipcRenderer.invoke('db-get-default-device-kit'),
   addDeviceKit: (data: any) => ipcRenderer.invoke('db-add-device-kit', data),
   updateDeviceKit: (id: number, updates: any) => ipcRenderer.invoke('db-update-device-kit', id, updates),

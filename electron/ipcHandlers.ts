@@ -13,7 +13,7 @@ import {
   getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices,
   addBulkSessionQuestions, deleteSessionQuestionsBySessionId, getSessionQuestionsBySessionId,
   addBulkSessionBoitiers, deleteSessionBoitiersBySessionId, getSessionBoitiersBySessionId,
-  getAllDeviceKits, getDefaultDeviceKit, addDeviceKit, updateDeviceKit, deleteDeviceKit, setDefaultDeviceKit,
+  getAllDeviceKits, getDefaultDeviceKit, addDeviceKit, updateDeviceKit, deleteDeviceKit, setDefaultDeviceKit, getDeviceKitById,
   assignDeviceToKit, removeDeviceFromKit, getKitsForVotingDevice, removeAssignmentsByVotingDeviceId,
   addReferential, getAllReferentiels, getReferentialByCode, getReferentialById,
   getAllTrainers, addTrainer, deleteTrainer, setDefaultTrainer, updateTrainer, getTrainerById,
@@ -166,6 +166,10 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   ipcMain.handle('db-get-all-device-kits', async () => {
     loggerInstance.debug('[IPC] db-get-all-device-kits');
     return getAllDeviceKits();
+  });
+  ipcMain.handle('db-get-device-kit-by-id', async (_event: IpcMainInvokeEvent, id: number) => {
+    loggerInstance.debug(`[IPC] db-get-device-kit-by-id: ${id}`);
+    return getDeviceKitById(id);
   });
   ipcMain.handle('db-get-default-device-kit', async () => {
     loggerInstance.debug('[IPC] db-get-default-device-kit');

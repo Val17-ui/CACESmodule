@@ -51,7 +51,7 @@ declare global {
       getDefaultPptxTemplate: () => Promise<Buffer>;
       savePptxFile: (fileBuffer: ArrayBuffer, fileName: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
       openExcelFileDialog: () => Promise<{ canceled: boolean; filePaths: string[]; fileBuffer?: string; fileName?: string; error?: string; }>;
-      openDirectoryDialog: (filePath?: string) => Promise<void>;
+      openDirectoryDialog: (filePath?: string) => Promise<{ canceled: boolean; path?: string }>;
       openResultsFile: () => Promise<{ canceled: boolean; filePaths: string[]; fileName: string | null; fileBuffer: string | null; error: string | null; }>;
       openFile: (filePath: string) => Promise<void>;
       importResultsForIteration: (iterationId: number, sessionId: number, results: SessionResult[]) => Promise<Session | undefined>;
