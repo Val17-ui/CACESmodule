@@ -93,10 +93,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         const results = await StorageManager.getResultsForSession(session.id);
         setSessionResults(results);
 
-        if (session.questionMappings && session.questionMappings.length > 0) {
-          const questionIds = session.questionMappings
-            .map(q => q.dbQuestionId)
-            .filter((id): id is number => id !== null && id !== undefined);
+        // Dériver les questions des résultats réels plutôt que des mappings
+        if (results && results.length > 0) {
+          const questionIds = [...new Set(results.map(r => r.questionId))];
 
           if (questionIds.length > 0) {
             const baseQuestions = await StorageManager.getQuestionsByIds(questionIds);
@@ -104,9 +103,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
               baseQuestions.map(async (question: QuestionWithId) => {
                 let resolvedThemeName = 'Thème non spécifié';
                 if (question.blocId) {
-                  const bloc = allBlocsDb.find(b => b.id === question.blocId); // Use preloaded allBlocsDb
+                  const bloc = allBlocsDb.find(b => b.id === question.blocId);
                   if (bloc && bloc.theme_id) {
-                    const theme = allThemesDb.find(t => t.id === bloc.theme_id); // Use preloaded allThemesDb
+                    const theme = allThemesDb.find(t => t.id === bloc.theme_id);
                     if (theme) {
                       resolvedThemeName = theme.nom_complet;
                     }
