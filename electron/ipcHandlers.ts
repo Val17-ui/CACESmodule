@@ -24,7 +24,7 @@ import {
 } from '@electron/db';
 
 import { getLogger, ILogger } from '@electron/utils/logger';
-import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '@types';
+import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '../common/types';
 
 let handlerInitialized = false;
 
