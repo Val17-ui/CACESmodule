@@ -41,7 +41,7 @@ const ResultsImporter: React.FC<ResultsImporterProps> = ({
                 variant="secondary"
                 icon={<FileUp size={16} />}
                 onClick={() => handleImportResults(index)}
-                disabled={!editingSessionData?.questionMappings || isReadOnly || !editingSessionData?.orsFilePath}
+                disabled={iter.status === 'completed' || !iter.ors_file_path}
               >
                 Importer les Résultats pour {iter.name}
               </Button>

@@ -568,7 +568,7 @@ ipcMain.handle(
   ipcMain.handle('open-file', async (_event: IpcMainInvokeEvent, filePath: string) => {
     loggerInstance.debug(`[IPC] open-file: ${filePath}`);
     try {
-      const result = shell.openPath(filePath);
+      const result = await shell.openPath(filePath);
       return { success: true, result };
     } catch (error: any) {
       loggerInstance.debug(`Failed to open file ${filePath}: ${error}`);
