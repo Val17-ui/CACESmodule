@@ -946,7 +946,9 @@ if (savedIterationId) { // <-- On ajoute cette condition
           const fileName = `${safeSessionName}_${safeIterationName}.ors`;
           const saveResult = await window.dbAPI?.savePptxFile(orsBlob, fileName);
           if (saveResult && saveResult.success) {
-            const iterToUpdate = upToDateSessionData.iterations?.find((it: any) => it.iteration_index === i) || { created_at: new Date().toISOString() };
+            const iterToUpdateRaw = upToDateSessionData.iterations?.find((it: any) => it.iteration_index === i);
+            const { participants, ...iterToUpdate } = iterToUpdateRaw || { created_at: new Date().toISOString() };
+
             await StorageManager.addOrUpdateSessionIteration({
               ...iterToUpdate,
               session_id: currentSavedId,
