@@ -205,7 +205,7 @@ const TrainerSettings: React.FC = () => {
                 <Input
                   type="text"
                   defaultValue={trainer.name}
-                  onBlur={(e) => {
+                  onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                     if (trainer.id && e.target.value !== trainer.name) {
                       handleNameChange(trainer.id, e.target.value);
                     }

@@ -37,6 +37,8 @@ declare global {
       getBlocById: (id: number) => Promise<Bloc | undefined>;
       getAllBlocs: () => Promise<Bloc[]>;
       addQuestion: (data: Omit<QuestionWithId, 'id'>) => Promise<number | undefined>;
+      upsertQuestion: (questionData: Omit<QuestionWithId, 'id'>) => Promise<number | undefined>;
+      upsertParticipant: (participant: any) => Promise<number | undefined>;
       getQuestionById: (id: number) => Promise<QuestionWithId | undefined>;
       getQuestionsByBlocId: (blocId: number) => Promise<QuestionWithId[]>;
       updateQuestion: (id: number, updates: Partial<Omit<QuestionWithId, 'id'>>) => Promise<number | undefined>;
@@ -75,9 +77,12 @@ declare global {
       addTrainer: (data: Omit<Trainer, 'id'>) => Promise<number | undefined>;
       getTrainerById: (id: number) => Promise<Trainer | undefined>;
       deleteTrainer: (id: number) => Promise<void>;
-      setDefaultTrainer: (id: number) => Promise<void>;
+      setDefaultTrainer: (id: number) => Promise<number | undefined>;
       updateTrainer: (id: number, updates: Partial<Omit<Trainer, 'id'>>) => Promise<number | undefined>;
+      getAllTrainers: () => Promise<Trainer[]>;
       calculateBlockUsage: () => Promise<BlockUsage[]>;
+      setParticipantAssignmentsForIteration: (iterationId: number, assignments: any[]) => Promise<void>;
+      checkAndFinalizeSession: (sessionId: number) => Promise<Session | undefined>;
       exportAllData: () => Promise<any>;
       importAllData: (data: any) => Promise<void>;
     };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../components/layout/Layout';
-import GlobalStats from '../components/reports/GlobalStats.tsx';
+import GlobalStats from '../components/reports/GlobalStats';
 import ReportTypeSelector, { ReportType } from '../components/reports/ReportTypeSelector';
 import ReportsList from '../components/reports/ReportsList';
 import ReportDetails from '../components/reports/ReportDetails';

@@ -7,6 +7,7 @@ type InputProps = {
   value?: string | number;
   defaultValue?: string | number; // Ajout de defaultValue
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   name?: string;
   id?: string;
   error?: string;
@@ -29,6 +30,7 @@ const Input: React.FC<InputProps> = ({
   value,
   defaultValue, // Déstructurer defaultValue
   onChange,
+  onBlur,
   name,
   id,
   error,
@@ -69,6 +71,7 @@ const Input: React.FC<InputProps> = ({
           value={value}
           defaultValue={defaultValue} // Utiliser defaultValue ici
           onChange={onChange}
+          onBlur={onBlur}
           placeholder={placeholder}
           className={`
             block w-full rounded-xl border-gris-moyen shadow-sm
