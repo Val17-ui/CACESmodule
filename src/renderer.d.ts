@@ -91,6 +91,7 @@ declare global {
 
 interface ElectronAPI {
   readImageFile: (path: string | Blob | null) => Promise<string>;
+  readFileBuffer: (filePath: string) => Promise<{ canceled: boolean; fileName: string | null; fileBuffer: string | null; error: string | null; }>;
   Buffer_from: (data: string, encoding: string) => Buffer;
   openFileDialog: () => Promise<{
     canceled: boolean;
