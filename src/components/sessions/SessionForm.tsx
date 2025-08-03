@@ -241,15 +241,18 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
             setSelectedTrainerId(sessionData.trainerId || null);
             setSelectedKitIdState(sessionData.selectedKitId || null);
 
-            if (sessionData.iteration_count && sessionData.iteration_count > 1) {
-              setIterationCount(sessionData.iteration_count);
-              if (sessionData.iterations && sessionData.iterations.length > 0) {
-                setIterationNames(sessionData.iterations.map(iter => iter.name));
-              } else {
-                // Fallback if names are not stored in iterations
-                const newIterationNames = Array.from({ length: sessionData.iteration_count }, (_, i) => `Session_${i + 1}`);
-                setIterationNames(newIterationNames);
+            if (sessionData.iteration_count && sessionData.iteration_count > 0) {
+              const count = sessionData.iteration_count;
+              setIterationCount(count);
+              let names = sessionData.iterations?.map((iter: { name: any; }) => iter.name) || [];
+              if (names.length < count) {
+                const additionalNames = Array.from({ length: count - names.length }, (_, i) => `Session_${names.length + i + 1}`);
+                names = [...names, ...additionalNames];
               }
+              if (names.length > count) {
+                names = names.slice(0, count);
+              }
+              setIterationNames(names);
             } else {
               setIterationCount(1);
               setIterationNames(['Session_1']);
