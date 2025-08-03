@@ -309,6 +309,11 @@ export const StorageManager = {
     }
   },
 
+  async getDeviceKitById(id: number) {
+    if (!window.dbAPI?.getDeviceKitById) throw new Error("dbAPI.getDeviceKitById is not available.");
+    return window.dbAPI.getDeviceKitById(id);
+  },
+
   async getDefaultDeviceKit() {
     if (!window.dbAPI?.getDefaultDeviceKit) throw new Error("dbAPI.getDefaultDeviceKit is not available.");
     return window.dbAPI.getDefaultDeviceKit();

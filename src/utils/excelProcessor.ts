@@ -56,14 +56,25 @@ export async function parseQuestionsExcel(file: File): Promise<{ data: RawExcelQ
         const rowData: RawExcelQuestion = {};
         
         row.eachCell((cell, colNumber) => {
-          const header = columnHeaders[colNumber - 1];
+          const header = columnHeaders[colNumber - 1] as keyof RawExcelQuestion;
           if (header) {
-            const value = cell.value?.toString().trim() || '';
-            if (header === 'timeLimit') {
-              rowData[header] = value ? parseInt(value, 10) : undefined;
+            const cellValue = cell.value;
+            let finalValue: string | number | undefined;
+
+            if (cellValue === null || cellValue === undefined) {
+              finalValue = undefined;
             } else {
-              rowData[header as keyof RawExcelQuestion] = value || undefined;
+              const stringValue = cellValue.toString().trim();
+              if (header === 'timeLimit') {
+                finalValue = stringValue ? parseInt(stringValue, 10) : undefined;
+                if (finalValue !== undefined && isNaN(finalValue)) {
+                  finalValue = undefined;
+                }
+              } else {
+                finalValue = stringValue || undefined;
+              }
             }
+            (rowData[header] as any) = finalValue;
           }
         });
 

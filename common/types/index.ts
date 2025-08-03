@@ -20,7 +20,7 @@ export interface Session {
   orsFilePath?: string | Blob | ArrayBuffer | null; // Chemin d'accès au fichier .ors
   status?: 'planned' | 'in-progress' | 'completed' | 'cancelled' | 'ready'; // Statut optionnel, ajout de 'ready'
   location?: string; // Lieu de la session
-  questionMappings?: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>;
+  questionMappings?: QuestionMapping[];
   notes?: string; // Notes pour la session
   createdAt?: string;
   updatedAt?: string;
