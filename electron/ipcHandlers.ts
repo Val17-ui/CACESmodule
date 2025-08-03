@@ -565,6 +565,22 @@ ipcMain.handle(
     }
   });
 
+  ipcMain.handle('read-file-buffer', async (_event: IpcMainInvokeEvent, filePath: string) => {
+    loggerInstance.debug(`[IPC] read-file-buffer: ${filePath}`);
+    try {
+      const fileBuffer = await fs.readFile(filePath);
+      return {
+        canceled: false,
+        fileName: path.basename(filePath),
+        fileBuffer: fileBuffer.toString('base64'),
+        error: null
+      };
+    } catch (error: any) {
+      loggerInstance.debug(`Failed to read file for buffer: ${error}`);
+      return { canceled: false, fileName: null, fileBuffer: null, error: error.message };
+    }
+  });
+
   ipcMain.handle('open-file', async (_event: IpcMainInvokeEvent, filePath: string) => {
     loggerInstance.debug(`[IPC] open-file: ${filePath}`);
     try {

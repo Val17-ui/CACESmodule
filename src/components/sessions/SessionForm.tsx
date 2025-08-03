@@ -988,199 +988,148 @@ if (savedIterationId) { // <-- On ajoute cette condition
       setImportSummary("Aucune session active.");
       return;
     }
+
     const iteration = editingSessionData.iterations?.find(it => it.iteration_index === iterationIndex);
-    if (!iteration?.id || !iteration?.ors_file_path) {
+    if (!iteration?.id || !iteration.ors_file_path) {
       setImportSummary("Veuillez d'abord générer un fichier .ors pour cette itération.");
       return;
     }
+
+    const currentQuestionMappings = iteration.question_mappings;
+    if (!currentQuestionMappings || currentQuestionMappings.length === 0) {
+      setImportSummary("Erreur: Mappages de questions manquants pour cette itération. Impossible de lier les résultats.");
+      logger.error(`[Import Results] No question mappings found for iteration ${iteration.id}`);
+      return;
+    }
+
     if (iteration.status === 'completed') {
       if (!window.confirm("Les résultats pour cette itération ont déjà été importés. Voulez-vous vraiment les ré-importer et écraser les données existantes ?")) {
         return;
       }
       await StorageManager.deleteResultsForIteration(iteration.id);
     }
+
     setImportSummary(`Lecture du fichier ORS pour l'itération ${iteration.name}...`);
     try {
-      const fileData = await window.dbAPI?.openResultsFile();
-      if (!fileData || fileData.canceled || !fileData.fileBuffer) {
-        setImportSummary("Aucun fichier sélectionné ou lecture annulée.");
+      const fileData = await window.dbAPI?.readFileBuffer(iteration.ors_file_path);
+      if (!fileData || !fileData.fileBuffer) {
+        setImportSummary(`Lecture du fichier ORS échouée: ${fileData?.error || 'Buffer vide.'}`);
         return;
       }
-      const arrayBuffer = base64ToArrayBuffer(fileData.fileBuffer);
 
+      const arrayBuffer = base64ToArrayBuffer(fileData.fileBuffer);
       const zip = await JSZip.loadAsync(arrayBuffer);
       const orSessionXmlFile = zip.file("ORSession.xml");
-      if (!orSessionXmlFile) { setImportSummary("Erreur: ORSession.xml introuvable dans le .zip."); return; }
+      if (!orSessionXmlFile) {
+        setImportSummary("Erreur: ORSession.xml introuvable dans le .zip.");
+        return;
+      }
+
       const xmlString = await orSessionXmlFile.async("string");
       setImportSummary("Parsing XML...");
       let extractedResultsFromXml: ExtractedResultFromXml[] = parseOmbeaResultsXml(xmlString);
+
       if (extractedResultsFromXml.length === 0) {
         setImportSummary("Aucune réponse trouvée dans le fichier XML.");
         return;
       }
-      logger.info(`[Import Results] ${extractedResultsFromXml.length} réponses initialement extraites du XML.`);
-      const slideGuidsToIgnore = editingSessionData.ignoredSlideGuids;
-      if (slideGuidsToIgnore && slideGuidsToIgnore.length > 0) {
-        const countBeforeFilteringIgnored = extractedResultsFromXml.length;
-        extractedResultsFromXml = extractedResultsFromXml.filter(
-          (result: ExtractedResultFromXml) => !slideGuidsToIgnore.includes(result.questionSlideGuid)
-        );
-        const countAfterFilteringIgnored = extractedResultsFromXml.length;
-        if (countBeforeFilteringIgnored > countAfterFilteringIgnored) {
-          logger.info(`[Import Results] ${countBeforeFilteringIgnored - countAfterFilteringIgnored} réponses correspondant à ${slideGuidsToIgnore.length} GUID(s) ignoré(s) ont été filtrées.`);
-        }
-      }
+      logger.info(`[Import Results] ${extractedResultsFromXml.length} réponses initialement extraites du XML pour l'itération ${iteration.id}.`);
+
+      // Deduplication
       const latestResultsMap = new Map<string, ExtractedResultFromXml>();
       for (const result of extractedResultsFromXml) {
         const key = `${result.participantDeviceID}-${result.questionSlideGuid}`;
         const existingResult = latestResultsMap.get(key);
-        if (!existingResult) {
+        if (!existingResult || (result.timestamp && existingResult.timestamp && new Date(result.timestamp) > new Date(existingResult.timestamp))) {
           latestResultsMap.set(key, result);
-        } else {
-          if (result.timestamp && existingResult.timestamp) {
-            if (new Date(result.timestamp) > new Date(existingResult.timestamp)) {
-              latestResultsMap.set(key, result);
-            }
-          } else if (result.timestamp && !existingResult.timestamp) {
-            latestResultsMap.set(key, result);
-          }
         }
       }
       const finalExtractedResults = Array.from(latestResultsMap.values());
       logger.info(`[Import Results] ${finalExtractedResults.length} réponses retenues après déduplication.`);
-      if (finalExtractedResults.length === 0 && !(editingSessionData.ignoredSlideGuids && editingSessionData.ignoredSlideGuids.length > 0 && extractedResultsFromXml.length === 0) ) {
-        setImportSummary("Aucune réponse valide à importer après filtrage et déduplication.");
+
+      if (finalExtractedResults.length === 0) {
+        setImportSummary("Aucune réponse valide à importer après déduplication.");
         return;
       }
-      if (!currentSessionDbId) {
-        setImportSummary("Erreur: ID de session non défini. Impossible de continuer.");
-        logger.error("[Import Results] currentSessionDbId is null, cannot proceed.");
-        return;
+
+      const sessionBoitiers = iteration.participants?.map((p: any) => ({
+        serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
+        participantName: `${p.prenom} ${p.nom}`,
+      })).filter((b: any) => b.serialNumber);
+
+      if (!sessionBoitiers || sessionBoitiers.length === 0) {
+           console.warn(`[Import Results] Aucune information de boîtier (sessionBoitiers) trouvée pour l'itération ${iteration.id}.`);
       }
-      const sessionQuestionsFromDb = await StorageManager.getSessionQuestionsBySessionId(currentSessionDbId);
-      const sessionBoitiers = await StorageManager.getSessionBoitiersBySessionId(currentSessionDbId);
-      if (!sessionQuestionsFromDb || sessionQuestionsFromDb.length === 0) {
-        setImportSummary("Erreur: Impossible de charger les questions de référence pour cette session.");
-        logger.error(`[Import Results] Impossible de charger sessionQuestions pour sessionId: ${currentSessionDbId}`);
-        return;
-      }
-      if (!sessionBoitiers) {
-           console.warn(`[Import Results] Aucune information de boîtier (sessionBoitiers) trouvée pour sessionId: ${currentSessionDbId}.`);
-      }
-      const relevantSessionQuestions = editingSessionData.ignoredSlideGuids
-        ? sessionQuestionsFromDb.filter((sq: SessionQuestion) => !editingSessionData.ignoredSlideGuids!.includes(sq.slideGuid))
-        : sessionQuestionsFromDb;
-      const relevantSessionQuestionGuids = new Set(relevantSessionQuestions.map((sq: SessionQuestion) => sq.slideGuid));
-      const totalRelevantQuestionsCount = relevantSessionQuestionGuids.size;
-      logger.info(`[Import Results] Nombre total de questions pertinentes pour la session: ${totalRelevantQuestionsCount}`);
-      for (const result of finalExtractedResults) {
-        if (!relevantSessionQuestionGuids.has(result.questionSlideGuid)) {
-          const errorMessage = `GUID de question importé (${result.questionSlideGuid}) n'est pas parmi les questions pertinentes de la session.`;
-          setImportSummary(errorMessage);
-          logger.error(`[Import Results - Anomaly] ${errorMessage}`, {
-            importedGuid: result.questionSlideGuid,
-            expectedGuids: Array.from(relevantSessionQuestionGuids)
-          });
-          return;
-        }
-      }
-      logger.info("[Import Results] Vérification des GUID de questions terminée.");
-      const detectedAnomaliesData: DetectedAnomalies = {
-        expectedHavingIssues: [],
-        unknownThatResponded: [],
-      };
+
+      const relevantSessionQuestionGuids = new Set(currentQuestionMappings.map((q: any) => q.slideGuid));
+
+      // Anomaly detection
+      const detectedAnomaliesData: DetectedAnomalies = { expectedHavingIssues: [], unknownThatResponded: [] };
       const responsesFromExpectedDevices: ExtractedResultFromXml[] = [];
-      for (const boitierAttendu of (sessionBoitiers || [])) {
-        const responsesForThisExpectedDevice = finalExtractedResults.filter(
-          (r: ExtractedResultFromXml) => r.participantDeviceID === boitierAttendu.serialNumber
-        );
-        const respondedGuidsForThisExpected = new Set(responsesForThisExpectedDevice.map((r: ExtractedResultFromXml) => r.questionSlideGuid));
-        const missedGuidsForThisExpected: string[] = [];
-        if (totalRelevantQuestionsCount > 0) {
-          relevantSessionQuestionGuids.forEach((guid: string, _key: string, _set: Set<string>) => {
-            if (!respondedGuidsForThisExpected.has(guid)) {
-              missedGuidsForThisExpected.push(guid);
+      const expectedSerialNumbers = new Set(sessionBoitiers.map((b: any) => b.serialNumber));
+
+      finalExtractedResults.forEach(result => {
+        if (expectedSerialNumbers.has(result.participantDeviceID)) {
+          responsesFromExpectedDevices.push(result);
+        } else {
+          let unknown = detectedAnomaliesData.unknownThatResponded?.find(u => u.serialNumber === result.participantDeviceID);
+          if (!unknown) {
+            unknown = { serialNumber: result.participantDeviceID, responses: [] };
+            detectedAnomaliesData.unknownThatResponded?.push(unknown);
+          }
+          unknown.responses.push(result);
+        }
+      });
+
+      sessionBoitiers.forEach((boitier: any) => {
+        const respondedGuids = new Set(finalExtractedResults.filter(r => r.participantDeviceID === boitier.serialNumber).map(r => r.questionSlideGuid));
+        const missedGuids = [...relevantSessionQuestionGuids].filter(guid => !respondedGuids.has(guid as string));
+        if (missedGuids.length > 0) {
+          detectedAnomaliesData.expectedHavingIssues?.push({
+            serialNumber: boitier.serialNumber,
+            participantName: boitier.participantName,
+            responseInfo: {
+              respondedToQuestionsGuids: [...respondedGuids],
+              missedQuestionsGuids: missedGuids,
+              totalSessionQuestionsCount: relevantSessionQuestionGuids.size,
+              responsesProvidedByExpected: finalExtractedResults.filter(r => r.participantDeviceID === boitier.serialNumber),
             }
           });
         }
-        if (missedGuidsForThisExpected.length > 0 && totalRelevantQuestionsCount > 0) {
-          if (!detectedAnomaliesData.expectedHavingIssues) detectedAnomaliesData.expectedHavingIssues = [];
-          detectedAnomaliesData.expectedHavingIssues.push({
-            serialNumber: boitierAttendu.serialNumber,
-            visualId: boitierAttendu.visualId,
-            participantName: boitierAttendu.participantName,
-            responseInfo: {
-              respondedToQuestionsGuids: Array.from(respondedGuidsForThisExpected),
-              responsesProvidedByExpected: responsesForThisExpectedDevice,
-              missedQuestionsGuids: missedGuidsForThisExpected,
-              totalSessionQuestionsCount: totalRelevantQuestionsCount,
-            },
-          });
-        } else if (totalRelevantQuestionsCount === 0 && responsesForThisExpectedDevice.length > 0) {
-           responsesFromExpectedDevices.push(...responsesForThisExpectedDevice);
-        } else {
-          responsesFromExpectedDevices.push(...responsesForThisExpectedDevice);
-        }
-      }
-      logger.info(`[Import Results] ${detectedAnomaliesData.expectedHavingIssues?.length || 0} boîtier(s) attendu(s) ont des réponses manquantes.`);
-      const expectedSerialNumbers = new Set((sessionBoitiers || []).map((b: SessionBoitier) => b.serialNumber));
-      const unknownSerialNumbersResponses: { [key: string]: ExtractedResultFromXml[] } = {};
-      for (const result of finalExtractedResults) {
-        if (!expectedSerialNumbers.has(result.participantDeviceID)) {
-          if (!unknownSerialNumbersResponses[result.participantDeviceID]) {
-            unknownSerialNumbersResponses[result.participantDeviceID] = [];
-          }
-          unknownSerialNumbersResponses[result.participantDeviceID].push(result);
-        }
-      }
-      Object.entries(unknownSerialNumbersResponses).forEach(([serialNumber, responses]: [string, ExtractedResultFromXml[]]) => {
-        if (!detectedAnomaliesData.unknownThatResponded) detectedAnomaliesData.unknownThatResponded = [];
-        detectedAnomaliesData.unknownThatResponded.push({
-          serialNumber: serialNumber,
-          responses: responses,
-        });
       });
-      logger.info(`[Import Results] ${detectedAnomaliesData.unknownThatResponded?.length || 0} boîtier(s) inconnu(s) ont répondu.`);
+
       if ((detectedAnomaliesData.expectedHavingIssues?.length || 0) > 0 || (detectedAnomaliesData.unknownThatResponded?.length || 0) > 0) {
         setImportSummary(`Anomalies détectées: ${detectedAnomaliesData.expectedHavingIssues?.length || 0} boîtier(s) attendu(s) avec problèmes, ${detectedAnomaliesData.unknownThatResponded?.length || 0} boîtier(s) inconnu(s). Résolution nécessaire.`);
-        setDetectedAnomalies(detectedAnomaliesData as DetectedAnomalies);
+        setDetectedAnomalies(detectedAnomaliesData);
         setPendingValidResults(responsesFromExpectedDevices);
         setCurrentIterationForImport(iteration.id);
         setShowAnomalyResolutionUI(true);
         logger.info("[Import Results] Des anomalies de boîtiers ont été détectées. Affichage de l'interface de résolution.");
         return;
       }
+
       logger.info("[Import Results] Aucune anomalie de boîtier détectée. Procédure d'import direct.");
-      setImportSummary(`${responsesFromExpectedDevices.length} réponses valides prêtes pour transformation et import...`);
-      const currentQuestionMappings = editingSessionData.questionMappings;
-      if (!currentQuestionMappings || currentQuestionMappings.length === 0) {
-        setImportSummary("Erreur: Mappages de questions manquants pour la session. Impossible de lier les résultats.");
-        return;
-      }
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         responsesFromExpectedDevices,
         currentQuestionMappings,
         currentSessionDbId,
         iteration.id
       );
+
       if (sessionResultsToSave.length > 0) {
-        try {
-          const updatedSession = await StorageManager.importResultsForIteration(iteration.id, currentSessionDbId, sessionResultsToSave);
-          if (updatedSession) {
-            setEditingSessionData(updatedSession);
-            setImportSummary(`${sessionResultsToSave.length} résultats importés et traités avec succès pour l'itération ${iteration.name}.`);
-          } else {
-            setImportSummary("Erreur lors de la finalisation de l'itération.");
-          }
-        } catch (error: any) {
-          setImportSummary(`Erreur lors de la finalisation de l'itération: ${error.message}`);
+        const updatedSession = await StorageManager.importResultsForIteration(iteration.id, currentSessionDbId, sessionResultsToSave);
+        if (updatedSession) {
+          setEditingSessionData(updatedSession);
+          setImportSummary(`${sessionResultsToSave.length} résultats importés et traités avec succès pour l'itération ${iteration.name}.`);
+        } else {
+          setImportSummary("Erreur lors de la finalisation de l'itération.");
         }
       } else {
         setImportSummary("Aucun résultat à importer.");
       }
     } catch (error: any) {
       setImportSummary(`Erreur traitement fichier: ${error.message}`);
-      logger.error(`Erreur lors du traitement du fichier de résultats pour la session ID ${currentSessionDbId}`, {eventType: 'RESULTS_IMPORT_FILE_PROCESSING_ERROR', sessionId: currentSessionDbId, error});
+      logger.error(`Erreur lors du traitement du fichier de résultats pour la session ID ${currentSessionDbId}`, { eventType: 'RESULTS_IMPORT_FILE_PROCESSING_ERROR', sessionId: currentSessionDbId, error });
     }
   };
 
