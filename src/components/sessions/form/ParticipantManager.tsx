@@ -82,34 +82,34 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {participants.map((p) => {
-              const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.id));
+              const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.uiId));
               return (
-                <tr key={p.id}>
+                <tr key={p.uiId}>
                   {iterationCount > 1 && (
                     <td className="px-4 py-2">
                       <Select
                         value={assignedIteration || ''}
-                        onChange={(e) => handleParticipantIterationChange(p.id, parseInt(e.target.value, 10))}
+                        onChange={(e) => handleParticipantIterationChange(p.uiId, parseInt(e.target.value, 10))}
                         options={iterationNames.map((name, index) => ({ value: index.toString(), label: name }))}
                         placeholder="N/A"
                         disabled={isReadOnly}
                       />
                     </td>
                   )}
-                  <td className="px-4 py-2"><Input value={p.firstName} onChange={(e) => handleParticipantChange(p.id, 'firstName', e.target.value)} disabled={isReadOnly} /></td>
-                  <td className="px-4 py-2"><Input value={p.lastName} onChange={(e) => handleParticipantChange(p.id, 'lastName', e.target.value)} disabled={isReadOnly} /></td>
-                  <td className="px-4 py-2"><Input value={p.organization || ''} onChange={(e) => handleParticipantChange(p.id, 'organization', e.target.value)} disabled={isReadOnly} /></td>
-                  <td className="px-4 py-2"><Input value={p.identificationCode || ''} onChange={(e) => handleParticipantChange(p.id, 'identificationCode', e.target.value)} disabled={isReadOnly} /></td>
+                  <td className="px-4 py-2"><Input value={p.firstName} onChange={(e) => handleParticipantChange(p.uiId, 'firstName', e.target.value)} disabled={isReadOnly} /></td>
+                  <td className="px-4 py-2"><Input value={p.lastName} onChange={(e) => handleParticipantChange(p.uiId, 'lastName', e.target.value)} disabled={isReadOnly} /></td>
+                  <td className="px-4 py-2"><Input value={p.organization || ''} onChange={(e) => handleParticipantChange(p.uiId, 'organization', e.target.value)} disabled={isReadOnly} /></td>
+                  <td className="px-4 py-2"><Input value={p.identificationCode || ''} onChange={(e) => handleParticipantChange(p.uiId, 'identificationCode', e.target.value)} disabled={isReadOnly} /></td>
                   <td className="px-4 py-2">
                     <Select
                       value={p.assignedGlobalDeviceId?.toString() || ''}
-                      onChange={(e) => handleParticipantChange(p.id, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
-                      options={votingDevicesInSelectedKit.map(d => ({ value: d.id!.toString(), label: `${d.name} (${d.serialNumber})`, disabled: participants.some(participant => participant.id !== p.id && participant.assignedGlobalDeviceId === d.id) }))}
+                      onChange={(e) => handleParticipantChange(p.uiId, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
+                      options={votingDevicesInSelectedKit.map(d => ({ value: d.id!.toString(), label: `${d.name} (${d.serialNumber})`, disabled: participants.some(participant => participant.uiId !== p.uiId && participant.assignedGlobalDeviceId === d.id) }))}
                       placeholder="N/A"
                       disabled={isReadOnly}
                     />
                   </td>
-                  <td className="px-4 py-2"><Button variant="danger" size="sm" onClick={() => handleRemoveParticipant(p.id)} disabled={isReadOnly}><Trash2 size={14} /></Button></td>
+                  <td className="px-4 py-2"><Button variant="danger" size="sm" onClick={() => handleRemoveParticipant(p.uiId)} disabled={isReadOnly}><Trash2 size={14} /></Button></td>
                 </tr>
               );
             })}

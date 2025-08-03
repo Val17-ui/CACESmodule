@@ -140,7 +140,7 @@ export interface Participant {
 }
 
 export interface FormParticipant extends Participant {
-  id: string;
+  uiId: string;
   firstName: string;
   lastName: string;
   deviceId: number | null;

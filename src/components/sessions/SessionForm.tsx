@@ -13,7 +13,8 @@ import {
   Bloc,
   QuestionWithId as StoredQuestion,
   VotingDevice,
-  DeviceKit
+  DeviceKit,
+  FormParticipant
 } from '@common/types';
 import { StorageManager } from '../../services/StorageManager';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -23,16 +24,6 @@ import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import AnomalyResolutionModal, { DetectedAnomalies } from './AnomalyResolutionModal';
 import { ExpectedIssueResolution, UnknownDeviceResolution } from '@common/types';
-
-type FormParticipant = DBParticipantType & {
-  uiId: string;
-  dbId?: number;
-  firstName: string;
-  lastName: string;
-  deviceId: number | null;
-  hasSigned?: boolean;
-};
-
 import { parseFullSessionExcel } from '../../utils/excelProcessor';
 
 interface SessionFormProps {
@@ -261,7 +252,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
             setModifiedAfterOrsGeneration(false);
             if (sessionData.iterations && sessionData.iterations.length > 0) {
                 console.log('[SessionLoad-LOG] Step 1: Raw sessionData.iterations received from DB:', JSON.parse(JSON.stringify(sessionData.iterations)));
-                                                                                    const allParticipantsFromIterations = sessionData.iterations.flatMap((iter: any) => (iter as any).participants || []);
+                const allParticipantsFromIterations = (sessionData.iterations.flatMap((iter: any) => (iter as any).participants || [])) as DBParticipantType[];
                 console.log('[SessionLoad-LOG] Step 2: Flattened list of all participants from all iterations:', JSON.parse(JSON.stringify(allParticipantsFromIterations)));
 
                 const uniqueParticipantsMap = new Map<string | number, DBParticipantType>();
@@ -298,10 +289,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                                 console.warn('[SessionLoad-LOG] Iteration participant missing ID:', p_iter);
                                 return null;
                             };
-                            const matchingFormParticipant = formParticipants.find(fp => fp.dbId === p_iter.id);
+                            const matchingFormParticipant = formParticipants.find(fp => fp.id === p_iter.id);
                             if (matchingFormParticipant) {
                                 return {
-                                    id: matchingFormParticipant.id,
+                                    id: matchingFormParticipant.uiId,
                                     assignedGlobalDeviceId: p_iter.assignedGlobalDeviceId || null
                                 };
                             }
@@ -427,7 +418,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                     const device = hardwareDevices.find(d => d.name === p.deviceName);
                     return {
                         uiId: `imported-${Date.now()}-${index}`,
-                        dbId: undefined,
                         firstName: p.prenom,
                         lastName: p.nom,
                         organization: p.organization,
@@ -635,7 +625,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
         assignedGlobalDeviceId: null,
         statusInSession: 'present',
         uiId: `imported-${Date.now()}-${index}`,
-        dbId: undefined,
         firstName: p.prenom || '',
         lastName: p.nom || '',
         organization: (p as any).organization || '',
@@ -757,7 +746,7 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
 
     // Check for unassigned participants
     const assignedParticipantIds = new Set(Object.values(participantAssignments).flat().map((p: { id: string; assignedGlobalDeviceId: number | null }) => p.id));
-    const unassignedParticipants = participants.filter(p => !assignedParticipantIds.has(p.id));
+    const unassignedParticipants = participants.filter(p => !assignedParticipantIds.has(p.uiId));
 
     if (unassignedParticipants.length > 0) {
         const unassignedNames = unassignedParticipants.map(p => `${p.firstName} ${p.lastName}`).join(', ');
@@ -935,7 +924,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
       for (const i of iterationsToGenerate) {
         const iterationName = iterationNames[i];
         const assignedParticipantIds = (participantAssignments[i] || []).map((p: { id: string; assignedGlobalDeviceId: number | null }) => String(p.id));
-        const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.id));
+        const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.uiId));
         const participantsForGenerator = participantsForIteration.map(p => {
           const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
           return { idBoitier: device?.serialNumber || '', nom: p.lastName, prenom: p.firstName, identificationCode: p.identificationCode };
@@ -1194,7 +1183,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
       return;
     }
     let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
-    let updatedParticipantsList: DBParticipantType[] = editingSessionData.iterations?.flatMap((iter: any) => (iter as any).participants || []) || [];
+    let updatedParticipantsList: DBParticipantType[] = (editingSessionData.iterations?.flatMap((iter: any) => (iter as any).participants || []) || []) as DBParticipantType[];
     let participantsDataChanged = false;
     const originalAnomalies = detectedAnomalies;
     if (!originalAnomalies) {
@@ -1307,7 +1296,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
             const reloadedSessionForUI = await StorageManager.getSessionById(currentSessionDbId);
             if (reloadedSessionForUI && reloadedSessionForUI.iterations) {
                 setEditingSessionData(reloadedSessionForUI);
-                const allParticipantsFromIterations = reloadedSessionForUI.iterations.flatMap((iter: any) => (iter as any).participants || []);
+                const allParticipantsFromIterations = (reloadedSessionForUI.iterations.flatMap((iter: any) => (iter as any).participants || [])) as DBParticipantType[];
                 const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode, p])).values());
                 const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
                     const visualDeviceId = index + 1;
@@ -1321,7 +1310,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
                       assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
                       statusInSession: p_db_updated.statusInSession,
                       uiId: currentFormParticipantState?.uiId || `updated-${index}-${Date.now()}`,
-                      dbId: p_db_updated.id,
+                      id: p_db_updated.id,
                       firstName: p_db_updated.prenom,
                       lastName: p_db_updated.nom,
                       deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
@@ -1389,7 +1378,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
                   const finalUpdatedSessionWithScores = await StorageManager.getSessionById(currentSessionDbId);
                        if (finalUpdatedSessionWithScores && finalUpdatedSessionWithScores.iterations) {
                       setEditingSessionData(finalUpdatedSessionWithScores);
-                          const allParticipantsFromIterations = finalUpdatedSessionWithScores.iterations.flatMap((iter: any) => (iter as any).participants || []);
+                          const allParticipantsFromIterations = (finalUpdatedSessionWithScores.iterations.flatMap((iter: any) => (iter as any).participants || [])) as DBParticipantType[];
                           const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode, p])).values());
                                                     const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
                           const visualDeviceId = index + 1;
@@ -1403,7 +1392,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
                             assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
                             statusInSession: p_db_updated.statusInSession,
                             uiId: currentFormParticipantState?.uiId || `final-updated-${index}-${Date.now()}`,
-                            dbId: p_db_updated.id,
+                            id: p_db_updated.id,
                             firstName: p_db_updated.prenom,
                             lastName: p_db_updated.nom,
                             deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
@@ -1507,7 +1496,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
           <ParticipantManager
             isReadOnly={isReadOnly}
             participants={participants}
-            setParticipants={setParticipants as React.Dispatch<React.SetStateAction<FormParticipant[]>>}
+            setParticipants={setParticipants}
             handleParticipantChange={handleParticipantChange}
             handleRemoveParticipant={handleRemoveParticipant}
             handleAddParticipant={handleAddParticipant}
