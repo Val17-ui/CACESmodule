@@ -159,12 +159,14 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
       'numstage': 'numStage',
     };
 
-    sessionDetailsSheet.eachRow((row) => {
-      const rawKey = row.getCell(1).value?.toString().toLowerCase().trim();
-      const value = row.getCell(2).value;
-      if (rawKey) {
-        const mappedKey = keyMapping[rawKey] || rawKey;
-        details[mappedKey] = value || '';
+    sessionDetailsSheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) { // Skip header row
+        const rawKey = row.getCell(1).value?.toString().toLowerCase().trim();
+        const value = row.getCell(2).value;
+        if (rawKey) {
+          const mappedKey = keyMapping[rawKey] || rawKey;
+          details[mappedKey] = value || '';
+        }
       }
     });
     console.log('[Excel Import] Parsed session details:', JSON.stringify(details, null, 2));
@@ -176,39 +178,45 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
   const participantsSheet = findSheet('Participants');
   if (participantsSheet) {
     console.log(`[Excel Import] Parsing sheet: "${participantsSheet.name}" for participants.`);
-    const headerRowValues = participantsSheet.getRow(1).values;
-    const headerRow = Array.isArray(headerRowValues)
-      ? headerRowValues.map(h => (h ? h.toString().toLowerCase().trim() : ''))
-      : [];
-    console.log('[Excel Import] Found participant headers:', headerRow);
+    const headerRow = participantsSheet.getRow(1);
+    const headerMap: { [key: string]: number } = {};
+    headerRow.eachCell((cell, colNumber) => {
+        const headerText = cell.value?.toString().toLowerCase().trim();
+        if (headerText) {
+            headerMap[headerText] = colNumber;
+        }
+    });
 
-    const findIndex = (aliases: string[]) => {
-      for (const alias of aliases) {
-        const index = headerRow.indexOf(alias);
-        if (index !== -1) return index + 1; // ExcelJS cell indices are 1-based
-      }
-      return -1;
+    console.log('[Excel Import] Found participant header map:', JSON.stringify(headerMap, null, 2));
+
+    const getColNumber = (aliases: string[]) => {
+        for (const alias of aliases) {
+            if (headerMap[alias]) {
+                return headerMap[alias];
+            }
+        }
+        return -1;
     };
 
-    const prenomIndex = findIndex(['prénom', 'prenom', 'firstname', 'first name']);
-    const nomIndex = findIndex(['nom', 'lastname', 'last name']);
-    const organizationIndex = findIndex(['organisation', 'organization', 'société', 'societe']);
-    const identificationCodeIndex = findIndex(['code identification', 'identificationcode', 'code']);
-    const iterationNumberIndex = findIndex(['itération', 'iteration', 'iterationnumber']);
-    const deviceNameIndex = findIndex(['boîtier', 'boitier', 'devicename']);
+    const prenomCol = getColNumber(['prénom', 'prenom', 'firstname', 'first name']);
+    const nomCol = getColNumber(['nom', 'lastname', 'last name']);
+    const organizationCol = getColNumber(['organisation', 'organization', 'société', 'societe']);
+    const identificationCodeCol = getColNumber(['code identification', 'identificationcode', 'code']);
+    const iterationNumberCol = getColNumber(['itération', 'iteration', 'iterationnumber']);
+    const deviceNameCol = getColNumber(['boîtier', 'boitier', 'devicename']);
 
     participantsSheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) { // Skip header row
-        const prenom = prenomIndex !== -1 ? row.getCell(prenomIndex).value?.toString() || '' : '';
-        const nom = nomIndex !== -1 ? row.getCell(nomIndex).value?.toString() || '' : '';
+        const prenom = prenomCol !== -1 ? row.getCell(prenomCol).value?.toString() || '' : '';
+        const nom = nomCol !== -1 ? row.getCell(nomCol).value?.toString() || '' : '';
         if (prenom || nom) {
           participants.push({
             prenom,
             nom,
-            organization: organizationIndex !== -1 ? row.getCell(organizationIndex).value?.toString() || '' : '',
-            identificationCode: identificationCodeIndex !== -1 ? row.getCell(identificationCodeIndex).value?.toString() || '' : '',
-            iterationNumber: iterationNumberIndex !== -1 ? parseInt(row.getCell(iterationNumberIndex).value?.toString() || '1', 10) : 1,
-            deviceName: deviceNameIndex !== -1 ? row.getCell(deviceNameIndex).value?.toString() || '' : '',
+            organization: organizationCol !== -1 ? row.getCell(organizationCol).value?.toString() || '' : '',
+            identificationCode: identificationCodeCol !== -1 ? row.getCell(identificationCodeCol).value?.toString() || '' : '',
+            iterationNumber: iterationNumberCol !== -1 ? parseInt(row.getCell(iterationNumberCol).value?.toString() || '1', 10) : 1,
+            deviceName: deviceNameCol !== -1 ? row.getCell(deviceNameCol).value?.toString() || '' : '',
           });
         }
       }
