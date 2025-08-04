@@ -181,22 +181,10 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   }, [session, effectiveSelectedBlocIds, sessionResults, questionsForThisSession, deviceMap, allThemesDb, allBlocsDb]);
 
   const participantCalculatedData: ParticipantCalculatedData[] = useMemo(() => {
-    console.log("--- DEBUGGING REPORT ---");
-    console.log("Participants available in report:", JSON.stringify(participants.map(p => ({ id: p.id, nom: p.nom })), null, 2));
-    console.log("Session results available in report:", JSON.stringify(sessionResults.map(r => ({ qId: r.questionId, pId: r.participantId })), null, 2));
-
     return participants.map(p => {
       const participantResults = p.id
-        ? sessionResults.filter(r => {
-            const match = r.participantId === p.id;
-            if (match) console.log(`Match found for participant ${p.nom} (ID: ${p.id})`);
-            return match;
-          })
+        ? sessionResults.filter(r => r.participantId === p.id)
         : [];
-
-      if (p.id && participantResults.length === 0 && sessionResults.length > 0) {
-        console.log(`%c[WARNING] No results found for participant ${p.nom} (ID: ${p.id}) despite there being ${sessionResults.length} total results.`, "color: orange");
-      }
 
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
       const themeScores = calculateThemeScores(participantResults, questionsForThisSession);

@@ -212,13 +212,15 @@ const createSchema = () => {
       session_iteration_id INTEGER,
       questionId INTEGER NOT NULL, /* references questions.id */
       participantIdBoitier TEXT NOT NULL, /* Could be serialNumber of votingDevice or a participant identifier */
+      participantId INTEGER, /* Foreign key to participants.id */
       answer TEXT, /* JSON array of selected answers or single answer */
       isCorrect INTEGER, /* 0 for false, 1 for true */
       pointsObtained INTEGER,
       timestamp INTEGER NOT NULL, /* Unix timestamp (seconds since epoch) */
       FOREIGN KEY (sessionId) REFERENCES sessions(id) ON DELETE CASCADE,
       FOREIGN KEY (session_iteration_id) REFERENCES session_iterations(id) ON DELETE CASCADE,
-      FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
+      FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE,
+      FOREIGN KEY (participantId) REFERENCES participants(id) ON DELETE SET NULL
     );`,
     `CREATE INDEX IF NOT EXISTS idx_sessionResults_sessionId ON sessionResults(sessionId);`,
     `CREATE INDEX IF NOT EXISTS idx_sessionResults_questionId ON sessionResults(questionId);`,
@@ -364,9 +366,14 @@ const createSchema = () => {
         if (!resultsColumns.some(c => c.name === 'session_iteration_id')) {
             db.prepare(`ALTER TABLE sessionResults ADD COLUMN session_iteration_id INTEGER`).run();
             _logger.info(`[DB MIGRATION] Added column 'session_iteration_id' to 'sessionResults'.`);
-            // Now that the column is guaranteed to exist, create the index.
             db.prepare(`CREATE INDEX IF NOT EXISTS idx_sessionResults_session_iteration_id ON sessionResults(session_iteration_id)`).run();
             _logger.info(`[DB MIGRATION] Added index 'idx_sessionResults_session_iteration_id' to 'sessionResults'.`);
+        }
+        if (!resultsColumns.some(c => c.name === 'participantId')) {
+            db.prepare(`ALTER TABLE sessionResults ADD COLUMN participantId INTEGER`).run();
+            _logger.info(`[DB MIGRATION] Added column 'participantId' to 'sessionResults'.`);
+            db.prepare(`CREATE INDEX IF NOT EXISTS idx_sessionResults_participantId ON sessionResults(participantId)`).run();
+            _logger.info(`[DB MIGRATION] Added index 'idx_sessionResults_participantId' to 'sessionResults'.`);
         }
 
         _logger.debug("[DB MIGRATION] Checking for 'questions' table migrations...");
@@ -669,19 +676,20 @@ const questionToRow = (question: Partial<Omit<QuestionWithId, 'id'> | QuestionWi
 const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const { blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updatedAt } = question;
+      const { text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updatedAt } = question;
+      const blocId = question.blocId === undefined || question.blocId === null ? null : question.blocId;
       const stmt = getDb().prepare(`
         INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updated_at)
         VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version, @updated_at)
       `);
       const rowData = questionToRow({
         blocId, text, type, correctAnswer, timeLimit,
-        isEliminatory, // Sera converti en 0/1 par questionToRow
+        isEliminatory,
         createdAt,
         usageCount: usageCount ?? 0,
         correctResponseRate: correctResponseRate ?? 0,
         slideGuid,
-        options, // Sera stringifié par questionToRow
+        options,
         version,
         updatedAt
       });
@@ -1185,8 +1193,8 @@ const addSessionResult = async (result: Omit<SessionResult, 'id'>): Promise<numb
   return asyncDbRun(() => {
     try {
       const stmt = getDb().prepare(`
-        INSERT INTO sessionResults (sessionId, session_iteration_id, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
-        VALUES (@sessionId, @sessionIterationId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
+        INSERT INTO sessionResults (sessionId, session_iteration_id, questionId, participantIdBoitier, participantId, answer, isCorrect, pointsObtained, timestamp)
+        VALUES (@sessionId, @sessionIterationId, @questionId, @participantIdBoitier, @participantId, @answer, @isCorrect, @pointsObtained, @timestamp)
       `);
       const rowData = sessionResultToRow(result);
       const res = stmt.run(rowData);
@@ -1204,8 +1212,8 @@ const addBulkSessionResults = async (results: Omit<SessionResult, 'id'>[]): Prom
   return asyncDbRun(() => {
     const insertedIds: (number | undefined)[] = [];
     const insertStmt = getDb().prepare(`
-      INSERT INTO sessionResults (sessionId, session_iteration_id, questionId, participantIdBoitier, answer, isCorrect, pointsObtained, timestamp)
-      VALUES (@sessionId, @sessionIterationId, @questionId, @participantIdBoitier, @answer, @isCorrect, @pointsObtained, @timestamp)
+      INSERT INTO sessionResults (sessionId, session_iteration_id, questionId, participantIdBoitier, participantId, answer, isCorrect, pointsObtained, timestamp)
+      VALUES (@sessionId, @sessionIterationId, @questionId, @participantIdBoitier, @participantId, @answer, @isCorrect, @pointsObtained, @timestamp)
     `);
 
     const transaction = getDb().transaction((items: Omit<SessionResult, 'id'>[]) => {

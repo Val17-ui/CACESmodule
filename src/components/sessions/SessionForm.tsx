@@ -595,7 +595,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
     if (jsonData.length === 0) return parsed;
     let headers: string[] = [];
     let dataStartIndex = 0;
-    const potentialHeaders = jsonData[0].map(h => h.toString().toLowerCase());
+    const potentialHeaders = jsonData[0].map((h: any) => h.toString().toLowerCase());
     const hasPrenom = potentialHeaders.includes('prénom') || potentialHeaders.includes('prenom');
     const hasNom = potentialHeaders.includes('nom');
     if (hasPrenom && hasNom) {
@@ -1142,13 +1142,15 @@ if (savedIterationId) { // <-- On ajoute cette condition
       }
 
       logger.info("[Import Results] Aucune anomalie de boîtier détectée. Procédure d'import direct.");
-      const participantsForIteration = (iteration.participants || []).map((p: any) => ({
-        id: p.id,
-        serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
-      })).filter((p: any) => p.id && p.serialNumber);
-
-      console.log(`--- DEBUGGING IMPORT (Iteration ${iterationIndex}) ---`);
-      console.log("Participants passed to transformer:", JSON.stringify(participantsForIteration, null, 2));
+      const participantsForIteration = (iteration.participants || [])
+        .map((p: any) => {
+          const device = hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId);
+          return {
+            id: p.id,
+            serialNumber: device ? device.serialNumber : undefined,
+          };
+        })
+        .filter((p): p is { id: number; serialNumber: string } => !!p.id && !!p.serialNumber);
 
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         responsesFromExpectedDevices,
@@ -1324,13 +1326,15 @@ if (savedIterationId) { // <-- On ajoute cette condition
           setImportSummary("Erreur: Mappages de questions (questionMappings) manquants pour l'itération. Impossible de lier les résultats.");
           return;
       }
-      const participantsForIteration = (iterationForImport.participants || []).map((p: any) => ({
-        id: p.id,
-        serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
-      })).filter((p: any) => p.id && p.serialNumber);
-
-      console.log(`--- DEBUGGING ANOMALY RESOLUTION (Iteration ${currentIterationForImport}) ---`);
-      console.log("Participants passed to transformer:", JSON.stringify(participantsForIteration, null, 2));
+      const participantsForIteration = (iterationForImport.participants || [])
+        .map((p: any) => {
+            const device = hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId);
+            return {
+                id: p.id,
+                serialNumber: device ? device.serialNumber : undefined,
+            };
+        })
+        .filter((p): p is { id: number; serialNumber: string } => !!p.id && !!p.serialNumber);
 
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         finalResultsToImport,
