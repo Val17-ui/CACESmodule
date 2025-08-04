@@ -39,6 +39,17 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+  const [reportLogo, setReportLogo] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchLogo = async () => {
+      const logoSetting = await StorageManager.getAdminSetting('reportLogoBase64');
+      if (logoSetting && logoSetting.value) {
+        setReportLogo(logoSetting.value);
+      }
+    };
+    fetchLogo();
+  }, []);
 
   const participants = session.participants || [];
 
@@ -197,28 +208,56 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     : 0;
 
 
-  const handleExportPDF = () => { // Export PDF de la session (vue actuelle)
+  const handleExportPDF = () => {
     if (reportRef.current) {
-      html2canvas(reportRef.current, { scale: 2, useCORS: true }).then((canvas: HTMLCanvasElement) => {
+      html2canvas(reportRef.current, { scale: 2, useCORS: true }).then((canvas) => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfPageHeight = pdf.internal.pageSize.getHeight();
-        const imgWidth = canvas.width;
-        const imgHeight = canvas.height;
-        const ratio = imgHeight / imgWidth;
-        const newImgHeight = pdfWidth * ratio; // prefer-const
-        // let position = 0; // Unused
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const margin = 10;
+        const headerHeight = 25;
+        const footerHeight = 20;
+        const contentHeight = pdfHeight - headerHeight - footerHeight;
 
-        if (newImgHeight > pdfPageHeight) {
-            const pageCount = Math.ceil(newImgHeight / pdfPageHeight); // prefer-const
-            for (let i = 0; i < pageCount; i++) {
-                if (i > 0) pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, -i * pdfPageHeight, pdfWidth, newImgHeight);
+        const imgCanvasWidth = canvas.width;
+        const imgCanvasHeight = canvas.height;
+        const imgRatio = imgCanvasWidth / imgCanvasHeight;
+
+        const contentWidth = pdfWidth - margin * 2;
+        const contentHeight = (canvas.height * contentWidth) / canvas.width;
+
+        const pageContentHeight = pdfHeight - headerHeight - footerHeight;
+        const totalPages = Math.ceil(contentHeight / pageContentHeight);
+
+        for (let i = 0; i < totalPages; i++) {
+          if (i > 0) {
+            pdf.addPage();
+          }
+          const y = -(pageContentHeight * i) + headerHeight;
+          pdf.addImage(imgData, 'PNG', margin, y, contentWidth, contentHeight);
+
+          // Header
+          pdf.setFontSize(18);
+          pdf.text('Rapport de Session', margin, margin + 5);
+          if (reportLogo) {
+            try {
+              pdf.addImage(reportLogo, 'PNG', pdfWidth - margin - 30, margin, 25, 25);
+            } catch (e) {
+              console.error("Erreur d'ajout du logo au PDF:", e);
             }
-        } else {
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, newImgHeight);
+          }
+
+          // Footer & Signature Box
+          pdf.setFontSize(10);
+          pdf.setTextColor(150);
+          pdf.text(`Page ${i + 1} / ${totalPages}`, pdfWidth / 2, pdfHeight - margin + 5, { align: 'center' });
+          pdf.setDrawColor(150, 150, 150);
+          pdf.rect(margin, pdfHeight - footerHeight, 80, 15);
+          pdf.setTextColor(100);
+          pdf.text('Signature du Formateur:', margin + 2, pdfHeight - footerHeight + 5);
         }
+
         pdf.save(`rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`);
       });
     }
