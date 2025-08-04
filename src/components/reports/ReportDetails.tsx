@@ -169,12 +169,19 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
   const participantCalculatedData: ParticipantCalculatedData[] = useMemo(() => {
     return participants.map(p => {
-      // Filtrer les résultats directement par l'ID unique du participant.
-      // C'est plus robuste que de se fier au numéro de série du boîtier,
-      // surtout si les résultats contiennent maintenant `participantId`.
-      const participantResults = p.id
-        ? sessionResults.filter(r => r.participantId === p.id)
-        : [];
+      const deviceSerialNumber = p.assignedGlobalDeviceId ? deviceMap.get(p.assignedGlobalDeviceId) : undefined;
+
+      const participantResults = sessionResults.filter(r => {
+        // Nouvelle logique de correspondance robuste
+        if (r.participantId && p.id) {
+          return r.participantId === p.id;
+        }
+        // Fallback pour les anciens résultats sans participantId
+        if (deviceSerialNumber) {
+          return r.participantIdBoitier === deviceSerialNumber;
+        }
+        return false;
+      });
 
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
       const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
@@ -238,9 +245,16 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     const zip = new JSZip();
 
     for (const participantData of participantCalculatedData) {
-      const participantSpecificResults = participantData.id
-        ? sessionResults.filter(r => r.participantId === participantData.id)
-        : [];
+      const deviceSerialNumber = participantData.idBoitier;
+      const participantSpecificResults = sessionResults.filter(r => {
+        if (r.participantId && participantData.id) {
+          return r.participantId === participantData.id;
+        }
+        if (deviceSerialNumber) {
+          return r.participantIdBoitier === deviceSerialNumber;
+        }
+        return false;
+      });
       const specificThemeScores = calculateThemeScores(participantSpecificResults, questionsForThisSession);
 
       let reportHtml = `
