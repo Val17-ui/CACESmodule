@@ -95,10 +95,12 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
         // Dériver les questions des résultats réels plutôt que des mappings
         if (results && results.length > 0) {
+          console.log('DEBUG: Session Question Mappings:', JSON.stringify(session.questionMappings, null, 2));
           const questionIds = [...new Set(results.map(r => r.questionId))];
 
           if (questionIds.length > 0) {
             const baseQuestions = await StorageManager.getQuestionsByIds(questionIds);
+            console.log('DEBUG: First 2 Base Questions from DB:', JSON.stringify(baseQuestions.slice(0, 2), null, 2));
             const enrichedQuestions = await Promise.all(
               baseQuestions.map(async (question: QuestionWithId) => {
                 let resolvedThemeName = 'Thème non spécifié';
@@ -110,6 +112,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                       resolvedThemeName = theme.nom_complet;
                     }
                   }
+                }
+                if(resolvedThemeName === 'Thème non spécifié') {
+                    console.log(`DEBUG: Failed to resolve theme for Q_ID: ${question.id}, BlocID: ${question.blocId}`);
                 }
                 return { ...question, resolvedThemeName };
               })
