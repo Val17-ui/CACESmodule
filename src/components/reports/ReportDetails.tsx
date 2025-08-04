@@ -60,81 +60,81 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   }, [session.selectedBlocIds, questionsForThisSession]);
 
 
+  // Effet 1: Charger les données de base (non dépendantes de la session)
   useEffect(() => {
-    const fetchData = async () => {
-      if (session.id) {
-        const allVotingDevicesData = await StorageManager.getAllVotingDevices();
-        setVotingDevices(allVotingDevicesData);
+    const fetchBaseData = async () => {
+      try {
+        const [themes, blocs, devices] = await Promise.all([
+          StorageManager.getAllThemes(),
+          StorageManager.getAllBlocs(),
+          StorageManager.getAllVotingDevices()
+        ]);
+        setAllThemesDb(themes);
+        setAllBlocsDb(blocs);
+        setVotingDevices(devices);
+      } catch (error) {
+        console.error("Failed to load base data:", error);
+      }
+    };
+    fetchBaseData();
+  }, []);
 
-        const allThemesData = await StorageManager.getAllThemes();
-        setAllThemesDb(allThemesData);
-        const allBlocsData = await StorageManager.getAllBlocs();
-        setAllBlocsDb(allBlocsData);
+  // Effet 2: Charger les données spécifiques à la session et enrichir les questions
+  useEffect(() => {
+    const fetchSessionData = async () => {
+      if (!session.id || allThemesDb.length === 0 || allBlocsDb.length === 0) {
+        // Ne pas continuer si les données de base ne sont pas prêtes ou si la session n'a pas d'ID
+        return;
+      }
 
-        if (session.trainerId) {
-          const trainer = await StorageManager.getTrainerById(session.trainerId);
+      // Charger les détails spécifiques comme le formateur et le référentiel
+      if (session.trainerId) {
+        StorageManager.getTrainerById(session.trainerId).then(trainer => {
           if (trainer) setTrainerName(trainer.name);
-        }
+        });
+      }
+      if (session.referentielId) {
+        StorageManager.getReferentialById(session.referentielId).then(ref => {
+          if (ref) setReferentialCode(ref.code);
+        });
+      }
 
-        if (session.referentielId) {
-          const referential = await StorageManager.getReferentialById(session.referentielId);
-          if (referential && referential.code) {
-            setReferentialCode(referential.code);
-          } else {
-            setReferentialCode('N/A');
-          }
-        } else {
-          setReferentialCode('N/A');
-        }
+      // Charger les résultats de la session
+      const results = await StorageManager.getResultsForSession(session.id);
+      setSessionResults(results);
 
-        // Note: La logique pour `themeNames` est maintenant dans un `useEffect` séparé
-        // qui dépend de `effectiveSelectedBlocIds` pour une meilleure séparation des préoccupations.
+      if (results && results.length > 0) {
+        const questionIds = [...new Set(results.map(r => r.questionId))];
+        if (questionIds.length > 0) {
+          const baseQuestions = await StorageManager.getQuestionsByIds(questionIds);
 
-        const results = await StorageManager.getResultsForSession(session.id);
-        setSessionResults(results);
-
-        // Dériver les questions des résultats réels plutôt que des mappings
-        if (results && results.length > 0) {
-          console.log('DEBUG: Session Question Mappings:', JSON.stringify(session.questionMappings, null, 2));
-          const questionIds = [...new Set(results.map(r => r.questionId))];
-
-          if (questionIds.length > 0) {
-            const baseQuestions = await StorageManager.getQuestionsByIds(questionIds);
-            console.log('DEBUG: First 2 Base Questions from DB:', JSON.stringify(baseQuestions.slice(0, 2), null, 2));
-            const enrichedQuestions = await Promise.all(
-              baseQuestions.map(async (question: QuestionWithId) => {
-                let resolvedThemeName = 'Thème non spécifié';
-                if (question.blocId) {
-                  const bloc = allBlocsDb.find(b => b.id === question.blocId);
-                  if (bloc && typeof bloc.theme_id === 'number') {
-                    const theme = allThemesDb.find(t => t.id === bloc.theme_id);
-                    if (theme) {
-                      resolvedThemeName = theme.nom_complet;
-                    }
-                  }
+          // Enrichissement des questions - maintenant que allBlocsDb et allThemesDb sont garantis d'être là
+          const enrichedQuestions = baseQuestions.map(question => {
+            let resolvedThemeName = 'Thème non spécifié';
+            if (question.blocId) {
+              const bloc = allBlocsDb.find(b => b.id === question.blocId);
+              if (bloc && bloc.theme_id) {
+                const theme = allThemesDb.find(t => t.id === bloc.theme_id);
+                if (theme) {
+                  resolvedThemeName = theme.nom_complet;
                 }
-                if(resolvedThemeName === 'Thème non spécifié') {
-                    console.log(`DEBUG: Failed to resolve theme for Q_ID: ${question.id}, BlocID: ${question.blocId}`);
-                }
-                return { ...question, resolvedThemeName };
-              })
-            );
-            setQuestionsForThisSession(enrichedQuestions);
-          } else {
-            setQuestionsForThisSession([]);
-          }
+              }
+            }
+            return { ...question, resolvedThemeName };
+          });
+          setQuestionsForThisSession(enrichedQuestions);
         } else {
           setQuestionsForThisSession([]);
         }
       } else {
-        setSessionResults([]);
         setQuestionsForThisSession([]);
       }
     };
-    fetchData();
-  }, [session]); // Dependency on session only, to re-fetch when the session prop changes.
 
+    fetchSessionData();
+  }, [session.id, session.trainerId, session.referentielId, allThemesDb, allBlocsDb]); // Dépend de la session et des données de base
 
+  // Effet 3: Calculer les statistiques des blocs une fois que tout est prêt
   useEffect(() => {
     if (
       session &&
