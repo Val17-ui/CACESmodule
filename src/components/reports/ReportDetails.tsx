@@ -422,19 +422,42 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                 </div>
               )}
             </div>
+            <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-around text-center">
+                    <div>
+                        <span className="text-xs text-gray-500">Taux de réussite</span>
+                        <p className="text-xl font-semibold text-gray-900">{passRate.toFixed(0)}%</p>
+                    </div>
+                    <div className="border-l border-gray-200 h-10 mx-4"></div>
+                    <div>
+                        <span className="text-xs text-gray-500">Score moyen</span>
+                        <p className="text-xl font-semibold text-gray-900">{averageScoreOverall.toFixed(0)}/100</p>
+                    </div>
+                    <div className="border-l border-gray-200 h-10 mx-4"></div>
+                    <div>
+                        <span className="text-xs text-gray-500">Certifiés</span>
+                        <p className="text-xl font-semibold text-green-600">{passedCount} / {participants.length}</p>
+                    </div>
+                </div>
+            </div>
           </Card>
 
           {/* Colonne 2: Détails par thème */}
           {blockStats.length > 0 && (
-            <Card title="Détails par thème">
+            <Card>
               <div className="space-y-4">
-                {blockStats.map(bs => {
-                  const averageCorrectAnswers = (bs.averageScoreOnBlock / 100) * bs.questionsInBlockCount;
+                {blockStats.sort((a, b) => a.blocCode.localeCompare(b.blocCode)).map(bs => {
+                  const questionsInBlock = questionsForThisSession.filter(q => q.blocId === bs.blocId);
+                  const versions = [...new Set(questionsInBlock.map(q => q.version))];
+                  const version = versions.length === 1 ? versions[0] : undefined;
 
                   return (
                     <div key={bs.blocId} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
                       <h4 className="text-sm font-semibold text-gray-800 mb-1">
                         Thème: <span className="font-normal">{bs.themeName}</span> - <span className="font-normal">{bs.blocCode}</span>
+                        {version !== undefined && (
+                          <span className="font-normal"> - Version: {version}</span>
+                        )}
                         <span className="text-xs text-gray-500 ml-2">({bs.questionsInBlockCount} questions)</span>
                       </h4>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -447,36 +470,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   );
                 })}
               </div>
-              {blockStats.length > 0 && (
-                <div className="mt-4 bg-blue-50 p-3 rounded-lg">
-                    <p className="text-xs text-blue-700">
-                    <strong>Note :</strong> Le "Taux de réussite" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique.
-                    </p>
-                </div>
-              )}
             </Card>
           )}
         </div>
-
-        {/* Ligne transverse: Statistiques de la session */}
-        <Card className="mb-6">
-          <div className="flex items-center justify-around p-4 bg-gray-50 rounded-xl text-center">
-            <div>
-              <span className="text-xs text-gray-500">Taux de réussite</span>
-              <p className="text-xl font-semibold text-gray-900">{passRate.toFixed(0)}%</p>
-            </div>
-            <div className="border-l border-gray-200 h-10 mx-4"></div>
-            <div>
-              <span className="text-xs text-gray-500">Score moyen</span>
-              <p className="text-xl font-semibold text-gray-900">{averageScoreOverall.toFixed(0)}/100</p>
-            </div>
-            <div className="border-l border-gray-200 h-10 mx-4"></div>
-            <div>
-              <span className="text-xs text-gray-500">Certifiés</span>
-              <p className="text-xl font-semibold text-green-600">{passedCount} / {participants.length}</p>
-            </div>
-          </div>
-        </Card>
 
         <Card className="mb-6">
           <div className="overflow-x-auto">
@@ -487,52 +483,54 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Identification</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score Global</th>
-                  {sessionThemeNames.map(themeName => (
-                    <th key={themeName} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{themeName}</th>
-                  ))}
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Session</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {participantCalculatedData.map((participantData, index) => (
-                  <tr key={participantData.assignedGlobalDeviceId || `pd-${index}`} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{participantData.nom} {participantData.prenom}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-700">{participantData.organization || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-700">{participantData.identificationCode || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${participantData.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {participantData.score !== undefined ? participantData.score.toFixed(0) : '-'}
-                        </div>
-                        <div className="w-24 bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${participantData.reussite ? 'bg-green-600' : 'bg-red-600'}`}
-                            style={{ width: `${participantData.score || 0}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </td>
-                    {sessionThemeNames.map(themeName => (
-                      <td key={themeName} className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-700">
-                          {participantData.themeScores && participantData.themeScores[themeName]
-                            ? `${participantData.themeScores[themeName].score.toFixed(0)}%`
-                            : '-'}
+                  <React.Fragment key={participantData.assignedGlobalDeviceId || `pd-${index}`}>
+                    <tr className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{participantData.nom} {participantData.prenom}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-700">{participantData.organization || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-700">{participantData.identificationCode || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${participantData.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {participantData.score !== undefined ? participantData.score.toFixed(0) : '-'}
+                          </div>
+                          <div className="w-24 bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${participantData.reussite ? 'bg-green-600' : 'bg-red-600'}`}
+                              style={{ width: `${participantData.score || 0}%` }}
+                            ></div>
+                          </div>
                         </div>
                       </td>
-                    ))}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {participantData.reussite === true && <Badge variant="success">Certifié</Badge>}
-                      {participantData.reussite === false && <Badge variant="danger">Ajourné</Badge>}
-                      {participantData.reussite === undefined && <Badge variant="default">-</Badge>}
-                    </td>
-                  </tr>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {participantData.reussite === true && <Badge variant="success">Certifié</Badge>}
+                        {participantData.reussite === false && <Badge variant="danger">Ajourné</Badge>}
+                        {participantData.reussite === undefined && <Badge variant="default">-</Badge>}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={5} className="px-6 py-2 bg-gray-50">
+                        <div className="text-xs text-gray-600">
+                          {participantData.themeScores && Object.entries(participantData.themeScores).map(([themeName, themeScore], i, arr) => (
+                            <span key={themeName}>
+                              {themeName.split(' ').map(word => word[0]).join('')}: {themeScore.correct}/{themeScore.total}
+                              {i < arr.length - 1 && ' - '}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
