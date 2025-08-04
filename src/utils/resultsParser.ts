@@ -153,84 +153,69 @@ export const transformParsedResponsesToSessionResults = (
   extractedResults: ExtractedResultFromXml[],
   questionMappingsFromSession: Array<{dbQuestionId: number, slideGuid: string | null, orderInPptx: number}>,
   currentSessionId: number,
-  currentIterationId: number
+  currentIterationId: number,
+  participantsForIteration: Array<{ id: number, serialNumber: string }>
 ): SessionResult[] => {
   const sessionResults: SessionResult[] = [];
-
-  // logger.info("[Transform Log] Initial questionMappingsFromSession:", questionMappingsFromSession); // DEBUG
 
   if (!currentSessionId || !currentIterationId) {
     logger.error("ID de session ou d'itération manquant pour la transformation des résultats.");
     return [];
   }
   if (!questionMappingsFromSession || questionMappingsFromSession.length === 0) {
-    logger.warning("Aucun mappage de question (questionMappings) fourni pour la session. Impossible de lier les résultats XML aux IDs de questions de la DB.");
+    logger.warning("Aucun mappage de question fourni pour la session.");
+    return [];
+  }
+  if (!participantsForIteration || participantsForIteration.length === 0) {
+    logger.warning("Aucun participant fourni pour l'itération.");
     return [];
   }
 
-  // Créer un Map pour un accès rapide au dbQuestionId par slideGuid à partir des mappings de la session
   const dbQuestionIdBySlideGuid = new Map<string, number>();
   questionMappingsFromSession.forEach(mapping => {
-    if (mapping.slideGuid && mapping.dbQuestionId) { // s'assurer que slideGuid et dbQuestionId existent
+    if (mapping.slideGuid && mapping.dbQuestionId) {
       dbQuestionIdBySlideGuid.set(mapping.slideGuid, mapping.dbQuestionId);
-    } else {
-      logger.warning("Mapping de question incomplet ignoré dans questionMappingsFromSession:", mapping);
     }
   });
 
-  if (dbQuestionIdBySlideGuid.size === 0) {
-    logger.warning("Aucun mappage slideGuid -> dbQuestionId valide trouvé dans questionMappingsFromSession. Vérifiez le contenu de session.questionMappings.");
-    return [];
-  }
-  // logger.info("[Transform Log] Map dbQuestionId par SlideGUID (depuis session.questionMappings):", dbQuestionIdBySlideGuid); // DEBUG
-
-  extractedResults.forEach((extResult, _index) => { // index unused
-    const dbQuestionId = dbQuestionIdBySlideGuid.get(extResult.questionSlideGuid);
-
-    /* DEBUG Start
-    if (index < 5) { // Log details for the first 5 extracted results being transformed
-        logger.info(`[Transform Log] Processing extResult ${index}: SlideGUID=${extResult.questionSlideGuid}, ParticipantDeviceID=${extResult.participantDeviceID}, PointsObtained=${extResult.pointsObtained}`);
+  const participantIdBySerial = new Map<string, number>();
+  participantsForIteration.forEach(p => {
+    if (p.serialNumber && p.id) {
+      participantIdBySerial.set(p.serialNumber, p.id);
     }
-    DEBUG End */
+  });
+
+  extractedResults.forEach(extResult => {
+    const dbQuestionId = dbQuestionIdBySlideGuid.get(extResult.questionSlideGuid);
+    const participantId = participantIdBySerial.get(extResult.participantDeviceID);
 
     if (!dbQuestionId) {
-      logger.warning(`Impossible de trouver un dbQuestionId pour le SlideGUID XML "${extResult.questionSlideGuid}" via les questionMappings de la session. Résultat ignoré pour le participant ${extResult.participantDeviceID}.`);
+      logger.warning(`Impossible de trouver un dbQuestionId pour le SlideGUID XML "${extResult.questionSlideGuid}".`);
+      return;
+    }
+    if (!participantId) {
+      logger.warning(`Impossible de trouver un participantId pour le boîtier S/N "${extResult.participantDeviceID}".`);
+      // Ne pas retourner ici, on peut quand même enregistrer le résultat anonymement si on le souhaite,
+      // mais pour l'instant, on l'ignore car il ne peut pas être lié à un participant.
       return;
     }
 
-    // Déterminer isCorrect en fonction des points.
     const isCorrect = extResult.pointsObtained > 0;
-    /* DEBUG Start
-     if (index < 5) {
-        logger.info(`[Transform Log] For extResult ${index}: dbQuestionId=${dbQuestionId}, isCorrect derived as ${isCorrect} from points ${extResult.pointsObtained}`);
-    }
-    DEBUG End */
 
     const sessionResult: SessionResult = {
       sessionId: currentSessionId,
       sessionIterationId: currentIterationId,
-      questionId: dbQuestionId, // Utiliser le dbQuestionId trouvé grâce au mapping
+      questionId: dbQuestionId,
       participantIdBoitier: extResult.participantDeviceID,
+      participantId: participantId, // Ajout de l'ID unique du participant
       answer: extResult.answerGivenID,
       isCorrect: isCorrect,
-      pointsObtained: extResult.pointsObtained, // Assurer le transfert des points
+      pointsObtained: extResult.pointsObtained,
       timestamp: new Date().toISOString(),
     };
     sessionResults.push(sessionResult);
-    /* DEBUG Start
-    if (index < 5) {
-        logger.info(`[Transform Log] Created SessionResult ${index}:`, sessionResult);
-    }
-    DEBUG End */
   });
 
   logger.info(`${sessionResults.length} résultats transformés en SessionResult.`);
-  /* DEBUG Start
-  if (sessionResults.length > 0 && sessionResults.length < 5) {
-    logger.info("[Transform Log] All transformed SessionResults (if few):", sessionResults);
-  } else if (sessionResults.length > 0) {
-    logger.info("[Transform Log] First 3 transformed SessionResults:", sessionResults.slice(0,3));
-  }
-  DEBUG End */
   return sessionResults;
 };

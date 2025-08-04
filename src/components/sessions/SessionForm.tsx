@@ -1142,11 +1142,17 @@ if (savedIterationId) { // <-- On ajoute cette condition
       }
 
       logger.info("[Import Results] Aucune anomalie de boîtier détectée. Procédure d'import direct.");
+      const participantsForIteration = (iteration.participants || []).map((p: any) => ({
+        id: p.id,
+        serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
+      })).filter((p: any) => p.id && p.serialNumber);
+
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         responsesFromExpectedDevices,
         currentQuestionMappings,
         currentSessionDbId,
-        iteration.id
+        iteration.id,
+        participantsForIteration
       );
 
       if (sessionResultsToSave.length > 0) {
@@ -1315,11 +1321,17 @@ if (savedIterationId) { // <-- On ajoute cette condition
           setImportSummary("Erreur: Mappages de questions (questionMappings) manquants pour l'itération. Impossible de lier les résultats.");
           return;
       }
+      const participantsForIteration = (iterationForImport.participants || []).map((p: any) => ({
+        id: p.id,
+        serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
+      })).filter((p: any) => p.id && p.serialNumber);
+
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         finalResultsToImport,
         sessionQuestionMaps,
         currentSessionDbId,
-        currentIterationForImport
+        currentIterationForImport,
+        participantsForIteration
       );
       if (sessionResultsToSave.length > 0) {
         const updatedSession = await StorageManager.importResultsForIteration(currentIterationForImport, currentSessionDbId, sessionResultsToSave);

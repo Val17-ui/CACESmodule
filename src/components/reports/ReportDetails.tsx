@@ -169,13 +169,18 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
   const participantCalculatedData: ParticipantCalculatedData[] = useMemo(() => {
     return participants.map(p => {
-      const deviceSerialNumber = p.assignedGlobalDeviceId ? deviceMap.get(p.assignedGlobalDeviceId) : undefined;
-      const participantResults = deviceSerialNumber
-        ? sessionResults.filter(r => r.participantIdBoitier === deviceSerialNumber)
+      // Filtrer les résultats directement par l'ID unique du participant.
+      // C'est plus robuste que de se fier au numéro de série du boîtier,
+      // surtout si les résultats contiennent maintenant `participantId`.
+      const participantResults = p.id
+        ? sessionResults.filter(r => r.participantId === p.id)
         : [];
+
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
       const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
       const reussite = determineIndividualSuccess(score, themeScores);
+      const deviceSerialNumber = p.assignedGlobalDeviceId ? deviceMap.get(p.assignedGlobalDeviceId) : undefined;
+
       return {
         ...p,
         score,
@@ -233,7 +238,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     const zip = new JSZip();
 
     for (const participantData of participantCalculatedData) {
-      const participantSpecificResults = sessionResults.filter(r => r.participantIdBoitier === participantData.idBoitier);
+      const participantSpecificResults = participantData.id
+        ? sessionResults.filter(r => r.participantId === participantData.id)
+        : [];
       const specificThemeScores = calculateThemeScores(participantSpecificResults, questionsForThisSession);
 
       let reportHtml = `

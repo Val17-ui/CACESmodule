@@ -273,15 +273,13 @@ export const calculateNumericBlockPerformanceForSession = (
   }
 
   session.participants.forEach(participant => {
-    const deviceSerialNumber = participant.assignedGlobalDeviceId
-      ? deviceMap.get(participant.assignedGlobalDeviceId)
-      : undefined;
+    // Utiliser l'ID unique du participant pour filtrer ses résultats.
+    const participantResults = participant.id
+      ? sessionResults.filter(r => r.participantId === participant.id)
+      : [];
 
-    if (!deviceSerialNumber) return; // Ne peut pas lier ce participant aux résultats
-
-    const participantResultsForThisBlock = sessionResults.filter(r =>
-      r.participantIdBoitier === deviceSerialNumber &&
-      questionsInThisNumericBlock.some(q => q.id === r.questionId) // Vérifie que la question est bien de CE bloc numérique
+    const participantResultsForThisBlock = participantResults.filter(r =>
+      questionsInThisNumericBlock.some(q => q.id === r.questionId)
     );
 
     // On ne compte un participant pour la moyenne que s'il a des résultats pour ce bloc

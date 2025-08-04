@@ -164,6 +164,7 @@ export interface SessionResult {
   // Doit correspondre à l'ID de la question DANS LA DB (QuestionWithId.id)
   questionId: number;
   participantIdBoitier: string; // Identifiant du boîtier du participant
+  participantId?: number; // Clé étrangère vers Participant.id
   answer: string; // Réponse donnée (ID de l'option de réponse pour QCM/QCU)
   isCorrect: boolean; // Si la réponse était correcte
   pointsObtained: number; // Points obtenus pour cette réponse spécifique
