@@ -1015,7 +1015,10 @@ const getAllSessions = async (): Promise<Session[]> => {
     try {
       const stmt = getDb().prepare(`
         SELECT
-          s.*,
+          s.id, s.nomSession, s.dateSession, s.referentielId, s.selectedBlocIds, s.selectedKitId,
+          s.createdAt, s.location, s.status, s.questionMappings, s.notes, s.trainerId,
+          s.ignoredSlideGuids, s.resolvedImportAnomalies, s.orsFilePath, s.resultsImportedAt,
+          s.num_session, s.num_stage, s.archived_at, s.iteration_count, s.updatedAt,
           (SELECT COUNT(DISTINCT pa.participant_id)
            FROM participant_assignments pa
            JOIN session_iterations si ON pa.session_iteration_id = si.id
@@ -1043,7 +1046,15 @@ const getAllSessions = async (): Promise<Session[]> => {
 const getSessionById = async (id: number): Promise<Session | undefined> => {
   return asyncDbRun(() => {
     try {
-      const stmt = getDb().prepare("SELECT * FROM sessions WHERE id = ?");
+      const stmt = getDb().prepare(`
+        SELECT
+          id, nomSession, dateSession, referentielId, selectedBlocIds, selectedKitId,
+          createdAt, location, status, questionMappings, notes, trainerId,
+          ignoredSlideGuids, resolvedImportAnomalies, orsFilePath, resultsImportedAt,
+          num_session, num_stage, archived_at, iteration_count, updatedAt
+        FROM sessions
+        WHERE id = ?
+      `);
       const row = stmt.get(id) as any;
       _logger?.debug(`[DB Sessions] getSessionById: Raw row for session ${id}: ${JSON.stringify(row)}`);
       if (!row) return undefined;
