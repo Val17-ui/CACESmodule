@@ -1147,6 +1147,9 @@ if (savedIterationId) { // <-- On ajoute cette condition
         serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
       })).filter((p: any) => p.id && p.serialNumber);
 
+      console.log(`--- DEBUGGING IMPORT (Iteration ${iterationIndex}) ---`);
+      console.log("Participants passed to transformer:", JSON.stringify(participantsForIteration, null, 2));
+
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         responsesFromExpectedDevices,
         currentQuestionMappings,
@@ -1325,6 +1328,9 @@ if (savedIterationId) { // <-- On ajoute cette condition
         id: p.id,
         serialNumber: hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId)?.serialNumber,
       })).filter((p: any) => p.id && p.serialNumber);
+
+      console.log(`--- DEBUGGING ANOMALY RESOLUTION (Iteration ${currentIterationForImport}) ---`);
+      console.log("Participants passed to transformer:", JSON.stringify(participantsForIteration, null, 2));
 
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         finalResultsToImport,
