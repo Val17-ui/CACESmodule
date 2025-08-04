@@ -47,6 +47,20 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     return new Map(votingDevices.map(device => [device.id, device.serialNumber]));
   }, [votingDevices]);
 
+  const effectiveSelectedBlocIds = useMemo(() => {
+    // Priorité à la sélection de la session si elle existe
+    if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
+      return session.selectedBlocIds;
+    }
+    // Sinon, dériver des questions réellement présentes dans les résultats
+    if (questionsForThisSession.length > 0) {
+      const blocIds = new Set(questionsForThisSession.map(q => q.blocId).filter((id): id is number => id !== undefined && id !== null));
+      return Array.from(blocIds);
+    }
+    return [];
+  }, [session.selectedBlocIds, questionsForThisSession]);
+
+
   useEffect(() => {
     const fetchData = async () => {
       if (session.id) {
@@ -74,21 +88,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           setReferentialCode('N/A');
         }
 
-        if (session.selectedBlocIds && session.selectedBlocIds.length > 0) {
-          const uniqueThemeIds = new Set<number>();
-          for (const blocId of session.selectedBlocIds) {
-            const bloc = await StorageManager.getBlocById(blocId); // Assumes getBlocById is efficient or blocs are preloaded/cached
-            if (bloc && bloc.theme_id) {
-              uniqueThemeIds.add(bloc.theme_id);
-            }
-          }
-          const fetchedThemeNames = [];
-          for (const themeId of uniqueThemeIds) {
-            const theme = await StorageManager.getThemeById(themeId); // Assumes getThemeById is efficient or themes are preloaded/cached
-            if (theme) fetchedThemeNames.push(theme.nom_complet);
-          }
-          setThemeNames(fetchedThemeNames.sort());
-        }
+        // Note: La logique pour `themeNames` est maintenant dans un `useEffect` séparé
+        // qui dépend de `effectiveSelectedBlocIds` pour une meilleure séparation des préoccupations.
 
         const results = await StorageManager.getResultsForSession(session.id);
         setSessionResults(results);
@@ -104,7 +105,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                 let resolvedThemeName = 'Thème non spécifié';
                 if (question.blocId) {
                   const bloc = allBlocsDb.find(b => b.id === question.blocId);
-                  if (bloc && bloc.theme_id) {
+                  if (bloc && typeof bloc.theme_id === 'number') {
                     const theme = allThemesDb.find(t => t.id === bloc.theme_id);
                     if (theme) {
                       resolvedThemeName = theme.nom_complet;
@@ -130,9 +131,34 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   }, [session]); // Dependency on session only, to re-fetch when the session prop changes.
 
   useEffect(() => {
+    const fetchThemeNames = async () => {
+        if (effectiveSelectedBlocIds.length > 0 && allThemesDb.length > 0) {
+            const uniqueThemeIds = new Set<number>();
+            for (const blocId of effectiveSelectedBlocIds) {
+                // On utilise allBlocsDb qui est déjà en mémoire plutôt que d'appeler l'API
+                const bloc = allBlocsDb.find(b => b.id === blocId);
+                if (bloc && typeof bloc.theme_id === 'number') {
+                    uniqueThemeIds.add(bloc.theme_id);
+                }
+            }
+            const fetchedThemeNames = [];
+            for (const themeId of uniqueThemeIds) {
+                // On utilise allThemesDb qui est déjà en mémoire
+                const theme = allThemesDb.find(t => t.id === themeId);
+                if (theme) fetchedThemeNames.push(theme.nom_complet);
+            }
+            setThemeNames(fetchedThemeNames.sort());
+        } else {
+            setThemeNames([]);
+        }
+    };
+    fetchThemeNames();
+  }, [effectiveSelectedBlocIds, allThemesDb, allBlocsDb]); // Dépend des IDs effectifs et des données DB
+
+  useEffect(() => {
     if (
       session &&
-      session.selectedBlocIds &&
+      effectiveSelectedBlocIds.length > 0 &&
       sessionResults.length > 0 &&
       questionsForThisSession.length > 0 &&
       deviceMap.size > 0 &&
@@ -140,7 +166,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       allBlocsDb.length > 0
     ) {
       const calculatedBlockStats: NumericBlockPerformanceStats[] = [];
-      session.selectedBlocIds.forEach(blocId => {
+      effectiveSelectedBlocIds.forEach(blocId => {
         if (blocId === undefined || blocId === null) return;
         const stats = calculateNumericBlockPerformanceForSession(
           blocId,
@@ -159,7 +185,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     } else {
       setBlockStats([]);
     }
-  }, [session, sessionResults, questionsForThisSession, deviceMap, allThemesDb, allBlocsDb]);
+  }, [session, effectiveSelectedBlocIds, sessionResults, questionsForThisSession, deviceMap, allThemesDb, allBlocsDb]);
 
   const participantCalculatedData: ParticipantCalculatedData[] = useMemo(() => {
     return participants.map(p => {
@@ -187,15 +213,15 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     : 0;
 
   const questionnaireDraw = useMemo(() => {
-    if (!session.selectedBlocIds || !allThemesDb.length || !allBlocsDb.length) {
+    if (effectiveSelectedBlocIds.length === 0 || !allThemesDb.length || !allBlocsDb.length) {
       return [];
     }
 
     const themesWithBlocks = new Map<number, { theme: Theme; blocks: { bloc: Bloc; version?: number }[] }>();
 
-    session.selectedBlocIds.forEach(blocId => {
+    effectiveSelectedBlocIds.forEach(blocId => {
       const bloc = allBlocsDb.find(b => b.id === blocId);
-      if (bloc && bloc.theme_id) {
+      if (bloc && typeof bloc.theme_id === 'number') {
         const theme = allThemesDb.find(t => t.id === bloc.theme_id);
         if (theme) {
           if (!themesWithBlocks.has(theme.id)) {
@@ -211,7 +237,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     });
 
     return Array.from(themesWithBlocks.values());
-  }, [session.selectedBlocIds, allThemesDb, allBlocsDb, questionsForThisSession]);
+  }, [effectiveSelectedBlocIds, allThemesDb, allBlocsDb, questionsForThisSession]);
 
   const handleExportPDF = () => { // Export PDF de la session (vue actuelle)
     if (reportRef.current) {
@@ -427,27 +453,6 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           </div>
         </Card>
 
-        <Card title="Résultat du tirage du questionnaire" className="mb-6">
-          {questionnaireDraw.length > 0 ? (
-            <div className="space-y-4">
-              {questionnaireDraw.map(({ theme, blocks }) => (
-                <div key={theme.id}>
-                  <h4 className="font-semibold text-gray-700">{theme.nom_complet}</h4>
-                  <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
-                    {blocks.map(({ bloc, version }) => (
-                      <li key={bloc.id} className="text-sm text-gray-600">
-                        Bloc: {bloc.code_bloc} - Version: {version !== undefined ? version : 'N/A'}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">Aucun bloc de questions n'a été sélectionné pour cette session.</p>
-          )}
-        </Card>
-        
         <Card title="Résultats par participant" className="mb-6">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
