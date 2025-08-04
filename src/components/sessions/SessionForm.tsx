@@ -1175,13 +1175,22 @@ if (savedIterationId) { // <-- On ajoute cette condition
     logger.info('[AnomalyResolution] Décisions pour les attendus:', expectedResolutions);
     logger.info('[AnomalyResolution] Décisions pour les inconnus:', unknownResolutions);
     setShowAnomalyResolutionUI(false);
-    if (!currentSessionDbId || !editingSessionData || !editingSessionData.questionMappings) {
+
+    if (!currentSessionDbId) {
+      setImportSummary("Erreur critique : ID de session manquant.");
+      logger.error("[AnomalyResolution] ID de session manquant.");
+      return;
+    }
+
+    const freshSessionData = await StorageManager.getSessionById(currentSessionDbId);
+
+    if (!freshSessionData || !freshSessionData.questionMappings) {
       setImportSummary("Erreur critique : Données de session manquantes pour finaliser l'import après résolution.");
       logger.error("[AnomalyResolution] Données de session critiques manquantes pour finaliser l'import.");
       return;
     }
     let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
-    let updatedParticipantsList: DBParticipantType[] = (editingSessionData.iterations?.flatMap((iter: any) => (iter as any).participants || []) || []) as DBParticipantType[];
+    let updatedParticipantsList: DBParticipantType[] = (freshSessionData.iterations?.flatMap((iter: any) => (iter as any).participants || []) || []) as DBParticipantType[];
     let participantsDataChanged = false;
     const originalAnomalies = detectedAnomalies;
     if (!originalAnomalies) {
@@ -1331,7 +1340,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
         logger.error("[AnomalyResolution] currentIterationForImport is null, cannot proceed.");
         return;
       }
-      const sessionQuestionMaps = editingSessionData.questionMappings;
+      const sessionQuestionMaps = freshSessionData.questionMappings;
       if (!sessionQuestionMaps || sessionQuestionMaps.length === 0) {
           setImportSummary("Erreur: Mappages de questions (questionMappings) manquants pour la session. Impossible de lier les résultats.");
           return;
