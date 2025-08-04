@@ -26,9 +26,11 @@ interface ParticipantCalculatedData extends Participant {
 
 type ReportDetailsProps = {
   session: Session;
+  onExportPDF: (handler: () => void) => void;
+  onExportZIP: (handler: () => void) => void;
 };
 
-const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
+const ReportDetails: React.FC<ReportDetailsProps> = ({ session, onExportPDF, onExportZIP }) => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
   const [questionsForThisSession, setQuestionsForThisSession] = useState<(QuestionWithId & { resolvedThemeName?: string })[]>([]);
@@ -181,17 +183,10 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   }, [session, effectiveSelectedBlocIds, sessionResults, questionsForThisSession, deviceMap, allThemesDb, allBlocsDb]);
 
   const participantCalculatedData: ParticipantCalculatedData[] = useMemo(() => {
-    console.log('[ReportDetails] Recalculating participant data. Dependencies:', { participants, sessionResults, questionsForThisSession, deviceMap });
     return participants.map(p => {
       const participantResults = p.id
-        ? sessionResults.filter(r => {
-            const match = String(r.participantId) === String(p.id);
-            // console.log(`Filtering results for p.id ${p.id}: result p.id is ${r.participantId}, match: ${match}`);
-            return match;
-          })
+        ? sessionResults.filter(r => r.participantId === p.id)
         : [];
-
-      console.log(`[ReportDetails] For participant ${p.id} (${p.prenom} ${p.nom}), found ${participantResults.length} results.`);
 
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
       const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
@@ -356,18 +351,14 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
   // console.log('[ReportDetails] Final referentialCode before render:', referentialCode); // Nettoyé
 
+  useEffect(() => {
+    onExportPDF(handleExportPDF);
+    onExportZIP(handleExportAllParticipantsPDF);
+  }, [onExportPDF, onExportZIP, handleExportPDF, handleExportAllParticipantsPDF]);
+
+
   return (
     <div>
-      <div className="flex justify-end mb-4 space-x-2">
-        <Button
-          onClick={handleExportAllParticipantsPDF}
-          icon={<Download size={16}/>}
-          disabled={isGeneratingZip}
-        >
-          {isGeneratingZip ? 'Génération en cours...' : 'ZIP Participants'}
-        </Button>
-        <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter PDF</Button>
-      </div>
       <div ref={reportRef} className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Colonne 1: Détails de la session */}
