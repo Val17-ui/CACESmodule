@@ -82,6 +82,7 @@ declare global {
       getAllTrainers: () => Promise<Trainer[]>;
       calculateBlockUsage: () => Promise<BlockUsage[]>;
       setParticipantAssignmentsForIteration: (iterationId: number, assignments: any[]) => Promise<void>;
+      updateParticipantStatusInIteration: (participantId: number, iterationId: number, status: 'present' | 'absent') => Promise<number | undefined>;
       checkAndFinalizeSession: (sessionId: number) => Promise<Session | undefined>;
       exportAllData: () => Promise<any>;
       importAllData: (data: any) => Promise<void>;

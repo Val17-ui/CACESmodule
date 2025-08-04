@@ -24,6 +24,7 @@ import {
   getAdminSetting, setAdminSetting, getAllAdminSettings,
   exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
+  updateParticipantStatusInIteration,
   checkAndFinalizeSessionStatus
 } from '@electron/db';
 
@@ -358,6 +359,11 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
       await clearAssignmentsForIteration(iterationId);
       const promises = assignments.map(assignment => addParticipantAssignment(assignment));
       return Promise.all(promises);
+  });
+
+  ipcMain.handle('db-update-participant-status-in-iteration', async (_event: IpcMainInvokeEvent, participantId: number, iterationId: number, status: 'present' | 'absent') => {
+    loggerInstance.debug(`[IPC] db-update-participant-status-in-iteration: pId=${participantId}, iId=${iterationId}, status=${status}`);
+    return updateParticipantStatusInIteration(participantId, iterationId, status);
   });
 
   // AdminSettings

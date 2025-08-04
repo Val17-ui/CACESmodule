@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   // Participants
   upsertParticipant: (participant: any) => ipcRenderer.invoke('db-upsert-participant', participant),
   setParticipantAssignmentsForIteration: (iterationId: number, assignments: any[]) => ipcRenderer.invoke('db-set-participant-assignments-for-iteration', iterationId, assignments),
+  updateParticipantStatusInIteration: (participantId: number, iterationId: number, status: 'present' | 'absent') => ipcRenderer.invoke('db-update-participant-status-in-iteration', participantId, iterationId, status),
 
   // SessionResults
   addBulkSessionResults: (results: any) => ipcRenderer.invoke('db-add-bulk-session-results', results),

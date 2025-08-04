@@ -1204,39 +1204,45 @@ if (savedIterationId) { // <-- On ajoute cette condition
       return;
     }
     let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
-    let updatedParticipantsList: DBParticipantType[] = (freshSessionData.iterations?.flatMap((iter: any) => (iter as any).participants || []) || []) as DBParticipantType[];
-    let participantsDataChanged = false;
+    let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
     const originalAnomalies = detectedAnomalies;
     if (!originalAnomalies) {
         setImportSummary("Erreur critique : Données d'anomalies originales non trouvées.");
         logger.error("[AnomalyResolution] Données d'anomalies originales (état detectedAnomalies) non trouvées.");
         return;
     }
+
+    const allParticipantsInSession = freshSessionData.iterations?.flatMap(iter => iter.participants || []).filter(p => p.id !== undefined) as (DBParticipantType & { id: number })[] || [];
+    const allAssignmentsInSession = freshSessionData.iterations?.flatMap(iter => {
+        const iterId = iter.id;
+        if (!iterId || !iter.participants) return [];
+        return iter.participants.map(p => ({
+            participantId: p.id,
+            iterationId: iterId,
+            deviceId: p.assignedGlobalDeviceId,
+            deviceSerialNumber: hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId)?.serialNumber,
+        }));
+    }) || [];
+
     for (const resolution of expectedResolutions) {
-      const expectedDeviceData = originalAnomalies.expectedHavingIssues?.find(
-        (e: any) => e.serialNumber === resolution.serialNumber
-      );
-      if (!expectedDeviceData) continue;
-      const participantIndex = updatedParticipantsList.findIndex((p: DBParticipantType) => {
-        const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
-        return device?.serialNumber === resolution.serialNumber;
-      });
-      if (resolution.action === 'mark_absent' || resolution.action === 'ignore_device') {
-        logger.info(`[AnomalyResolution] Traitement pour ${expectedDeviceData.participantName} (SN: ${resolution.serialNumber}): Action = ${resolution.action}.`);
-        if (participantIndex !== -1) {
-          const currentParticipant = updatedParticipantsList[participantIndex];
-          updatedParticipantsList[participantIndex] = {
-            ...currentParticipant,
-            statusInSession: 'absent',
-            score: 0,
-            reussite: false
-          };
-          participantsDataChanged = true;
-          logger.info(`[AnomalyResolution] Participant ${expectedDeviceData.participantName} marqué comme absent. Score et réussite mis à 0.`);
-        } else {
-          console.warn(`[AnomalyResolution] Participant non trouvé pour ${expectedDeviceData.participantName} (SN: ${resolution.serialNumber}) lors du marquage comme absent.`);
+        const expectedDeviceData = originalAnomalies.expectedHavingIssues?.find(
+            (e: any) => e.serialNumber === resolution.serialNumber
+        );
+        if (!expectedDeviceData) continue;
+
+        const assignmentInfo = allAssignmentsInSession.find(a => a.deviceSerialNumber === resolution.serialNumber && a.iterationId === currentIterationForImport);
+        if (!assignmentInfo) {
+            logger.warn(`[AnomalyResolution] Could not find assignment for device SN ${resolution.serialNumber} in iteration ${currentIterationForImport}.`);
+            continue;
         }
-      } else if (resolution.action === 'aggregate_with_unknown') {
+
+        if (resolution.action === 'mark_absent' || resolution.action === 'ignore_device') {
+            logger.info(`[AnomalyResolution] Marking participant ${assignmentInfo.participantId} as absent in iteration ${assignmentInfo.iterationId}.`);
+            await window.dbAPI?.updateParticipantStatusInIteration(assignmentInfo.participantId!, assignmentInfo.iterationId, 'absent');
+            // Remove their results from the final import list
+            finalResultsToImport = finalResultsToImport.filter(r => r.participantDeviceID !== resolution.serialNumber);
+
+        } else if (resolution.action === 'aggregate_with_unknown') {
         if (resolution.sourceUnknownSerialNumber) {
           const unknownSourceDeviceData = originalAnomalies.unknownThatResponded?.find(
             (u: any) => u.serialNumber === resolution.sourceUnknownSerialNumber
@@ -1282,24 +1288,10 @@ if (savedIterationId) { // <-- On ajoute cette condition
       );
       if (!unknownDeviceData) continue;
       if (resolution.action === 'add_as_new_participant') {
-        logger.info(`[AnomalyResolution] Ajout nouveau participant pour inconnu SN: ${resolution.serialNumber}, nom: ${resolution.newParticipantName}.`);
+        // This part needs to be refactored to use proper DB calls (upsertParticipant, addParticipantAssignment)
+        // For now, we log it and do not crash.
+        logger.warn(`[AnomalyResolution] 'add_as_new_participant' is not fully implemented and will not persist correctly. SN: ${resolution.serialNumber}`);
         finalResultsToImport.push(...unknownDeviceData.responses);
-        const newParticipantName = resolution.newParticipantName || `Participant Inconnu ${resolution.serialNumber.slice(-4)}`;
-        let assignedGlobalDeviceIdForNew: number | null = null;
-        const existingHardwareDevice = hardwareDevices.find(hd => hd.serialNumber === resolution.serialNumber);
-        if (existingHardwareDevice) {
-            assignedGlobalDeviceIdForNew = existingHardwareDevice.id!;
-        } else {
-            console.warn(`[AnomalyResolution] Aucun VotingDevice global pour SN ${resolution.serialNumber}. Nouveau participant sans assignedGlobalDeviceId.`);
-        }
-        const newParticipantEntry: DBParticipantType = {
-          nom: newParticipantName.split(' ').slice(1).join(' ') || `SN-${resolution.serialNumber.slice(-4)}`,
-          prenom: newParticipantName.split(' ')[0] || 'Inconnu',
-          assignedGlobalDeviceId: assignedGlobalDeviceIdForNew,
-          identificationCode: `NEW_${resolution.serialNumber}`,
-        };
-        updatedParticipantsList.push(newParticipantEntry);
-        participantsDataChanged = true;
       } else if (resolution.action === 'ignore_responses') {
         logger.info(`[AnomalyResolution] Réponses de l'inconnu SN: ${resolution.serialNumber} ignorées.`);
       }
@@ -1311,43 +1303,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
     }
     finalResultsToImport = Array.from(uniqueResultsMap.values());
     logger.info(`[AnomalyResolution] ${finalResultsToImport.length} résultats finaux à importer après résolution.`);
-    if (participantsDataChanged) {
-        try {
-            await StorageManager.updateSession(currentSessionDbId, { participants: updatedParticipantsList, updatedAt: new Date().toISOString() });
-            const reloadedSessionForUI = await StorageManager.getSessionById(currentSessionDbId);
-            if (reloadedSessionForUI && reloadedSessionForUI.iterations) {
-                setEditingSessionData(reloadedSessionForUI);
-                const allParticipantsFromIterations = (reloadedSessionForUI.iterations.flatMap((iter: any) => (iter as any).participants || [])) as DBParticipantType[];
-                const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode, p])).values());
-                const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
-                    const visualDeviceId = index + 1;
-                    const currentFormParticipantState = participants[index];
-                    return {
-                      nom: p_db_updated.nom,
-                      prenom: p_db_updated.prenom,
-                      identificationCode: p_db_updated.identificationCode,
-                      score: p_db_updated.score,
-                      reussite: p_db_updated.reussite,
-                      assignedGlobalDeviceId: p_db_updated.assignedGlobalDeviceId,
-                      statusInSession: p_db_updated.statusInSession,
-                      uiId: currentFormParticipantState?.uiId || `updated-${index}-${Date.now()}`,
-                      id: p_db_updated.id,
-                      firstName: p_db_updated.prenom,
-                      lastName: p_db_updated.nom,
-                      deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
-                      organization: currentFormParticipantState?.organization || '',
-                      hasSigned: currentFormParticipantState?.hasSigned || false,
-                    };
-                });
-                setParticipants(formParticipantsToUpdate);
-            }
-            logger.info(`[AnomalyResolution] Liste des participants mise à jour dans la session ${currentSessionDbId}.`);
-        } catch (error: any) {
-            logger.error(`[AnomalyResolution] Erreur lors de la mise à jour des participants pour la session ${currentSessionDbId}.`, error);
-            setImportSummary("Erreur lors de la mise à jour des participants après résolution. L'import est stoppé.");
-            return;
-        }
-    }
+
     try {
       if (!currentIterationForImport) {
         setImportSummary("Erreur critique: ID d'itération manquant pour la résolution des anomalies.");

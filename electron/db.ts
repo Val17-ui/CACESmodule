@@ -299,6 +299,7 @@ const createSchema = () => {
         participant_id INTEGER NOT NULL,
         voting_device_id INTEGER NOT NULL,
         kit_id INTEGER NOT NULL,
+        status TEXT DEFAULT 'present',
         FOREIGN KEY (session_iteration_id) REFERENCES session_iterations(id) ON DELETE CASCADE,
         FOREIGN KEY (participant_id) REFERENCES participants(id) ON DELETE CASCADE,
         FOREIGN KEY (voting_device_id) REFERENCES votingDevices(id) ON DELETE CASCADE,
@@ -388,6 +389,13 @@ const createSchema = () => {
             _logger.info(`[DB MIGRATION] Added column 'is_global' to 'deviceKits'.`);
         }
 
+        _logger.debug("[DB MIGRATION] Checking for 'participant_assignments' table migrations...");
+        const assignmentsColumns = db.pragma('table_info(participant_assignments)') as TableInfo[];
+        if (!assignmentsColumns.some(c => c.name === 'status')) {
+            db.prepare(`ALTER TABLE participant_assignments ADD COLUMN status TEXT DEFAULT 'present'`).run();
+            _logger.info(`[DB MIGRATION] Added column 'status' to 'participant_assignments'.`);
+        }
+
         // Attempt to drop the unique index on participants.identification_code if it exists from a previous schema
         try {
             _logger.debug("[DB MIGRATION] Attempting to drop old unique index on participants.identification_code...");
@@ -453,6 +461,24 @@ const addOrUpdateSessionIteration = async (iteration: SessionIteration): Promise
             }
         } catch (error) {
             _logger?.debug(`[DB SessionIterations] Error in addOrUpdateSessionIteration: ${error}`);
+            throw error;
+        }
+    });
+};
+
+const updateParticipantStatusInIteration = async (participantId: number, iterationId: number, status: 'present' | 'absent'): Promise<number | undefined> => {
+    return asyncDbRun(() => {
+        try {
+            const stmt = getDb().prepare(`
+                UPDATE participant_assignments
+                SET status = ?
+                WHERE participant_id = ? AND session_iteration_id = ?
+            `);
+            const result = stmt.run(status, participantId, iterationId);
+            _logger?.info(`[DB ParticipantAssignments] Updated status for participant ${participantId} in iteration ${iterationId} to ${status}. Changes: ${result.changes}`);
+            return result.changes;
+        } catch (error) {
+            _logger?.debug(`[DB ParticipantAssignments] Error updating status for participant ${participantId} in iteration ${iterationId}: ${error}`);
             throw error;
         }
     });
@@ -2292,4 +2318,4 @@ const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean
     });
 };
 
-export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, clearAssignmentsForIteration,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus };
+export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus };
