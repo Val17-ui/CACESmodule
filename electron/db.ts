@@ -302,6 +302,8 @@ const createSchema = () => {
         voting_device_id INTEGER NOT NULL,
         kit_id INTEGER NOT NULL,
         status TEXT DEFAULT 'present',
+        score INTEGER,
+        reussite INTEGER,
         FOREIGN KEY (session_iteration_id) REFERENCES session_iterations(id) ON DELETE CASCADE,
         FOREIGN KEY (participant_id) REFERENCES participants(id) ON DELETE CASCADE,
         FOREIGN KEY (voting_device_id) REFERENCES votingDevices(id) ON DELETE CASCADE,
@@ -411,6 +413,14 @@ const createSchema = () => {
         if (!assignmentsColumns.some(c => c.name === 'status')) {
             db.prepare(`ALTER TABLE participant_assignments ADD COLUMN status TEXT DEFAULT 'present'`).run();
             _logger.info(`[DB MIGRATION] Added column 'status' to 'participant_assignments'.`);
+        }
+        if (!assignmentsColumns.some(c => c.name === 'score')) {
+            db.prepare(`ALTER TABLE participant_assignments ADD COLUMN score INTEGER`).run();
+            _logger.info(`[DB MIGRATION] Added column 'score' to 'participant_assignments'.`);
+        }
+        if (!assignmentsColumns.some(c => c.name === 'reussite')) {
+            db.prepare(`ALTER TABLE participant_assignments ADD COLUMN reussite INTEGER`).run();
+            _logger.info(`[DB MIGRATION] Added column 'reussite' to 'participant_assignments'.`);
         }
 
         // Attempt to drop the unique index on participants.identification_code if it exists from a previous schema
@@ -1062,7 +1072,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
         }
 
         const assignments = getDb().prepare(`
-          SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
+          SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id, pa.score, pa.reussite
           FROM participant_assignments pa
           JOIN participants p ON pa.participant_id = p.id
           WHERE pa.session_iteration_id = ?
@@ -1075,6 +1085,8 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
           organization: a.organization,
           identificationCode: a.identification_code,
           assignedGlobalDeviceId: a.voting_device_id,
+          score: a.score,
+          reussite: a.reussite,
         }));
 
         // Return a well-defined object, ensuring 'participants' is always an array.
@@ -2306,6 +2318,81 @@ async function importAllData(data: unknown): Promise<void> {
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console _logger?.debugs with prefixes for easier debugging of setup and stub calls.
 
+const calculateAndSaveScoresForIteration = async (iterationId: number): Promise<void> => {
+    return asyncDbRun(() => {
+        const transaction = getDb().transaction(() => {
+            try {
+                _logger.info(`[DB Scores] Starting score calculation for iteration ${iterationId}.`);
+
+                const iteration = getDb().prepare("SELECT * FROM session_iterations WHERE id = ?").get(iterationId) as SessionIteration | undefined;
+                if (!iteration) {
+                    _logger.error(`[DB Scores] Iteration ${iterationId} not found.`);
+                    return;
+                }
+
+                // 1. Get all results for the iteration
+                const results = getDb().prepare("SELECT participantId, pointsObtained FROM sessionResults WHERE session_iteration_id = ?").all(iterationId) as { participantId: number, pointsObtained: number }[];
+                if (results.length === 0) {
+                    _logger.warn(`[DB Scores] No results found for iteration ${iterationId}. Skipping score calculation.`);
+                    return;
+                }
+
+                // 2. Get total possible score for the iteration
+                const questionMappings = JSON.parse(iteration.question_mappings as string || '[]') as { dbQuestionId: number }[];
+                const questionIds = questionMappings.map(q => q.dbQuestionId);
+                if (questionIds.length === 0) {
+                    _logger.warn(`[DB Scores] No question mappings for iteration ${iterationId}. Cannot calculate max score.`);
+                    return;
+                }
+                const placeholders = questionIds.map(() => '?').join(',');
+                const questions = getDb().prepare(`SELECT correctAnswer, options FROM questions WHERE id IN (${placeholders})`).all(...questionIds) as (QuestionWithId & {correctAnswer: string, options: string})[];
+
+                // Assuming 100 points per correct question, which is the standard from the XML parser
+                const maxScore = questionIds.length * 100;
+
+                // 3. Calculate score for each participant
+                const scoresByParticipant = new Map<number, number>();
+                for (const result of results) {
+                    const currentScore = scoresByParticipant.get(result.participantId) || 0;
+                    scoresByParticipant.set(result.participantId, currentScore + result.pointsObtained);
+                }
+
+                // 4. Update participant_assignments with score and reussite
+                const seuilReussite = 0.70; // 70%
+                const updateStmt = getDb().prepare(`
+                    UPDATE participant_assignments
+                    SET score = @score, reussite = @reussite
+                    WHERE session_iteration_id = @iterationId AND participant_id = @participantId
+                `);
+
+                const participantsInIter = getDb().prepare("SELECT participant_id FROM participant_assignments WHERE session_iteration_id = ?").all(iterationId) as { participant_id: number }[];
+
+                for (const p of participantsInIter) {
+                    const participantId = p.participant_id;
+                    const finalScore = scoresByParticipant.get(participantId) || 0;
+                    const scorePercentage = maxScore > 0 ? finalScore / maxScore : 0;
+                    const reussite = scorePercentage >= seuilReussite ? 1 : 0;
+
+                    updateStmt.run({
+                        score: finalScore,
+                        reussite: reussite,
+                        iterationId: iterationId,
+                        participantId: participantId
+                    });
+                     _logger.info(`[DB Scores] Updated participant ${participantId} in iteration ${iterationId}: Score=${finalScore}, Reussite=${reussite}`);
+                }
+
+                 _logger.info(`[DB Scores] Score calculation completed successfully for iteration ${iterationId}.`);
+
+            } catch (error) {
+                _logger.error(`[DB Scores] Transaction failed during score calculation for iteration ${iterationId}: ${error}`);
+                throw error; // Rollback transaction
+            }
+        });
+        transaction();
+    });
+};
+
 const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean> => {
     return asyncDbRun(() => {
         try {
@@ -2336,4 +2423,4 @@ const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean
     });
 };
 
-export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus };
+export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus, calculateAndSaveScoresForIteration };

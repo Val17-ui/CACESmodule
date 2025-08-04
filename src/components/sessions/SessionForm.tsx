@@ -1236,7 +1236,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
 
     for (const resolution of expectedResolutions) {
         const expectedDeviceData = originalAnomalies.expectedHavingIssues?.find(
-            (e: any) => e.serialNumber === resolution.serialNumber
+            (e: { serialNumber: string }) => e.serialNumber === resolution.serialNumber
         );
         if (!expectedDeviceData) continue;
 
@@ -1294,7 +1294,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
         continue;
       }
       const unknownDeviceData = originalAnomalies.unknownThatResponded?.find(
-        (u: any) => u.serialNumber === resolution.serialNumber
+        (u: { serialNumber: string }) => u.serialNumber === resolution.serialNumber
       );
       if (!unknownDeviceData) continue;
       if (resolution.action === 'add_as_new_participant') {
