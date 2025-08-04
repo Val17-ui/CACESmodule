@@ -37,9 +37,10 @@ export const calculateParticipantScore = (
  * @param sessionQuestions - Les questions de la session.
  * @returns Un objet avec les scores pour chaque thématique.
  */
-// Ajout d'une interface pour les questions enrichies avec le nom du thème résolu
+// Ajout d'une interface pour les questions enrichies avec le nom et le code du thème résolu
 interface QuestionWithResolvedTheme extends QuestionWithId {
   resolvedThemeName?: string;
+  resolvedThemeCode?: string;
 }
 
 // ThemeScoreDetails est maintenant importé depuis ../types
@@ -47,33 +48,36 @@ interface QuestionWithResolvedTheme extends QuestionWithId {
 export const calculateThemeScores = (
   participantResults: SessionResult[],
   sessionQuestions: QuestionWithResolvedTheme[] // Utilise le type enrichi
-): { [theme: string]: ThemeScoreDetails } => {
-  const themeData: { [theme: string]: { correct: number; total: number } } = {};
+): ThemeScoreDetails[] => {
+  const themeData: { [themeCode: string]: { correct: number; total: number; name: string } } = {};
 
   sessionQuestions.forEach(question => {
+    const themeCode = question.resolvedThemeCode || 'N/A';
     const themeName = question.resolvedThemeName || 'Thème non spécifié';
-    if (!themeData[themeName]) {
-      themeData[themeName] = { correct: 0, total: 0 };
+    if (!themeData[themeCode]) {
+      themeData[themeCode] = { correct: 0, total: 0, name: themeName };
     }
-    themeData[themeName].total++;
+    themeData[themeCode].total++;
 
     const result = participantResults.find(r => r.questionId === question.id);
     if (result && result.isCorrect) {
-      themeData[themeName].correct++;
+      themeData[themeCode].correct++;
     }
   });
 
-  const finalThemeScores: { [theme: string]: ThemeScoreDetails } = {};
-  for (const themeName in themeData) {
-    const { correct, total } = themeData[themeName];
-    finalThemeScores[themeName] = {
+  const finalThemeScores: ThemeScoreDetails[] = [];
+  for (const themeCode in themeData) {
+    const { correct, total, name } = themeData[themeCode];
+    finalThemeScores.push({
+      themeCode,
+      themeName: name,
       score: total > 0 ? (correct / total) * 100 : 0,
       correct,
       total
-    };
+    });
   }
 
-  return finalThemeScores;
+  return finalThemeScores.sort((a, b) => a.themeCode.localeCompare(b.themeCode));
 };
 
 /**
@@ -84,7 +88,7 @@ export const calculateThemeScores = (
  */
 export const determineIndividualSuccess = (
   globalScore: number,
-  themeScores: { [theme: string]: ThemeScoreDetails }, // Modifié pour utiliser ThemeScoreDetails
+  themeScores: ThemeScoreDetails[],
   seuilGlobal: number = 70,
   seuilTheme: number = 50
 ): boolean => {
@@ -92,8 +96,8 @@ export const determineIndividualSuccess = (
     return false;
   }
 
-  for (const themeName in themeScores) {
-    if (themeScores[themeName].score < seuilTheme) { // Accéder à la propriété score
+  for (const theme of themeScores) {
+    if (theme.score < seuilTheme) {
       return false;
     }
   }
@@ -130,7 +134,7 @@ export const calculateSessionStats = (
   const successCount = session.participants.filter(p => {
     const participantResults = sessionResults.filter(r => r.participantIdBoitier === p.idBoitier);
     const score = calculateParticipantScore(participantResults, sessionQuestions);
-    const themeScores = calculateThemeScores(participantResults, sessionQuestions);
+    const themeScores = calculateThemeScores(participantResults, sessionQuestions as QuestionWithResolvedTheme[]);
     return determineIndividualSuccess(score, themeScores, seuilGlobal, seuilTheme);
   }).length;
 

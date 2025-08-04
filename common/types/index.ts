@@ -373,6 +373,8 @@ export interface ThemeScoreDetails {
   score: number; // en pourcentage
   correct: number;
   total: number;
+  themeName: string;
+  themeCode: string;
 }
 
 // Déplacé depuis db.ts

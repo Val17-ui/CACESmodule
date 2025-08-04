@@ -21,7 +21,7 @@ interface ParticipantCalculatedData extends Participant {
   score?: number;
   reussite?: boolean;
   idBoitier?: string;
-  themeScores?: { [theme: string]: ThemeScoreDetails };
+  themeScores?: ThemeScoreDetails[];
 }
 
 type ReportDetailsProps = {
@@ -111,16 +111,18 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           // Enrichissement des questions - maintenant que allBlocsDb et allThemesDb sont garantis d'être là
           const enrichedQuestions = baseQuestions.map(question => {
             let resolvedThemeName = 'Thème non spécifié';
+            let resolvedThemeCode = 'N/A';
             if (question.blocId) {
               const bloc = allBlocsDb.find(b => b.id === question.blocId);
               if (bloc && bloc.theme_id) {
                 const theme = allThemesDb.find(t => t.id === bloc.theme_id);
                 if (theme) {
                   resolvedThemeName = theme.nom_complet;
+                  resolvedThemeCode = theme.code_theme;
                 }
               }
             }
-            return { ...question, resolvedThemeName };
+            return { ...question, resolvedThemeName, resolvedThemeCode };
           });
           setQuestionsForThisSession(enrichedQuestions);
         } else {
@@ -250,8 +252,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           <p>Mention: ${participantData.reussite ? 'Réussi' : 'Ajourné'}</p>
           <h2 style="font-size: 11px;">Scores par Thème:</h2><ul>`;
       if (specificThemeScores) {
-        for (const [themeName, details] of Object.entries(specificThemeScores)) {
-          reportHtml += `<li>${themeName}: ${details.score.toFixed(0)}% (${details.correct}/${details.total})</li>`;
+        for (const themeScore of specificThemeScores) {
+          reportHtml += `<li>${themeScore.themeCode} - ${themeScore.themeName}: ${themeScore.score.toFixed(0)}% (${themeScore.correct}/${themeScore.total})</li>`;
         }
       }
       reportHtml += `</ul>`;
@@ -469,9 +471,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                       <tr className={`${rowStyle} border-b border-gray-300`}>
                         <td colSpan={5} className="px-6 py-2">
                           <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-                            {participantData.themeScores && Object.entries(participantData.themeScores).map(([themeName, themeScore]) => (
-                              <span key={themeName} className="font-medium">
-                                {themeName.split(' ').map(word => word[0]).join('')}:
+                            {participantData.themeScores && participantData.themeScores.map(themeScore => (
+                              <span key={themeScore.themeCode} className="font-medium">
+                                {themeScore.themeCode}:
                                 <span className="font-normal ml-1">{themeScore.correct}/{themeScore.total}</span>
                               </span>
                             ))}
