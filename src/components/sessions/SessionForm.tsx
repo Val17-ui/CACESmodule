@@ -1189,9 +1189,17 @@ if (savedIterationId) { // <-- On ajoute cette condition
 
     const freshSessionData = await StorageManager.getSessionById(currentSessionDbId);
 
-    if (!freshSessionData || !freshSessionData.questionMappings) {
-      setImportSummary("Erreur critique : Données de session manquantes pour finaliser l'import après résolution.");
-      logger.error("[AnomalyResolution] Données de session critiques manquantes pour finaliser l'import.");
+    if (!freshSessionData) {
+      setImportSummary("Erreur critique : Impossible de recharger les données de la session.");
+      logger.error("[AnomalyResolution] Impossible de recharger les données de la session.");
+      return;
+    }
+
+    const iterationForImport = freshSessionData.iterations?.find(it => it.id === currentIterationForImport);
+
+    if (!iterationForImport || !iterationForImport.question_mappings) {
+      setImportSummary("Erreur critique : Données de l'itération manquantes pour finaliser l'import.");
+      logger.error("[AnomalyResolution] Données de l'itération (ou ses mappings) manquantes pour finaliser l'import.");
       return;
     }
     let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
@@ -1345,9 +1353,10 @@ if (savedIterationId) { // <-- On ajoute cette condition
         logger.error("[AnomalyResolution] currentIterationForImport is null, cannot proceed.");
         return;
       }
-      const sessionQuestionMaps = freshSessionData.questionMappings;
+      // Utiliser les mappings de l'itération spécifique, pas de la session globale
+      const sessionQuestionMaps = iterationForImport.question_mappings;
       if (!sessionQuestionMaps || sessionQuestionMaps.length === 0) {
-          setImportSummary("Erreur: Mappages de questions (questionMappings) manquants pour la session. Impossible de lier les résultats.");
+          setImportSummary("Erreur: Mappages de questions (questionMappings) manquants pour l'itération. Impossible de lier les résultats.");
           return;
       }
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
