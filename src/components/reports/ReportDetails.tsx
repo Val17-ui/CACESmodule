@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
-import { UserCheck, Calendar, Download, Layers, MapPin, User, BookOpen, ListChecks } from 'lucide-react';
+import { UserCheck, Calendar, Download, MapPin, User, BookOpen, Bookmark } from 'lucide-react';
 import { Session, Participant, SessionResult, QuestionWithId, Theme, Bloc, VotingDevice, ThemeScoreDetails } from '@common/types';
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
@@ -31,11 +31,10 @@ type ReportDetailsProps = {
 const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
-  const [questionsForThisSession, setQuestionsForThisSession] = useState<QuestionWithId[]>([]);
+  const [questionsForThisSession, setQuestionsForThisSession] = useState<(QuestionWithId & { resolvedThemeName?: string })[]>([]);
   const [blockStats, setBlockStats] = useState<NumericBlockPerformanceStats[]>([]);
   const [trainerName, setTrainerName] = useState<string>('N/A');
   const [referentialCode, setReferentialCode] = useState<string>('N/A');
-  const [themeNames, setThemeNames] = useState<string[]>([]);
   const [votingDevices, setVotingDevices] = useState<VotingDevice[]>([]);
   const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
@@ -130,30 +129,6 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     fetchData();
   }, [session]); // Dependency on session only, to re-fetch when the session prop changes.
 
-  useEffect(() => {
-    const fetchThemeNames = async () => {
-        if (effectiveSelectedBlocIds.length > 0 && allThemesDb.length > 0) {
-            const uniqueThemeIds = new Set<number>();
-            for (const blocId of effectiveSelectedBlocIds) {
-                // On utilise allBlocsDb qui est déjà en mémoire plutôt que d'appeler l'API
-                const bloc = allBlocsDb.find(b => b.id === blocId);
-                if (bloc && typeof bloc.theme_id === 'number') {
-                    uniqueThemeIds.add(bloc.theme_id);
-                }
-            }
-            const fetchedThemeNames = [];
-            for (const themeId of uniqueThemeIds) {
-                // On utilise allThemesDb qui est déjà en mémoire
-                const theme = allThemesDb.find(t => t.id === themeId);
-                if (theme) fetchedThemeNames.push(theme.nom_complet);
-            }
-            setThemeNames(fetchedThemeNames.sort());
-        } else {
-            setThemeNames([]);
-        }
-    };
-    fetchThemeNames();
-  }, [effectiveSelectedBlocIds, allThemesDb, allBlocsDb]); // Dépend des IDs effectifs et des données DB
 
   useEffect(() => {
     if (
@@ -194,7 +169,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         ? sessionResults.filter(r => r.participantIdBoitier === deviceSerialNumber)
         : [];
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
-      const themeScores = calculateThemeScores(participantResults, questionsForThisSession as any);
+      const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
       const reussite = determineIndividualSuccess(score, themeScores);
       return {
         ...p,
@@ -212,44 +187,6 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     ? participantCalculatedData.reduce((sum, p) => sum + (p.score || 0), 0) / participants.length
     : 0;
 
-  const sessionThemeNames = useMemo(() => {
-    const allThemeNames = new Set<string>();
-    participantCalculatedData.forEach(p => {
-      if (p.themeScores) {
-        Object.keys(p.themeScores).forEach(themeName => {
-          allThemeNames.add(themeName);
-        });
-      }
-    });
-    return Array.from(allThemeNames).sort();
-  }, [participantCalculatedData]);
-
-  const questionnaireDraw = useMemo(() => {
-    if (effectiveSelectedBlocIds.length === 0 || !allThemesDb.length || !allBlocsDb.length) {
-      return [];
-    }
-
-    const themesWithBlocks = new Map<number, { theme: Theme; blocks: { bloc: Bloc; version?: number }[] }>();
-
-    effectiveSelectedBlocIds.forEach(blocId => {
-      const bloc = allBlocsDb.find(b => b.id === blocId);
-      if (bloc && typeof bloc.theme_id === 'number') {
-        const theme = allThemesDb.find(t => t.id === bloc.theme_id);
-        if (theme) {
-          if (!themesWithBlocks.has(theme.id)) {
-            themesWithBlocks.set(theme.id, { theme, blocks: [] });
-          }
-          // Find the version from the first question associated with this block
-          const questionInBlock = questionsForThisSession.find(q => q.blocId === blocId);
-          const version = questionInBlock?.version;
-
-          themesWithBlocks.get(theme.id)!.blocks.push({ bloc, version });
-        }
-      }
-    });
-
-    return Array.from(themesWithBlocks.values());
-  }, [effectiveSelectedBlocIds, allThemesDb, allBlocsDb, questionsForThisSession]);
 
   const handleExportPDF = () => { // Export PDF de la session (vue actuelle)
     if (reportRef.current) {
@@ -383,60 +320,60 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Colonne 1: Détails de la session */}
           <Card>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">
               {session.nomSession}
             </h3>
-            <div className="space-y-3">
-              <div className="flex items-center text-sm">
-                <Calendar size={18} className="text-gray-400 mr-2" />
-                <span>Date : {formatDate(session.dateSession)}</span>
+            <div className="space-y-3 text-base">
+              <div className="flex items-center">
+                <Calendar size={18} className="text-gray-500 mr-3" />
+                <span>Date : <strong>{formatDate(session.dateSession)}</strong></span>
               </div>
-              <div className="flex items-center text-sm">
-                <BookOpen size={18} className="text-gray-400 mr-2" />
-                <span>Référentiel : {referentialCode}</span>
+              <div className="flex items-center">
+                <BookOpen size={18} className="text-gray-500 mr-3" />
+                <span>Référentiel : <strong>{referentialCode}</strong></span>
               </div>
-              <div className="flex items-center text-sm">
-                <UserCheck size={18} className="text-gray-400 mr-2" />
-                <span>Participants : {participants.length}</span>
+              <div className="flex items-center">
+                <UserCheck size={18} className="text-gray-500 mr-3" />
+                <span>Participants : <strong>{participants.length}</strong></span>
               </div>
-              <div className="flex items-center text-sm">
-                <User size={18} className="text-gray-400 mr-2" />
-                <span>Formateur : {trainerName}</span>
+              <div className="flex items-center">
+                <User size={18} className="text-gray-500 mr-3" />
+                <span>Formateur : <strong>{trainerName}</strong></span>
               </div>
               {session.location && (
-                <div className="flex items-center text-sm">
-                  <MapPin size={18} className="text-gray-400 mr-2" />
-                  <span>Lieu : {session.location}</span>
+                <div className="flex items-center">
+                  <MapPin size={18} className="text-gray-500 mr-3" />
+                  <span>Lieu : <strong>{session.location}</strong></span>
                 </div>
               )}
               {session.num_stage && (
-                <div className="flex items-center text-sm">
-                  <span className="text-gray-400 mr-2 w-18 font-semibold">N° Stage :</span>
-                  <span>{session.num_stage}</span>
+                <div className="flex items-center">
+                  <Bookmark size={18} className="text-gray-500 mr-3" />
+                  <span>N° Stage : <strong>{session.num_stage}</strong></span>
                 </div>
               )}
               {session.num_session && (
-                <div className="flex items-center text-sm">
-                  <span className="text-gray-400 mr-2 w-18 font-semibold">N° Session :</span>
-                  <span>{session.num_session}</span>
+                <div className="flex items-center">
+                  <Bookmark size={18} className="text-gray-500 mr-3" />
+                  <span>N° Session : <strong>{session.num_session}</strong></span>
                 </div>
               )}
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="mt-6 pt-4 border-t border-gray-200">
                 <div className="flex items-center justify-around text-center">
                     <div>
-                        <span className="text-xs text-gray-500">Taux de réussite</span>
-                        <p className="text-xl font-semibold text-gray-900">{passRate.toFixed(0)}%</p>
+                        <span className="text-sm text-gray-600">Taux de réussite</span>
+                        <p className="text-2xl font-bold text-gray-900">{passRate.toFixed(0)}%</p>
                     </div>
-                    <div className="border-l border-gray-200 h-10 mx-4"></div>
+                    <div className="border-l border-gray-300 h-12 mx-2"></div>
                     <div>
-                        <span className="text-xs text-gray-500">Score moyen</span>
-                        <p className="text-xl font-semibold text-gray-900">{averageScoreOverall.toFixed(0)}/100</p>
+                        <span className="text-sm text-gray-600">Score moyen</span>
+                        <p className="text-2xl font-bold text-gray-900">{averageScoreOverall.toFixed(0)}/100</p>
                     </div>
-                    <div className="border-l border-gray-200 h-10 mx-4"></div>
+                    <div className="border-l border-gray-300 h-12 mx-2"></div>
                     <div>
-                        <span className="text-xs text-gray-500">Certifiés</span>
-                        <p className="text-xl font-semibold text-green-600">{passedCount} / {participants.length}</p>
+                        <span className="text-sm text-gray-600">Certifiés</span>
+                        <p className="text-2xl font-bold text-green-600">{passedCount} / {participants.length}</p>
                     </div>
                 </div>
             </div>
@@ -486,10 +423,10 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Session</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white">
                 {participantCalculatedData.map((participantData, index) => (
                   <React.Fragment key={participantData.assignedGlobalDeviceId || `pd-${index}`}>
-                    <tr className="hover:bg-gray-50">
+                    <tr className="hover:bg-gray-50 border-b border-gray-200">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{participantData.nom} {participantData.prenom}</div>
                       </td>
@@ -518,13 +455,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                         {participantData.reussite === undefined && <Badge variant="default">-</Badge>}
                       </td>
                     </tr>
-                    <tr>
-                      <td colSpan={5} className="px-6 py-2 bg-gray-50">
-                        <div className="text-xs text-gray-600">
-                          {participantData.themeScores && Object.entries(participantData.themeScores).map(([themeName, themeScore], i, arr) => (
-                            <span key={themeName}>
-                              {themeName.split(' ').map(word => word[0]).join('')}: {themeScore.correct}/{themeScore.total}
-                              {i < arr.length - 1 && ' - '}
+                    <tr className="border-b border-gray-300">
+                      <td colSpan={5} className="px-6 py-2 bg-gray-100">
+                        <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+                          {participantData.themeScores && Object.entries(participantData.themeScores).map(([themeName, themeScore]) => (
+                            <span key={themeName} className="font-medium">
+                              {themeName.split(' ').map(word => word[0]).join('')}:
+                              <span className="font-normal ml-1">{themeScore.correct}/{themeScore.total}</span>
                             </span>
                           ))}
                         </div>
