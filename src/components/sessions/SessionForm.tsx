@@ -1203,7 +1203,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
       logger.error("[AnomalyResolution] Données de l'itération (ou ses mappings) manquantes pour finaliser l'import.");
       return;
     }
-    let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
+
     let finalResultsToImport: ExtractedResultFromXml[] = [...baseResultsToProcess];
     const originalAnomalies = detectedAnomalies;
     if (!originalAnomalies) {
@@ -1212,11 +1212,10 @@ if (savedIterationId) { // <-- On ajoute cette condition
         return;
     }
 
-    const allParticipantsInSession = freshSessionData.iterations?.flatMap(iter => iter.participants || []).filter(p => p.id !== undefined) as (DBParticipantType & { id: number })[] || [];
-    const allAssignmentsInSession = freshSessionData.iterations?.flatMap(iter => {
+    const allAssignmentsInSession = freshSessionData.iterations?.flatMap((iter: SessionIteration) => {
         const iterId = iter.id;
         if (!iterId || !iter.participants) return [];
-        return iter.participants.map(p => ({
+        return iter.participants.map((p: DBParticipantType) => ({
             participantId: p.id,
             iterationId: iterId,
             deviceId: p.assignedGlobalDeviceId,
@@ -1230,15 +1229,15 @@ if (savedIterationId) { // <-- On ajoute cette condition
         );
         if (!expectedDeviceData) continue;
 
-        const assignmentInfo = allAssignmentsInSession.find(a => a.deviceSerialNumber === resolution.serialNumber && a.iterationId === currentIterationForImport);
-        if (!assignmentInfo) {
-            logger.warn(`[AnomalyResolution] Could not find assignment for device SN ${resolution.serialNumber} in iteration ${currentIterationForImport}.`);
+        const assignmentInfo = allAssignmentsInSession.find(a => a && a.deviceSerialNumber === resolution.serialNumber && a.iterationId === currentIterationForImport);
+        if (!assignmentInfo || !assignmentInfo.participantId) {
+            logger.warning(`[AnomalyResolution] Could not find assignment for device SN ${resolution.serialNumber} in iteration ${currentIterationForImport}.`);
             continue;
         }
 
         if (resolution.action === 'mark_absent' || resolution.action === 'ignore_device') {
             logger.info(`[AnomalyResolution] Marking participant ${assignmentInfo.participantId} as absent in iteration ${assignmentInfo.iterationId}.`);
-            await window.dbAPI?.updateParticipantStatusInIteration(assignmentInfo.participantId!, assignmentInfo.iterationId, 'absent');
+            await window.dbAPI.updateParticipantStatusInIteration(assignmentInfo.participantId, assignmentInfo.iterationId, 'absent');
             // Remove their results from the final import list
             finalResultsToImport = finalResultsToImport.filter(r => r.participantDeviceID !== resolution.serialNumber);
 
@@ -1290,7 +1289,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
       if (resolution.action === 'add_as_new_participant') {
         // This part needs to be refactored to use proper DB calls (upsertParticipant, addParticipantAssignment)
         // For now, we log it and do not crash.
-        logger.warn(`[AnomalyResolution] 'add_as_new_participant' is not fully implemented and will not persist correctly. SN: ${resolution.serialNumber}`);
+        logger.warning(`[AnomalyResolution] 'add_as_new_participant' is not fully implemented and will not persist correctly. SN: ${resolution.serialNumber}`);
         finalResultsToImport.push(...unknownDeviceData.responses);
       } else if (resolution.action === 'ignore_responses') {
         logger.info(`[AnomalyResolution] Réponses de l'inconnu SN: ${resolution.serialNumber} ignorées.`);
