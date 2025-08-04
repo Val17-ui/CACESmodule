@@ -26,11 +26,9 @@ interface ParticipantCalculatedData extends Participant {
 
 type ReportDetailsProps = {
   session: Session;
-  onExportPDF: (handler: () => void) => void;
-  onExportZIP: (handler: () => void) => void;
 };
 
-const ReportDetails: React.FC<ReportDetailsProps> = ({ session, onExportPDF, onExportZIP }) => {
+const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
   const [questionsForThisSession, setQuestionsForThisSession] = useState<(QuestionWithId & { resolvedThemeName?: string })[]>([]);
@@ -351,14 +349,18 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session, onExportPDF, onE
 
   // console.log('[ReportDetails] Final referentialCode before render:', referentialCode); // Nettoyé
 
-  useEffect(() => {
-    onExportPDF(handleExportPDF);
-    onExportZIP(handleExportAllParticipantsPDF);
-  }, [onExportPDF, onExportZIP, handleExportPDF, handleExportAllParticipantsPDF]);
-
-
   return (
     <div>
+      <div className="flex justify-end mb-4 space-x-2">
+        <Button
+          onClick={handleExportAllParticipantsPDF}
+          icon={<Download size={16}/>}
+          disabled={isGeneratingZip}
+        >
+          {isGeneratingZip ? 'Génération en cours...' : 'ZIP Participants'}
+        </Button>
+        <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter PDF</Button>
+      </div>
       <div ref={reportRef} className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Colonne 1: Détails de la session */}

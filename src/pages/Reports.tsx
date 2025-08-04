@@ -33,8 +33,6 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]);
   const [startDate, setStartDate] = useState<string>(''); // Nouvel état pour date de début
   const [endDate, setEndDate] = useState<string>('');     // Nouvel état pour date de fin
-  const [exportPdfHandler, setExportPdfHandler] = useState<(() => void) | null>(null);
-  const [exportZipHandler, setExportZipHandler] = useState<(() => void) | null>(null);
 
   const referentialCodeMap = useMemo(() => {
     return new Map(allReferentielsDb.map(ref => [ref.id, ref.code]));
@@ -137,13 +135,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
 
   const renderContent = () => {
     if (selectedSession) {
-      return (
-        <ReportDetails
-          session={selectedSession}
-          onExportPDF={setExportPdfHandler}
-          onExportZIP={setExportZipHandler}
-        />
-      );
+      return <ReportDetails session={selectedSession} />;
     }
 
     switch (activeReport) {
@@ -251,8 +243,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
       )}
       {selectedSession && (
         <>
-          <Button variant="outline" icon={<Download size={16} className="text-rouge-accent" />} onClick={() => exportPdfHandler && exportPdfHandler()}>Exporter PDF</Button>
-          <Button variant="outline" icon={<Printer size={16} className="text-rouge-accent" />} onClick={() => exportZipHandler && exportZipHandler()}>ZIP Participants</Button>
+          {/* Les boutons ont été déplacés dans ReportDetails.tsx */}
         </>
       )}
     </div>
