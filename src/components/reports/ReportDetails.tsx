@@ -212,6 +212,18 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     ? participantCalculatedData.reduce((sum, p) => sum + (p.score || 0), 0) / participants.length
     : 0;
 
+  const sessionThemeNames = useMemo(() => {
+    const allThemeNames = new Set<string>();
+    participantCalculatedData.forEach(p => {
+      if (p.themeScores) {
+        Object.keys(p.themeScores).forEach(themeName => {
+          allThemeNames.add(themeName);
+        });
+      }
+    });
+    return Array.from(allThemeNames).sort();
+  }, [participantCalculatedData]);
+
   const questionnaireDraw = useMemo(() => {
     if (effectiveSelectedBlocIds.length === 0 || !allThemesDb.length || !allBlocsDb.length) {
       return [];
@@ -368,125 +380,103 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter Rapport Session (PDF)</Button>
       </div>
       <div ref={reportRef} className="p-4">
-        <Card className="mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:items-start">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {session.nomSession}
-              </h3>
-              
-              <div className="space-y-3">
-                <div className="flex items-center text-sm">
-                  <Calendar size={18} className="text-gray-400 mr-2" />
-                  <span>Date : {formatDate(session.dateSession)}</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <BookOpen size={18} className="text-gray-400 mr-2" />
-                  <span>Référentiel : {referentialCode}</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <UserCheck size={18} className="text-gray-400 mr-2" />
-                  <span>Participants : {participants.length}</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <User size={18} className="text-gray-400 mr-2" />
-                  <span>Formateur : {trainerName}</span>
-                </div>
-                {session.location && (
-                  <div className="flex items-center text-sm">
-                    <MapPin size={18} className="text-gray-400 mr-2" />
-                    <span>Lieu : {session.location}</span>
-                  </div>
-                )}
-                {session.num_stage && (
-                  <div className="flex items-center text-sm">
-                    <span className="text-gray-400 mr-2 w-18 font-semibold">N° Stage :</span>
-                    <span>{session.num_stage}</span>
-                  </div>
-                )}
-                {session.num_session && (
-                  <div className="flex items-center text-sm">
-                    <span className="text-gray-400 mr-2 w-18 font-semibold">N° Session :</span>
-                    <span>{session.num_session}</span>
-                  </div>
-                )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          {/* Colonne 1: Détails de la session */}
+          <Card>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              {session.nomSession}
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-center text-sm">
+                <Calendar size={18} className="text-gray-400 mr-2" />
+                <span>Date : {formatDate(session.dateSession)}</span>
               </div>
+              <div className="flex items-center text-sm">
+                <BookOpen size={18} className="text-gray-400 mr-2" />
+                <span>Référentiel : {referentialCode}</span>
+              </div>
+              <div className="flex items-center text-sm">
+                <UserCheck size={18} className="text-gray-400 mr-2" />
+                <span>Participants : {participants.length}</span>
+              </div>
+              <div className="flex items-center text-sm">
+                <User size={18} className="text-gray-400 mr-2" />
+                <span>Formateur : {trainerName}</span>
+              </div>
+              {session.location && (
+                <div className="flex items-center text-sm">
+                  <MapPin size={18} className="text-gray-400 mr-2" />
+                  <span>Lieu : {session.location}</span>
+                </div>
+              )}
+              {session.num_stage && (
+                <div className="flex items-center text-sm">
+                  <span className="text-gray-400 mr-2 w-18 font-semibold">N° Stage :</span>
+                  <span>{session.num_stage}</span>
+                </div>
+              )}
+              {session.num_session && (
+                <div className="flex items-center text-sm">
+                  <span className="text-gray-400 mr-2 w-18 font-semibold">N° Session :</span>
+                  <span>{session.num_session}</span>
+                </div>
+              )}
             </div>
-            
-            <div className="bg-gray-50 p-4 rounded-xl">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">
-                Statistiques de la session
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-gray-500">Taux de réussite</p>
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {passRate.toFixed(0)}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Score moyen</p>
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {averageScoreOverall.toFixed(0)}/100
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Certifiés</p>
-                  <p className="text-lg font-medium text-green-600">
-                    {passedCount} / {participants.length}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Seuil de réussite</p>
-                  <p className="text-lg font-medium text-gray-900">
-                    70%
-                  </p>
-                </div>
+          </Card>
+
+          {/* Colonne 2: Détails par thème */}
+          {blockStats.length > 0 && (
+            <Card title="Détails par thème">
+              <div className="space-y-4">
+                {blockStats.map(bs => {
+                  const averageCorrectAnswers = (bs.averageScoreOnBlock / 100) * bs.questionsInBlockCount;
+
+                  return (
+                    <div key={bs.blocId} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <h4 className="text-sm font-semibold text-gray-800 mb-1">
+                        Thème: <span className="font-normal">{bs.themeName}</span> - <span className="font-normal">{bs.blocCode}</span>
+                        <span className="text-xs text-gray-500 ml-2">({bs.questionsInBlockCount} questions)</span>
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        <div>
+                            <span className="text-gray-500">Taux de réussite:</span>
+                            <strong className="ml-1 text-gray-700">{bs.successRateOnBlock.toFixed(0)}%</strong>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+              {blockStats.length > 0 && (
+                <div className="mt-4 bg-blue-50 p-3 rounded-lg">
+                    <p className="text-xs text-blue-700">
+                    <strong>Note :</strong> Le "Taux de réussite" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique.
+                    </p>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+
+        {/* Ligne transverse: Statistiques de la session */}
+        <Card className="mb-6">
+          <div className="flex items-center justify-around p-4 bg-gray-50 rounded-xl text-center">
+            <div>
+              <span className="text-xs text-gray-500">Taux de réussite</span>
+              <p className="text-xl font-semibold text-gray-900">{passRate.toFixed(0)}%</p>
+            </div>
+            <div className="border-l border-gray-200 h-10 mx-4"></div>
+            <div>
+              <span className="text-xs text-gray-500">Score moyen</span>
+              <p className="text-xl font-semibold text-gray-900">{averageScoreOverall.toFixed(0)}/100</p>
+            </div>
+            <div className="border-l border-gray-200 h-10 mx-4"></div>
+            <div>
+              <span className="text-xs text-gray-500">Certifiés</span>
+              <p className="text-xl font-semibold text-green-600">{passedCount} / {participants.length}</p>
             </div>
           </div>
         </Card>
-
-        {blockStats.length > 0 && (
-          <Card title="Détails par thème" className="mb-6">
-            <div className="space-y-4">
-              {blockStats.map(bs => {
-                const questionInBlock = questionsForThisSession.find(q => q.blocId === bs.blocId);
-                const version = questionInBlock?.version;
-                const averageCorrectAnswers = (bs.averageScoreOnBlock / 100) * bs.questionsInBlockCount;
-
-                return (
-                  <div key={bs.blocId} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
-                    <h4 className="text-sm font-semibold text-gray-800 mb-1">
-                      Thème: <span className="font-normal">{bs.themeName}</span> - <span className="font-normal">{bs.blocCode}</span>
-                      {version !== undefined && (
-                        <span className="font-normal"> - Version: v{version}</span>
-                      )}
-                      <span className="text-xs text-gray-500 ml-2">({bs.questionsInBlockCount} questions)</span>
-                    </h4>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                      <div>
-                          <span className="text-gray-500">Score moyen:</span>
-                          <strong className="ml-1 text-gray-700">{averageCorrectAnswers.toFixed(1)} / {bs.questionsInBlockCount}</strong>
-                      </div>
-                      <div>
-                          <span className="text-gray-500">Taux de réussite:</span>
-                          <strong className="ml-1 text-gray-700">{bs.successRateOnBlock.toFixed(0)}%</strong>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {blockStats.length > 0 && (
-              <div className="mt-4 bg-blue-50 p-3 rounded-lg">
-                  <p className="text-xs text-blue-700">
-                  <strong>Note :</strong> Le "Taux de réussite" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique.
-                  </p>
-              </div>
-            )}
-          </Card>
-        )}
 
         <Card className="mb-6">
           <div className="overflow-x-auto">
@@ -496,7 +486,10 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Identification</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score Global Session</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score Global</th>
+                  {sessionThemeNames.map(themeName => (
+                    <th key={themeName} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{themeName}</th>
+                  ))}
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Session</th>
                 </tr>
               </thead>
@@ -525,6 +518,15 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                         </div>
                       </div>
                     </td>
+                    {sessionThemeNames.map(themeName => (
+                      <td key={themeName} className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-700">
+                          {participantData.themeScores && participantData.themeScores[themeName]
+                            ? `${participantData.themeScores[themeName].score.toFixed(0)}%`
+                            : '-'}
+                        </div>
+                      </td>
+                    ))}
                     <td className="px-6 py-4 whitespace-nowrap">
                       {participantData.reussite === true && <Badge variant="success">Certifié</Badge>}
                       {participantData.reussite === false && <Badge variant="danger">Ajourné</Badge>}
