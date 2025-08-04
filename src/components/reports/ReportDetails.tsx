@@ -181,17 +181,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   }, [session, effectiveSelectedBlocIds, sessionResults, questionsForThisSession, deviceMap, allThemesDb, allBlocsDb]);
 
   const participantCalculatedData: ParticipantCalculatedData[] = useMemo(() => {
-    console.log('[ReportDetails] Recalculating participant data. Dependencies:', { participants, sessionResults, questionsForThisSession, deviceMap });
     return participants.map(p => {
       const participantResults = p.id
         ? sessionResults.filter(r => {
-            const match = r.participantId === p.id;
-            // console.log(`Filtering results for p.id ${p.id}: result p.id is ${r.participantId}, match: ${match}`);
+            const match = String(r.participantId) === String(p.id);
             return match;
           })
         : [];
-
-      console.log(`[ReportDetails] For participant ${p.id} (${p.prenom} ${p.nom}), found ${participantResults.length} results.`);
 
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
       const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
