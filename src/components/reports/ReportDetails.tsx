@@ -368,7 +368,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter Rapport Session (PDF)</Button>
       </div>
       <div ref={reportRef} className="p-4">
-        <Card title="Résumé de la session" className="mb-6">
+        <Card className="mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:items-start">
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-4">
@@ -384,12 +384,6 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   <BookOpen size={18} className="text-gray-400 mr-2" />
                   <span>Référentiel : {referentialCode}</span>
                 </div>
-                {themeNames.length > 0 && (
-                  <div className="flex items-start text-sm">
-                    <ListChecks size={18} className="text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
-                    <span className="flex-1 min-w-0">Thèmes abordés : {themeNames.join(', ')}</span>
-                  </div>
-                )}
                 <div className="flex items-center text-sm">
                   <UserCheck size={18} className="text-gray-400 mr-2" />
                   <span>Participants : {participants.length}</span>
@@ -453,7 +447,48 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           </div>
         </Card>
 
-        <Card title="Résultats par participant" className="mb-6">
+        {blockStats.length > 0 && (
+          <Card title="Détails par thème" className="mb-6">
+            <div className="space-y-4">
+              {blockStats.map(bs => {
+                const questionInBlock = questionsForThisSession.find(q => q.blocId === bs.blocId);
+                const version = questionInBlock?.version;
+                const averageCorrectAnswers = (bs.averageScoreOnBlock / 100) * bs.questionsInBlockCount;
+
+                return (
+                  <div key={bs.blocId} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">
+                      Thème: <span className="font-normal">{bs.themeName}</span> - <span className="font-normal">{bs.blocCode}</span>
+                      {version !== undefined && (
+                        <span className="font-normal"> - Version: v{version}</span>
+                      )}
+                      <span className="text-xs text-gray-500 ml-2">({bs.questionsInBlockCount} questions)</span>
+                    </h4>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div>
+                          <span className="text-gray-500">Score moyen:</span>
+                          <strong className="ml-1 text-gray-700">{averageCorrectAnswers.toFixed(1)} / {bs.questionsInBlockCount}</strong>
+                      </div>
+                      <div>
+                          <span className="text-gray-500">Taux de réussite:</span>
+                          <strong className="ml-1 text-gray-700">{bs.successRateOnBlock.toFixed(0)}%</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {blockStats.length > 0 && (
+              <div className="mt-4 bg-blue-50 p-3 rounded-lg">
+                  <p className="text-xs text-blue-700">
+                  <strong>Note :</strong> Le "Taux de réussite" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique.
+                  </p>
+              </div>
+            )}
+          </Card>
+        )}
+
+        <Card className="mb-6">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -502,44 +537,6 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           </div>
         </Card>
 
-        {blockStats.length > 0 && (
-          <Card title="Performances par Bloc de Questions (utilisés dans cette session)" className="mb-6">
-            <div className="flex items-center mb-3 text-gray-600">
-                <Layers size={18} className="mr-2" />
-                <h3 className="text-md font-semibold">
-                Détail par bloc
-                </h3>
-            </div>
-            <div className="space-y-4">
-              {blockStats.map(bs => (
-                <div key={bs.blocId} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-1">
-                    Thème: <span className="font-normal">{bs.themeName}</span> - Bloc: <span className="font-normal">{bs.blocCode}</span>
-                    <span className="text-xs text-gray-500 ml-2">({bs.questionsInBlockCount} questions)</span>
-                  </h4>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <div>
-                        <span className="text-gray-500">Score moyen sur bloc:</span>
-                        <strong className="ml-1 text-gray-700">{bs.averageScoreOnBlock.toFixed(1)}%</strong>
-                    </div>
-                    <div>
-                        <span className="text-gray-500">Taux de réussite du bloc:</span>
-                        <strong className="ml-1 text-gray-700">{bs.successRateOnBlock.toFixed(0)}%</strong>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {blockStats.length > 0 && ( // S'assurer que blockStats a au moins un élément pour l'indexation
-              <div className="mt-4 bg-blue-50 p-3 rounded-lg">
-                  <p className="text-xs text-blue-700">
-                  <strong>Note :</strong> Le "Taux de réussite du bloc" indique le pourcentage de participants ayant obtenu au moins 50% de bonnes réponses aux questions de ce bloc spécifique.
-                  {blockStats[0] && ` Par exemple, pour un bloc de ${blockStats[0].questionsInBlockCount} questions, il faut au moins ${Math.ceil(blockStats[0].questionsInBlockCount * 0.5)} bonnes réponses.`}
-                  </p>
-              </div>
-            )}
-          </Card>
-        )}
       </div>
     </div>
   );
