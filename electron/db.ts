@@ -983,7 +983,7 @@ const rowToSession = (row: any): Session => {
   };
 
 const addSession = async (session: Omit<Session, 'id'>): Promise<number | undefined> => {
-  _logger?.info(`[DB] Adding new session: ${JSON.stringify(session)}`);
+  _logger?.info(`[DB] LOG: addSession received data: ${JSON.stringify(session, null, 2)}`);
   return asyncDbRun(() => {
     try {
       const stmt = getDb().prepare(`
@@ -1123,7 +1123,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
 };
 
 const updateSession = async (id: number, updates: Partial<Omit<Session, 'id'>>): Promise<number | undefined> => {
-  _logger?.info(`[DB] Updating session ${id} with: ${JSON.stringify(updates)}`);
+  _logger?.info(`[DB] LOG: updateSession received data for ID ${id}: ${JSON.stringify(updates, null, 2)}`);
   return asyncDbRun(() => {
     try {
       // Ensure 'iteration_count' is included if it's in the updates
