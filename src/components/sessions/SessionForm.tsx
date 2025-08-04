@@ -1143,7 +1143,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
 
       logger.info("[Import Results] Aucune anomalie de boîtier détectée. Procédure d'import direct.");
       const participantsForIteration = (iteration.participants || [])
-        .map((p: any) => {
+        .map((p: DBParticipantType) => {
           const device = hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId);
           return {
             id: p.id,
@@ -1240,7 +1240,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
         );
         if (!expectedDeviceData) continue;
 
-        const assignmentInfo = allAssignmentsInSession.find(a => a && a.deviceSerialNumber === resolution.serialNumber && a.iterationId === currentIterationForImport);
+        const assignmentInfo = allAssignmentsInSession.find((a: { deviceSerialNumber: string | undefined; iterationId: number; }) => a && a.deviceSerialNumber === resolution.serialNumber && a.iterationId === currentIterationForImport);
         if (!assignmentInfo || !assignmentInfo.participantId) {
             logger.warning(`[AnomalyResolution] Could not find assignment for device SN ${resolution.serialNumber} in iteration ${currentIterationForImport}.`);
             continue;

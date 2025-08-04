@@ -25,8 +25,7 @@ import {
   exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
   updateParticipantStatusInIteration,
-  checkAndFinalizeSessionStatus,
-  calculateAndSaveScoresForIteration
+  checkAndFinalizeSessionStatus
 } from '@electron/db';
 
 import { getLogger, ILogger } from '@electron/utils/logger';
@@ -89,7 +88,6 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
     loggerInstance.debug(`[IPC] import-results-for-iteration: iterationId=${iterationId}, sessionId=${sessionId}`);
     try {
         await addBulkSessionResults(results);
-        await calculateAndSaveScoresForIteration(iterationId);
         await updateSessionIteration(iterationId, { status: 'completed' });
         await checkAndFinalizeSessionStatus(sessionId);
         // Return the updated session object to the frontend
