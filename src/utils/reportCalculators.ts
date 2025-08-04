@@ -14,7 +14,10 @@ export const calculateParticipantScore = (
   participantResults: SessionResult[],
   sessionQuestions: QuestionWithId[]
 ): number => {
+  console.log(`[ScoreCalc] Calculating score for participant. Found ${participantResults.length} results and ${sessionQuestions.length} questions.`);
+
   if (sessionQuestions.length === 0) {
+    console.log('[ScoreCalc] No session questions found, returning score 0.');
     return 0;
   }
 
@@ -26,7 +29,10 @@ export const calculateParticipantScore = (
     }
   });
 
+  console.log(`[ScoreCalc] Found ${correctAnswersCount} correct answers.`);
+
   const score = (correctAnswersCount / sessionQuestions.length) * 100;
+  console.log(`[ScoreCalc] Final score calculated: ${score}`);
   return score;
 };
 
