@@ -1078,6 +1078,8 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
           WHERE pa.session_iteration_id = ?
         `).all(iter.id) as any[];
 
+        _logger.debug(`[DB Sessions] LOG getSessionById: Fetched assignments for iteration ${iter.id}: ${JSON.stringify(assignments)}`);
+
         const participantsForIter: Participant[] = assignments.map(a => ({
           id: a.participant_id,
           nom: a.last_name,
@@ -2322,42 +2324,43 @@ const calculateAndSaveScoresForIteration = async (iterationId: number): Promise<
     return asyncDbRun(() => {
         const transaction = getDb().transaction(() => {
             try {
-                _logger.info(`[DB Scores] Starting score calculation for iteration ${iterationId}.`);
+                _logger.info(`[DB Scores] LOG 1: Starting score calculation for iteration ${iterationId}.`);
 
                 const iteration = getDb().prepare("SELECT * FROM session_iterations WHERE id = ?").get(iterationId) as SessionIteration | undefined;
                 if (!iteration) {
-                    _logger.error(`[DB Scores] Iteration ${iterationId} not found.`);
+                    _logger.error(`[DB Scores] LOG 2: Iteration ${iterationId} not found. Aborting.`);
                     return;
                 }
 
-                // 1. Get all results for the iteration
                 const results = getDb().prepare("SELECT participantId, pointsObtained FROM sessionResults WHERE session_iteration_id = ?").all(iterationId) as { participantId: number, pointsObtained: number }[];
+                _logger.info(`[DB Scores] LOG 3: Found ${results.length} results for iteration ${iterationId}.`);
                 if (results.length === 0) {
-                    _logger.warn(`[DB Scores] No results found for iteration ${iterationId}. Skipping score calculation.`);
+                    _logger.warn(`[DB Scores] No results to process. Skipping score calculation.`);
                     return;
                 }
+                _logger.debug(`[DB Scores] LOG 3a: Raw results: ${JSON.stringify(results)}`);
 
-                // 2. Get total possible score for the iteration
                 const questionMappings = JSON.parse(iteration.question_mappings as string || '[]') as { dbQuestionId: number }[];
                 const questionIds = questionMappings.map(q => q.dbQuestionId);
+                _logger.info(`[DB Scores] LOG 4: Found ${questionIds.length} question mappings for iteration.`);
                 if (questionIds.length === 0) {
-                    _logger.warn(`[DB Scores] No question mappings for iteration ${iterationId}. Cannot calculate max score.`);
+                    _logger.warn(`[DB Scores] No question mappings. Cannot calculate max score.`);
                     return;
                 }
-                const placeholders = questionIds.map(() => '?').join(',');
-                const questions = getDb().prepare(`SELECT correctAnswer, options FROM questions WHERE id IN (${placeholders})`).all(...questionIds) as (QuestionWithId & {correctAnswer: string, options: string})[];
 
-                // Assuming 100 points per correct question, which is the standard from the XML parser
                 const maxScore = questionIds.length * 100;
+                _logger.info(`[DB Scores] LOG 5: Calculated Max Score is ${maxScore} (${questionIds.length} questions * 100 points).`);
 
-                // 3. Calculate score for each participant
                 const scoresByParticipant = new Map<number, number>();
                 for (const result of results) {
+                    if(result.participantId === null) continue; // Ignore results without a participant
                     const currentScore = scoresByParticipant.get(result.participantId) || 0;
-                    scoresByParticipant.set(result.participantId, currentScore + result.pointsObtained);
+                    scoresByParticipant.set(result.participantId, currentScore + (result.pointsObtained || 0));
                 }
+                _logger.info(`[DB Scores] LOG 6: Aggregated scores for ${scoresByParticipant.size} participants.`);
+                _logger.debug(`[DB Scores] LOG 6a: Aggregated scores map: ${JSON.stringify(Array.from(scoresByParticipant.entries()))}`);
 
-                // 4. Update participant_assignments with score and reussite
+
                 const seuilReussite = 0.70; // 70%
                 const updateStmt = getDb().prepare(`
                     UPDATE participant_assignments
@@ -2366,6 +2369,7 @@ const calculateAndSaveScoresForIteration = async (iterationId: number): Promise<
                 `);
 
                 const participantsInIter = getDb().prepare("SELECT participant_id FROM participant_assignments WHERE session_iteration_id = ?").all(iterationId) as { participant_id: number }[];
+                _logger.info(`[DB Scores] LOG 7: Found ${participantsInIter.length} participants assigned to this iteration. Starting update loop.`);
 
                 for (const p of participantsInIter) {
                     const participantId = p.participant_id;
@@ -2373,19 +2377,22 @@ const calculateAndSaveScoresForIteration = async (iterationId: number): Promise<
                     const scorePercentage = maxScore > 0 ? finalScore / maxScore : 0;
                     const reussite = scorePercentage >= seuilReussite ? 1 : 0;
 
-                    updateStmt.run({
+                    _logger.debug(`[DB Scores] LOG 7a: Updating P_ID ${participantId}: finalScore=${finalScore}, scorePercentage=${scorePercentage}, reussite=${reussite}`);
+                    const updateResult = updateStmt.run({
                         score: finalScore,
                         reussite: reussite,
                         iterationId: iterationId,
                         participantId: participantId
                     });
-                     _logger.info(`[DB Scores] Updated participant ${participantId} in iteration ${iterationId}: Score=${finalScore}, Reussite=${reussite}`);
+                    if(updateResult.changes === 0) {
+                       _logger.warn(`[DB Scores] LOG 7b: No rows updated for participant ${participantId}. Check assignment.`);
+                    }
                 }
 
-                 _logger.info(`[DB Scores] Score calculation completed successfully for iteration ${iterationId}.`);
+                 _logger.info(`[DB Scores] LOG 8: Score calculation and update loop completed for iteration ${iterationId}.`);
 
             } catch (error) {
-                _logger.error(`[DB Scores] Transaction failed during score calculation for iteration ${iterationId}: ${error}`);
+                _logger.error(`[DB Scores] LOG 9: Transaction failed during score calculation for iteration ${iterationId}: ${error}`);
                 throw error; // Rollback transaction
             }
         });
