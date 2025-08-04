@@ -12,7 +12,8 @@ import {
   QuestionWithId as StoredQuestion,
   VotingDevice,
   DeviceKit,
-  FormParticipant
+  FormParticipant,
+  SessionIteration
 } from '@common/types';
 import { StorageManager } from '../../services/StorageManager';
 import { parseOmbeaResultsXml, ExtractedResultFromXml, transformParsedResponsesToSessionResults } from '../../utils/resultsParser';
@@ -1195,7 +1196,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
       return;
     }
 
-    const iterationForImport = freshSessionData.iterations?.find(it => it.id === currentIterationForImport);
+    const iterationForImport = freshSessionData.iterations?.find((it: SessionIteration) => it.id === currentIterationForImport);
 
     if (!iterationForImport || !iterationForImport.question_mappings) {
       setImportSummary("Erreur critique : Données de l'itération manquantes pour finaliser l'import.");
