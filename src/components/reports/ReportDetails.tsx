@@ -186,7 +186,6 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
       const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
       const reussite = determineIndividualSuccess(score, themeScores);
-      const deviceSerialNumber = p.assignedGlobalDeviceId ? deviceMap.get(p.assignedGlobalDeviceId) : undefined;
 
       return {
         ...p,
