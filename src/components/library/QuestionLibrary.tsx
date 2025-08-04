@@ -359,7 +359,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           usageCount: 0,
           correctResponseRate: 0,
           image: undefined, // Actual image blob not handled from this import
-          version: parseInt(row[headerMap['version']], 10) || 1, // Read version
+          version: (row[headerMap['version']] || '').toString().trim(), // Read version as string
         };
 
         try {
