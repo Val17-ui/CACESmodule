@@ -210,8 +210,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
   const handleExportPDF = () => {
     if (reportRef.current) {
-      html2canvas(reportRef.current, { scale: 2, useCORS: true }).then((canvas) => {
-        const imgData = canvas.toDataURL('image/png');
+      html2canvas(reportRef.current, { scale: 1.5, useCORS: true }).then((canvas) => {
+        const imgData = canvas.toDataURL('image/jpeg', 0.9);
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
