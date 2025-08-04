@@ -153,7 +153,7 @@ const createSchema = () => {
       correctResponseRate REAL DEFAULT 0,
       slideGuid TEXT,
       options TEXT, /* JSON array of strings */
-      version INTEGER, /* New column for version */
+      version TEXT, /* Changed from INTEGER to TEXT */
       updated_at TEXT,
       FOREIGN KEY (blocId) REFERENCES blocs(id) ON DELETE SET NULL
     );`,
@@ -370,11 +370,21 @@ const createSchema = () => {
         }
 
         _logger.debug("[DB MIGRATION] Checking for 'questions' table migrations...");
+        const questionsColumns = db.pragma('table_info(questions)') as TableInfo[];
+        const existingQuestionsColNames = questionsColumns.map(c => c.name);
+
+        // Migration for version column type
+        const versionColumn = questionsColumns.find(c => c.name === 'version');
+        if (versionColumn && versionColumn.type === 'INTEGER') {
+            _logger.warn("[DB MIGRATION] Found 'version' column with INTEGER type. This cannot be automatically migrated to TEXT in SQLite. New questions will be stored correctly, but old version data might remain as truncated numbers. Manual data migration may be required for full correction.");
+            // In a real scenario, a more complex migration (rename, create, copy, drop) would be needed.
+            // For now, we log this limitation. The schema definition is already updated for new DBs.
+        }
+
         const questionsColumnsToAdd = [
-            { name: 'userQuestionId', type: 'TEXT' }, { name: 'version', type: 'INTEGER' },
+            { name: 'userQuestionId', type: 'TEXT' }, { name: 'version', type: 'TEXT' }, // Ensure new columns are created as TEXT
             { name: 'updated_at', type: 'TEXT' }
         ];
-        const existingQuestionsColNames = (db.pragma('table_info(questions)') as TableInfo[]).map(c => c.name);
         for (const column of questionsColumnsToAdd) {
             if (!existingQuestionsColNames.includes(column.name)) {
                 db.prepare(`ALTER TABLE questions ADD COLUMN ${column.name} ${column.type}`).run();

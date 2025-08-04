@@ -229,7 +229,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
     for (const participantData of participantCalculatedData) {
       const participantSpecificResults = sessionResults.filter(r => r.participantIdBoitier === participantData.idBoitier);
-      const specificThemeScores = calculateThemeScores(participantSpecificResults, questionsForThisSession as any);
+      const specificThemeScores = calculateThemeScores(participantSpecificResults, questionsForThisSession);
 
       let reportHtml = `
         <div style="font-family: Arial, sans-serif; margin: 10px; font-size: 9px;">
