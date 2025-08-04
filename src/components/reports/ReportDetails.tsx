@@ -387,14 +387,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   const questionsInBlock = questionsForThisSession.filter(q => q.blocId === bs.blocId);
                   const versions = [...new Set(questionsInBlock.map(q => q.version))];
                   const version = versions.length === 1 ? versions[0] : undefined;
-                  const raw_version = questionsInBlock.length > 0 ? questionsInBlock[0].version : 'N/A';
 
                   return (
                     <div key={bs.blocId} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
                       <h4 className="text-sm font-semibold text-gray-800 mb-1">
                         Thème: <span className="font-normal">{bs.themeName}</span> - <span className="font-normal">{bs.blocCode}</span>
                         {version !== undefined && (
-                          <span className="font-normal"> - Version: {version} (Raw: {raw_version})</span>
+                          <span className="font-normal"> - Version: {version}</span>
                         )}
                         <span className="text-xs text-gray-500 ml-2">({bs.questionsInBlockCount} questions)</span>
                       </h4>
@@ -410,13 +409,6 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
               </div>
             </Card>
           )}
-        </div>
-
-        <div className="bg-yellow-100 p-4 my-4 rounded-lg">
-          <h4 className="font-bold text-sm text-yellow-800">Debug Info: Theme Scores</h4>
-          <pre className="text-xs whitespace-pre-wrap">
-            {JSON.stringify(participantCalculatedData[0]?.themeScores, null, 2)}
-          </pre>
         </div>
 
         <Card className="mb-6">
