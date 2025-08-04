@@ -273,17 +273,9 @@ export const calculateNumericBlockPerformanceForSession = (
   }
 
   session.participants.forEach(participant => {
-    const deviceSerialNumber = participant.assignedGlobalDeviceId ? deviceMap.get(participant.assignedGlobalDeviceId) : undefined;
-
-    const participantResults = sessionResults.filter(r => {
-      if (r.participantId && participant.id) {
-        return r.participantId === participant.id;
-      }
-      if (deviceSerialNumber) {
-        return r.participantIdBoitier === deviceSerialNumber;
-      }
-      return false;
-    });
+    const participantResults = participant.id
+      ? sessionResults.filter(r => r.participantId === participant.id)
+      : [];
 
     const participantResultsForThisBlock = participantResults.filter(r =>
       questionsInThisNumericBlock.some(q => q.id === r.questionId)
