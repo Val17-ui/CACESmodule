@@ -364,9 +364,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           icon={<Download size={16}/>}
           disabled={isGeneratingZip}
         >
-          {isGeneratingZip ? 'Génération en cours...' : 'Télécharger Rapports Participants (ZIP)'}
+          {isGeneratingZip ? 'Génération en cours...' : 'ZIP Participants'}
         </Button>
-        <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter Rapport Session (PDF)</Button>
+        <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter PDF</Button>
       </div>
       <div ref={reportRef} className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
