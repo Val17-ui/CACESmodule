@@ -4,7 +4,7 @@ import { Session, Referential, Trainer, Theme, Bloc, QuestionWithId, Omit, Sessi
 declare global {
   interface Window {
     electronAPI: ElectronAPI;
-    dbAPI?: {
+    dbAPI: {
       getAllSessions: () => Promise<Session[]>;
       getSessionById: (id: number) => Promise<Session | undefined>;
       addSession: (data: Omit<Session, 'id'>) => Promise<number | undefined>;

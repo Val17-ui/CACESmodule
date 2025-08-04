@@ -1229,7 +1229,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
         );
         if (!expectedDeviceData) continue;
 
-        const assignmentInfo = allAssignmentsInSession.find((a: { deviceSerialNumber: string | undefined; iterationId: number | undefined; }) => a && a.deviceSerialNumber === resolution.serialNumber && a.iterationId === currentIterationForImport);
+        const assignmentInfo = allAssignmentsInSession.find(a => a && a.deviceSerialNumber === resolution.serialNumber && a.iterationId === currentIterationForImport);
         if (!assignmentInfo || !assignmentInfo.participantId) {
             logger.warning(`[AnomalyResolution] Could not find assignment for device SN ${resolution.serialNumber} in iteration ${currentIterationForImport}.`);
             continue;
@@ -1237,7 +1237,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
 
         if (resolution.action === 'mark_absent' || resolution.action === 'ignore_device') {
             logger.info(`[AnomalyResolution] Marking participant ${assignmentInfo.participantId} as absent in iteration ${assignmentInfo.iterationId}.`);
-            await window.dbAPI?.updateParticipantStatusInIteration(assignmentInfo.participantId, assignmentInfo.iterationId, 'absent');
+            await window.dbAPI.updateParticipantStatusInIteration(assignmentInfo.participantId, assignmentInfo.iterationId, 'absent');
             // Remove their results from the final import list
             finalResultsToImport = finalResultsToImport.filter(r => r.participantDeviceID !== resolution.serialNumber);
 
