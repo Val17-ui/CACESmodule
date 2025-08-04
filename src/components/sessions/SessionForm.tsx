@@ -964,6 +964,11 @@ if (savedIterationId) { // <-- On ajoute cette condition
         );
 
         if (orsBlob) {
+          // Enregistrer les mappings sur la session principale UNE SEULE FOIS
+          if (i === 0 && (!upToDateSessionData.questionMappings || upToDateSessionData.questionMappings.length === 0)) {
+            await StorageManager.updateSession(currentSavedId, { questionMappings: questionMappings });
+          }
+
           const safeSessionName = (sessionName || 'Session').replace(/ /g, '_');
           const safeIterationName = (iterationName || 'Iteration').replace(/ /g, '_');
           const fileName = `${safeSessionName}_${safeIterationName}.ors`;
@@ -979,7 +984,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
               name: iterationName,
               ors_file_path: saveResult.filePath,
               status: 'ready',
-              question_mappings: questionMappings,
+              question_mappings: questionMappings, // Garder aussi sur l'itération pour référence
             });
             setImportSummary(`Itération ${iterationName} générée.`);
           } else { throw new Error(`Sauvegarde échouée pour ${iterationName}: ${saveResult?.error}`); }
@@ -1379,7 +1384,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
                   logger.info(`[AnomalyResolution] Anomalies résolues et auditées pour session ID ${currentSessionDbId}`, {
                     eventType: 'ANOMALIES_RESOLVED_AUDITED',
                     sessionId: currentSessionDbId,
-                    sessionName: finalSessionDataForScores?.nomSession || editingSessionData.nomSession,
+                    sessionName: finalSessionDataForScores?.nomSession || editingSessionData?.nomSession || '',
                     resolutions: anomaliesAuditData
                   });
                   const finalUpdatedSessionWithScores = await StorageManager.getSessionById(currentSessionDbId);
