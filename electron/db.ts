@@ -1045,8 +1045,39 @@ const getAllSessions = async (): Promise<Session[]> => {
       const rows = stmt.all() as any[];
       return rows.map(row => {
         const session = rowToSession(row);
-        // Assurer que averageScore est un nombre, ou null si aucune donnée.
         session.averageScore = row.averageScore === null ? null : Number(row.averageScore);
+
+        // --- Start of added logic ---
+        const iterationsFromDb = getDb().prepare("SELECT * FROM session_iterations WHERE session_id = ? ORDER BY iteration_index ASC").all(session.id) as SessionIteration[];
+
+        const allParticipants = new Map<number, Participant>();
+        iterationsFromDb.forEach(iter => {
+          if (!iter.id) return;
+
+          const assignments = getDb().prepare(`
+            SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
+            FROM participant_assignments pa
+            JOIN participants p ON pa.participant_id = p.id
+            WHERE pa.session_iteration_id = ?
+          `).all(iter.id) as any[];
+
+          assignments.forEach(a => {
+            const participant: Participant = {
+              id: a.participant_id,
+              nom: a.last_name,
+              prenom: a.first_name,
+              organization: a.organization,
+              identificationCode: a.identification_code,
+              assignedGlobalDeviceId: a.voting_device_id,
+            };
+            if (participant.id) {
+              allParticipants.set(participant.id, participant);
+            }
+          });
+        });
+        session.participants = Array.from(allParticipants.values());
+        // --- End of added logic ---
+
         return session;
       });
     } catch (error) {

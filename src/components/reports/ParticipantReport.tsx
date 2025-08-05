@@ -178,7 +178,7 @@ const ParticipantReport = () => {
       const currentParticipantSessionResults = sessionResults.filter(r => r.participantIdBoitier === serialNumberOfSelectedParticipant);
       const score = calculateParticipantScore(currentParticipantSessionResults, enrichedSessionQuestions);
       const themeScores = calculateThemeScores(currentParticipantSessionResults, enrichedSessionQuestions);
-      const reussite = determineIndividualSuccess(score, themeScores);
+      const reussite = determineIndividualSuccess(score, Object.values(themeScores));
 
       setDetailedParticipation({
         ...targetSession,

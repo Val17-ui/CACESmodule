@@ -53,37 +53,37 @@ interface QuestionWithResolvedTheme extends QuestionWithId {
 
 export const calculateThemeScores = (
   participantResults: SessionResult[],
-  sessionQuestions: QuestionWithResolvedTheme[] // Utilise le type enrichi
-): ThemeScoreDetails[] => {
-  const themeData: { [themeCode: string]: { correct: number; total: number; name: string } } = {};
+  sessionQuestions: QuestionWithResolvedTheme[]
+): { [themeName: string]: ThemeScoreDetails } => {
+  const themeData: { [themeName: string]: { correct: number; total: number; code: string } } = {};
 
   sessionQuestions.forEach(question => {
-    const themeCode = question.resolvedThemeCode || 'N/A';
     const themeName = question.resolvedThemeName || 'Thème non spécifié';
-    if (!themeData[themeCode]) {
-      themeData[themeCode] = { correct: 0, total: 0, name: themeName };
+    const themeCode = question.resolvedThemeCode || 'N/A';
+    if (!themeData[themeName]) {
+      themeData[themeName] = { correct: 0, total: 0, code: themeCode };
     }
-    themeData[themeCode].total++;
+    themeData[themeName].total++;
 
     const result = participantResults.find(r => r.questionId === question.id);
     if (result && result.isCorrect) {
-      themeData[themeCode].correct++;
+      themeData[themeName].correct++;
     }
   });
 
-  const finalThemeScores: ThemeScoreDetails[] = [];
-  for (const themeCode in themeData) {
-    const { correct, total, name } = themeData[themeCode];
-    finalThemeScores.push({
-      themeCode,
-      themeName: name,
+  const finalThemeScores: { [themeName: string]: ThemeScoreDetails } = {};
+  for (const themeName in themeData) {
+    const { correct, total, code } = themeData[themeName];
+    finalThemeScores[themeName] = {
+      themeCode: code,
+      themeName: themeName,
       score: total > 0 ? (correct / total) * 100 : 0,
       correct,
-      total
-    });
+      total,
+    };
   }
 
-  return finalThemeScores.sort((a, b) => a.themeCode.localeCompare(b.themeCode));
+  return finalThemeScores;
 };
 
 /**
