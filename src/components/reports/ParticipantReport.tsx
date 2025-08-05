@@ -22,6 +22,7 @@ import Badge from '../ui/Badge';
 
 interface EnrichedQuestionForParticipantReport extends QuestionWithId {
   resolvedThemeName?: string;
+  resolvedBlocCode?: string;
   participantAnswer?: string;
   pointsObtainedForAnswer?: number;
   isCorrectAnswer?: boolean;
@@ -57,6 +58,23 @@ const ParticipantReport = () => {
   const [endDate, setEndDate] = useState<string>('');
   const [detailedParticipation, setDetailedParticipation] = useState<ProcessedSessionDetails | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [trainerName, setTrainerName] = useState<string>('N/A');
+
+  useEffect(() => {
+    const fetchTrainerName = async () => {
+      if (detailedParticipation?.trainerId) {
+        const trainer = await window.dbAPI?.getTrainerById(detailedParticipation.trainerId);
+        if (trainer) {
+          setTrainerName(trainer.name);
+        } else {
+          setTrainerName('N/A');
+        }
+      } else {
+        setTrainerName('N/A');
+      }
+    };
+    fetchTrainerName();
+  }, [detailedParticipation]);
 
   const referentialCodeMap = useMemo(() => {
     return new Map(allReferentiels.map(ref => [ref.id, ref.code]));
@@ -132,6 +150,65 @@ const ParticipantReport = () => {
     );
   }, [allSessionParticipations, searchTerm]);
 
+  const structuredReportData = useMemo(() => {
+    if (!detailedParticipation?.questionsForDisplay) {
+      return {};
+    }
+
+    const data: {
+      [themeName: string]: {
+        themeId: number;
+        blocks: {
+          [blockKey: string]: {
+            questions: EnrichedQuestionForParticipantReport[];
+            score: number;
+            correct: number;
+            total: number;
+          };
+        };
+      };
+    } = {};
+
+    detailedParticipation.questionsForDisplay.forEach(q => {
+      const theme = allThemesDb.find(t => t.nom_complet === q.resolvedThemeName);
+      if (!theme) return;
+
+      const themeName = theme.nom_complet;
+      if (!data[themeName]) {
+        data[themeName] = {
+          themeId: theme.id,
+          blocks: {},
+        };
+      }
+
+      const bloc = allBlocsDb.find(b => b.id === q.blocId);
+      const blockKey = bloc ? `${bloc.code_bloc} (v${q.version || 'N/A'})` : `Inconnu (v${q.version || 'N/A'})`;
+
+      if (!data[themeName].blocks[blockKey]) {
+        data[themeName].blocks[blockKey] = {
+          questions: [],
+          score: 0,
+          correct: 0,
+          total: 0,
+        };
+      }
+
+      data[themeName].blocks[blockKey].questions.push(q);
+    });
+
+    // Calculate scores
+    for (const themeName in data) {
+      for (const blockKey in data[themeName].blocks) {
+        const block = data[themeName].blocks[blockKey];
+        block.total = block.questions.length;
+        block.correct = block.questions.filter(q => q.isCorrectAnswer).length;
+        block.score = block.total > 0 ? (block.correct / block.total) * 100 : 0;
+      }
+    }
+
+    return data;
+  }, [detailedParticipation, allThemesDb, allBlocsDb]);
+
   const handleSelectParticipation = async (participation: SessionParticipation) => {
     setDetailedParticipation(null);
 
@@ -157,20 +234,24 @@ const ParticipantReport = () => {
         baseSessionQuestions.map(async (question: QuestionWithId, index: number) => {
           try {
             let resolvedThemeName = 'Thème non spécifié';
+            let resolvedBlocCode = 'N/A';
             if (question.blocId) {
               const bloc = allBlocsDb.find(b => b.id === question.blocId);
-              if (bloc && bloc.theme_id) {
-                const theme = allThemesDb.find(t => t.id === bloc.theme_id);
-                if (theme) resolvedThemeName = theme.nom_complet;
+              if (bloc) {
+                resolvedBlocCode = bloc.code_bloc;
+                if (bloc.theme_id) {
+                  const theme = allThemesDb.find(t => t.id === bloc.theme_id);
+                  if (theme) resolvedThemeName = theme.nom_complet;
+                }
               }
             }
             const participantResult = sessionResults.find(
               (sr: SessionResult) => sr.participantIdBoitier === serialNumberOfSelectedParticipant && sr.questionId === question.id
             );
-            return { ...question, resolvedThemeName, participantAnswer: participantResult?.answer, pointsObtainedForAnswer: participantResult?.pointsObtained, isCorrectAnswer: participantResult?.isCorrect };
+            return { ...question, resolvedThemeName, resolvedBlocCode, participantAnswer: participantResult?.answer, pointsObtainedForAnswer: participantResult?.pointsObtained, isCorrectAnswer: participantResult?.isCorrect };
           } catch (error) {
             console.error(`[ParticipantReport] Error enriching question ID ${question.id} (index ${index}):`, error);
-            return { ...question, resolvedThemeName: 'Erreur chargement thème', participantAnswer: 'Erreur', pointsObtainedForAnswer: 0, isCorrectAnswer: false };
+            return { ...question, resolvedThemeName: 'Erreur chargement thème', resolvedBlocCode: 'Erreur', participantAnswer: 'Erreur', pointsObtainedForAnswer: 0, isCorrectAnswer: false };
           }
         })
       );
@@ -390,16 +471,7 @@ const ParticipantReport = () => {
   };
 
   if (detailedParticipation) {
-    const { participantRef, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
-
-    const questionsByTheme: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
-    if (questionsForDisplay) {
-      questionsForDisplay.forEach(q => {
-        const theme = q.resolvedThemeName || 'Thème non spécifié';
-        if (!questionsByTheme[theme]) questionsByTheme[theme] = [];
-        questionsByTheme[theme].push(q);
-      });
-    }
+    const { participantRef, participantScore, participantSuccess } = detailedParticipation;
 
     return (
       <Card>
@@ -415,66 +487,102 @@ const ParticipantReport = () => {
             {isGeneratingPdf ? 'Génération PDF...' : 'Télécharger PDF'}
           </Button>
         </div>
-        <h2 className="text-2xl font-bold mb-1">Détail de la participation</h2>
-        <p className="text-lg mb-1">Participant : <span className="font-semibold">{participantRef.prenom} {participantRef.nom}</span></p>
-        <p className="text-md mb-1">Session : <span className="font-semibold">{detailedParticipation.nomSession}</span> ({new Date(detailedParticipation.dateSession).toLocaleDateString('fr-FR')})</p>
-        <p className="text-md mb-4">Référentiel : <Badge variant="default">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <Card className="p-4">
-            <h3 className="text-lg font-semibold mb-2">Performance Globale</h3>
-            <p className={participantSuccess ? 'text-green-600 font-bold text-2xl' : 'text-red-600 font-bold text-2xl'}>
-              {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
-            </p>
-            {participantSuccess !== undefined ? (
-              participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
-            ) : <Badge variant="warning">En attente</Badge>}
-          </Card>
-          <Card className="p-4">
-            <h3 className="text-lg font-semibold mb-2">Scores par Thème</h3>
-            {themeScores && Object.entries(themeScores).length > 0 ? (
-              Object.entries(themeScores).map(([themeName, themeScoreDetail]) => (
-              <div key={themeName} className="mb-1 text-sm">
-                <span className={themeScoreDetail.score < 50 ? 'text-red-500 font-semibold' : 'text-gray-700 font-semibold'}>
-                  {themeName}: </span> {themeScoreDetail.score.toFixed(0)}% ({themeScoreDetail.correct}/{themeScoreDetail.total})
-              </div>
-            ))
-            ) : (<p className="text-sm text-gray-500">Scores par thème non disponibles.</p>)}
-          </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Col 1: Details */}
+          <div className="lg:col-span-1">
+            <h2 className="text-2xl font-bold mb-4">Détails</h2>
+            <Card className="p-4 space-y-2">
+              <div><strong>Participant :</strong> {participantRef.prenom} {participantRef.nom}</div>
+              <div><strong>ID Candidat :</strong> {participantRef.identificationCode || 'N/A'}</div>
+              <div><strong>Organisation :</strong> {participantRef.organization || 'N/A'}</div>
+              <hr className="my-2" />
+              <div><strong>Session :</strong> {detailedParticipation.nomSession}</div>
+              <div><strong>N° Session :</strong> {detailedParticipation.num_session || 'N/A'}</div>
+              <div><strong>N° Stage :</strong> {detailedParticipation.num_stage || 'N/A'}</div>
+              <div><strong>Date :</strong> {new Date(detailedParticipation.dateSession).toLocaleDateString('fr-FR')}</div>
+              <div><strong>Lieu :</strong> {detailedParticipation.location || 'N/A'}</div>
+              <div><strong>Formateur :</strong> {trainerName}</div>
+              <div><strong>Référentiel :</strong> <Badge variant="default">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></div>
+            </Card>
+          </div>
+
+          {/* Col 2: Scores */}
+          <div className="lg:col-span-2">
+            <h2 className="text-2xl font-bold mb-4">Scores</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="p-4">
+                <h3 className="text-lg font-semibold mb-2">Scores par Thème/Bloc</h3>
+                <div className="space-y-4">
+                  {Object.entries(structuredReportData)
+                    .sort(([_, a], [__, b]) => a.themeId - b.themeId)
+                    .map(([themeName, themeData]) => (
+                      <div key={themeName}>
+                        <h4 className="font-semibold text-md mb-1">{themeName}</h4>
+                        {Object.entries(themeData.blocks).map(([blockKey, blockData]) => (
+                          <div key={blockKey} className="text-sm ml-4">
+                            <span className={blockData.score < 50 ? 'text-red-500 font-semibold' : 'text-gray-700'}>
+                              {blockKey}:
+                            </span> {blockData.score.toFixed(0)}% ({blockData.correct}/{blockData.total})
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                </div>
+              </Card>
+              <Card className="p-4">
+                <h3 className="text-lg font-semibold mb-2">Performance Globale</h3>
+                <p className={participantSuccess ? 'text-green-600 font-bold text-2xl' : 'text-red-600 font-bold text-2xl'}>
+                  {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
+                </p>
+                {participantSuccess !== undefined ? (
+                  participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
+                ) : <Badge variant="warning">En attente</Badge>}
+              </Card>
+            </div>
+          </div>
         </div>
 
-        <div>
-        <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Détail des Questions par Thème</h3>
-        {Object.entries(questionsByTheme).length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-              {Object.entries(questionsByTheme).map(([themeName, questions]) => (
+        <div className="mt-6">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Détail des Questions</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+            {Object.entries(structuredReportData)
+              .sort(([_, a], [__, b]) => a.themeId - b.themeId)
+              .map(([themeName, themeData]) => (
                 <div key={themeName} className="mb-4 pt-2">
                   <h4 className="text-md font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-300">
                     {themeName}
                   </h4>
-                  {questions.map((q, qIndex) => (
-                    <div key={q.id || `q-${qIndex}`} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
-                      <p className="flex items-start font-medium text-gray-900 mb-1">
-                        <HelpCircle size={16} className="mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
-                        <span>{q.text}</span>
-                      </p>
-                      <div className="pl-6 space-y-0.5">
-                        <p>Votre réponse : <span className="font-semibold">{q.participantAnswer || 'Non répondu'}</span></p>
-                        {q.isCorrectAnswer === false && q.participantAnswer !== undefined && (
-                          <p className="text-orange-600">Bonne réponse : <span className="font-semibold">{q.correctAnswer}</span></p>
-                        )}
-                         <p className="flex items-center">
-                            Points : <span className="font-semibold ml-1">{q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</span>
-                            {q.isCorrectAnswer === true && <CheckCircle size={15} className="ml-2 text-green-500" />}
-                            {q.isCorrectAnswer === false && q.participantAnswer !== undefined && <XCircle size={15} className="ml-2 text-red-500" />}
+                  {Object.entries(themeData.blocks).map(([blockKey, blockData]) => (
+                    <div key={blockKey}>
+                      <h5 className="font-medium text-gray-600 mb-2">{blockKey}</h5>
+                      {blockData.questions.map((q, qIndex) => (
+                        <div key={q.id || `q-${qIndex}`} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
+                          <p className="flex items-start font-medium text-gray-900 mb-1">
+                            <HelpCircle size={16} className="mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
+                            <span>{q.text}</span>
                           </p>
-                      </div>
+                          <div className="pl-6 space-y-0.5">
+                            <p>Votre réponse : <span className="font-semibold">{q.participantAnswer || 'Non répondu'}</span></p>
+                            {q.isCorrectAnswer === false && q.participantAnswer !== undefined && (
+                              <p className="text-orange-600">Bonne réponse : <span className="font-semibold">{q.correctAnswer}</span></p>
+                            )}
+                            <p className="flex items-center">
+                              {q.isCorrectAnswer === true ? (
+                                <CheckCircle size={15} className="mr-2 text-green-500" />
+                              ) : (
+                                <XCircle size={15} className="mr-2 text-red-500" />
+                              )}
+                              <span>{q.isCorrectAnswer ? 'Correct' : 'Incorrect'}</span>
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
               ))}
-            </div>
-          ) : (<p className="mt-4 text-sm text-gray-500">Détail des questions non disponible.</p>)}
+          </div>
         </div>
       </Card>
     );
