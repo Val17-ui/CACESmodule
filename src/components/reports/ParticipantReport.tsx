@@ -382,8 +382,7 @@ const ParticipantReport = () => {
     y += 10;
 
     // --- Questions Section ---
-    doc.addPage();
-    y = 20;
+    y += 10;
     doc.setFontSize(14);
     doc.setTextColor(33, 33, 33);
     doc.setFont('helvetica', 'bold');
@@ -392,43 +391,72 @@ const ParticipantReport = () => {
 
     const sortedThemes = Object.entries(structuredReportData).sort(([_, a], [__, b]) => a.themeId - b.themeId);
 
+    const columnWidth = (doc.internal.pageSize.width - margin * 3) / 2;
+    const column1X = margin;
+    const column2X = margin + columnWidth + margin;
+    let y1 = y;
+    let y2 = y;
+    let currentColumn = 1;
+
+    const checkPageEnd = (currentY: number) => {
+        if (currentY > pageHeight - 20) {
+            if (currentColumn === 1) {
+                currentColumn = 2;
+                return y; // Return original y to start at top of next column
+            } else {
+                doc.addPage();
+                currentColumn = 1;
+                return 20; // Return start y for new page
+            }
+        }
+        return currentY;
+    }
+
     sortedThemes.forEach(([themeName, themeData]) => {
-      if (y > pageHeight - 20) { doc.addPage(); y = 20; }
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(63, 81, 181);
-      doc.text(themeName, margin, y);
-      y += 7;
+        let currentY = currentColumn === 1 ? y1 : y2;
+        currentY = checkPageEnd(currentY);
+        if (currentColumn === 1) y1 = currentY; else y2 = currentY;
 
-      Object.entries(themeData.blocks).forEach(([blockKey, blockData]) => {
-        if (y > pageHeight - 20) { doc.addPage(); y = 20; }
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'italic');
-        doc.setTextColor(100, 100, 100);
-        doc.text(blockKey, margin, y);
-        y += 6;
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(63, 81, 181);
+        doc.text(themeName, currentColumn === 1 ? column1X : column2X, currentY);
+        currentY += 7;
 
-        blockData.questions.forEach(q => {
-          if (y > pageHeight - 15) { doc.addPage(); y = 20; }
-          doc.setFontSize(9);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(33, 33, 33);
-          const questionTextLines = doc.splitTextToSize(q.text, doc.internal.pageSize.width - margin * 2);
-          doc.text(questionTextLines, margin, y);
-          y += questionTextLines.length * 4;
+        Object.entries(themeData.blocks).forEach(([blockKey, blockData]) => {
+            currentY = checkPageEnd(currentY);
+            if (currentColumn === 1) y1 = currentY; else y2 = currentY;
 
-          doc.setFont('helvetica', 'normal');
-          const answerText = `Réponse : ${q.participantAnswer || 'Non répondu'}`;
-          const statusText = q.isCorrectAnswer ? 'Correct' : 'Incorrect';
-          const answerX = margin + 4;
-          const statusX = answerX + doc.getTextWidth(answerText) + 5;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(100, 100, 100);
+            doc.text(blockKey, currentColumn === 1 ? column1X : column2X, currentY);
+            currentY += 6;
 
-          doc.text(answerText, answerX, y);
-          doc.setTextColor(q.isCorrectAnswer ? 46 : 198, q.isCorrectAnswer ? 125 : 40, q.isCorrectAnswer ? 50 : 40);
-          doc.text(statusText, statusX, y);
-          y += 6;
+            blockData.questions.forEach(q => {
+                currentY = checkPageEnd(currentY);
+                if (currentColumn === 1) y1 = currentY; else y2 = currentY;
+
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(33, 33, 33);
+                const questionTextLines = doc.splitTextToSize(q.text, columnWidth);
+                doc.text(questionTextLines, currentColumn === 1 ? column1X : column2X, currentY);
+                currentY += questionTextLines.length * 4;
+
+                doc.setFont('helvetica', 'normal');
+                const answerText = `Réponse : ${q.participantAnswer || 'Non répondu'}`;
+                const statusText = q.isCorrectAnswer ? 'Correct' : 'Incorrect';
+                const answerX = (currentColumn === 1 ? column1X : column2X) + 4;
+                const statusX = answerX + doc.getTextWidth(answerText) + 5;
+
+                doc.text(answerText, answerX, currentY);
+                doc.setTextColor(q.isCorrectAnswer ? 46 : 198, q.isCorrectAnswer ? 125 : 40, q.isCorrectAnswer ? 50 : 40);
+                doc.text(statusText, statusX, currentY);
+                currentY += 6;
+            });
         });
-      });
+        if (currentColumn === 1) y1 = currentY; else y2 = currentY;
     });
 
     const safeFileName = `Rapport_${participantRef.prenom}_${participantRef.nom}_${nomSession}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
