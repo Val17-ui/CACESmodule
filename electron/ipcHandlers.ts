@@ -26,7 +26,7 @@ import {
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
   updateParticipantStatusInIteration,
   checkAndFinalizeSessionStatus
-} from './db';
+} from '@electron/db';
 
 import { getLogger, ILogger } from '@electron/utils/logger';
 import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '@common/types';
@@ -438,6 +438,20 @@ ipcMain.handle(
   }
 );
 
+  ipcMain.handle('get-default-pptx-template', async () => {
+    loggerInstance.debug('[IPC] get-default-pptx-template');
+    const templatePath = path.resolve(__dirname, '../../dist/templates/default.pptx');
+    loggerInstance.debug(`[get-default-pptx-template] Calculated template path: ${templatePath}`);
+    try {
+      const fileBuffer = await fs.readFile(templatePath);
+      loggerInstance.debug(`[get-default-pptx-template] Successfully read file, buffer length: ${fileBuffer.length}`);
+      return fileBuffer;
+    } catch (error) {
+      loggerInstance.debug(`[get-default-pptx-template] Failed to read default PPTX template: ${error}`);
+      throw new Error('Could not load default PPTX template.');
+    }
+  });
+
   ipcMain.handle('save-pptx-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
     loggerInstance.debug(`[IPC] save-pptx-file: ${fileName}`);
     try {
@@ -453,21 +467,6 @@ ipcMain.handle(
       return { success: false, error: error.message };
     }
   });
-
-  ipcMain.handle('get-default-pptx-template', async () => {
-    loggerInstance.debug('[IPC] get-default-pptx-template');
-    const templatePath = path.resolve(__dirname, '../../dist/templates/default.pptx');
-    loggerInstance.debug(`[get-default-pptx-template] Calculated template path: ${templatePath}`);
-    try {
-      const fileBuffer = await fs.readFile(templatePath);
-      loggerInstance.debug(`[get-default-pptx-template] Successfully read file, buffer length: ${fileBuffer.length}`);
-      return fileBuffer;
-    } catch (error) {
-      loggerInstance.debug(`[get-default-pptx-template] Failed to read default PPTX template: ${error}`);
-      throw new Error('Could not load default PPTX template.');
-    }
-  });
-
 
   ipcMain.handle('save-report-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
     loggerInstance.debug(`[IPC] save-report-file: ${fileName}`);

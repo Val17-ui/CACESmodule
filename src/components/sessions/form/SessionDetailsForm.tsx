@@ -1,35 +1,51 @@
 import React from 'react';
-import { CACESReferential, Referential } from '@common/types';
+import { CACESReferential, Referential, Trainer } from '@common/types';
 import Card from '../../ui/Card';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
-import { useSessionContext } from '../context/SessionContext';
 
 interface SessionDetailsFormProps {
   isReadOnly: boolean;
+  sessionName: string;
+  setSessionName: (value: string) => void;
+  sessionDate: string;
+  setSessionDate: (value: string) => void;
+  referentielsData: Referential[];
+  selectedReferential: CACESReferential | '';
+  setSelectedReferential: (value: CACESReferential | '') => void;
+  setSelectedReferentialId: (id: number | null) => void;
+  editingSessionData: any; // Simplified for now
+  trainersList: Trainer[];
+  selectedTrainerId: number | null;
+  setSelectedTrainerId: (id: number | null) => void;
+  numSession: string;
+  setNumSession: (value: string) => void;
+  numStage: string;
+  setNumStage: (value: string) => void;
+  iterationCount: number;
+  setIterationCount: (value: number) => void;
+  setIterationNames: (names: string[]) => void;
+  setParticipantAssignments: (assignments: any) => void;
+  location: string;
+  setLocation: (value: string) => void;
+  notes: string;
+  setNotes: (value: string) => void;
+  displayedBlockDetails: Array<{ themeName: string, blocName: string }>;
 }
 
-const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) => {
-  const { state, dispatch } = useSessionContext();
-  const {
-    sessionName,
-    sessionDate,
-    referentielsData,
-    selectedReferential,
-    editingSessionData,
-    trainersList,
-    selectedTrainerId,
-    numSession,
-    numStage,
-    iterationCount,
-    location,
-    notes,
-    displayedBlockDetails,
-  } = state;
-
-  const setField = (field: keyof typeof state, payload: any) => {
-    dispatch({ type: 'SET_FIELD', field, payload });
-  };
+const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
+  isReadOnly,
+  sessionName, setSessionName,
+  sessionDate, setSessionDate,
+  referentielsData, selectedReferential, setSelectedReferential, setSelectedReferentialId, editingSessionData,
+  trainersList, selectedTrainerId, setSelectedTrainerId,
+  numSession, setNumSession,
+  numStage, setNumStage,
+  iterationCount, setIterationCount, setIterationNames, setParticipantAssignments,
+  location, setLocation,
+  notes, setNotes,
+  displayedBlockDetails
+}) => {
 
   const referentialOptionsFromData = referentielsData.map((r: Referential) => ({
     value: r.code,
@@ -43,7 +59,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) =
           label="Nom de la session"
           placeholder="Ex: Formation CACES R489 - Groupe A"
           value={sessionName}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('sessionName', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionName(e.target.value)}
           required
           disabled={isReadOnly}
         />
@@ -51,7 +67,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) =
           label="Date de la session"
           type="date"
           value={sessionDate}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('sessionDate', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)}
           required
           disabled={isReadOnly}
         />
@@ -63,12 +79,12 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) =
           value={selectedReferential}
           onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
             const newSelectedCode = e.target.value as CACESReferential | '';
-            setField('selectedReferential', newSelectedCode);
+            setSelectedReferential(newSelectedCode);
             if (newSelectedCode) {
               const refObj = referentielsData.find(r => r.code === newSelectedCode);
-              setField('selectedReferentialId', refObj?.id || null);
+              setSelectedReferentialId(refObj?.id || null);
             } else {
-              setField('selectedReferentialId', null);
+              setSelectedReferentialId(null);
             }
           }}
           placeholder="Sélectionner un référentiel"
@@ -77,9 +93,9 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) =
         />
         <Select
           label="Formateur"
-          options={trainersList.map((t) => ({ value: t.id?.toString() || '', label: t.name }))}
+          options={trainersList.map((t: Trainer) => ({ value: t.id?.toString() || '', label: t.name }))}
           value={selectedTrainerId?.toString() || ''}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setField('selectedTrainerId', e.target.value ? parseInt(e.target.value, 10) : null)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null)}
           placeholder="Sélectionner un formateur"
           disabled={isReadOnly}
         />
@@ -89,14 +105,14 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) =
           label="Numéro de session"
           placeholder="Ex: 2024-001"
           value={numSession}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('numSession', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumSession(e.target.value)}
           disabled={isReadOnly}
         />
         <Input
           label="Numéro de stage"
           placeholder="Ex: CACES-2024-A"
           value={numStage}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('numStage', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
           disabled={isReadOnly}
         />
       </div>
@@ -105,7 +121,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) =
           label="Lieu de formation"
           placeholder="Ex: Centre de formation Paris Nord"
           value={location}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('location', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)}
           disabled={isReadOnly}
         />
         <Input
@@ -116,12 +132,20 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) =
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
             const count = parseInt(e.target.value, 10);
             if (count > 0) {
-              setField('iterationCount', count);
+              setIterationCount(count);
               const newIterationNames = Array.from({ length: count }, (_, i) => `Session_${i + 1}`);
-              setField('iterationNames', newIterationNames);
-              // This logic needs to be carefully managed, might be better in the reducer
-              // For now, it's a direct dispatch
-              dispatch({ type: 'SET_ASSIGNMENTS', payload: {} });
+              setIterationNames(newIterationNames);
+              setParticipantAssignments((prev: any) => {
+                const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
+                for (let i = 0; i < count; i++) {
+                  if (prev[i]) {
+                    newAssignments[i] = prev[i];
+                  } else {
+                    newAssignments[i] = [];
+                  }
+                }
+                return newAssignments;
+              });
             }
           }}
           disabled={isReadOnly}
@@ -134,7 +158,7 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({ isReadOnly }) =
           className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
           placeholder="Informations complémentaires..."
           value={notes}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setField('notes', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
           readOnly={isReadOnly}
         />
       </div>

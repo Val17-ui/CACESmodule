@@ -158,7 +158,7 @@ const SessionFormContent: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessi
           const iterationsToGenerate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: state.iterationCount }, (_, i) => i);
           for (const i of iterationsToGenerate) {
             const iterationName = state.iterationNames[i];
-            const assignedParticipantIds = (state.participantAssignments[i] || []).map((p: { id: string; assignedGlobalDeviceId: number | null }) => String(p.id));
+            const assignedParticipantIds = (state.participantAssignments[i] || []).map((p: { id: string; }) => p.id);
             const participantsForIteration = state.participants.filter(p => assignedParticipantIds.includes(p.uiId));
             const participantsForGenerator = participantsForIteration.map(p => {
               const device = state.hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);

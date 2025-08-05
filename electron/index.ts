@@ -2,7 +2,7 @@ import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeIpcHandlers } from '@electron/ipcHandlers';
-import { initializeDatabase, getDb, setAdminSetting } from './db';
+import { initializeDatabase, getDb, setAdminSetting } from '@electron/db';
 import { initializeLogger, getLogger } from '@electron/utils/logger';
 import { generatePPTXVal17 } from '@electron/utils/val17PptxGenerator';
 import fs from 'fs';

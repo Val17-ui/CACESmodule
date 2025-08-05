@@ -8,6 +8,7 @@ import {
   VotingDevice,
   DeviceKit,
   FormParticipant,
+  Participant as DBParticipantType,
   CACESReferential,
 } from '@common/types';
 import { StorageManager } from '../../../services/StorageManager';
@@ -101,7 +102,7 @@ export const useSessionLoader = ({
 
   useEffect(() => {
     const loadSession = async () => {
-      if (sessionIdToLoad) {
+      if (sessionIdToLoad && state.referentielsData.length > 0) {
         try {
           const sessionData = await StorageManager.getSessionById(sessionIdToLoad);
           dispatch({ type: 'SET_FIELD', field: 'editingSessionData', payload: sessionData || null });
@@ -111,6 +112,13 @@ export const useSessionLoader = ({
             dispatch({ type: 'SET_FIELD', field: 'sessionDate', payload: sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '' });
             dispatch({ type: 'SET_FIELD', field: 'numSession', payload: sessionData.num_session || '' });
             dispatch({ type: 'SET_FIELD', field: 'numStage', payload: sessionData.num_stage || '' });
+            if (sessionData.referentielId) {
+                const refObj = state.referentielsData.find(r => r.id === sessionData.referentielId);
+                if (refObj) {
+                  dispatch({ type: 'SET_FIELD', field: 'selectedReferential', payload: refObj.code as CACESReferential });
+                  dispatch({ type: 'SET_FIELD', field: 'selectedReferentialId', payload: refObj.id! });
+                }
+            }
           }
         } catch (error) {
           console.error("Erreur chargement session:", error);
@@ -119,7 +127,7 @@ export const useSessionLoader = ({
       }
     };
     loadSession();
-  }, [sessionIdToLoad, dispatch]);
+  }, [sessionIdToLoad, dispatch, state.referentielsData]);
 
   useEffect(() => {
     if (sessionToImport && state.referentielsData.length > 0 && state.trainersList.length > 0 && state.deviceKitsList.length > 0) {
