@@ -137,7 +137,7 @@ export async function generatePresentation(
   templateFile: File | ArrayBuffer | string,
   adminSettings: AdminPPTXSettings,
   logger: ILogger
-): Promise<{ orsBlob: ArrayBufferLike | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
+): Promise<{ filePath: string | null; questionMappings: QuestionMapping[] | null; ignoredSlideGuids: string[] | null; }> {
   logger.info('[LOG][pptxOrchestrator] === Début de generatePresentation ===');
   logger.info(`[LOG][pptxOrchestrator] sessionInfo: ${JSON.stringify(sessionInfo)}`);
   logger.info(`[LOG][pptxOrchestrator] Nombre de participants: ${participantsForGenerator.length}`);
@@ -266,11 +266,11 @@ export async function generatePresentation(
     } else {
       logger.error(`[ERREUR][pptxOrchestrator] Échec de la génération des données PPTX complètes.`);
       dialog.showErrorBox("Erreur de génération PPTX", "La génération du fichier PPTX ou des données de mappage a échoué.");
-      return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
+      return { filePath: null, questionMappings: null, ignoredSlideGuids: null };
     }
   } catch (error) {
     logger.error(`[ERREUR][pptxOrchestrator] Erreur dans generatePresentation: ${error}`);
     dialog.showErrorBox("Erreur de génération", "Une erreur est survenue lors de la création du fichier .ors.");
-    return { orsBlob: null, questionMappings: null, ignoredSlideGuids: null };
+    return { filePath: null, questionMappings: null, ignoredSlideGuids: null };
   }
 }
