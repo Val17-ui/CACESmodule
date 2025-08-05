@@ -8,7 +8,6 @@ import {
 import { StorageManager } from '../../services/StorageManager';
 import { getActivePptxTemplateFile } from '../../utils/templateManager';
 import AnomalyResolutionModal from './AnomalyResolutionModal';
-import { parseFullSessionExcel } from '../../utils/excelProcessor';
 import ResultsImporter from './form/ResultsImporter';
 import QuestionnaireGenerator from './form/QuestionnaireGenerator';
 import ParticipantManager from './form/ParticipantManager';
@@ -36,31 +35,6 @@ interface AdminPPTXSettings {
     pollCountdownStartMode: string;
     pollMultipleResponse: string;
 }
-
-const parseFrenchDate = (dateValue: string | Date | number): string => {
-    if (!dateValue) return '';
-    if (typeof dateValue === 'string') {
-      const parts = dateValue.replace(/\//g, '-').split('-');
-      if (parts.length === 3) {
-        const [p1, p2, p3] = parts;
-        if (p1.length <= 2 && p2.length <= 2 && p3.length === 4) {
-          const date = new Date(Number(p3), Number(p2) - 1, Number(p1));
-          if (!isNaN(date.getTime())) {
-            const timezoneOffset = date.getTimezoneOffset() * 60000;
-            const adjustedDate = new Date(date.getTime() - timezoneOffset);
-            return adjustedDate.toISOString().split('T')[0];
-          }
-        }
-      }
-    }
-    const date = new Date(dateValue as any);
-    if (!isNaN(date.getTime())) {
-      const timezoneOffset = date.getTimezoneOffset() * 60000;
-      const adjustedDate = new Date(date.getTime() - timezoneOffset);
-      return adjustedDate.toISOString().split('T')[0];
-    }
-    return dateValue.toString();
-};
 
 const SessionFormContent: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImport }) => {
     const { state, dispatch } = useSessionContext();
@@ -102,42 +76,10 @@ const SessionFormContent: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessi
         setModifiedAfterOrsGeneration: (modified) => dispatch({ type: 'SET_FIELD', field: 'modifiedAfterOrsGeneration', payload: modified }),
       });
 
-      const resetFormTactic = useCallback(() => {
-        dispatch({ type: 'RESET_FORM' });
-      }, [dispatch]);
-
       useSessionLoader({
         sessionIdToLoad,
-        isImporting: false, // This needs to be handled properly
-        importCompleted: false, // This needs to be handled properly
-        hardwareLoaded: state.hardwareLoaded,
-        setHardwareLoaded: (loaded) => dispatch({ type: 'SET_FIELD', field: 'hardwareLoaded', payload: loaded }),
-        referentielsData: state.referentielsData,
-        setReferentielsData: (data) => dispatch({ type: 'SET_FIELD', field: 'referentielsData', payload: data }),
-        setTrainersList: (data) => dispatch({ type: 'SET_FIELD', field: 'trainersList', payload: data }),
-        setAllThemesData: (data) => dispatch({ type: 'SET_FIELD', field: 'allThemesData', payload: data }),
-        setAllBlocsData: (data) => dispatch({ type: 'SET_FIELD', field: 'allBlocsData', payload: data }),
-        setDeviceKitsList: (data) => dispatch({ type: 'SET_FIELD', field: 'deviceKitsList', payload: data }),
-        setHardwareDevices: (data) => dispatch({ type: 'SET_FIELD', field: 'hardwareDevices', payload: data }),
-        setEditingSessionData: (data) => dispatch({ type: 'SET_FIELD', field: 'editingSessionData', payload: data }),
-        setCurrentSessionDbId: (id) => dispatch({ type: 'SET_FIELD', field: 'currentSessionDbId', payload: id }),
-        setSessionName: (name) => dispatch({ type: 'SET_FIELD', field: 'sessionName', payload: name }),
-        setSessionDate: (date) => dispatch({ type: 'SET_FIELD', field: 'sessionDate', payload: date }),
-        setNumSession: (num) => dispatch({ type: 'SET_FIELD', field: 'numSession', payload: num }),
-        setNumStage: (num) => dispatch({ type: 'SET_FIELD', field: 'numStage', payload: num }),
-        setSelectedReferential: (ref) => dispatch({ type: 'SET_FIELD', field: 'selectedReferential', payload: ref }),
-        setSelectedReferentialId: (id) => dispatch({ type: 'SET_FIELD', field: 'selectedReferentialId', payload: id }),
-        setLocation: (location) => dispatch({ type: 'SET_FIELD', field: 'location', payload: location }),
-        setNotes: (notes) => dispatch({ type: 'SET_FIELD', field: 'notes', payload: notes }),
-        setSelectedTrainerId: (id) => dispatch({ type: 'SET_FIELD', field: 'selectedTrainerId', payload: id }),
-        setSelectedBlocIds: (ids) => dispatch({ type: 'SET_FIELD', field: 'selectedBlocIds', payload: ids }),
-        setSelectedKitIdState: (id) => dispatch({ type: 'SET_FIELD', field: 'selectedKitIdState', payload: id }),
-        setIterationCount: (count) => dispatch({ type: 'SET_FIELD', field: 'iterationCount', payload: count }),
-        setIterationNames: (names) => dispatch({ type: 'SET_FIELD', field: 'iterationNames', payload: names }),
-        setParticipants: (p) => dispatch({ type: 'SET_PARTICIPANTS', payload: p }),
-        setParticipantAssignments: (a) => dispatch({ type: 'SET_ASSIGNMENTS', payload: a }),
-        setImportSummary: (summary) => dispatch({ type: 'SET_FIELD', field: 'importSummary', payload: summary }),
-        resetForm: resetFormTactic,
+        sessionToImport,
+        dispatch,
       });
 
       useEffect(() => {
@@ -351,46 +293,21 @@ const SessionFormContent: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessi
             return (
               <ParticipantManager
                 isReadOnly={isReadOnly}
-                participants={participants}
-                setParticipants={(p) => dispatch({ type: 'SET_PARTICIPANTS', payload: p })}
-                handleParticipantChange={handleParticipantChange}
-                handleRemoveParticipant={handleRemoveParticipant}
-                handleAddParticipant={handleAddParticipant}
-                handleParticipantFileSelect={handleParticipantFileSelect}
-                iterationCount={state.iterationCount}
-                iterationNames={state.iterationNames}
-                participantAssignments={participantAssignments}
-                handleParticipantIterationChange={handleParticipantIterationChange}
-                deviceKitsList={state.deviceKitsList}
-                selectedKitIdState={state.selectedKitIdState}
-                setSelectedKitIdState={(id) => dispatch({ type: 'SET_FIELD', field: 'selectedKitIdState', payload: id })}
-                votingDevicesInSelectedKit={state.votingDevicesInSelectedKit}
-                isLoadingKits={state.isLoadingKits}
               />
             );
           case 'generateQuestionnaire':
             return (
               <QuestionnaireGenerator
                 isReadOnly={isReadOnly}
-                isGeneratingOrs={state.isGeneratingOrs}
                 handleGenerateQuestionnaire={handleGenerateQuestionnaireAndOrs}
-                editingSessionData={state.editingSessionData}
-                modifiedAfterOrsGeneration={state.modifiedAfterOrsGeneration}
-                importSummary={state.importSummary}
-                activeTab={state.activeTab}
-                currentSessionDbId={state.currentSessionDbId}
-                selectedReferential={state.selectedReferential}
               />
             );
           case 'importResults':
             return (
               <ResultsImporter
                 isReadOnly={isReadOnly}
-                editingSessionData={state.editingSessionData}
                 handleImportResults={handleImportResults}
                 importSummary={resultsImportSummary || state.importSummary}
-                activeTab={state.activeTab}
-                currentSessionDbId={state.currentSessionDbId}
               />
             );
           case 'report':
