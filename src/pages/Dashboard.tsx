@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/layout/Layout';
-import DashboardCards from '../components/dashboard/DashboardCards';
 import DashboardSessionsOverview from '../components/dashboard/DashboardSessionsOverview';
 import AlertsNotifications from '../components/dashboard/AlertsNotifications'; // Ajout de l'import
+import QuickLinks from '../components/dashboard/QuickLinks';
 // import QuickActions from '../components/dashboard/QuickActions'; // Supprimé
 // import { mockSessions } from '../data/mockData'; // Plus besoin des mocks ici directement
 // import { getAllSessions } from '../db'; // Supprimé
@@ -69,7 +69,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
       activePage={activePage}
       onPageChange={onPageChange}
     >
-      <DashboardCards sessions={sessions} />
+      <QuickLinks onPageChange={onPageChange} sessions={sessions} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-2">
           <DashboardSessionsOverview sessions={sessions} onPageChange={onPageChange} referentiels={referentiels} />

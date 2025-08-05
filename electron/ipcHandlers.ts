@@ -20,7 +20,7 @@ import {
   addTheme, getThemeByCodeAndReferentialId, getThemesByReferentialId, getThemeById, getAllThemes,
   addBloc, getBlocByCodeAndThemeId, getBlocsByThemeId, getBlocById, getAllBlocs,
   addQuestion, upsertQuestion, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
-  getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks,
+  getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks, getQuestionCount,
   getAdminSetting, setAdminSetting, getAllAdminSettings,
   exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
@@ -631,6 +631,35 @@ ipcMain.handle(
     } catch (error: any) {
       loggerInstance.debug(`Failed to open file ${filePath}: ${error}`);
       return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-dashboard-alerts', async () => {
+    loggerInstance.debug('[IPC] get-dashboard-alerts');
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const sessions = await getAllSessions();
+      const overdueSessions = sessions.filter(s => {
+        const sessionDate = new Date(s.dateSession);
+        return s.status === 'ready' && sessionDate < today && !s.resultsImportedAt;
+      });
+
+      const questionCount = await getQuestionCount();
+
+      const orsSavePath = await getAdminSetting('orsSavePath');
+      const reportSavePath = await getAdminSetting('reportSavePath');
+
+      return {
+        overdueSessions,
+        questionCount,
+        isOrsPathSet: !!orsSavePath,
+        isReportPathSet: !!reportSavePath,
+      };
+    } catch (error) {
+      loggerInstance.error(`[IPC] get-dashboard-alerts failed: ${error}`);
+      throw error;
     }
   });
 
