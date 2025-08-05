@@ -221,12 +221,15 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       setLastSavedFilePath(null);
 
       try {
+        const logoSetting = await StorageManager.getAdminSetting('reportLogoBase64');
+        const currentLogo = logoSetting?.value || null;
+
         const canvas = await html2canvas(reportRef.current, { scale: 1.5, useCORS: true });
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
         const margin = 10;
-        const headerHeight = 25;
+        const headerHeight = 30; // Increased header height for better spacing
         const footerHeight = 20;
 
         const contentWidth = pdfWidth - margin * 2;
@@ -239,13 +242,13 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           const y = -(pageContentHeight * i) + headerHeight;
           pdf.addImage(canvas, 'PNG', margin, y, contentWidth, contentHeight);
 
-          if (reportLogo) {
+          if (currentLogo) {
             try {
-              pdf.addImage(reportLogo, 'PNG', pdfWidth - margin - 25, margin, 20, 20);
+              pdf.addImage(currentLogo, 'PNG', pdfWidth - margin - 25, margin, 20, 20);
             } catch (e) { console.error("Erreur d'ajout du logo au PDF:", e); }
           }
           pdf.setFontSize(18);
-          pdf.text('Rapport de Session', margin, margin + 15);
+          pdf.text('Rapport de Session', pdfWidth / 2, margin + 12, { align: 'center' });
           pdf.setFontSize(10);
           pdf.setTextColor(150);
           pdf.text(`Page ${i + 1} / ${totalPages}`, pdfWidth / 2, pdfHeight - margin + 5, { align: 'center' });
