@@ -28,13 +28,15 @@ const ResultsImporter: React.FC<ResultsImporterProps> = ({
             <div>
               <label htmlFor="resultsFileInput" className="block text-sm font-medium text-gray-700 mb-1">Fichier résultats (.ors)</label>
             </div>
-            {!editingSessionData?.orsFilePath && !isReadOnly && (
-              <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Générez d'abord le .ors pour cette session avant d'importer les résultats.</p>
-            )}
             {isReadOnly && (
               <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">Résultats déjà importés (session terminée).</p>
             )}
-            <p className="text-xs text-gray-500">Pour chaque itération, importez le fichier de résultats (.ors) correspondant après le déroulement du vote.</p>
+
+            {editingSessionData?.iterations?.some((iter: any) => !iter.ors_file_path) && !isReadOnly && (
+              <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md">
+                Générez d'abord le questionnaire pour chaque itération avant d'importer les résultats.
+              </p>
+            )}
 
             <div className="space-y-3 mt-4">
               {editingSessionData?.iterations?.map((iter: any, index: number) => {
