@@ -7,7 +7,6 @@ import Button from '../ui/Button';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
 import { StorageManager } from '../../services/StorageManager';
 import {
   calculateParticipantScore,
@@ -40,18 +39,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [isGeneratingZip, setIsGeneratingZip] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [reportLogo, setReportLogo] = useState<string | null>(null);
   const [lastSavedFilePath, setLastSavedFilePath] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchLogo = async () => {
-      const logoSetting = await StorageManager.getAdminSetting('reportLogoBase64');
-      if (logoSetting && logoSetting.value) {
-        setReportLogo(logoSetting.value);
-      }
-    };
-    fetchLogo();
-  }, []);
 
   const participants = session.participants || [];
 
@@ -261,7 +249,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         const pdfBlob = pdf.output('blob');
         const pdfBuffer = await pdfBlob.arrayBuffer();
         const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
-        const result = await window.dbAPI?.saveReportFile(pdfBuffer, fileName);
+        const result = await window.dbAPI?.saveReportFile?.(pdfBuffer, fileName);
         if (result?.success) {
           setLastSavedFilePath(result.filePath);
         } else {
@@ -348,7 +336,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       const zipBuffer = await zipBlob.arrayBuffer();
       const fileName = `Rapports_Session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.zip`;
-      const result = await window.dbAPI?.saveReportZipFile(zipBuffer, fileName);
+      const result = await window.dbAPI?.saveReportZipFile?.(zipBuffer, fileName);
       if (result?.success) {
         setLastSavedFilePath(result.filePath);
       } else {
