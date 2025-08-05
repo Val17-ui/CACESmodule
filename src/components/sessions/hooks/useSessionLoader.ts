@@ -8,7 +8,6 @@ import {
   VotingDevice,
   DeviceKit,
   FormParticipant,
-  Participant as DBParticipantType,
   CACESReferential,
 } from '@common/types';
 import { StorageManager } from '../../../services/StorageManager';
@@ -18,6 +17,12 @@ interface UseSessionLoaderProps {
   sessionIdToLoad?: number;
   sessionToImport?: File | null;
   dispatch: React.Dispatch<any>;
+  state: {
+    referentielsData: Referential[];
+    trainersList: Trainer[];
+    deviceKitsList: DeviceKit[];
+    hardwareDevices: VotingDevice[];
+  }
 }
 
 const parseFrenchDate = (dateValue: string | Date | number): string => {
@@ -49,6 +54,7 @@ export const useSessionLoader = ({
   sessionIdToLoad,
   sessionToImport,
   dispatch,
+  state,
 }: UseSessionLoaderProps) => {
 
   useEffect(() => {
@@ -105,7 +111,6 @@ export const useSessionLoader = ({
             dispatch({ type: 'SET_FIELD', field: 'sessionDate', payload: sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '' });
             dispatch({ type: 'SET_FIELD', field: 'numSession', payload: sessionData.num_session || '' });
             dispatch({ type: 'SET_FIELD', field: 'numStage', payload: sessionData.num_stage || '' });
-            // ... and so on for all fields
           }
         } catch (error) {
           console.error("Erreur chargement session:", error);
@@ -117,7 +122,7 @@ export const useSessionLoader = ({
   }, [sessionIdToLoad, dispatch]);
 
   useEffect(() => {
-    if (sessionToImport) {
+    if (sessionToImport && state.referentielsData.length > 0 && state.trainersList.length > 0 && state.deviceKitsList.length > 0) {
         const processImport = async () => {
             dispatch({ type: 'SET_FIELD', field: 'isImporting', payload: true });
             try {
@@ -125,23 +130,57 @@ export const useSessionLoader = ({
 
                 if (details.nomSession) dispatch({ type: 'SET_FIELD', field: 'sessionName', payload: details.nomSession.toString() });
                 if (details.dateSession) dispatch({ type: 'SET_FIELD', field: 'sessionDate', payload: parseFrenchDate(details.dateSession.toString()) });
-                // ... set all other fields from details ...
+                if (details.numSession) dispatch({ type: 'SET_FIELD', field: 'numSession', payload: details.numSession.toString() });
+                if (details.numStage) dispatch({ type: 'SET_FIELD', field: 'numStage', payload: details.numStage.toString() });
+                if (details.location) dispatch({ type: 'SET_FIELD', field: 'location', payload: details.location.toString() });
+                if (details.notes) dispatch({ type: 'SET_FIELD', field: 'notes', payload: details.notes.toString() });
 
-                const newFormParticipants: FormParticipant[] = parsedParticipants.map((p, index) => ({
-                    uiId: `imported-${Date.now()}-${index}`,
-                    firstName: p.prenom,
-                    lastName: p.nom,
-                    organization: p.organization,
-                    identificationCode: p.identificationCode,
-                    deviceId: null,
-                    assignedGlobalDeviceId: null, // This will be matched later
-                    hasSigned: false,
-                    nom: p.nom,
-                    prenom: p.prenom,
-                    score: undefined,
-                    reussite: undefined,
-                    statusInSession: 'present',
-                }));
+                if (details.referentielCode) {
+                    const ref = state.referentielsData.find(r => r.code === details.referentielCode);
+                    if (ref) {
+                        dispatch({ type: 'SET_FIELD', field: 'selectedReferentialId', payload: ref.id! });
+                        dispatch({ type: 'SET_FIELD', field: 'selectedReferential', payload: ref.code as CACESReferential });
+                    }
+                }
+                if (details.trainerName) {
+                    const trainer = state.trainersList.find(t => t.name === details.trainerName);
+                    if (trainer) {
+                        dispatch({ type: 'SET_FIELD', field: 'selectedTrainerId', payload: trainer.id! });
+                    }
+                }
+                if (details.kitName) {
+                    const kit = state.deviceKitsList.find(k => k.name === details.kitName);
+                    if (kit) {
+                        dispatch({ type: 'SET_FIELD', field: 'selectedKitIdState', payload: kit.id! });
+                    }
+                }
+
+                const iterationCount = parseInt(details.iterationCount?.toString() || '1', 10);
+                dispatch({ type: 'SET_FIELD', field: 'iterationCount', payload: iterationCount });
+                if (details.iterationNames) {
+                    dispatch({ type: 'SET_FIELD', field: 'iterationNames', payload: details.iterationNames.toString().split(',').map((name: string) => name.trim()) });
+                } else {
+                    dispatch({ type: 'SET_FIELD', field: 'iterationNames', payload: Array.from({ length: iterationCount }, (_, i) => `Session_${i + 1}`) });
+                }
+
+                const newFormParticipants: FormParticipant[] = parsedParticipants.map((p, index) => {
+                    const device = state.hardwareDevices.find(d => d.name === p.deviceName);
+                    return {
+                        uiId: `imported-${Date.now()}-${index}`,
+                        firstName: p.prenom,
+                        lastName: p.nom,
+                        organization: p.organization,
+                        identificationCode: p.identificationCode,
+                        deviceId: null,
+                        assignedGlobalDeviceId: device?.id ?? null,
+                        hasSigned: false,
+                        nom: p.nom,
+                        prenom: p.prenom,
+                        score: undefined,
+                        reussite: undefined,
+                        statusInSession: 'present',
+                    };
+                });
                 dispatch({ type: 'SET_PARTICIPANTS', payload: newFormParticipants });
 
                 const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
@@ -169,5 +208,5 @@ export const useSessionLoader = ({
         };
         processImport();
     }
-  }, [sessionToImport, dispatch]);
+  }, [sessionToImport, dispatch, state.referentielsData, state.trainersList, state.deviceKitsList, state.hardwareDevices]);
 };
