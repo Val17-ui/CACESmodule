@@ -117,6 +117,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   const [activeTab, setActiveTab] = useState<TabKey>('details');
   const [isGeneratingOrs, setIsGeneratingOrs] = useState(false);
   const [isFirstGenerationDone, setIsFirstGenerationDone] = useState(false);
+  const [iterationHasResults, setIterationHasResults] = useState<Record<number, boolean>>({});
   const [modifiedAfterOrsGeneration, setModifiedAfterOrsGeneration] = useState(false);
   const [trainersList, setTrainersList] = useState<Trainer[]>([]);
   const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
@@ -253,6 +254,16 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
             if (sessionData.iteration_count && sessionData.iteration_count > 0) {
               const count = sessionData.iteration_count;
               setIterationCount(count);
+              if (sessionData.iterations) {
+                const hasResultsMap: Record<number, boolean> = {};
+                for (const iter of sessionData.iterations) {
+                  if (iter.id) {
+                    const hasResults = await window.dbAPI?.hasResultsForIteration(iter.id);
+                    hasResultsMap[iter.iteration_index] = !!hasResults;
+                  }
+                }
+                setIterationHasResults(hasResultsMap);
+              }
               let names = sessionData.iterations?.map((iter: { name: any; }, index: number) => iter.name || `Session_${index + 1}`) || [];
               if (names.length < count) {
                 const additionalNames = Array.from({ length: count - names.length }, (_, i) => `Session_${names.length + i + 1}`);
@@ -894,22 +905,9 @@ if (savedIterationId) { // <-- On ajoute cette condition
   };
 
   const handleRegenerateIteration = async (iterationIndex: number) => {
-    if (!currentSessionDbId) return;
-    const iteration = editingSessionData?.iterations?.find(it => it.iteration_index === iterationIndex);
-    if (!iteration?.id) {
-      setImportSummary("Veuillez d'abord générer le questionnaire pour cette itération.");
-      return;
+    if (window.confirm("Êtes-vous certain de vouloir régénérer ce questionnaire ? Si celui-ci contient des votes, ceux-ci seront perdus.")) {
+      await handleGenerateQuestionnaireAndOrs(iterationIndex);
     }
-
-    const hasResults = await window.dbAPI?.hasResultsForIteration(iteration.id);
-    if (hasResults) {
-      if (!window.confirm("Cette itération a déjà des résultats importés. La regénération du questionnaire effacera les résultats existants. Êtes-vous sûr de vouloir continuer ?")) {
-        return;
-      }
-      await StorageManager.deleteResultsForIteration(iteration.id);
-    }
-
-    await handleGenerateQuestionnaireAndOrs(iterationIndex);
   };
 
   const handleGenerateQuestionnaireAndOrs = async (iterationIndex?: number) => {
@@ -1550,9 +1548,10 @@ if (savedIterationId) { // <-- On ajoute cette condition
           <QuestionnaireGenerator
             isReadOnly={isReadOnly}
             isGeneratingOrs={isGeneratingOrs}
+            isFirstGenerationDone={isFirstGenerationDone}
+            iterationHasResults={iterationHasResults}
             handleGenerateQuestionnaire={handleGenerateQuestionnaire}
             handleRegenerateIteration={handleRegenerateIteration}
-            isFirstGenerationDone={isFirstGenerationDone}
             editingSessionData={editingSessionData}
             modifiedAfterOrsGeneration={modifiedAfterOrsGeneration}
             importSummary={importSummary}

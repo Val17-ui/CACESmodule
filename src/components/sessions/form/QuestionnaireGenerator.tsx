@@ -7,6 +7,7 @@ interface QuestionnaireGeneratorProps {
   isReadOnly: boolean;
   isGeneratingOrs: boolean;
   isFirstGenerationDone: boolean;
+  iterationHasResults: Record<number, boolean>;
   handleGenerateQuestionnaire: () => void;
   handleRegenerateIteration: (iterationIndex: number) => void;
   editingSessionData: any; // Simplified
@@ -21,6 +22,7 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
   isReadOnly,
   isGeneratingOrs,
   isFirstGenerationDone,
+  iterationHasResults,
   handleGenerateQuestionnaire,
   handleRegenerateIteration,
   editingSessionData,
@@ -43,7 +45,7 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
         variant={isFirstGenerationDone ? "secondary" : "primary"}
         icon={<PackagePlus size={16} />}
         onClick={handleGenerateQuestionnaire}
-        disabled={isGenerationDisabled || isFirstGenerationDone}
+        disabled={isGenerationDisabled}
         title={mainButtonTitle}
       >
         {mainButtonText}
@@ -68,7 +70,7 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
                 <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
             </div>
           )}
-      {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && (
+      {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && isFirstGenerationDone && (
         <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
           <h4 className="text-md font-semibold text-gray-700 mb-2">Fichiers de questionnaire générés :</h4>
           <ul className="list-disc list-inside pl-2 space-y-1">
@@ -88,7 +90,8 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={() => handleRegenerateIteration(index)}
-                  disabled={isGeneratingOrs || isReadOnly}
+                  disabled={isGeneratingOrs || isReadOnly || iterationHasResults[index]}
+                  title={iterationHasResults[index] ? "Des résultats ont déjà été importés pour cette itération." : "Régénérer ce questionnaire"}
                 >
                   Régénérer
                 </Button>
