@@ -313,32 +313,35 @@ const ParticipantReport = () => {
         ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height: 60px; margin-bottom: 20px;"/>` : ''}
         <h1 style="font-size: 18px; text-align: center; color: #1a237e; margin-bottom: 10px;">RAPPORT INDIVIDUEL DE SESSION</h1>
         <hr style="border: 0; border-top: 1px solid #ccc; margin-bottom: 20px;" />
-        <table style="width: 100%; font-size: 10px; margin-bottom: 15px; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 4px; width: 50%;"><strong>Participant :</strong> ${participantRef.prenom} ${participantRef.nom}</td>
-            <td style="padding: 4px; width: 50%;"><strong>ID Candidat :</strong> ${participantRef.identificationCode || 'N/A'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px;"><strong>Organisation :</strong> ${participantRef.organization || 'N/A'}</td>
-            <td style="padding: 4px;"></td>
-          </tr>
-          <tr>
-            <td style="padding: 4px;"><strong>Session :</strong> ${nomSession}</td>
-            <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialDisplayForPdf}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px;"><strong>N° Session :</strong> ${num_session || 'N/A'}</td>
-            <td style="padding: 4px;"><strong>N° Stage :</strong> ${num_stage || 'N/A'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px;"><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</td>
-            <td style="padding: 4px;"><strong>Formateur :</strong> ${fetchedTrainerName}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px;"><strong>Lieu :</strong> ${location || 'N/A'}</td>
-            <td style="padding: 4px;"></td>
-          </tr>
-        </table>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div style="width: 48%;">
+            <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détails</h2>
+            <p><strong>Participant :</strong> ${participantRef.prenom} ${participantRef.nom}</p>
+            <p><strong>ID Candidat :</strong> ${participantRef.identificationCode || 'N/A'}</p>
+            <p><strong>Organisation :</strong> ${participantRef.organization || 'N/A'}</p>
+            <hr style="margin: 5px 0;" />
+            <p><strong>Session :</strong> ${nomSession}</p>
+            <p><strong>Référentiel :</strong> ${referentialDisplayForPdf}</p>
+            <p><strong>N° Session :</strong> ${num_session || 'N/A'}</p>
+            <p><strong>N° Stage :</strong> ${num_stage || 'N/A'}</p>
+            <p><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</p>
+            <p><strong>Formateur :</strong> ${fetchedTrainerName}</p>
+            <p><strong>Lieu :</strong> ${location || 'N/A'}</p>
+          </div>
+          <div style="width: 48%;">
+            <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Scores par Thème</h2>
+            ${Object.entries(structuredReportData)
+              .sort(([_, a], [__, b]) => a.themeId - b.themeId)
+              .map(([themeName, themeData]) => `
+                <div style="margin-bottom: 5px;">
+                  <strong style="${themeData.score < 50 ? 'color: #c62828;' : ''}">${themeName}</strong>
+                  ${Object.entries(themeData.blocks).map(([blockKey, blockData]) => `
+                    <div style="margin-left: 10px;">- ${blockKey}: ${blockData.score.toFixed(0)}% (${blockData.correct}/${blockData.total})</div>
+                  `).join('')}
+                </div>
+              `).join('')}
+          </div>
+        </div>
         <div style="background-color: ${participantSuccess ? '#e8f5e9' : '#ffebee'}; padding: 15px; border-radius: 4px; margin-bottom: 20px; text-align: center;">
           <p style="font-size: 14px; font-weight: bold; margin:0;">Score Global :
             <span style="color: ${participantSuccess ? '#2e7d32' : '#c62828'};">${participantScore !== undefined ? participantScore.toFixed(0) : 'N/A'} / 100</span>
@@ -347,19 +350,8 @@ const ParticipantReport = () => {
             Mention : ${participantSuccess ? 'RÉUSSI' : 'AJOURNÉ'}
           </p>
         </div>
-        <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Scores par Thème</h2>`;
-    if (themeScores && Object.keys(themeScores).length > 0) {
-      pdfHtml += '<ul style="list-style-type: none; padding-left: 0;">';
-      for (const [themeName, details] of Object.entries(themeScores)) {
-        pdfHtml += `<li style="margin-bottom: 5px; padding: 5px; border-bottom: 1px solid #eee; ${details.score < 50 ? 'color: #c62828; font-weight: bold;' : ''}">
-          ${themeName}: ${details.score.toFixed(0)}% (${details.correct}/${details.total})
-        </li>`;
-      }
-      pdfHtml += '</ul>';
-    } else {
-      pdfHtml += '<p style="font-size: 10px; color: #555;">Scores par thème non disponibles.</p>';
-    }
-    pdfHtml += `<h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Questions</h2>`;
+        <div style="page-break-after: always;"></div>
+        <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Questions</h2>`;
     const questionsByThemeForPdf: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
     if (questionsForDisplay) {
       questionsForDisplay.forEach(q => {
