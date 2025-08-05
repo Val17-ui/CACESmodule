@@ -258,8 +258,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 const hasResultsMap: Record<number, boolean> = {};
                 for (const iter of sessionData.iterations) {
                   if (iter.id) {
-                    // @ts-ignore
-                    // @ts-ignore
                     const hasResults = await window.dbAPI?.hasResultsForIteration(iter.id);
                     hasResultsMap[iter.iteration_index] = !!hasResults;
                   }
@@ -911,7 +909,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
   };
 
   const handleRegenerateIteration = async (iterationIndex: number) => {
-    if (window.confirm("Etes-vous certain de vouloir régénérer ce questionnaire ? si celui-ci contient des votes ceux-ci seront perdus.")) {
+    if (window.confirm("Êtes-vous certain de vouloir régénérer ce questionnaire ? Si celui-ci contient des votes, ceux-ci seront perdus.")) {
       await handleGenerateQuestionnaireAndOrs(iterationIndex);
     }
   };
