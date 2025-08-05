@@ -9,7 +9,8 @@ interface TechnicalSettingsData {
   reportPrefix: string;
   pptxPrefix: string;
   backupFileName: string;
-  orsSavePath: string; // New: Path for saving ORS files
+  orsSavePath: string;
+  reportSavePath: string;
 }
 
 const TechnicalSettings: React.FC = () => {
@@ -17,7 +18,8 @@ const TechnicalSettings: React.FC = () => {
     reportPrefix: 'Rapport_',
     pptxPrefix: 'Questionnaire_',
     backupFileName: 'CACES_Manager_Backup.json',
-    orsSavePath: '', // Initialize with empty string
+    orsSavePath: '',
+    reportSavePath: '',
   });
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -29,12 +31,14 @@ const TechnicalSettings: React.FC = () => {
       const pptxPrefix = await StorageManager.getAdminSetting('pptxPrefix');
       const backupFileName = await StorageManager.getAdminSetting('backupFileName');
       const orsSavePath = await StorageManager.getAdminSetting('orsSavePath');
+      const reportSavePath = await StorageManager.getAdminSetting('reportSavePath');
 
       setSettings({
         reportPrefix: reportPrefix || 'Rapport_',
         pptxPrefix: pptxPrefix || 'Questionnaire_',
         backupFileName: backupFileName || 'CACES_Manager_Backup.json',
         orsSavePath: orsSavePath || '',
+        reportSavePath: reportSavePath || '',
       });
       setIsLoading(false);
     };
@@ -48,6 +52,7 @@ const TechnicalSettings: React.FC = () => {
       await StorageManager.setAdminSetting('pptxPrefix', settings.pptxPrefix);
       await StorageManager.setAdminSetting('backupFileName', settings.backupFileName);
       await StorageManager.setAdminSetting('orsSavePath', settings.orsSavePath);
+      await StorageManager.setAdminSetting('reportSavePath', settings.reportSavePath);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
@@ -73,6 +78,21 @@ const TechnicalSettings: React.FC = () => {
     } catch (error) {
       console.error("Error opening directory dialog:", error);
       // Optionally, set an error state in the UI
+    }
+  };
+
+  const handleBrowseReportSavePath = async () => {
+    if (!window.dbAPI) {
+      console.error("dbAPI not available");
+      return;
+    }
+    try {
+      const result = await window.dbAPI.openDirectoryDialog();
+      if (!result.canceled && result.path) {
+        handleChange('reportSavePath', result.path);
+      }
+    } catch (error) {
+      console.error("Error opening directory dialog:", error);
     }
   };
 
@@ -121,6 +141,21 @@ const TechnicalSettings: React.FC = () => {
               readOnly // User selects via dialog, not types freely
             />
             <Button onClick={handleBrowseOrsSavePath} type="button">
+              Parcourir
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+          <label className="font-medium text-gray-700">Dossier de sauvegarde des Rapports</label>
+          <div className="flex items-center gap-2">
+            <Input
+              value={settings.reportSavePath}
+              onChange={e => handleChange('reportSavePath', e.target.value)}
+              placeholder="Ex: C:/Users/VotreNom/Documents/Rapports"
+              readOnly
+            />
+            <Button onClick={handleBrowseReportSavePath} type="button">
               Parcourir
             </Button>
           </div>

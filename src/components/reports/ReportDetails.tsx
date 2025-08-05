@@ -39,7 +39,9 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const [allThemesDb, setAllThemesDb] = useState<Theme[]>([]);
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [reportLogo, setReportLogo] = useState<string | null>(null);
+  const [lastSavedFilePath, setLastSavedFilePath] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchLogo = async () => {
@@ -208,10 +210,18 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
     : 0;
 
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (reportRef.current) {
-      html2canvas(reportRef.current, { scale: 1.5, useCORS: true }).then((canvas) => {
-        const imgData = canvas.toDataURL('image/jpeg', 0.9);
+      const savePath = await StorageManager.getAdminSetting('reportSavePath');
+      if (!savePath) {
+        alert("Veuillez d'abord configurer le chemin de sauvegarde des rapports dans les Paramètres Techniques.");
+        return;
+      }
+      setIsGeneratingPdf(true);
+      setLastSavedFilePath(null);
+
+      try {
+        const canvas = await html2canvas(reportRef.current, { scale: 1.5, useCORS: true });
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
@@ -221,29 +231,21 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
         const contentWidth = pdfWidth - margin * 2;
         const contentHeight = (canvas.height * contentWidth) / canvas.width;
-
         const pageContentHeight = pdfHeight - headerHeight - footerHeight;
         const totalPages = Math.ceil(contentHeight / pageContentHeight);
 
         for (let i = 0; i < totalPages; i++) {
-          if (i > 0) {
-            pdf.addPage();
-          }
+          if (i > 0) pdf.addPage();
           const y = -(pageContentHeight * i) + headerHeight;
-          pdf.addImage(imgData, 'PNG', margin, y, contentWidth, contentHeight);
+          pdf.addImage(canvas, 'PNG', margin, y, contentWidth, contentHeight);
 
-          // Header
           if (reportLogo) {
             try {
               pdf.addImage(reportLogo, 'PNG', pdfWidth - margin - 25, margin, 20, 20);
-            } catch (e) {
-              console.error("Erreur d'ajout du logo au PDF:", e);
-            }
+            } catch (e) { console.error("Erreur d'ajout du logo au PDF:", e); }
           }
           pdf.setFontSize(18);
           pdf.text('Rapport de Session', margin, margin + 15);
-
-          // Footer & Signature Box
           pdf.setFontSize(10);
           pdf.setTextColor(150);
           pdf.text(`Page ${i + 1} / ${totalPages}`, pdfWidth / 2, pdfHeight - margin + 5, { align: 'center' });
@@ -253,8 +255,21 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           pdf.text('Signature du Formateur:', margin + 2, pdfHeight - footerHeight + 5);
         }
 
-        pdf.save(`rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`);
-      });
+        const pdfBlob = pdf.output('blob');
+        const pdfBuffer = await pdfBlob.arrayBuffer();
+        const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
+        const result = await window.dbAPI?.saveReportFile(pdfBuffer, fileName);
+        if (result?.success) {
+          setLastSavedFilePath(result.filePath);
+        } else {
+          throw new Error(result?.error || 'Une erreur inconnue est survenue.');
+        }
+      } catch (error) {
+        console.error("Erreur lors de l'export PDF:", error);
+        alert(`Erreur lors de l'export PDF: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        setIsGeneratingPdf(false);
+      }
     }
   };
 
@@ -267,12 +282,18 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
   const handleExportAllParticipantsPDF = async () => {
     if (!session || participantCalculatedData.length === 0) return;
+    const savePath = await StorageManager.getAdminSetting('reportSavePath');
+    if (!savePath) {
+      alert("Veuillez d'abord configurer le chemin de sauvegarde des rapports dans les Paramètres Techniques.");
+      return;
+    }
     setIsGeneratingZip(true);
+    setLastSavedFilePath(null);
     const zip = new JSZip();
 
     for (const participantData of participantCalculatedData) {
       const participantSpecificResults = participantData.id
-        ? sessionResults.filter(r => r.participantId === participantData.id)
+        ? sessionResults.filter(r => String(r.participantId) === String(participantData.id))
         : [];
       const specificThemeScores = calculateThemeScores(participantSpecificResults, questionsForThisSession);
 
@@ -309,25 +330,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
       try {
         const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfPageHeight = pdf.internal.pageSize.getHeight();
-        const img = new Image();
-        img.src = imgData;
-        await new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r(); });
-
-        if (img.width > 0 && img.height > 0) {
-            const ratio = img.height / img.width;
-            const imgHeightInPdf = pdfWidth * ratio;
-            if (imgHeightInPdf <= pdfPageHeight) {
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeightInPdf);
-            } else {
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeightInPdf);
-            }
-        } else {
-            console.error("Skipping PDF for participant due to image error:", participantData);
-        }
+        pdf.addImage(canvas, 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
         const safeFileName = `Rapport_${session.nomSession}_${participantData.nom}_${participantData.prenom}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
         zip.file(safeFileName, pdf.output('blob'));
       } catch (error) {
@@ -339,27 +343,50 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
     try {
       const zipBlob = await zip.generateAsync({ type: 'blob' });
-      saveAs(zipBlob, `Rapports_Session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.zip`);
+      const zipBuffer = await zipBlob.arrayBuffer();
+      const fileName = `Rapports_Session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.zip`;
+      const result = await window.dbAPI?.saveReportZipFile(zipBuffer, fileName);
+      if (result?.success) {
+        setLastSavedFilePath(result.filePath);
+      } else {
+        throw new Error(result?.error || 'Une erreur inconnue est survenue.');
+      }
     } catch (error) {
       console.error("Erreur ZIP:", error);
+      alert(`Erreur lors de la génération du ZIP: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsGeneratingZip(false);
     }
   };
 
-  // console.log('[ReportDetails] Final referentialCode before render:', referentialCode); // Nettoyé
-
   return (
     <div>
-      <div className="flex justify-end mb-4 space-x-2">
+      <div className="flex justify-end mb-4 space-x-2 items-center">
+        {lastSavedFilePath && (
+          <div className="text-sm text-green-600 mr-4">
+            Fichier enregistré !{' '}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                window.dbAPI?.openFile(lastSavedFilePath);
+              }}
+              className="underline hover:text-green-800"
+            >
+              Ouvrir le fichier
+            </a>
+          </div>
+        )}
         <Button
           onClick={handleExportAllParticipantsPDF}
           icon={<Download size={16}/>}
-          disabled={isGeneratingZip}
+          disabled={isGeneratingZip || isGeneratingPdf}
         >
-          {isGeneratingZip ? 'Génération en cours...' : 'ZIP Participants'}
+          {isGeneratingZip ? 'Génération ZIP...' : 'ZIP Participants'}
         </Button>
-        <Button onClick={handleExportPDF} icon={<Download size={16}/>}>Exporter PDF</Button>
+        <Button onClick={handleExportPDF} icon={<Download size={16}/>} disabled={isGeneratingZip || isGeneratingPdf}>
+          {isGeneratingPdf ? 'Génération PDF...' : 'Exporter PDF'}
+        </Button>
       </div>
       <div ref={reportRef} className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">

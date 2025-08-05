@@ -468,6 +468,38 @@ ipcMain.handle(
     }
   });
 
+  ipcMain.handle('save-report-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
+    loggerInstance.debug(`[IPC] save-report-file: ${fileName}`);
+    try {
+      const savePath = await getAdminSetting('reportSavePath');
+      if (!savePath) {
+        throw new Error("Le chemin de sauvegarde des rapports n'est pas configuré dans les paramètres techniques.");
+      }
+      const filePath = path.join(savePath, fileName);
+      await fs.writeFile(filePath, Buffer.from(fileBuffer));
+      return { success: true, filePath };
+    } catch (error: any) {
+      loggerInstance.debug(`Failed to save report file: ${error}`);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('save-report-zip-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
+    loggerInstance.debug(`[IPC] save-report-zip-file: ${fileName}`);
+    try {
+      const savePath = await getAdminSetting('reportSavePath');
+      if (!savePath) {
+        throw new Error("Le chemin de sauvegarde des rapports n'est pas configuré dans les paramètres techniques.");
+      }
+      const filePath = path.join(savePath, fileName);
+      await fs.writeFile(filePath, Buffer.from(fileBuffer));
+      return { success: true, filePath };
+    } catch (error: any) {
+      loggerInstance.debug(`Failed to save report zip file: ${error}`);
+      return { success: false, error: error.message };
+    }
+  });
+
   // File Operations
   ipcMain.handle('open-file-dialog', async () => {
     loggerInstance.debug('[IPC] open-file-dialog');

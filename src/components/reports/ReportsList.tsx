@@ -85,12 +85,6 @@ const ReportsList: React.FC<ReportsListProps> = ({ sessions, onViewReport, refer
                   >
                     Consulter
                   </Button>
-                  <Button variant="ghost" size="sm" title="Exporter en PDF">
-                    <Download size={16} />
-                  </Button>
-                  <Button variant="ghost" size="sm" title="Imprimer">
-                    <Printer size={16} />
-                  </Button>
                 </div>
               </TableCell>
             </TableRow>
