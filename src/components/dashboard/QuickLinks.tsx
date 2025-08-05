@@ -1,8 +1,9 @@
 import React from 'react';
-import { Plus, Upload, FileText, Settings } from 'lucide-react';
+import { Plus, Upload, FileText } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import { Session } from '@common/types';
+import { useSessionStore } from '../../stores/sessionStore';
 
 type QuickLinksProps = {
   onPageChange: (page: string, sessionId?: number) => void;
@@ -10,27 +11,27 @@ type QuickLinksProps = {
 };
 
 const QuickLinks: React.FC<QuickLinksProps> = ({ onPageChange, sessions }) => {
+  const { startCreating, startImporting } = useSessionStore();
+
   const handleNewSession = () => {
-    // This should trigger the same logic as the "Nouvelle session" button in the Sessions page
+    startCreating();
     onPageChange('sessions');
-    // The Sessions page should handle the creation state.
-    // We might need to pass a specific state to onPageChange if not.
-    // For now, just navigating to the sessions page seems reasonable.
-    // A more specific implementation might be onPageChange('sessions', { action: 'new' })
   };
 
-  const handleImportSession = () => {
-    // This should trigger the same logic as the "Importer une session" button in the Sessions page
-    onPageChange('sessions');
-    // Similar to new session, the Sessions page should handle the import trigger.
+  const handleImportSession = async () => {
+    if (window.dbAPI) {
+      const result = await window.dbAPI.openExcelFileDialog();
+      if (!result.canceled && result.fileBuffer) {
+        const blob = new Blob([Buffer.from(result.fileBuffer, 'base64')], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const file = new File([blob], result.fileName!, { type: blob.type });
+        startImporting(file);
+        onPageChange('sessions');
+      }
+    }
   };
 
   const handleOpenReport = (sessionId: number) => {
     onPageChange('reports', sessionId);
-  };
-
-  const handleGoToSettings = () => {
-    onPageChange('settings');
   };
 
   const today = new Date();
@@ -40,35 +41,32 @@ const QuickLinks: React.FC<QuickLinksProps> = ({ onPageChange, sessions }) => {
     const sessionDate = new Date(s.dateSession);
     sessionDate.setHours(0, 0, 0, 0);
     return s.status === 'completed' && sessionDate.getTime() === today.getTime();
-  });
+  }).sort((a, b) => new Date(b.resultsImportedAt!).getTime() - new Date(a.resultsImportedAt!).getTime());
+
+  const latestReportSession = completedTodaySessions.length > 0 ? completedTodaySessions[0] : null;
 
   return (
-    <Card className="mb-6">
+    <Card>
       <h3 className="text-lg font-medium text-texte-principal mb-4">Liens rapides</h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Button variant="outline" onClick={() => onPageChange('sessions', undefined)}>
+      <div className="space-y-2">
+        <Button variant="outline" onClick={handleNewSession} className="w-full justify-start">
           <Plus size={16} className="mr-2" />
           Nouvelle session
         </Button>
-        <Button variant="outline" onClick={() => onPageChange('sessions', undefined)}>
+        <Button variant="outline" onClick={handleImportSession} className="w-full justify-start">
           <Upload size={16} className="mr-2" />
           Importer une session
         </Button>
-        <Button variant="outline" onClick={handleGoToSettings}>
-          <Settings size={16} className="mr-2" />
-          Paramètres
-        </Button>
-
-        {completedTodaySessions.map(session => (
+        {latestReportSession && (
           <Button
-            key={session.id}
             variant="outline"
-            onClick={() => handleOpenReport(session.id!)}
+            onClick={() => handleOpenReport(latestReportSession.id!)}
+            className="w-full justify-start"
           >
             <FileText size={16} className="mr-2" />
-            Rapport: {session.nomSession}
+            Rapport: {latestReportSession.nomSession}
           </Button>
-        ))}
+        )}
       </div>
     </Card>
   );

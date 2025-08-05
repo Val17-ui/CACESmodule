@@ -4,10 +4,10 @@ import SessionsList from '../components/sessions/SessionsList';
 import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
 import { Plus, Upload } from 'lucide-react';
-// import { getAllSessions, getSessionById } from '../db'; // Supprimé
 import { Session as DBSession, Referential } from '@common/types';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import { useSessionStore } from '../stores/sessionStore';
 
 type SessionsProps = {
   activePage: string;
@@ -106,8 +106,7 @@ const periodFilters = [
 ];
 
 const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId }) => {
-  const [isCreating, setIsCreating] = useState(false);
-  const [sessionToImport, setSessionToImport] = useState<File | null>(null);
+  const { isCreating, sessionToImport, startCreating, startImporting, reset: resetSessionStore } = useSessionStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [managingSessionId, setManagingSessionId] = useState<number | null>(null);
   const [managingSessionName, setManagingSessionName] = useState<string | null>(null); // Nouvel état pour le nom
@@ -292,16 +291,14 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   }, [rawSessions, searchTerm, selectedPeriod, activeList]);
 
   const handleCreateNew = () => {
-    setIsCreating(true);
-    setSessionToImport(null);
+    startCreating();
     setManagingSessionId(null);
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setSessionToImport(file);
-      setIsCreating(true);
+      startImporting(file);
       setManagingSessionId(null);
     }
     if (fileInputRef.current) {
@@ -315,14 +312,13 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
 
   const handleManageSession = (id: number) => {
     setManagingSessionId(id);
-    setIsCreating(false);
+    resetSessionStore();
     onPageChange(activePage, id); // S'assurer que App.tsx est au courant de la session gérée
   };
 
   const handleBackToList = () => {
-    setIsCreating(false);
+    resetSessionStore();
     setManagingSessionId(null);
-    setSessionToImport(null);
     onPageChange(activePage, undefined); // Notifier App.tsx qu'on n'est plus sur une session spécifique
     fetchRawSessions(); // Recharger la liste au cas où des modifs auraient été faites
   };
