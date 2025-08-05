@@ -686,6 +686,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   };
 
 const handleGenerateQuestionnaire = async () => {
+    const validationErrors = validateSessionDataForGeneration();
+    if (validationErrors.length > 0) {
+      setImportSummary(`Erreur de validation :\n- ${validationErrors.join('\n- ')}`);
+      setActiveTab('participants');
+      return;
+    }
+
     const sessionData = await prepareSessionDataForDb();
     if (sessionData) {
         const savedId = await handleSaveSession(sessionData);
@@ -770,6 +777,56 @@ const handleGenerateQuestionnaire = async () => {
       resultsImportedAt: null,
     };
     return sessionToSave as DBSession;
+  };
+
+  const validateSessionDataForGeneration = (iterationIndex?: number): string[] => {
+    const errors: string[] = [];
+    const iterationsToValidate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: iterationCount }, (_, i) => i);
+
+    const allAssignedParticipantUiIds = new Set(Object.values(participantAssignments).flat().map(p => p.id));
+
+    for (const p of participants) {
+      if (!allAssignedParticipantUiIds.has(p.uiId)) {
+        errors.push(`Le participant ${p.firstName} ${p.lastName} n'est lié à aucune itération.`);
+      }
+      if (!p.firstName || !p.lastName) {
+        errors.push(`Le nom ou le prénom d'un participant est manquant.`);
+      }
+    }
+
+    for (const i of iterationsToValidate) {
+      const iterationName = iterationNames[i] || `Itération ${i + 1}`;
+      const assignedParticipants = (participantAssignments[i] || []).map(assignment => {
+        return participants.find(p => p.uiId === assignment.id);
+      }).filter((p): p is FormParticipant => p !== undefined);
+
+      if (assignedParticipants.length === 0) {
+        errors.push(`L'itération '${iterationName}' n'a aucun participant assigné.`);
+        continue;
+      }
+
+      const deviceIdMap = new Map<number, FormParticipant[]>();
+      for (const p of assignedParticipants) {
+        if (!p.assignedGlobalDeviceId) {
+          errors.push(`Veuillez assigner un boîtier à ${p.firstName} ${p.lastName} dans l'itération '${iterationName}'.`);
+        } else {
+          if (!deviceIdMap.has(p.assignedGlobalDeviceId)) {
+            deviceIdMap.set(p.assignedGlobalDeviceId, []);
+          }
+          deviceIdMap.get(p.assignedGlobalDeviceId)!.push(p);
+        }
+      }
+
+      for (const [deviceId, assigned] of deviceIdMap.entries()) {
+        if (assigned.length > 1) {
+          const names = assigned.map(p => `${p.firstName} ${p.lastName}`).join(' et ');
+          const deviceName = hardwareDevices.find(d => d.id === deviceId)?.name || `ID: ${deviceId}`;
+          errors.push(`Dans l'itération '${iterationName}', le boîtier ${deviceName} est assigné à plusieurs participants : ${names}.`);
+        }
+      }
+    }
+
+    return errors;
   };
 
 const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
@@ -909,6 +966,13 @@ if (savedIterationId) { // <-- On ajoute cette condition
   };
 
   const handleRegenerateIteration = async (iterationIndex: number) => {
+    const validationErrors = validateSessionDataForGeneration(iterationIndex);
+    if (validationErrors.length > 0) {
+      setImportSummary(`Erreur de validation :\n- ${validationErrors.join('\n- ')}`);
+      setActiveTab('participants');
+      return;
+    }
+
     if (window.confirm("Êtes-vous certain de vouloir régénérer ce questionnaire ? Si celui-ci contient des votes, ceux-ci seront perdus.")) {
       await handleGenerateQuestionnaireAndOrs(iterationIndex);
     }
