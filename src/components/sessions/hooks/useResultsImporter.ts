@@ -2,14 +2,13 @@ import { useState } from 'react';
 import JSZip from 'jszip';
 import {
   Session as DBSession,
-  ExtractedResultFromXml,
   ExpectedIssueResolution,
   UnknownDeviceResolution,
   VotingDevice,
-  DBParticipantType,
+  Participant as DBParticipantType,
   SessionIteration,
 } from '@common/types';
-import { parseOmbeaResultsXml, transformParsedResponsesToSessionResults } from '../../../utils/resultsParser';
+import { parseOmbeaResultsXml, transformParsedResponsesToSessionResults, ExtractedResultFromXml } from '../../../utils/resultsParser';
 import { StorageManager } from '../../../services/StorageManager';
 import { logger } from '../../../utils/logger';
 import AnomalyResolutionModal, { DetectedAnomalies } from '../AnomalyResolutionModal';
@@ -330,7 +329,7 @@ export const useResultsImporter = ({
           return;
       }
       const participantsForIteration = (iterationForImport.participants || [])
-        .map((p: any) => {
+        .map((p: DBParticipantType) => {
             const device = hardwareDevices.find(d => d.id === p.assignedGlobalDeviceId);
             return {
                 id: p.id,

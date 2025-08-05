@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import Button from '../ui/Button';
 import { Save, Trash2 } from 'lucide-react';
 import {
@@ -38,15 +38,7 @@ interface AdminPPTXSettings {
 
 const SessionFormContent: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImport }) => {
     const { state, dispatch } = useSessionContext();
-    const {
-        participants,
-        participantAssignments,
-        handleAddParticipant,
-        handleRemoveParticipant,
-        handleParticipantChange,
-        handleParticipantIterationChange,
-        handleParticipantFileSelect,
-      } = useParticipantManager({
+    useParticipantManager({
         initialParticipants: state.participants,
         initialAssignments: state.participantAssignments,
         editingSessionData: state.editingSessionData,
@@ -80,6 +72,7 @@ const SessionFormContent: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessi
         sessionIdToLoad,
         sessionToImport,
         dispatch,
+        state,
       });
 
       useEffect(() => {
