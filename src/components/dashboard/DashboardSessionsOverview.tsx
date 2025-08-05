@@ -81,7 +81,7 @@ const SessionRow: React.FC<{session: Session, onPageChange: (page: string, sessi
               </span>
               <span className="text-gris-moyen hidden sm:inline">•</span>
               <span className="text-sm text-texte-principal/80 block sm:inline mt-1 sm:mt-0">
-                {session.participants ? session.participants.length : 0} participant(s)
+                {session.participantCount ?? 0} participant(s)
               </span>
             </div>
           </div>

@@ -133,6 +133,19 @@ export const getQuestionById = async (id: number): Promise<QuestionWithId | unde
   });
 }
 
+export const getQuestionCount = async (): Promise<number> => {
+  return asyncDbRun(() => {
+    try {
+      const stmt = getDb().prepare("SELECT COUNT(*) as count FROM questions");
+      const result = stmt.get() as { count: number };
+      return result.count;
+    } catch (error) {
+      logger?.debug(`[DB Questions] Error getting question count: ${error}`);
+      throw error;
+    }
+  });
+};
+
 export const getQuestionsByIds = async (ids: number[]): Promise<QuestionWithId[]> => {
   if (!ids || ids.length === 0) return Promise.resolve([]);
   return asyncDbRun(() => {
