@@ -12,6 +12,7 @@ declare global {
       addBulkSessionResults: (results: Omit<SessionResult, 'id'>[]) => Promise<(number | undefined)[] | undefined>;
       getResultsForSession: (sessionId: number) => Promise<SessionResult[]>;
       getAllResults: () => Promise<SessionResult[]>;
+      hasResultsForIteration: (iterationId: number) => Promise<boolean>;
       getAllVotingDevices: () => Promise<VotingDevice[]>;
       addBulkSessionQuestions: (questions: Omit<SessionQuestion, 'id'>[]) => Promise<(number | undefined)[] | undefined>;
       deleteSessionQuestionsBySessionId: (sessionId: number) => Promise<void>;
