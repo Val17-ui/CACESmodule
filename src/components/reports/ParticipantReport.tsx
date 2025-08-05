@@ -158,6 +158,7 @@ const ParticipantReport = () => {
     const data: {
       [themeName: string]: {
         themeId: number;
+        score: number;
         blocks: {
           [blockKey: string]: {
             questions: EnrichedQuestionForParticipantReport[];
@@ -182,7 +183,7 @@ const ParticipantReport = () => {
       }
 
       const bloc = allBlocsDb.find(b => b.id === q.blocId);
-      const blockKey = bloc ? `${bloc.code_bloc} (v${q.version || 'N/A'})` : `Inconnu (v${q.version || 'N/A'})`;
+      const blockKey = bloc ? `${bloc.code_bloc} (${q.version || 'N/A'})` : `Inconnu (${q.version || 'N/A'})`;
 
       if (!data[themeName].blocks[blockKey]) {
         data[themeName].blocks[blockKey] = {
@@ -196,14 +197,22 @@ const ParticipantReport = () => {
       data[themeName].blocks[blockKey].questions.push(q);
     });
 
-    // Calculate scores
+    // Calculate scores for blocks and themes
     for (const themeName in data) {
+      let totalThemeCorrect = 0;
+      let totalThemeQuestions = 0;
+
       for (const blockKey in data[themeName].blocks) {
         const block = data[themeName].blocks[blockKey];
         block.total = block.questions.length;
         block.correct = block.questions.filter(q => q.isCorrectAnswer).length;
         block.score = block.total > 0 ? (block.correct / block.total) * 100 : 0;
+
+        totalThemeCorrect += block.correct;
+        totalThemeQuestions += block.total;
       }
+
+      data[themeName].score = totalThemeQuestions > 0 ? (totalThemeCorrect / totalThemeQuestions) * 100 : 0;
     }
 
     return data;
@@ -498,48 +507,42 @@ const ParticipantReport = () => {
               <div><strong>Organisation :</strong> {participantRef.organization || 'N/A'}</div>
               <hr className="my-2" />
               <div><strong>Session :</strong> {detailedParticipation.nomSession}</div>
+              <div><strong>Référentiel :</strong> <Badge variant="default">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></div>
               <div><strong>N° Session :</strong> {detailedParticipation.num_session || 'N/A'}</div>
               <div><strong>N° Stage :</strong> {detailedParticipation.num_stage || 'N/A'}</div>
               <div><strong>Date :</strong> {new Date(detailedParticipation.dateSession).toLocaleDateString('fr-FR')}</div>
-              <div><strong>Lieu :</strong> {detailedParticipation.location || 'N/A'}</div>
               <div><strong>Formateur :</strong> {trainerName}</div>
-              <div><strong>Référentiel :</strong> <Badge variant="default">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></div>
+              <div><strong>Lieu :</strong> {detailedParticipation.location || 'N/A'}</div>
             </Card>
           </div>
 
           {/* Col 2: Scores */}
-          <div className="lg:col-span-2">
-            <h2 className="text-2xl font-bold mb-4">Scores</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="p-4">
-                <h3 className="text-lg font-semibold mb-2">Scores par Thème/Bloc</h3>
-                <div className="space-y-4">
-                  {Object.entries(structuredReportData)
-                    .sort(([_, a], [__, b]) => a.themeId - b.themeId)
-                    .map(([themeName, themeData]) => (
-                      <div key={themeName}>
-                        <h4 className="font-semibold text-md mb-1">{themeName}</h4>
-                        {Object.entries(themeData.blocks).map(([blockKey, blockData]) => (
-                          <div key={blockKey} className="text-sm ml-4">
-                            <span className={blockData.score < 50 ? 'text-red-500 font-semibold' : 'text-gray-700'}>
-                              {blockKey}:
-                            </span> {blockData.score.toFixed(0)}% ({blockData.correct}/{blockData.total})
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                </div>
-              </Card>
-              <Card className="p-4">
-                <h3 className="text-lg font-semibold mb-2">Performance Globale</h3>
-                <p className={participantSuccess ? 'text-green-600 font-bold text-2xl' : 'text-red-600 font-bold text-2xl'}>
-                  {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
-                </p>
-                {participantSuccess !== undefined ? (
-                  participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
-                ) : <Badge variant="warning">En attente</Badge>}
-              </Card>
-            </div>
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="p-4">
+              <div className="space-y-4">
+                {Object.entries(structuredReportData)
+                  .sort(([_, a], [__, b]) => a.themeId - b.themeId)
+                  .map(([themeName, themeData]) => (
+                    <div key={themeName}>
+                      <h4 className={`font-semibold text-md mb-1 ${themeData.score < 50 ? 'text-red-500' : ''}`}>{themeName}</h4>
+                      {Object.entries(themeData.blocks).map(([blockKey, blockData]) => (
+                        <div key={blockKey} className="text-sm ml-4">
+                          {blockKey}: {blockData.score.toFixed(0)}% ({blockData.correct}/{blockData.total})
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+              </div>
+            </Card>
+            <Card className="p-4">
+              <h3 className="text-lg font-semibold mb-2">Performance Globale</h3>
+              <p className={participantSuccess ? 'text-green-600 font-bold text-2xl' : 'text-red-600 font-bold text-2xl'}>
+                {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
+              </p>
+              {participantSuccess !== undefined ? (
+                participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
+              ) : <Badge variant="warning">En attente</Badge>}
+            </Card>
           </div>
         </div>
 
@@ -558,22 +561,13 @@ const ParticipantReport = () => {
                       <h5 className="font-medium text-gray-600 mb-2">{blockKey}</h5>
                       {blockData.questions.map((q, qIndex) => (
                         <div key={q.id || `q-${qIndex}`} className="text-sm mb-4 pb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
-                          <p className="flex items-start font-medium text-gray-900 mb-1">
-                            <HelpCircle size={16} className="mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
-                            <span>{q.text}</span>
-                          </p>
+                          <p className="font-medium text-gray-900 mb-1">{q.text}</p>
                           <div className="pl-6 space-y-0.5">
-                            <p>Votre réponse : <span className="font-semibold">{q.participantAnswer || 'Non répondu'}</span></p>
-                            {q.isCorrectAnswer === false && q.participantAnswer !== undefined && (
-                              <p className="text-orange-600">Bonne réponse : <span className="font-semibold">{q.correctAnswer}</span></p>
-                            )}
-                            <p className="flex items-center">
-                              {q.isCorrectAnswer === true ? (
-                                <CheckCircle size={15} className="mr-2 text-green-500" />
-                              ) : (
-                                <XCircle size={15} className="mr-2 text-red-500" />
-                              )}
-                              <span>{q.isCorrectAnswer ? 'Correct' : 'Incorrect'}</span>
+                            <p>
+                              Réponse : <span className="font-semibold">{q.participantAnswer || 'Non répondu'}</span>
+                              <span className={`ml-2 font-semibold ${q.isCorrectAnswer ? 'text-green-600' : 'text-red-600'}`}>
+                                {q.isCorrectAnswer ? 'Correct' : 'Incorrect'}
+                              </span>
                             </p>
                           </div>
                         </div>
