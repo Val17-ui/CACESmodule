@@ -58,6 +58,7 @@ const ParticipantReport = () => {
   const [endDate, setEndDate] = useState<string>('');
   const [detailedParticipation, setDetailedParticipation] = useState<ProcessedSessionDetails | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [savedPdfPath, setSavedPdfPath] = useState<string | null>(null);
   const [trainerName, setTrainerName] = useState<string>('N/A');
 
   useEffect(() => {
@@ -319,7 +320,7 @@ const ParticipantReport = () => {
           </tr>
           <tr>
             <td style="padding: 4px;"><strong>Organisation :</strong> ${participantRef.organization || 'N/A'}</td>
-            <td style="padding: 4px;"><strong>ID Boîtier :</strong> ${boitierIdDisplay}</td>
+            <td style="padding: 4px;"></td>
           </tr>
           <tr>
             <td style="padding: 4px;"><strong>Session :</strong> ${nomSession}</td>
@@ -385,9 +386,12 @@ const ParticipantReport = () => {
             pdfHtml += `
               <div style="margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dotted #ccc; page-break-inside: avoid;">
                 <p style="margin: 1px 0; font-weight: bold; font-size: 9px;">${q.text}</p>
-                <p style="margin: 1px 0 0 8px; font-size: 9px;">Réponse : <span style="font-style: italic;">${q.participantAnswer || 'N/R'}</span></p>
-                ${q.isCorrectAnswer === false && q.participantAnswer !== undefined ? `<p style="margin: 1px 0 0 8px; color: #d32f2f; font-size: 9px;">Correction : <span style="font-style: italic;">${q.correctAnswer}</span></p>` : ''}
-                <p style="margin: 1px 0 0 8px; font-size: 9px;">Points : ${q.pointsObtainedForAnswer !== undefined ? q.pointsObtainedForAnswer : (q.isCorrectAnswer ? 1 : 0)}</p>
+                <p style="margin: 1px 0 0 8px; font-size: 9px;">
+                  Réponse : <span style="font-style: italic;">${q.participantAnswer || 'N/R'}</span>
+                  <span style="color: ${q.isCorrectAnswer ? '#2e7d32' : '#c62828'}; font-weight: bold; margin-left: 8px;">
+                    ${q.isCorrectAnswer ? 'Correct' : 'Incorrect'}
+                  </span>
+                </p>
               </div>`;
           }
           pdfHtml += `</div>`;
@@ -482,7 +486,16 @@ const ParticipantReport = () => {
     }
 
     const safeFileName = `Rapport_${participantRef.prenom}_${participantRef.nom}_${nomSession}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
-    pdf.save(safeFileName);
+
+    const pdfBuffer = pdf.output('arraybuffer');
+
+    const result = await window.dbAPI.saveReportFile(pdfBuffer, safeFileName);
+    if (result.success && result.filePath) {
+      setSavedPdfPath(result.filePath);
+    } else {
+      // Handle error, maybe show a notification to the user
+      console.error("Failed to save PDF:", result.error);
+    }
 
     setIsGeneratingPdf(false);
   };
@@ -503,6 +516,18 @@ const ParticipantReport = () => {
           >
             {isGeneratingPdf ? 'Génération PDF...' : 'Télécharger PDF'}
           </Button>
+          {savedPdfPath && (
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                window.dbAPI.openFile(savedPdfPath);
+              }}
+              className="text-sm text-blue-600 hover:underline ml-4"
+            >
+              Ouvrir le rapport
+            </a>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -542,13 +567,17 @@ const ParticipantReport = () => {
               </div>
             </Card>
             <Card className="p-4">
-              <h3 className="text-lg font-semibold mb-2">Performance Globale</h3>
-              <p className={participantSuccess ? 'text-green-600 font-bold text-2xl' : 'text-red-600 font-bold text-2xl'}>
-                {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
-              </p>
-              {participantSuccess !== undefined ? (
-                participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
-              ) : <Badge variant="warning">En attente</Badge>}
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Note Globale</h3>
+                <div className="text-right">
+                  <p className={participantSuccess ? 'text-green-600 font-bold text-xl' : 'text-red-600 font-bold text-xl'}>
+                    {participantScore !== undefined ? `${participantScore.toFixed(0)} / 100` : 'N/A'}
+                  </p>
+                  {participantSuccess !== undefined ? (
+                    participantSuccess ? <Badge variant="success">Réussi</Badge> : <Badge variant="danger">Ajourné</Badge>
+                  ) : <Badge variant="warning">En attente</Badge>}
+                </div>
+              </div>
             </Card>
           </div>
         </div>
