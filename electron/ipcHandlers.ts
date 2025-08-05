@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 import {
   getAllSessions, getSessionById, addSession, updateSession,
   addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration,
-  addBulkSessionResults, getResultsForSession, getAllResults,
+  addBulkSessionResults, getResultsForSession, getAllResults, hasResultsForIteration,
   getAllVotingDevices, addVotingDevice, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices,
   addBulkSessionQuestions, deleteSessionQuestionsBySessionId, getSessionQuestionsBySessionId,
   addBulkSessionBoitiers, deleteSessionBoitiersBySessionId, getSessionBoitiersBySessionId,
@@ -82,6 +82,11 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   ipcMain.handle('db-get-all-results', async () => {
     loggerInstance.debug('[IPC] db-get-all-results');
     return getAllResults();
+  });
+
+  ipcMain.handle('db-has-results-for-iteration', async (_event: IpcMainInvokeEvent, iterationId: number) => {
+    loggerInstance.debug(`[IPC] db-has-results-for-iteration: ${iterationId}`);
+    return hasResultsForIteration(iterationId);
   });
 
   ipcMain.handle('import-results-for-iteration', async (_event: IpcMainInvokeEvent, iterationId: number, sessionId: number, results: SessionResult[]) => {

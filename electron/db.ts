@@ -112,6 +112,19 @@ const archiveOldSessions = async (): Promise<void> => {
   });
 };
 
+const hasResultsForIteration = async (iterationId: number): Promise<boolean> => {
+  return asyncDbRun(() => {
+    try {
+      const stmt = getDb().prepare("SELECT 1 FROM sessionResults WHERE session_iteration_id = ? LIMIT 1");
+      const result = stmt.get(iterationId);
+      return !!result;
+    } catch (error) {
+      _logger?.debug(`[DB SessionResults] Error checking for results for iteration ${iterationId}: ${error}`);
+      throw error;
+    }
+  });
+};
+
 const createSchema = () => {
   _logger?.debug("[DB SCHEMA] Attempting to create/verify schema...");
   const DDL_STATEMENTS = [
@@ -2347,4 +2360,4 @@ const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean
     });
 };
 
-export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus };
+export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, hasResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus };

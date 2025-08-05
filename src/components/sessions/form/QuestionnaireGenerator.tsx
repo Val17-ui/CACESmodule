@@ -6,7 +6,9 @@ import Card from '../../ui/Card';
 interface QuestionnaireGeneratorProps {
   isReadOnly: boolean;
   isGeneratingOrs: boolean;
+  isFirstGenerationDone: boolean;
   handleGenerateQuestionnaire: () => void;
+  handleRegenerateIteration: (iterationIndex: number) => void;
   editingSessionData: any; // Simplified
   modifiedAfterOrsGeneration: boolean;
   importSummary: string | null;
@@ -18,7 +20,9 @@ interface QuestionnaireGeneratorProps {
 const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
   isReadOnly,
   isGeneratingOrs,
+  isFirstGenerationDone,
   handleGenerateQuestionnaire,
+  handleRegenerateIteration,
   editingSessionData,
   modifiedAfterOrsGeneration,
   importSummary,
@@ -26,19 +30,23 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
   currentSessionDbId,
   selectedReferential,
 }) => {
+  const isGenerationDisabled = isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId);
+  const mainButtonText = isGeneratingOrs ? "Génération..." : (isFirstGenerationDone ? "Régénérer tout" : "Générer tous les questionnaires");
+  const mainButtonTitle = isGenerationDisabled ? "Veuillez d'abord sélectionner un référentiel" :
+                         isReadOnly ? "La session est terminée, regénération bloquée." :
+                         isFirstGenerationDone ? "Régénérer tous les questionnaires (Attention : ceci écrasera les existants)" :
+                         "Générer tous les questionnaires";
+
   return (
     <Card title="Générer le questionnaire" className="mb-6">
       <Button
-        variant={editingSessionData?.orsFilePath ? "secondary" : "primary"}
+        variant={isFirstGenerationDone ? "secondary" : "primary"}
         icon={<PackagePlus size={16} />}
         onClick={handleGenerateQuestionnaire}
-        disabled={isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId)}
-        title={(!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId) ? "Veuillez d'abord sélectionner un référentiel" :
-               isReadOnly ? "La session est terminée, regénération bloquée." :
-                   (!!editingSessionData?.orsFilePath) ? "Régénérer le questionnaire (Attention : ceci écrasera l'existant)" :
-                   "Générer le questionnaire"}
+        disabled={isGenerationDisabled || isFirstGenerationDone}
+        title={mainButtonTitle}
       >
-        {isGeneratingOrs ? "Génération..." : (editingSessionData?.orsFilePath ? "Régénérer le questionnaire" : "Générer le questionnaire")}
+        {mainButtonText}
       </Button>
       {isReadOnly && (
              <p className="mt-2 text-sm text-yellow-700">La session est terminée, la génération/régénération est bloquée.</p>
@@ -65,14 +73,24 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
           <h4 className="text-md font-semibold text-gray-700 mb-2">Fichiers de questionnaire générés :</h4>
           <ul className="list-disc list-inside pl-2 space-y-1">
             {editingSessionData.iterations.map((iter: any, index: number) => (
-              <li key={index} className="text-sm text-gray-600">
-                <span className="font-medium">{iter.name}:</span>
+              <li key={index} className="text-sm text-gray-600 flex items-center justify-between">
+                <div>
+                  <span className="font-medium">{iter.name}:</span>
+                  <Button
+                    variant="ghost"
+                    onClick={() => { if (iter.ors_file_path) window.dbAPI?.openFile(iter.ors_file_path); }}
+                    className="ml-2"
+                  >
+                    {iter.ors_file_path}
+                  </Button>
+                </div>
                 <Button
-                  variant="ghost"
-                  onClick={() => { if (iter.ors_file_path) window.dbAPI?.openFile(iter.ors_file_path); }}
-                  className="ml-2"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRegenerateIteration(index)}
+                  disabled={isGeneratingOrs || isReadOnly}
                 >
-                  {iter.ors_file_path}
+                  Régénérer
                 </Button>
               </li>
             ))}

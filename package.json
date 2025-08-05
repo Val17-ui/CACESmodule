@@ -18,8 +18,8 @@
     "start": "npm run build && electron ."
   },
   "build": {
-    "appId": "com.evalactive.app",
-    "productName": "eval'active",
+    "appId": "com.easycertif.app",
+    "productName": "EasyCertif",
     "files": [
       "dist/renderer/**/*",
       "dist-electron/**/*"

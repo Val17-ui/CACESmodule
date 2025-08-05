@@ -116,6 +116,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   const [hardwareLoaded, setHardwareLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('details');
   const [isGeneratingOrs, setIsGeneratingOrs] = useState(false);
+  const [isFirstGenerationDone, setIsFirstGenerationDone] = useState(false);
   const [modifiedAfterOrsGeneration, setModifiedAfterOrsGeneration] = useState(false);
   const [trainersList, setTrainersList] = useState<Trainer[]>([]);
   const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
@@ -246,6 +247,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
             setSelectedBlocIds(sessionData.selectedBlocIds || []);
             setSelectedKitIdState(sessionData.selectedKitId || null);
 
+            if (sessionData.orsFilePath) {
+              setIsFirstGenerationDone(true);
+            }
             if (sessionData.iteration_count && sessionData.iteration_count > 0) {
               const count = sessionData.iteration_count;
               setIterationCount(count);
@@ -889,6 +893,25 @@ if (savedIterationId) { // <-- On ajoute cette condition
     }
   };
 
+  const handleRegenerateIteration = async (iterationIndex: number) => {
+    if (!currentSessionDbId) return;
+    const iteration = editingSessionData?.iterations?.find(it => it.iteration_index === iterationIndex);
+    if (!iteration?.id) {
+      setImportSummary("Veuillez d'abord générer le questionnaire pour cette itération.");
+      return;
+    }
+
+    const hasResults = await window.dbAPI?.hasResultsForIteration(iteration.id);
+    if (hasResults) {
+      if (!window.confirm("Cette itération a déjà des résultats importés. La regénération du questionnaire effacera les résultats existants. Êtes-vous sûr de vouloir continuer ?")) {
+        return;
+      }
+      await StorageManager.deleteResultsForIteration(iteration.id);
+    }
+
+    await handleGenerateQuestionnaireAndOrs(iterationIndex);
+  };
+
   const handleGenerateQuestionnaireAndOrs = async (iterationIndex?: number) => {
     const refCodeToUse = selectedReferential || (editingSessionData?.referentielId ? referentielsData.find(r => r.id === editingSessionData.referentielId)?.code : null);
     if (!refCodeToUse) {
@@ -994,6 +1017,9 @@ if (savedIterationId) { // <-- On ajoute cette condition
       }
       const finalSessionData = await StorageManager.getSessionById(currentSavedId);
       setEditingSessionData(finalSessionData || null);
+      if (iterationIndex === undefined) {
+        setIsFirstGenerationDone(true);
+      }
     } catch (error: any) {
       setImportSummary(`Erreur majeure génération: ${error.message}`);
     } finally {
@@ -1525,6 +1551,8 @@ if (savedIterationId) { // <-- On ajoute cette condition
             isReadOnly={isReadOnly}
             isGeneratingOrs={isGeneratingOrs}
             handleGenerateQuestionnaire={handleGenerateQuestionnaire}
+            handleRegenerateIteration={handleRegenerateIteration}
+            isFirstGenerationDone={isFirstGenerationDone}
             editingSessionData={editingSessionData}
             modifiedAfterOrsGeneration={modifiedAfterOrsGeneration}
             importSummary={importSummary}
