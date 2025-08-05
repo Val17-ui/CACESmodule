@@ -252,6 +252,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
               setIsFirstGenerationDone(true);
             }
             if (sessionData.iteration_count && sessionData.iteration_count > 0) {
+              const count = sessionData.iteration_count;
+              setIterationCount(count);
               if (sessionData.iterations) {
                 const hasResultsMap: Record<number, boolean> = {};
                 for (const iter of sessionData.iterations) {
@@ -262,8 +264,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 }
                 setIterationHasResults(hasResultsMap);
               }
-              const count = sessionData.iteration_count;
-              setIterationCount(count);
               let names = sessionData.iterations?.map((iter: { name: any; }, index: number) => iter.name || `Session_${index + 1}`) || [];
               if (names.length < count) {
                 const additionalNames = Array.from({ length: count - names.length }, (_, i) => `Session_${names.length + i + 1}`);
