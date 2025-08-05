@@ -33,19 +33,19 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
   selectedReferential,
 }) => {
   const isGenerationDisabled = isGeneratingOrs || isReadOnly || (!selectedReferential && !currentSessionDbId && !editingSessionData?.referentielId);
-  const mainButtonText = isGeneratingOrs ? "Génération..." : (isFirstGenerationDone ? "Régénérer tout" : "Générer tous les questionnaires");
+  const mainButtonText = isGeneratingOrs ? "Génération..." : "Générer tous les questionnaires";
   const mainButtonTitle = isGenerationDisabled ? "Veuillez d'abord sélectionner un référentiel" :
                          isReadOnly ? "La session est terminée, regénération bloquée." :
-                         isFirstGenerationDone ? "Régénérer tous les questionnaires (Attention : ceci écrasera les existants)" :
-                         "Générer tous les questionnaires";
+                         isFirstGenerationDone ? "Les questionnaires ont déjà été générés. Utilisez les boutons ci-dessous pour une regénération." :
+                         "Générer tous les questionnaires pour chaque itération";
 
   return (
     <Card title="Générer le questionnaire" className="mb-6">
       <Button
-        variant={isFirstGenerationDone ? "secondary" : "primary"}
+        variant="primary"
         icon={<PackagePlus size={16} />}
         onClick={handleGenerateQuestionnaire}
-        disabled={isGenerationDisabled}
+        disabled={isGenerationDisabled || isFirstGenerationDone}
         title={mainButtonTitle}
       >
         {mainButtonText}
@@ -72,32 +72,49 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
           )}
       {editingSessionData?.iterations && editingSessionData.iterations.length > 0 && isFirstGenerationDone && (
         <div className="mt-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
-          <h4 className="text-md font-semibold text-gray-700 mb-2">Fichiers de questionnaire générés :</h4>
-          <ul className="list-disc list-inside pl-2 space-y-1">
+          <h4 className="text-md font-semibold text-gray-700 mb-3">Génération par itération</h4>
+          <ul className="space-y-3">
             {editingSessionData.iterations.map((iter: any, index: number) => (
-              <li key={index} className="text-sm text-gray-600 flex items-center justify-between">
+              <li key={index} className="p-2 bg-white rounded-md border border-gray-300 flex items-center justify-between">
                 <div>
-                  <span className="font-medium">{iter.name}:</span>
-                  <Button
-                    variant="ghost"
-                    onClick={() => { if (iter.ors_file_path) window.dbAPI?.openFile(iter.ors_file_path); }}
-                    className="ml-2"
-                  >
-                    {iter.ors_file_path}
-                  </Button>
+                  <span className="font-medium text-gray-800">{iter.name}</span>
+                  {iter.ors_file_path ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { if (iter.ors_file_path) window.dbAPI?.openFile(iter.ors_file_path); }}
+                        className="ml-2 text-xs"
+                        title={`Ouvrir ${iter.ors_file_path}`}
+                      >
+                        Voir le fichier
+                      </Button>
+                  ) : (
+                    <span className="ml-3 text-xs text-gray-500">(en attente de génération)</span>
+                  )}
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleRegenerateIteration(index)}
-                  disabled={isGeneratingOrs || isReadOnly || iterationHasResults[index]}
-                  title={iterationHasResults[index] ? "Des résultats ont déjà été importés pour cette itération." : "Régénérer ce questionnaire"}
+                  disabled={isGeneratingOrs || isReadOnly}
+                  title={iterationHasResults[index] ? "Des résultats ont déjà été importés pour cette itération, la regénération est bloquée." : "Régénérer uniquement le questionnaire de cette itération."}
                 >
-                  Régénérer
+                  Régénérer ce questionnaire
                 </Button>
               </li>
             ))}
           </ul>
+          <div className="mt-4 pt-4 border-t border-gray-300">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleGenerateQuestionnaire}
+              disabled={isGeneratingOrs || isReadOnly}
+              title="Regénérer tous les questionnaires pour toutes les itérations. Attention, cela peut écraser les fichiers existants."
+            >
+              Régénérer tout (toutes les itérations)
+            </Button>
+          </div>
         </div>
       )}
  </Card>

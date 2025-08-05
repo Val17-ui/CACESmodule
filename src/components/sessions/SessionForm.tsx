@@ -905,7 +905,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
   };
 
   const handleRegenerateIteration = async (iterationIndex: number) => {
-    if (window.confirm("Êtes-vous certain de vouloir régénérer ce questionnaire ? Si celui-ci contient des votes, ceux-ci seront perdus.")) {
+    if (window.confirm("Etes-vous certain de vouloir régénérer ce questionnaire ? si celui-ci contient des votes ceux-ci seront perdus.")) {
       await handleGenerateQuestionnaireAndOrs(iterationIndex);
     }
   };
