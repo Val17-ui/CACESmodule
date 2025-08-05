@@ -434,13 +434,25 @@ ipcMain.handle(
       throw new Error('Invalid template format provided to pptx-generate IPC handler.');
     }
 
-    const result = await generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, loggerInstance);
-    return {
-      filePath: result.filePath,
-      questionMappings: result.questionMappings,
-    };
+    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, loggerInstance);
   }
 );
+
+  ipcMain.handle('save-pptx-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
+    loggerInstance.debug(`[IPC] save-pptx-file: ${fileName}`);
+    try {
+      const orsSavePath = await getAdminSetting('orsSavePath');
+      if (!orsSavePath) {
+        throw new Error("Le chemin de sauvegarde des ORS n'est pas configuré dans les paramètres techniques.");
+      }
+      const filePath = path.join(orsSavePath, fileName);
+      await fs.writeFile(filePath, Buffer.from(fileBuffer));
+      return { success: true, filePath };
+    } catch (error: any) {
+      loggerInstance.debug(`Failed to save PPTX file: ${error}`);
+      return { success: false, error: error.message };
+    }
+  });
 
   ipcMain.handle('get-default-pptx-template', async () => {
     loggerInstance.debug('[IPC] get-default-pptx-template');

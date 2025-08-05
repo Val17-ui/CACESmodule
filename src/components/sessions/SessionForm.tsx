@@ -166,30 +166,35 @@ const SessionFormContent: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessi
             });
 
             const templateFile = await getActivePptxTemplateFile();
-            const result = await window.dbAPI?.generatePresentation(
+            const { orsBlob, questionMappings } = await window.dbAPI?.generatePresentation(
               { name: `${state.sessionName} - ${iterationName}`, date: state.sessionDate, referential: refCodeToUse as CACESReferential },
               participantsForGenerator, allSelectedQuestionsForPptx, templateFile, {} as AdminPPTXSettings
             );
 
-            if (result && result.questionMappings && result.filePath) {
-              const { questionMappings, filePath } = result;
+            if (orsBlob) {
               if (i === 0 && (!upToDateSessionData.questionMappings || upToDateSessionData.questionMappings.length === 0)) {
                 await StorageManager.updateSession(currentSavedId, { questionMappings: questionMappings });
               }
 
-              const iterToUpdateRaw = upToDateSessionData.iterations?.find((it: any) => it.iteration_index === i);
-              const { participants, ...iterToUpdate } = iterToUpdateRaw || { created_at: new Date().toISOString() };
+              const safeSessionName = (state.sessionName || 'Session').replace(/ /g, '_');
+              const safeIterationName = (iterationName || 'Iteration').replace(/ /g, '_');
+              const fileName = `${safeSessionName}_${safeIterationName}.ors`;
+              const saveResult = await window.dbAPI?.savePptxFile(orsBlob, fileName);
+              if (saveResult && saveResult.success) {
+                const iterToUpdateRaw = upToDateSessionData.iterations?.find((it: any) => it.iteration_index === i);
+                const { participants, ...iterToUpdate } = iterToUpdateRaw || { created_at: new Date().toISOString() };
 
-              await StorageManager.addOrUpdateSessionIteration({
-                ...iterToUpdate,
-                session_id: currentSavedId,
-                iteration_index: i,
-                name: iterationName,
-                ors_file_path: filePath,
-                status: 'ready',
-                question_mappings: questionMappings,
-              });
-              dispatch({ type: 'SET_FIELD', field: 'importSummary', payload: `Itération ${iterationName} générée.` });
+                await StorageManager.addOrUpdateSessionIteration({
+                  ...iterToUpdate,
+                  session_id: currentSavedId,
+                  iteration_index: i,
+                  name: iterationName,
+                  ors_file_path: saveResult.filePath,
+                  status: 'ready',
+                  question_mappings: questionMappings,
+                });
+                dispatch({ type: 'SET_FIELD', field: 'importSummary', payload: `Itération ${iterationName} générée.` });
+              } else { throw new Error(`Sauvegarde échouée pour ${iterationName}: ${saveResult?.error}`); }
             }
           }
           const finalSessionData = await StorageManager.getSessionById(currentSavedId);
