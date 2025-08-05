@@ -292,200 +292,152 @@ const ParticipantReport = () => {
   const generateSingleParticipantReportPDF = async () => {
     if (!detailedParticipation) return;
     setIsGeneratingPdf(true);
+    setSavedPdfPath(null);
 
-    const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, themeScores, questionsForDisplay, num_session, num_stage } = detailedParticipation;
+    const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, questionsForDisplay, num_session, num_stage } = detailedParticipation;
 
-    let fetchedTrainerName = 'N/A';
-    if (trainerId) {
-      const trainer = await window.dbAPI?.getTrainerById(trainerId);
-      if (trainer) fetchedTrainerName = trainer.name;
-    }
+    const doc = new jsPDF();
+    const pageHeight = doc.internal.pageSize.height;
+    const margin = 15;
+    let y = 20;
 
-    const reportDate = new Date().toLocaleDateString('fr-FR');
-    const logoBase64 = await StorageManager.getAdminSetting('reportLogoBase64') as string || null;
-    const boitierIdDisplay = deviceMap.get(participantRef.assignedGlobalDeviceId === null ? undefined : participantRef.assignedGlobalDeviceId) || 'N/A';
+    // --- Header ---
+    doc.setFontSize(18);
+    doc.setTextColor(33, 33, 33);
+    doc.text("Rapport Individuel de Session", doc.internal.pageSize.width / 2, y, { align: 'center' });
+    y += 10;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, y, doc.internal.pageSize.width - margin, y);
+    y += 10;
+
+    // --- Details Section (Two Columns) ---
+    const col1X = margin;
+    const col2X = doc.internal.pageSize.width / 2 + 5;
+    let yCol1 = y;
+    let yCol2 = y;
 
     const currentReferential = referentielId ? allReferentiels.find(r => r.id === referentielId) : null;
     const referentialDisplayForPdf = currentReferential ? `${currentReferential.code} - ${currentReferential.nom_complet}` : 'N/A';
 
-    let pdfHtml = `
-      <div style="font-family: Arial, sans-serif; margin: 20px; font-size: 10px; color: #333;">
-        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height: 60px; margin-bottom: 20px;"/>` : ''}
-        <h1 style="font-size: 18px; text-align: center; color: #1a237e; margin-bottom: 10px;">RAPPORT INDIVIDUEL DE SESSION</h1>
-        <hr style="border: 0; border-top: 1px solid #ccc; margin-bottom: 20px;" />
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-          <div style="width: 48%;">
-            <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détails</h2>
-            <p><strong>Participant :</strong> ${participantRef.prenom} ${participantRef.nom}</p>
-            <p><strong>ID Candidat :</strong> ${participantRef.identificationCode || 'N/A'}</p>
-            <p><strong>Organisation :</strong> ${participantRef.organization || 'N/A'}</p>
-            <hr style="margin: 5px 0;" />
-            <p><strong>Session :</strong> ${nomSession}</p>
-            <p><strong>Référentiel :</strong> ${referentialDisplayForPdf}</p>
-            <p><strong>N° Session :</strong> ${num_session || 'N/A'}</p>
-            <p><strong>N° Stage :</strong> ${num_stage || 'N/A'}</p>
-            <p><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</p>
-            <p><strong>Formateur :</strong> ${fetchedTrainerName}</p>
-            <p><strong>Lieu :</strong> ${location || 'N/A'}</p>
-          </div>
-          <div style="width: 48%;">
-            <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Scores par Thème</h2>
-            ${Object.entries(structuredReportData)
-              .sort(([_, a], [__, b]) => a.themeId - b.themeId)
-              .map(([themeName, themeData]) => `
-                <div style="margin-bottom: 5px;">
-                  <strong style="${themeData.score < 50 ? 'color: #c62828;' : ''}">${themeName}</strong>
-                  ${Object.entries(themeData.blocks).map(([blockKey, blockData]) => `
-                    <div style="margin-left: 10px;">- ${blockKey}: ${blockData.score.toFixed(0)}% (${blockData.correct}/${blockData.total})</div>
-                  `).join('')}
-                </div>
-              `).join('')}
-          </div>
-        </div>
-        <div style="background-color: ${participantSuccess ? '#e8f5e9' : '#ffebee'}; padding: 15px; border-radius: 4px; margin-bottom: 20px; text-align: center;">
-          <p style="font-size: 14px; font-weight: bold; margin:0;">Score Global :
-            <span style="color: ${participantSuccess ? '#2e7d32' : '#c62828'};">${participantScore !== undefined ? participantScore.toFixed(0) : 'N/A'} / 100</span>
-          </p>
-          <p style="font-size: 12px; font-weight: bold; color: ${participantSuccess ? '#2e7d32' : '#c62828'}; margin-top: 5px;">
-            Mention : ${participantSuccess ? 'RÉUSSI' : 'AJOURNÉ'}
-          </p>
-        </div>
-        <div style="page-break-after: always;"></div>
-        <h2 style="font-size: 14px; color: #1a237e; border-bottom: 1px solid #3f51b5; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px;">Détail des Questions</h2>`;
-    const questionsByThemeForPdf: { [themeName: string]: EnrichedQuestionForParticipantReport[] } = {};
-    if (questionsForDisplay) {
-      questionsForDisplay.forEach(q => {
-        const theme = q.resolvedThemeName || 'Thème non spécifié';
-        if (!questionsByThemeForPdf[theme]) questionsByThemeForPdf[theme] = [];
-        questionsByThemeForPdf[theme].push(q);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text("Détails", col1X, yCol1);
+    yCol1 += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Participant : ${participantRef.prenom} ${participantRef.nom}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`ID Candidat : ${participantRef.identificationCode || 'N/A'}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`Organisation : ${participantRef.organization || 'N/A'}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`Session : ${nomSession}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`Référentiel : ${referentialDisplayForPdf}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`N° Session : ${num_session || 'N/A'}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`N° Stage : ${num_stage || 'N/A'}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`Date : ${new Date(dateSession).toLocaleDateString('fr-FR')}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`Formateur : ${trainerName}`, col1X, yCol1);
+    yCol1 += 5;
+    doc.text(`Lieu : ${location || 'N/A'}`, col1X, yCol1);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text("Scores par Thème", col2X, yCol2);
+    yCol2 += 6;
+    doc.setFont('helvetica', 'normal');
+
+    Object.entries(structuredReportData)
+      .sort(([_, a], [__, b]) => a.themeId - b.themeId)
+      .forEach(([themeName, themeData]) => {
+        doc.setTextColor(themeData.score < 50 ? 255 : 33, 0, 0);
+        doc.setFont('helvetica', 'bold');
+        doc.text(themeName, col2X, yCol2);
+        doc.setTextColor(33, 33, 33);
+        doc.setFont('helvetica', 'normal');
+        yCol2 += 5;
+
+        Object.entries(themeData.blocks).forEach(([blockKey, blockData]) => {
+          doc.text(`- ${blockKey}: ${blockData.score.toFixed(0)}% (${blockData.correct}/${blockData.total})`, col2X + 4, yCol2);
+          yCol2 += 5;
+        });
       });
-    }
-    if (Object.keys(questionsByThemeForPdf).length > 0) {
-      for (const [themeName, questions] of Object.entries(questionsByThemeForPdf)) {
-        pdfHtml += `<h3 style="font-size: 12px; color: #3f51b5; margin-top: 15px; margin-bottom: 8px; width:100%; page-break-before: auto; page-break-after: avoid;">Thème : ${themeName}</h3>`;
-        pdfHtml += `<div style="width: 100%; overflow: auto; page-break-inside: avoid;">`;
 
-        const questionsPerColumn = Math.ceil(questions.length / 3);
-        for (let col = 0; col < 3; col++) {
-          const marginRight = col < 2 ? '1%' : '0';
-          pdfHtml += `<div style="display: inline-block; width: 32%; vertical-align: top; margin-right: ${marginRight}; page-break-inside: avoid;">`;
+    y = Math.max(yCol1, yCol2) + 10;
 
-          const startIndex = col * questionsPerColumn;
-          const endIndex = Math.min(startIndex + questionsPerColumn, questions.length);
+    // --- Global Score ---
+    doc.setFillColor(participantSuccess ? 232 : 255, participantSuccess ? 245 : 235, participantSuccess ? 233 : 238);
+    doc.rect(margin, y, doc.internal.pageSize.width - margin * 2, 18, 'F');
+    y += 8;
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(participantSuccess ? 46 : 198, participantSuccess ? 125 : 40, participantSuccess ? 50 : 40);
+    doc.text(`Note Globale : ${participantScore !== undefined ? participantScore.toFixed(0) : 'N/A'} / 100`, doc.internal.pageSize.width / 2, y, { align: 'center' });
+    y += 7;
+    doc.setFontSize(12);
+    doc.text(`Mention : ${participantSuccess ? 'RÉUSSI' : 'AJOURNÉ'}`, doc.internal.pageSize.width / 2, y, { align: 'center' });
+    y += 10;
 
-          for (let i = startIndex; i < endIndex; i++) {
-            const q = questions[i];
-            pdfHtml += `
-              <div style="margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dotted #ccc; page-break-inside: avoid;">
-                <p style="margin: 1px 0; font-weight: bold; font-size: 9px;">${q.text}</p>
-                <p style="margin: 1px 0 0 8px; font-size: 9px;">
-                  Réponse : <span style="font-style: italic;">${q.participantAnswer || 'N/R'}</span>
-                  <span style="color: ${q.isCorrectAnswer ? '#2e7d32' : '#c62828'}; font-weight: bold; margin-left: 8px;">
-                    ${q.isCorrectAnswer ? 'Correct' : 'Incorrect'}
-                  </span>
-                </p>
-              </div>`;
-          }
-          pdfHtml += `</div>`;
-        }
-        pdfHtml += `</div>`;
-        pdfHtml += `<div style="clear: both;"></div>`;
-      }
-    } else {
-      pdfHtml += '<p style="font-size: 10px; color: #555;">Détail des questions non disponible.</p>';
-    }
-    pdfHtml += `<p style="text-align: right; font-size: 8px; color: #777; margin-top: 30px;">Rapport généré le ${reportDate}</p></div>`;
+    // --- Questions Section ---
+    doc.addPage();
+    y = 20;
+    doc.setFontSize(14);
+    doc.setTextColor(33, 33, 33);
+    doc.setFont('helvetica', 'bold');
+    doc.text("Détail des Questions", margin, y);
+    y += 8;
 
-    const element = document.createElement('div');
-    element.style.width = '1000px';
-    element.style.padding = '20px';
-    element.innerHTML = pdfHtml;
-    document.body.appendChild(element);
+    const sortedThemes = Object.entries(structuredReportData).sort(([_, a], [__, b]) => a.themeId - b.themeId);
 
-    const canvas = await html2canvas(element, { scale: 2, useCORS: true, windowWidth: element.scrollWidth, windowHeight: element.scrollHeight });
-    const imgData = canvas.toDataURL('image/png');
-    document.body.removeChild(element);
+    sortedThemes.forEach(([themeName, themeData]) => {
+      if (y > pageHeight - 20) { doc.addPage(); y = 20; }
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(63, 81, 181);
+      doc.text(themeName, margin, y);
+      y += 7;
 
-    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfPageHeight = pdf.internal.pageSize.getHeight();
+      Object.entries(themeData.blocks).forEach(([blockKey, blockData]) => {
+        if (y > pageHeight - 20) { doc.addPage(); y = 20; }
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(100, 100, 100);
+        doc.text(blockKey, margin, y);
+        y += 6;
 
-    const img = new Image();
-    img.src = imgData;
-    await new Promise(resolve => { img.onload = resolve; img.onerror = () => { console.error("Erreur de chargement de l'image pour PDF"); resolve(null);}; });
+        blockData.questions.forEach(q => {
+          if (y > pageHeight - 15) { doc.addPage(); y = 20; }
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(33, 33, 33);
+          const questionTextLines = doc.splitTextToSize(q.text, doc.internal.pageSize.width - margin * 2);
+          doc.text(questionTextLines, margin, y);
+          y += questionTextLines.length * 4;
 
-    if (img.width === 0 || img.height === 0) {
-      console.error("PDF Generation: Image from canvas has zero dimensions.");
-      setIsGeneratingPdf(false);
-      return;
-    }
+          doc.setFont('helvetica', 'normal');
+          const answerText = `Réponse : ${q.participantAnswer || 'Non répondu'}`;
+          const statusText = q.isCorrectAnswer ? 'Correct' : 'Incorrect';
+          const answerX = margin + 4;
+          const statusX = answerX + doc.getTextWidth(answerText) + 5;
 
-    const PADDING = 10;
-    const usableWidth = pdfWidth - 2 * PADDING;
-    const usableHeight = pdfPageHeight - 2 * PADDING;
-
-    const aspectRatio = img.height / img.width;
-    let finalImgWidth = usableWidth;
-    let finalImgHeight = usableWidth * aspectRatio;
-
-    if (finalImgHeight > usableHeight) {
-      finalImgHeight = usableHeight;
-      finalImgWidth = usableHeight / aspectRatio;
-    }
-
-    const sourceCanvas = canvas;
-    const pageCanvas = document.createElement('canvas');
-    const pageCtx = pageCanvas.getContext('2d');
-
-    let sliceHeightPx = sourceCanvas.height * (usableHeight / finalImgHeight);
-    if (finalImgHeight < usableHeight) {
-        sliceHeightPx = sourceCanvas.height;
-    }
-
-    pageCanvas.width = sourceCanvas.width;
-    pageCanvas.height = sliceHeightPx;
-
-    let yOffsetPx = 0;
-    let pageNum = 0;
-
-    while(yOffsetPx < sourceCanvas.height) {
-      if (pageNum > 0) {
-        pdf.addPage();
-      }
-      pageCtx?.clearRect(0,0, pageCanvas.width, pageCanvas.height);
-      pageCtx?.drawImage(sourceCanvas,
-        0, yOffsetPx,
-        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx),
-        0, 0,
-        sourceCanvas.width, Math.min(sliceHeightPx, sourceCanvas.height - yOffsetPx)
-      );
-      const pageImgData = pageCanvas.toDataURL('image/png');
-
-      let currentSlicePdfHeight = usableHeight;
-      if (yOffsetPx + sliceHeightPx > sourceCanvas.height) {
-          currentSlicePdfHeight = ((sourceCanvas.height - yOffsetPx) / sliceHeightPx) * usableHeight;
-      }
-
-      const currentSlicePdfWidth = Math.min(finalImgWidth, usableWidth);
-
-      pdf.addImage(pageImgData, 'PNG', PADDING + (usableWidth - currentSlicePdfWidth) / 2, PADDING, currentSlicePdfWidth, currentSlicePdfHeight);
-      yOffsetPx += sliceHeightPx;
-      pageNum++;
-      if (pageNum > 20) {
-          console.warn("PDF Generation: Exceeded 20 pages, stopping.");
-          break;
-      }
-    }
+          doc.text(answerText, answerX, y);
+          doc.setTextColor(q.isCorrectAnswer ? 46 : 198, q.isCorrectAnswer ? 125 : 40, q.isCorrectAnswer ? 50 : 40);
+          doc.text(statusText, statusX, y);
+          y += 6;
+        });
+      });
+    });
 
     const safeFileName = `Rapport_${participantRef.prenom}_${participantRef.nom}_${nomSession}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
-
-    const pdfBuffer = pdf.output('arraybuffer');
-
+    const pdfBuffer = doc.output('arraybuffer');
     const result = await window.dbAPI.saveReportFile(pdfBuffer, safeFileName);
+
     if (result.success && result.filePath) {
       setSavedPdfPath(result.filePath);
     } else {
-      // Handle error, maybe show a notification to the user
       console.error("Failed to save PDF:", result.error);
     }
 
