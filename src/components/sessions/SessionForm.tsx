@@ -40,7 +40,7 @@ interface SessionFormProps {
   sessionToImport?: File | null;
 }
 
-type TabKey = 'details' | 'participants' | 'generateQuestionnaire' | 'importResults';
+type TabKey = 'details' | 'participants' | 'generateQuestionnaire' | 'importResults' | 'report';
 
 interface AdminPPTXSettings {
     defaultDuration: number;
@@ -56,6 +56,7 @@ import ResultsImporter from './form/ResultsImporter';
 import QuestionnaireGenerator from './form/QuestionnaireGenerator';
 import ParticipantManager from './form/ParticipantManager';
 import SessionDetailsForm from './form/SessionDetailsForm';
+import ReportDetails from '../reports/ReportDetails';
 
 const parseFrenchDate = (dateValue: string | Date | number): string => {
   if (!dateValue) return '';
@@ -1429,13 +1430,20 @@ if (savedIterationId) { // <-- On ajoute cette condition
         participants: 'Participants',
         generateQuestionnaire: 'Générer le questionnaire',
         importResults: 'Importer les résultats',
+        report: 'Rapport',
     };
+
+    const isReportTabVisible = editingSessionData?.status === 'completed';
+    let tabsToShow: TabKey[] = ['details', 'participants', 'generateQuestionnaire', 'importResults'];
+    if (isReportTabVisible) {
+      tabsToShow.push('report');
+    }
 
     return (
         <div className="mb-6">
             <div className="border-b border-gray-200">
                 <nav className="-mb-px flex space-x-4 sm:space-x-8" aria-label="Tabs">
-                    {(['details', 'participants', 'generateQuestionnaire', 'importResults'] as TabKey[]).map((tabKey) => (
+                    {tabsToShow.map((tabKey) => (
                         <button
                             key={tabKey}
                             onClick={() => setActiveTab(tabKey)}
@@ -1536,6 +1544,8 @@ if (savedIterationId) { // <-- On ajoute cette condition
             currentSessionDbId={currentSessionDbId}
           />
         );
+      case 'report':
+        return editingSessionData ? <ReportDetails session={editingSessionData} /> : <div>Chargement du rapport...</div>;
       default:
         return null;
     }
