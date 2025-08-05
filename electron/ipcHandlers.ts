@@ -26,7 +26,7 @@ import {
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
   updateParticipantStatusInIteration,
   checkAndFinalizeSessionStatus
-} from '@electron/db';
+} from './db';
 
 import { getLogger, ILogger } from '@electron/utils/logger';
 import { Participant, QuestionWithId, Session, SessionResult, SessionQuestion, SessionBoitier, VotingDevice, DeviceKit, Trainer, Referential, Theme, Bloc, Question, SessionIteration, AdminPPTXSettings } from '@common/types';

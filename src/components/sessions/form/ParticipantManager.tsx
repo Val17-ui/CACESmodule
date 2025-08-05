@@ -1,57 +1,54 @@
 import React from 'react';
 import { FileUp, Trash2, UserPlus } from 'lucide-react';
-import { FormParticipant, VotingDevice, DeviceKit } from '@common/types';
 import Button from '../../ui/Button';
 import Card from '../../ui/Card';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
+import { useSessionContext } from '../context/SessionContext';
+import { useParticipantManager } from '../hooks/useParticipantManager';
+import { FormParticipant } from '@common/types';
 
 interface ParticipantManagerProps {
   isReadOnly: boolean;
-  participants: FormParticipant[];
-  setParticipants: React.Dispatch<React.SetStateAction<FormParticipant[]>>;
-  handleParticipantChange: (id: string, field: keyof FormParticipant, value: any) => void;
-  handleRemoveParticipant: (id: string) => void;
-  handleAddParticipant: () => void;
-  handleParticipantFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  iterationCount: number;
-  iterationNames: string[];
-  participantAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]>;
-  handleParticipantIterationChange: (participantId: string, newIterationIndex: number) => void;
-  deviceKitsList: DeviceKit[];
-  selectedKitIdState: number | null;
-  setSelectedKitIdState: (id: number | null) => void;
-  votingDevicesInSelectedKit: VotingDevice[];
-  isLoadingKits: boolean;
 }
 
-const ParticipantManager: React.FC<ParticipantManagerProps> = ({
-  isReadOnly,
-  participants,
-  handleParticipantChange,
-  handleRemoveParticipant,
-  handleAddParticipant,
-  handleParticipantFileSelect,
-  iterationCount,
-  iterationNames,
-  participantAssignments,
-  handleParticipantIterationChange,
-  deviceKitsList,
-  selectedKitIdState,
-  setSelectedKitIdState,
-  votingDevicesInSelectedKit,
-  isLoadingKits,
-}) => {
+const ParticipantManager: React.FC<ParticipantManagerProps> = ({ isReadOnly }) => {
+  const { state, dispatch } = useSessionContext();
+  const {
+    participants,
+    participantAssignments,
+    handleAddParticipant,
+    handleRemoveParticipant,
+    handleParticipantChange,
+    handleParticipantIterationChange,
+    handleParticipantFileSelect,
+  } = useParticipantManager({
+    initialParticipants: state.participants,
+    initialAssignments: state.participantAssignments,
+    editingSessionData: state.editingSessionData,
+    selectedKitIdState: state.selectedKitIdState,
+    votingDevicesInSelectedKit: state.votingDevicesInSelectedKit,
+  });
+
+  // Update context when local state changes
+  React.useEffect(() => {
+    dispatch({ type: 'SET_PARTICIPANTS', payload: participants });
+  }, [participants, dispatch]);
+
+  React.useEffect(() => {
+    dispatch({ type: 'SET_ASSIGNMENTS', payload: participantAssignments });
+  }, [participantAssignments, dispatch]);
+
   return (
     <Card title="Participants et Kits" className="mb-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <Select
           label="Kit de boîtiers"
-          options={deviceKitsList.map(kit => ({ value: kit.id!.toString(), label: kit.name }))}
-          value={selectedKitIdState?.toString() || ''}
-          onChange={(e) => setSelectedKitIdState(e.target.value ? parseInt(e.target.value, 10) : null)}
+          options={state.deviceKitsList.map(kit => ({ value: kit.id!.toString(), label: kit.name }))}
+          value={state.selectedKitIdState?.toString() || ''}
+          onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'selectedKitIdState', payload: e.target.value ? parseInt(e.target.value, 10) : null })}
           placeholder="Sélectionner un kit"
-          disabled={isLoadingKits || isReadOnly}
+          disabled={state.isLoadingKits || isReadOnly}
         />
         <div>
           <h4 className="text-sm font-medium text-gray-700 mb-2">Actions</h4>
@@ -71,7 +68,7 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {iterationCount > 1 && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Itération</th>}
+              {state.iterationCount > 1 && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Itération</th>}
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Prénom</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Organisation</th>
@@ -85,12 +82,12 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
               const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.uiId));
               return (
                 <tr key={p.uiId}>
-                  {iterationCount > 1 && (
+                  {state.iterationCount > 1 && (
                     <td className="px-4 py-2">
                       <Select
                         value={assignedIteration || ''}
                         onChange={(e) => handleParticipantIterationChange(p.uiId, parseInt(e.target.value, 10))}
-                        options={iterationNames.map((name, index) => ({ value: index.toString(), label: name }))}
+                        options={state.iterationNames.map((name, index) => ({ value: index.toString(), label: name }))}
                         placeholder="N/A"
                         disabled={isReadOnly}
                       />
@@ -104,7 +101,7 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
                     <Select
                       value={p.assignedGlobalDeviceId?.toString() || ''}
                       onChange={(e) => handleParticipantChange(p.uiId, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
-                      options={votingDevicesInSelectedKit.map(d => ({ value: d.id!.toString(), label: `${d.name} (${d.serialNumber})`, disabled: participants.some(participant => participant.uiId !== p.uiId && participant.assignedGlobalDeviceId === d.id) }))}
+                      options={state.votingDevicesInSelectedKit.map(d => ({ value: d.id!.toString(), label: `${d.name} (${d.serialNumber})`, disabled: participants.some(participant => participant.uiId !== p.uiId && participant.assignedGlobalDeviceId === d.id) }))}
                       placeholder="N/A"
                       disabled={isReadOnly}
                     />

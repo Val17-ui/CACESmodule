@@ -2,24 +2,22 @@ import React from 'react';
 import { FileUp } from 'lucide-react';
 import Button from '../../ui/Button';
 import Card from '../../ui/Card';
+import { useSessionContext } from '../context/SessionContext';
 
 interface ResultsImporterProps {
   isReadOnly: boolean;
-  editingSessionData: any; // Simplified
   handleImportResults: (iterationIndex: number) => void;
   importSummary: string | null;
-  activeTab: string;
-  currentSessionDbId: number | null;
 }
 
 const ResultsImporter: React.FC<ResultsImporterProps> = ({
   isReadOnly,
-  editingSessionData,
   handleImportResults,
   importSummary,
-  activeTab,
-  currentSessionDbId,
 }) => {
+  const { state } = useSessionContext();
+  const { editingSessionData, activeTab, currentSessionDbId } = state;
+
   return (
     <>
       {currentSessionDbId && (

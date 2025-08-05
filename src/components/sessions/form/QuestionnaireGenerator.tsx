@@ -2,30 +2,28 @@ import React from 'react';
 import { AlertTriangle, PackagePlus } from 'lucide-react';
 import Button from '../../ui/Button';
 import Card from '../../ui/Card';
+import { useSessionContext } from '../context/SessionContext';
 
 interface QuestionnaireGeneratorProps {
   isReadOnly: boolean;
-  isGeneratingOrs: boolean;
   handleGenerateQuestionnaire: () => void;
-  editingSessionData: any; // Simplified
-  modifiedAfterOrsGeneration: boolean;
-  importSummary: string | null;
-  activeTab: string;
-  currentSessionDbId: number | null;
-  selectedReferential: string;
 }
 
 const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
   isReadOnly,
-  isGeneratingOrs,
   handleGenerateQuestionnaire,
-  editingSessionData,
-  modifiedAfterOrsGeneration,
-  importSummary,
-  activeTab,
-  currentSessionDbId,
-  selectedReferential,
 }) => {
+  const { state } = useSessionContext();
+  const {
+    editingSessionData,
+    modifiedAfterOrsGeneration,
+    importSummary,
+    activeTab,
+    currentSessionDbId,
+    selectedReferential,
+    isGeneratingOrs,
+  } = state;
+
   return (
     <Card title="Générer le questionnaire" className="mb-6">
       <Button
