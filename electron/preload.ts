@@ -105,6 +105,8 @@ contextBridge.exposeInMainWorld('dbAPI', {
   // PPTX Generation
   generatePresentation: (sessionInfo: any, participants: any[], questions: any[], template?: any, adminSettings?: any) => ipcRenderer.invoke('pptx-generate', sessionInfo, participants, questions, template, adminSettings),
   savePptxFile: (fileBuffer: string, fileName: string) => ipcRenderer.invoke('save-pptx-file', fileBuffer, fileName),
+  saveReportFile: (fileBuffer: any, fileName: string) => ipcRenderer.invoke('save-report-file', fileBuffer, fileName),
+  saveReportZipFile: (fileBuffer: any, fileName: string) => ipcRenderer.invoke('save-report-zip-file', fileBuffer, fileName),
   getDefaultPptxTemplate: () => ipcRenderer.invoke('get-default-pptx-template'),
 
   // File Operations
