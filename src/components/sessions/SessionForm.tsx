@@ -258,6 +258,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 const hasResultsMap: Record<number, boolean> = {};
                 for (const iter of sessionData.iterations) {
                   if (iter.id) {
+                    // @ts-ignore
+                    // @ts-ignore
                     const hasResults = await window.dbAPI?.hasResultsForIteration(iter.id);
                     hasResultsMap[iter.iteration_index] = !!hasResults;
                   }
@@ -777,7 +779,11 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
     if (!sessionDataToSave) return null;
 
     // Check for unassigned participants
-    const assignedParticipantIds = new Set(Object.values(participantAssignments).flat().map((p: { id: string; assignedGlobalDeviceId: number | null }) => p.id));
+    const assignedParticipantIds = new Set(
+      Object.values(participantAssignments)
+        .flat()
+        .map((p: { id: string; assignedGlobalDeviceId: number | null }) => p.id)
+    );
     const unassignedParticipants = participants.filter((p: FormParticipant) => !assignedParticipantIds.has(p.uiId));
 
     if (unassignedParticipants.length > 0) {
