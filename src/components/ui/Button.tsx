@@ -2,7 +2,7 @@ import React from 'react';
 
 type ButtonProps = {
   children?: React.ReactNode; // Make children optional
-  variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'outline' | 'ghost' | 'link';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   icon?: React.ReactNode;
@@ -23,16 +23,17 @@ const Button: React.FC<ButtonProps> = ({
   type = 'button',
   title, // Added title to destructuring
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center rounded-xl transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-offset-2';
+  const baseStyles = 'inline-flex items-center justify-center rounded-md transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-offset-2';
   
   const variantStyles = {
     primary: 'bg-accent-neutre hover:bg-accent-neutre-hover text-white focus:ring-accent-neutre',
-    secondary: 'bg-gris-moyen hover:bg-gray-500 text-texte-principal focus:ring-gris-moyen', // Utilise gray-500 pour le hover pour l'instant
+    secondary: 'bg-gris-moyen hover:bg-gray-500 text-texte-principal focus:ring-gris-moyen',
     success: 'bg-vert-validation hover:brightness-90 text-white focus:ring-vert-validation',
     danger: 'bg-rouge-accent hover:brightness-90 text-white focus:ring-rouge-accent',
-    warning: 'bg-amber-500 hover:bg-amber-600 text-white focus:ring-amber-500', // Laissé tel quel pour l'instant
+    warning: 'bg-amber-500 hover:bg-amber-600 text-white focus:ring-amber-500',
     outline: 'border border-gris-moyen bg-fond-clair-principal hover:bg-gris-moyen/20 text-texte-principal focus:ring-accent-neutre',
     ghost: 'bg-transparent hover:bg-gris-moyen/20 text-texte-principal focus:ring-gris-moyen',
+    link: 'bg-transparent text-accent-neutre hover:underline focus:ring-accent-neutre',
   };
   
   const sizeStyles = {

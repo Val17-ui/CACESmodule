@@ -80,13 +80,13 @@ const QuestionnaireGenerator: React.FC<QuestionnaireGeneratorProps> = ({
                   <span className="font-medium text-gray-800">{iter.name}</span>
                   {iter.ors_file_path ? (
                       <Button
-                        variant="ghost"
+                        variant="link"
                         size="sm"
                         onClick={() => { if (iter.ors_file_path) window.dbAPI?.openFile(iter.ors_file_path); }}
                         className="ml-2 text-xs"
                         title={`Ouvrir ${iter.ors_file_path}`}
                       >
-                        Voir le fichier
+                        {iter.ors_file_path}
                       </Button>
                   ) : (
                     <span className="ml-3 text-xs text-gray-500">(en attente de génération)</span>
