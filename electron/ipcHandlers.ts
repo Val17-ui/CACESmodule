@@ -20,7 +20,7 @@ import {
   addTheme, getThemeByCodeAndReferentialId, getThemesByReferentialId, getThemeById, getAllThemes,
   addBloc, getBlocByCodeAndThemeId, getBlocsByThemeId, getBlocById, getAllBlocs,
   addQuestion, upsertQuestion, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
-  getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks, getQuestionCount,
+  getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks,
   getAdminSetting, setAdminSetting, getAllAdminSettings,
   exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
@@ -434,7 +434,11 @@ ipcMain.handle(
       throw new Error('Invalid template format provided to pptx-generate IPC handler.');
     }
 
-    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, loggerInstance);
+    const result = await generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, loggerInstance);
+    return {
+      filePath: result.filePath,
+      questionMappings: result.questionMappings,
+    };
   }
 );
 
@@ -452,21 +456,6 @@ ipcMain.handle(
     }
   });
 
-  ipcMain.handle('save-pptx-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
-    loggerInstance.debug(`[IPC] save-pptx-file: ${fileName}`);
-    try {
-      const orsSavePath = await getAdminSetting('orsSavePath');
-      if (!orsSavePath) {
-        throw new Error("Le chemin de sauvegarde des ORS n'est pas configuré dans les paramètres techniques.");
-      }
-      const filePath = path.join(orsSavePath, fileName);
-      await fs.writeFile(filePath, Buffer.from(fileBuffer));
-      return { success: true, filePath };
-    } catch (error: any) {
-      loggerInstance.debug(`Failed to save PPTX file: ${error}`);
-      return { success: false, error: error.message };
-    }
-  });
 
   ipcMain.handle('save-report-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
     loggerInstance.debug(`[IPC] save-report-file: ${fileName}`);
@@ -631,35 +620,6 @@ ipcMain.handle(
     } catch (error: any) {
       loggerInstance.debug(`Failed to open file ${filePath}: ${error}`);
       return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('get-dashboard-alerts', async () => {
-    loggerInstance.debug('[IPC] get-dashboard-alerts');
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const sessions = await getAllSessions();
-      const overdueSessions = sessions.filter(s => {
-        const sessionDate = new Date(s.dateSession);
-        return s.status === 'ready' && sessionDate < today && !s.resultsImportedAt;
-      });
-
-      const questionCount = await getQuestionCount();
-
-      const orsSavePath = await getAdminSetting('orsSavePath');
-      const reportSavePath = await getAdminSetting('reportSavePath');
-
-      return {
-        overdueSessions,
-        questionCount,
-        isOrsPathSet: !!orsSavePath,
-        isReportPathSet: !!reportSavePath,
-      };
-    } catch (error) {
-      loggerInstance.error(`[IPC] get-dashboard-alerts failed: ${error}`);
-      throw error;
     }
   });
 

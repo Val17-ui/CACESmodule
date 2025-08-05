@@ -259,7 +259,7 @@ export async function generatePresentation(
       // --- Fin: Logique de sauvegarde automatique ---
       logger.info('[LOG][pptxOrchestrator] Fin de generatePresentation avec succès.');
       return {
-        orsBlob: orsBuffer.buffer, // Convertir le Buffer en ArrayBuffer
+        filePath: fullPath,
         questionMappings: generatedData.questionMappings,
         ignoredSlideGuids: generatedData.preExistingQuestionSlideGuids
       };
