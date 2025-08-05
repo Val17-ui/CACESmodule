@@ -10,6 +10,7 @@ export interface Session {
     dateSession: string;
     referentielId?: number;
     participants?: Participant[];
+    participantCount?: number;
     sselectionBlocs?: {
         themeId: number;
         blocId: number;

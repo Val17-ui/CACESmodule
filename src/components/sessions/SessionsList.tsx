@@ -107,7 +107,7 @@ const SessionsList: React.FC<SessionsListProps> = ({
                       return <Badge variant="default">N/A</Badge>;
                     })()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">{session.participants?.length ?? 0}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">{session.participantCount ?? 0}</td>
                   <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(session.status)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     {session.donneesOrs instanceof Blob ? <Badge variant="success">Oui</Badge> : <Badge variant="default">Non</Badge>}
