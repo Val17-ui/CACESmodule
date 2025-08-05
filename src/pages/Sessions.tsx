@@ -121,7 +121,6 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
   useEffect(() => {
     if (sessionId !== undefined) {
       setManagingSessionId(sessionId);
-      setIsCreating(false);
       // Charger le nom de la session pour le titre via IPC
       if (window.dbAPI && typeof window.dbAPI.getSessionById === 'function') {
         window.dbAPI.getSessionById(sessionId).then((session: DBSession | undefined) => {
@@ -142,7 +141,6 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     } else {
       setManagingSessionId(null);
       setManagingSessionName(null); // Réinitialiser le nom
-      setIsCreating(false);
     }
   }, [sessionId]);
 
