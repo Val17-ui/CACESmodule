@@ -105,5 +105,4 @@ export * from './devices';
 export * from './results';
 export * from './admin';
 export * from './trainers';
-export * from './referentiels';
 export * from './schema';
