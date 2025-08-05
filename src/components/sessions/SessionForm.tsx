@@ -778,7 +778,7 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
 
     // Check for unassigned participants
     const assignedParticipantIds = new Set(Object.values(participantAssignments).flat().map((p: { id: string; assignedGlobalDeviceId: number | null }) => p.id));
-    const unassignedParticipants = participants.filter(p => !assignedParticipantIds.has(p.uiId));
+    const unassignedParticipants = participants.filter((p: FormParticipant) => !assignedParticipantIds.has(p.uiId));
 
     if (unassignedParticipants.length > 0) {
         const unassignedNames = unassignedParticipants.map(p => `${p.firstName} ${p.lastName}`).join(', ');
