@@ -292,7 +292,7 @@ const ParticipantReport = () => {
     if (!detailedParticipation) return;
     setIsGeneratingPdf(true);
 
-    const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, themeScores, questionsForDisplay } = detailedParticipation;
+    const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, themeScores, questionsForDisplay, num_session, num_stage } = detailedParticipation;
 
     let fetchedTrainerName = 'N/A';
     if (trainerId) {
@@ -315,18 +315,26 @@ const ParticipantReport = () => {
         <table style="width: 100%; font-size: 10px; margin-bottom: 15px; border-collapse: collapse;">
           <tr>
             <td style="padding: 4px; width: 50%;"><strong>Participant :</strong> ${participantRef.prenom} ${participantRef.nom}</td>
-            <td style="padding: 4px; width: 50%;"><strong>ID Boîtier :</strong> ${boitierIdDisplay}</td>
+            <td style="padding: 4px; width: 50%;"><strong>ID Candidat :</strong> ${participantRef.identificationCode || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px;"><strong>Organisation :</strong> ${participantRef.organization || 'N/A'}</td>
+            <td style="padding: 4px;"><strong>ID Boîtier :</strong> ${boitierIdDisplay}</td>
           </tr>
           <tr>
             <td style="padding: 4px;"><strong>Session :</strong> ${nomSession}</td>
-            <td style="padding: 4px;"><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</td>
-          </tr>
-          <tr>
             <td style="padding: 4px;"><strong>Référentiel :</strong> ${referentialDisplayForPdf}</td>
-            <td style="padding: 4px;"><strong>Lieu :</strong> ${location || 'N/A'}</td>
           </tr>
           <tr>
+            <td style="padding: 4px;"><strong>N° Session :</strong> ${num_session || 'N/A'}</td>
+            <td style="padding: 4px;"><strong>N° Stage :</strong> ${num_stage || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px;"><strong>Date :</strong> ${new Date(dateSession).toLocaleDateString('fr-FR')}</td>
             <td style="padding: 4px;"><strong>Formateur :</strong> ${fetchedTrainerName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px;"><strong>Lieu :</strong> ${location || 'N/A'}</td>
             <td style="padding: 4px;"></td>
           </tr>
         </table>
@@ -517,17 +525,16 @@ const ParticipantReport = () => {
           </div>
 
           {/* Col 2: Scores */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card className="p-4">
-              <div className="space-y-4">
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            <Card className="p-4 flex-grow">
+              <div className="space-y-2">
                 {Object.entries(structuredReportData)
                   .sort(([_, a], [__, b]) => a.themeId - b.themeId)
                   .map(([themeName, themeData]) => (
                     <div key={themeName}>
-                      <h4 className={`font-semibold text-md mb-1 ${themeData.score < 50 ? 'text-red-500' : ''}`}>{themeName}</h4>
                       {Object.entries(themeData.blocks).map(([blockKey, blockData]) => (
-                        <div key={blockKey} className="text-sm ml-4">
-                          {blockKey}: {blockData.score.toFixed(0)}% ({blockData.correct}/{blockData.total})
+                        <div key={blockKey} className="text-sm">
+                          <span className={`font-semibold ${themeData.score < 50 ? 'text-red-500' : ''}`}>{themeName}</span> - {blockKey}: {blockData.score.toFixed(0)}% ({blockData.correct}/{blockData.total})
                         </div>
                       ))}
                     </div>
