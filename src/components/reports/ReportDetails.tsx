@@ -233,15 +233,15 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           pdf.addImage(imgData, 'PNG', margin, y, contentWidth, contentHeight);
 
           // Header
-          pdf.setFontSize(18);
-          pdf.text('Rapport de Session', margin, margin + 5);
           if (reportLogo) {
             try {
-              pdf.addImage(reportLogo, 'PNG', pdfWidth - margin - 30, margin, 25, 25);
+              pdf.addImage(reportLogo, 'PNG', pdfWidth - margin - 25, margin, 20, 20);
             } catch (e) {
               console.error("Erreur d'ajout du logo au PDF:", e);
             }
           }
+          pdf.setFontSize(18);
+          pdf.text('Rapport de Session', margin, margin + 15);
 
           // Footer & Signature Box
           pdf.setFontSize(10);
@@ -474,16 +474,16 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                   return (
                     <React.Fragment key={participantData.assignedGlobalDeviceId || `pd-${index}`}>
                       <tr className={`${rowStyle} hover:bg-blue-50`}>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap align-middle">
                           <div className="text-sm font-medium text-gray-900">{participantData.nom} {participantData.prenom}</div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap align-middle">
                           <div className="text-sm text-gray-700">{participantData.organization || '-'}</div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap align-middle">
                           <div className="text-sm text-gray-700">{participantData.identificationCode || '-'}</div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap align-middle">
                           <div className="flex items-center">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${participantData.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                               {participantData.score !== undefined ? participantData.score.toFixed(0) : '-'}
@@ -496,15 +496,15 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap align-middle">
                           {participantData.reussite === true && <Badge variant="success">Certifié</Badge>}
                           {participantData.reussite === false && <Badge variant="danger">Ajourné</Badge>}
                           {participantData.reussite === undefined && <Badge variant="default">-</Badge>}
                         </td>
                       </tr>
-                      <tr className={`${rowStyle} border-b border-gray-300`}>
+                      <tr className={`${rowStyle} border-b-2 border-gray-300`}>
                         <td colSpan={5} className="px-6 py-2">
-                          <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+                          <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1 items-center">
                             {participantData.themeScores && participantData.themeScores.map(themeScore => (
                               <span key={themeScore.themeCode} className="font-medium">
                                 {themeScore.themeCode}:
