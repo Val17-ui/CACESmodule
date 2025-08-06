@@ -1,5 +1,5 @@
 {
-  "name": "easycertif",
+  "name": "evalactive",
   "private": true,
   "version": "0.0.0",
   "description": "eval'active - Application de bureau qui permet la création, la gestion et l'importation de fichiers ORS (fichiers de sessions interactives au format PowerPoint enrichi), destinée à être utilisée avec des boîtiers de vote avec importation, analyse et reporting des résultats",
@@ -19,7 +19,7 @@
   },
   "build": {
     "appId": "com.evalactive.app",
-    "productName": "EasyCertif",
+    "productName": "EvalActive",
     "files": [
       "dist/renderer/**/*",
       "dist-electron/**/*"
