@@ -20,7 +20,7 @@ interface ParticipantCalculatedData extends Participant {
   score?: number;
   reussite?: boolean;
   idBoitier?: string;
-  themeScores?: ThemeScoreDetails[];
+  themeScores?: { [themeName: string]: ThemeScoreDetails };
 }
 
 type ReportDetailsProps = {
@@ -178,7 +178,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
 
       const score = calculateParticipantScore(participantResults, questionsForThisSession);
       const themeScores = calculateThemeScores(participantResults, questionsForThisSession);
-      const reussite = determineIndividualSuccess(score, themeScores);
+      const reussite = determineIndividualSuccess(score, Object.values(themeScores));
       const deviceSerialNumber = p.assignedGlobalDeviceId ? deviceMap.get(p.assignedGlobalDeviceId) : undefined;
 
       return {
@@ -298,7 +298,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           <p>Mention: ${participantData.reussite ? 'Réussi' : 'Ajourné'}</p>
           <h2 style="font-size: 11px;">Scores par Thème:</h2><ul>`;
       if (specificThemeScores) {
-        for (const themeScore of specificThemeScores) {
+        for (const themeScore of Object.values(specificThemeScores)) {
           reportHtml += `<li>${themeScore.themeCode} - ${themeScore.themeName}: ${themeScore.score.toFixed(0)}% (${themeScore.correct}/${themeScore.total})</li>`;
         }
       }
