@@ -1893,70 +1893,47 @@ export async function generatePPTXVal17(
       dimensions: ImageDimensions;
       extension: string;
     }
-    const downloadedImages = new Map<number, DownloadedImage>();
     const questionMappingsInternal: QuestionMapping[] = [];
-
-    if (questions.some((q) => q.imageUrl)) {
-      const imagePromises = questions.map(async (question, index) => {
-        if (question.imageUrl) {
-          let imageData = null;
-          if (question.imageUrl.startsWith("http://") || question.imageUrl.startsWith("https://")) {
-            imageData = await downloadImageFromCloudWithDimensions(question.imageUrl, logger);
-          } else {
-            // Le chemin de l'image est déjà absolu, construit par l'orchestrateur.
-            logger.info(`[IMAGE] Tentative de chargement de l'image locale depuis le chemin absolu: ${question.imageUrl}`);
-            if (fs.existsSync(question.imageUrl)) {
-              imageData = await loadLocalImageWithDimensions(question.imageUrl, logger);
-            } else {
-              logger.warn(`[IMAGE] Fichier image local non trouvé à l'emplacement: ${question.imageUrl}`);
-            }
-          }
-
-          if (imageData) {
-            const absoluteSlideNumberForImage =
-              effectiveExistingSlideCount + introSlidesAddedCount + index + 1;
-            const imgFileName = `image_q_slide${absoluteSlideNumberForImage}.${imageData.extension}`;
-            const dimensions = calculateImageDimensions(
-              imageData.width,
-              imageData.height,
-              logger
-            );
-            return {
-              slideNumberContext: absoluteSlideNumberForImage,
-              image: {
-                fileName: imgFileName,
-                data: imageData.data,
-                width: imageData.width,
-                height: imageData.height,
-                dimensions,
-                extension: imageData.extension,
-              },
-            };
-          }
-        }
-        return null;
-      });
-      const imageResults = await Promise.all(imagePromises);
-      imageResults.forEach((result) => {
-        if (result && result.image) {
-          downloadedImages.set(result.slideNumberContext, result.image);
-          imageExtensions.add(result.image.extension);
-          outputZip
-            .folder("ppt/media")
-            ?.file(result.image.fileName, result.image.data);
-        }
-      });
-    }
 
     for (let i = 0; i < questions.length; i++) {
       const absoluteSlideNumber = effectiveExistingSlideCount + introSlidesAddedCount + i + 1;
       const questionData = questions[i];
+      let downloadedImage: DownloadedImage | null = null;
+
+      if (questionData.imageUrl) {
+        let imageData = null;
+        if (questionData.imageUrl.startsWith("http://") || questionData.imageUrl.startsWith("https://")) {
+          imageData = await downloadImageFromCloudWithDimensions(questionData.imageUrl, logger);
+        } else {
+          logger.info(`[IMAGE] Attempting to load local image from absolute path: ${questionData.imageUrl}`);
+          if (fs.existsSync(questionData.imageUrl)) {
+            imageData = await loadLocalImageWithDimensions(questionData.imageUrl, logger);
+          } else {
+            logger.warn(`[IMAGE] Local image file not found at: ${questionData.imageUrl}`);
+          }
+        }
+
+        if (imageData) {
+          const imgFileName = `image_q_slide${absoluteSlideNumber}.${imageData.extension}`;
+          downloadedImage = {
+            fileName: imgFileName,
+            data: imageData.data,
+            width: imageData.width,
+            height: imageData.height,
+            dimensions: calculateImageDimensions(imageData.width, imageData.height, logger),
+            extension: imageData.extension,
+          };
+          imageExtensions.add(imageData.extension);
+          outputZip.folder("ppt/media")?.file(imgFileName, imageData.data);
+        }
+      }
+
       const duration =
         questionData.points ||
         options.ombeaConfig?.pollTimeLimit ||
         options.defaultDuration ||
         30;
-      const downloadedImage = downloadedImages.get(absoluteSlideNumber);
+
       const slideXml = createSlideXml(
         questionData.question,
         questionData.options,
