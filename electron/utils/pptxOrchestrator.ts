@@ -113,12 +113,12 @@ export function transformQuestionsForVal17Generator(storedQuestions: QuestionWit
 
     let imageUrl: string | undefined = undefined;
     // Construire le chemin complet de l'image si un dossier est fourni
-    if (imagesFolderPath && typeof sq.image === 'string' && sq.image.length > 0) {
-      imageUrl = path.join(imagesFolderPath, sq.image);
+    if (imagesFolderPath && typeof sq.imageName === 'string' && sq.imageName.length > 0) {
+      imageUrl = path.join(imagesFolderPath, sq.imageName);
       logger.info(`[IMAGE] Chemin de l'image construit : ${imageUrl}`);
-    } else if (typeof sq.image === 'string' && sq.image.length > 0) {
+    } else if (typeof sq.imageName === 'string' && sq.imageName.length > 0) {
       // Fallback pour les chemins absolus ou URL si aucun dossier n'est fourni
-      imageUrl = sq.image;
+      imageUrl = sq.imageName;
       logger.info(`[IMAGE] Chemin de l'image utilisé directement : ${imageUrl}`);
     }
 

@@ -389,7 +389,6 @@ export interface QuestionWithId {
   timeLimit?: number;
   isEliminatory: boolean;
   blocId: number; // Made mandatory
-  image?: string | Blob | null;
   createdAt?: string;
   updatedAt?: string;
   usageCount?: number;

@@ -168,6 +168,7 @@ const createSchema = () => {
       options TEXT, /* JSON array of strings */
       version TEXT, /* Changed from INTEGER to TEXT */
       updated_at TEXT,
+      imageName TEXT,
       FOREIGN KEY (blocId) REFERENCES blocs(id) ON DELETE SET NULL
     );`,
     `CREATE INDEX IF NOT EXISTS idx_questions_blocId ON questions(blocId);`,
@@ -403,7 +404,7 @@ const createSchema = () => {
 
         const questionsColumnsToAdd = [
             { name: 'userQuestionId', type: 'TEXT' }, { name: 'version', type: 'TEXT' }, // Ensure new columns are created as TEXT
-            { name: 'updated_at', type: 'TEXT' }
+            { name: 'updated_at', type: 'TEXT' }, { name: 'imageName', type: 'TEXT' }
         ];
         for (const column of questionsColumnsToAdd) {
             if (!existingQuestionsColNames.includes(column.name)) {
@@ -658,6 +659,7 @@ const rowToQuestion = (row: any): QuestionWithId | undefined => {
     ...row,
     options: row.options ? JSON.parse(row.options) : [],
     isEliminatory: row.isEliminatory === 1,
+    imageName: row.imageName,
   };
 };
 
