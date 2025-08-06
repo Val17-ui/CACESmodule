@@ -153,6 +153,13 @@ export async function generatePresentation(
   const imagesFolderPath = await getAdminSetting('imagesFolderPath');
   logger.info(`[LOG][pptxOrchestrator] Dossier d'images récupéré des paramètres: ${imagesFolderPath}`);
 
+  // Debugging log to check for questions with images
+  const questionsWithImages = storedQuestions.filter(q => q.imageName && q.imageName.length > 0);
+  logger.info(`[DEBUG_IMAGE] Found ${questionsWithImages.length} questions with an imageName out of ${storedQuestions.length} total questions.`);
+  questionsWithImages.forEach(q => {
+    logger.info(`[DEBUG_IMAGE] Question ID ${q.id} has imageName: ${q.imageName}`);
+  });
+
   let templateBuffer: Buffer;
   if (templateFile) {
     logger.info('[LOG][pptxOrchestrator] Un fichier template a été fourni.');
