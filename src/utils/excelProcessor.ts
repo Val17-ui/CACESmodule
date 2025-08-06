@@ -40,6 +40,7 @@ export async function parseQuestionsExcel(file: File): Promise<{ data: RawExcelQ
 
     // Vérifier les en-têtes requis
     const requiredHeaders = ['text', 'referential', 'theme', 'optionA', 'optionB', 'correctAnswer', 'isEliminatory'];
+    // L'en-tête 'imageName' est optionnel, donc on ne le vérifie pas ici.
     for (const requiredHeader of requiredHeaders) {
       if (!columnHeaders.includes(requiredHeader)) {
         errors.push(`En-tête manquant requis : ${requiredHeader}.`);

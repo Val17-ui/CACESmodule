@@ -403,13 +403,19 @@ const createSchema = () => {
         }
 
         const questionsColumnsToAdd = [
-            { name: 'userQuestionId', type: 'TEXT' }, { name: 'version', type: 'TEXT' }, // Ensure new columns are created as TEXT
-            { name: 'updated_at', type: 'TEXT' }, { name: 'imageName', type: 'TEXT' }
+            { name: 'userQuestionId', type: 'TEXT' },
+            { name: 'version', type: 'TEXT' },
+            { name: 'updated_at', type: 'TEXT' },
+            { name: 'imageName', type: 'TEXT' }
         ];
         for (const column of questionsColumnsToAdd) {
             if (!existingQuestionsColNames.includes(column.name)) {
-                db.prepare(`ALTER TABLE questions ADD COLUMN ${column.name} ${column.type}`).run();
-                _logger.info(`[DB MIGRATION] Added column '${column.name}' to 'questions'.`);
+                try {
+                    db.prepare(`ALTER TABLE questions ADD COLUMN ${column.name} ${column.type}`).run();
+                    _logger.info(`[DB MIGRATION] Added column '${column.name}' to 'questions'.`);
+                } catch (e: any) {
+                    _logger.error(`[DB MIGRATION] Failed to add column '${column.name}' to 'questions': ${e.message}`);
+                }
             }
         }
 
