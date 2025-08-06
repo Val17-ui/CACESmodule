@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Trash2, Save, Image as ImageIconLucide } from 'lucide-react';
+import { Plus, Trash2, Save } from 'lucide-react';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -68,9 +68,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   }, [initialData]);
 
   const [question, setQuestion] = useState<QuestionWithId>(getInitialState);
-  const [hasImage, setHasImage] = useState(false);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -125,13 +122,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     setQuestion((prev: QuestionWithId) => ({ ...prev, blocId: selectedBlocId ? parseInt(selectedBlocId, 10) : prev.blocId || 0,}));
   }, [selectedBlocId]);
 
-  useEffect(() => {
-    return () => {
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-      }
-    };
-  }, [imagePreview]);
 
   // Effect to initialize/reset form based on questionId or initialData
   useEffect(() => {
@@ -160,28 +150,17 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             }
 
             if (existingQuestion.imageName) {
-              // We don't load the image for preview in edit mode,
-              // we just acknowledge it exists and show the name.
-              setHasImage(true);
               setQuestion(q => ({...q, imageName: existingQuestion.imageName}));
-            } else {
-              setHasImage(false);
-              setImageFile(null);
-              setImagePreview(null);
             }
           } else {
             logger.error(`Question with id ${questionId} not found. Resetting form.`);
             setQuestion(getInitialState()); // Reset to new initial state
             setSelectedReferentialId(''); setSelectedThemeId(''); setSelectedBlocId('');
-            if (imagePreview) URL.revokeObjectURL(imagePreview);
-            setHasImage(false); setImageFile(null); setImagePreview(null);
+            setQuestion(getInitialState()); // Reset to new initial state
           }
         } catch (error) {
           logger.error("Error fetching question: ", error);
           setQuestion(getInitialState());
-          setSelectedReferentialId(''); setSelectedThemeId(''); setSelectedBlocId('');
-          if (imagePreview) URL.revokeObjectURL(imagePreview);
-          setHasImage(false); setImageFile(null); setImagePreview(null);
         } finally {
           setIsLoading(false);
         }
@@ -194,34 +173,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         }
         setSelectedThemeId('');
         setSelectedBlocId('');
-
-
-        if (imagePreview) URL.revokeObjectURL(imagePreview);
-
-        if (newInitialState.image) {
-          if (typeof newInitialState.image === 'string') {
-            try {
-              const imageBase64 = await window.electronAPI?.readImageFile(newInitialState.image);
-              const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
-              setHasImage(true);
-              setImageFile(blob);
-              setImagePreview(URL.createObjectURL(blob));
-            } catch (error) {
-              logger.error(`Failed to load initial image from path: ${newInitialState.image} - ${(error as Error).message}`);
-              setHasImage(false);
-              setImageFile(null);
-              setImagePreview(null);
-            }
-          } else if (newInitialState.image instanceof Blob) {
-            setHasImage(true);
-            setImageFile(newInitialState.image);
-            setImagePreview(URL.createObjectURL(newInitialState.image));
-          }
-        } else {
-          setHasImage(false);
-          setImageFile(null);
-          setImagePreview(null);
-        }
       }
     };
     loadQuestionData();
@@ -258,16 +209,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     const { name, checked } = e.target;
     if (name === 'isEliminatory') {
       setQuestion((prev: QuestionWithId) => ({ ...prev, [name]: checked }));
-    } else if (name === 'hasImageToggle') {
-      setHasImage(checked);
-      if (!checked) {
-        if (imagePreview) {
-          URL.revokeObjectURL(imagePreview);
-        }
-        setImageFile(null);
-        setImagePreview(null);
-        setQuestion((prev: QuestionWithId) => ({ ...prev, imageName: undefined }));
-      }
     }
   };
 
@@ -295,30 +236,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-      }
-      setImageFile(file); // Store as File object
-      setImagePreview(URL.createObjectURL(file));
-      setHasImage(true);
-    }
-  };
-
-  const removeImage = () => {
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview);
-    }
-    setImageFile(null);
-    setImagePreview(null);
-    setHasImage(false);
-    const fileInput = document.getElementById('image-upload') as HTMLInputElement;
-    if (fileInput) {
-      fileInput.value = "";
-    }
-  };
 
   const validateForm = (): boolean => {
     logger.info('validateForm called. Current theme value:', question.theme);
@@ -365,7 +282,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     const questionDataForSave: Omit<QuestionWithId, 'id' | 'referential' | 'theme'> & { id?: number, blocId: number } = {
       ...dataToSave,
       blocId: finalBlocId,
-      imageName: imageFile ? imageFile.name : question.imageName,
+      imageName: question.imageName,
       options: question.options?.map((opt: string) => opt.toString()) || [],
       createdAt: currentId ? question.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -504,61 +421,15 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         </div>
 
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <label className="block text-sm font-medium text-gray-700">
-              Image associée (optionnel)
-            </label>
-            <label htmlFor="hasImageToggleCheckbox" className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                id="hasImageToggleCheckbox"
-                name="hasImageToggle"
-                checked={hasImage}
-                onChange={handleCheckboxChange}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <span className="ml-2 text-sm text-gray-700">Ajouter une image</span>
-            </label>
-          </div>
-
-          {hasImage && (
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-              <div className="text-center">
-                <ImageIconLucide className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="mt-4">
-                  <label htmlFor="image-upload" className="cursor-pointer">
-                    <span className="mt-2 block text-sm font-medium text-gray-900">
-                      {imagePreview ? "Changer l'image" : "Sélectionner une image"}
-                    </span>
-                    <input
-                      id="image-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="sr-only"
-                    />
-                  </label>
-                  <p className="mt-1 text-xs text-gray-500">
-                    PNG, JPG, GIF jusqu'à 10MB
-                  </p>
-                </div>
-                {imagePreview && (
-                   <div className="mt-2 relative group inline-block">
-                    <img src={imagePreview} alt="Prévisualisation" className="max-h-40 rounded" />
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100"
-                      onClick={removeImage}
-                      type="button"
-                    >
-                      <Trash2 size={16}/>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          <Input
+            label="Nom du fichier image (optionnel)"
+            type="text"
+            name="imageName"
+            value={question.imageName || ''}
+            onChange={handleInputChange}
+            placeholder="Ex: chariot.png"
+            error={errors.imageName}
+          />
         </div>
       </Card>
 

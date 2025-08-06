@@ -414,7 +414,9 @@ const createSchema = () => {
                     db.prepare(`ALTER TABLE questions ADD COLUMN ${column.name} ${column.type}`).run();
                     _logger.info(`[DB MIGRATION] Added column '${column.name}' to 'questions'.`);
                 } catch (e: any) {
-                    _logger.error(`[DB MIGRATION] Failed to add column '${column.name}' to 'questions': ${e.message}`);
+                    // This can happen if the column was added in a failed transaction before,
+                    // and the app was restarted. It's usually safe to ignore.
+                    _logger.warn(`[DB MIGRATION] Could not add column '${column.name}' to 'questions', it might already exist. Error: ${e.message}`);
                 }
             }
         }
