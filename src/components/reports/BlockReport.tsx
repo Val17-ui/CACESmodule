@@ -21,6 +21,7 @@ const BlockReport: React.FC<BlockReportProps> = ({ startDate, endDate, referenti
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [lastSavedFilePath, setLastSavedFilePath] = useState<string | null>(null);
   const reportContentRef = useRef<HTMLDivElement>(null);
 
   const handleExportPDF = async () => {
@@ -71,12 +72,11 @@ const BlockReport: React.FC<BlockReportProps> = ({ startDate, endDate, referenti
         const fileName = `rapport_des_tirages_${new Date().toISOString().split('T')[0]}.pdf`;
 
         const result = await window.dbAPI?.saveReportFile?.(pdfBuffer, fileName);
-        if (!result?.success) {
+        if (result?.success && result.filePath) {
+            setLastSavedFilePath(result.filePath);
+        } else {
            throw new Error(result?.error || 'Une erreur inconnue est survenue lors de la sauvegarde.');
         }
-        // Optionally, show a success message like in ReportDetails
-        alert(`Rapport sauvegardé avec succès à l'emplacement : ${result.filePath}`);
-
     } catch (error) {
         console.error("Erreur lors de l'export PDF du rapport des tirages:", error);
         alert(`Une erreur est survenue lors de la génération du PDF: ${error instanceof Error ? error.message : "Erreur inconnue"}`);
@@ -149,9 +149,17 @@ const BlockReport: React.FC<BlockReportProps> = ({ startDate, endDate, referenti
     <Card>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">Rapport des Tirages</h2>
-        <Button onClick={handleExportPDF} disabled={isGeneratingPdf || isLoading} icon={<Download size={16}/>}>
-          {isGeneratingPdf ? 'Génération...' : 'Exporter en PDF'}
-        </Button>
+        <div className="flex items-center space-x-2">
+            {lastSavedFilePath && (
+              <div className="text-sm text-green-600">
+                Fichier enregistré !{' '}
+                <a href="#" onClick={(e) => { e.preventDefault(); window.dbAPI?.openFile(lastSavedFilePath); }} className="underline hover:text-green-800">Ouvrir</a>
+              </div>
+            )}
+            <Button onClick={handleExportPDF} disabled={isGeneratingPdf || isLoading} icon={<Download size={16}/>}>
+              {isGeneratingPdf ? 'Génération...' : 'Exporter en PDF'}
+            </Button>
+        </div>
       </div>
       <div ref={reportContentRef}>
         {isLoading ? (

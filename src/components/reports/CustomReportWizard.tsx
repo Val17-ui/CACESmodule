@@ -47,6 +47,7 @@ const CustomReportWizard = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [templateName, setTemplateName] = useState('');
   const [savedTemplates, setSavedTemplates] = useState<ReportTemplate[]>([]);
+  const [lastSavedFilePath, setLastSavedFilePath] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -179,7 +180,6 @@ const CustomReportWizard = () => {
 
       if (rows.length > 0) {
           const headers = Array.from(config.fields).map(fieldId => {
-              const [type, key] = fieldId.split('.');
               const group = fieldConfig[config.reportType as ReportType];
               const field = Object.values(group).flat().find(f => f.id === fieldId);
               return { header: field?.label || fieldId, key: field?.label || fieldId, width: 25 };
@@ -202,7 +202,9 @@ const CustomReportWizard = () => {
       const fileName = `rapport_${config.reportType}_${new Date().toISOString().split('T')[0]}.xlsx`;
       const result = await window.dbAPI?.saveReportFile?.(buffer, fileName);
 
-      if(!result?.success) {
+      if(result?.success && result.filePath) {
+          setLastSavedFilePath(result.filePath);
+      } else {
           throw new Error(result?.error || 'Erreur lors de la sauvegarde du fichier Excel.');
       }
   }
@@ -270,10 +272,16 @@ const CustomReportWizard = () => {
                         <h4 className="font-bold text-gray-700 mb-2">Charger un modèle</h4>
                         <Select onChange={(e) => handleLoadTemplate(e.target.value)} options={[{value: '', label: 'Choisir...'}, ...savedTemplates.map(t => ({ value: t.name, label: t.name }))]}/>
                     </div>
-                    <div className="text-center pt-4">
+                    <div className="text-center pt-4 space-y-2">
                         <Button size="lg" variant="primary" icon={<Download size={20}/>} onClick={handleExportExcel} disabled={isExporting}>
                             {isExporting ? 'Génération en cours...' : 'Générer et Exporter'}
                         </Button>
+                        {lastSavedFilePath && (
+                            <div className="text-sm text-green-600">
+                                Fichier enregistré !{' '}
+                                <a href="#" onClick={(e) => { e.preventDefault(); window.dbAPI?.openFile(lastSavedFilePath); }} className="underline hover:text-green-800">Ouvrir le fichier</a>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
