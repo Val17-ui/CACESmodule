@@ -720,11 +720,11 @@ const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number
 const upsertQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number | undefined> => {
   return asyncDbRun(() => {
     try {
-      const { userQuestionId, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updatedAt } = question;
+      const { userQuestionId, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updatedAt, imageName } = question;
       const finalUpdatedAt = updatedAt || new Date().toISOString();
       const stmt = getDb().prepare(`
-        INSERT INTO questions (userQuestionId, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updated_at)
-        VALUES (@userQuestionId, @blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version, @updated_at)
+        INSERT INTO questions (userQuestionId, blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updated_at, imageName)
+        VALUES (@userQuestionId, @blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version, @updated_at, @imageName)
         ON CONFLICT(userQuestionId) DO UPDATE SET
           blocId = excluded.blocId,
           text = excluded.text,
@@ -737,7 +737,8 @@ const upsertQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<num
           slideGuid = excluded.slideGuid,
           options = excluded.options,
           version = excluded.version,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          imageName = excluded.imageName
       `);
       const rowData = questionToRow({
         userQuestionId, blocId, text, type, correctAnswer, timeLimit,
@@ -748,7 +749,8 @@ const upsertQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<num
         slideGuid,
         options, 
         version,
-        updatedAt: finalUpdatedAt
+        updatedAt: finalUpdatedAt,
+        imageName
       });
       const result = stmt.run(rowData);
       return result.lastInsertRowid as number;
