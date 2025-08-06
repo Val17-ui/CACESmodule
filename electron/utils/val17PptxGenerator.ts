@@ -1903,12 +1903,12 @@ export async function generatePPTXVal17(
           if (question.imageUrl.startsWith("http://") || question.imageUrl.startsWith("https://")) {
             imageData = await downloadImageFromCloudWithDimensions(question.imageUrl, logger);
           } else {
-            const resolvedImagePath = path.resolve(question.imageUrl);
-            logger.info(`[IMAGE] Tentative de chargement de l'image locale: ${resolvedImagePath}`);
-            if (fs.existsSync(resolvedImagePath)) {
-              imageData = await loadLocalImageWithDimensions(resolvedImagePath, logger);
+            // Le chemin de l'image est déjà absolu, construit par l'orchestrateur.
+            logger.info(`[IMAGE] Tentative de chargement de l'image locale depuis le chemin absolu: ${question.imageUrl}`);
+            if (fs.existsSync(question.imageUrl)) {
+              imageData = await loadLocalImageWithDimensions(question.imageUrl, logger);
             } else {
-              logger.warn(`[IMAGE] Fichier image local non trouvé: ${resolvedImagePath}`);
+              logger.warn(`[IMAGE] Fichier image local non trouvé à l'emplacement: ${question.imageUrl}`);
             }
           }
 

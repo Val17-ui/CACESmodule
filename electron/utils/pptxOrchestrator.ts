@@ -150,7 +150,8 @@ export async function generatePresentation(
   logger.info(`[LOG][pptxOrchestrator] Nombre de questions: ${storedQuestions.length}`);
   logger.info(`[LOG][pptxOrchestrator] adminSettings: ${JSON.stringify(adminSettings)}`);
   
-  const imagesFolderPath = await getAdminSetting('imagesFolderPath');
+  const imagesFolderPathSetting = await getAdminSetting('imagesFolderPath');
+  const imagesFolderPath = imagesFolderPathSetting?.value || null;
   logger.info(`[LOG][pptxOrchestrator] Dossier d'images récupéré des paramètres: ${imagesFolderPath}`);
 
   let templateBuffer: Buffer;
