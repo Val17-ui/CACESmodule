@@ -23,6 +23,14 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   forcedReferential,
   initialData
 }) => {
+  const [availableReferentiels, setAvailableReferentiels] = useState<Referential[]>([]);
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [blocs, setBlocs] = useState<Bloc[]>([]);
+
+  const [selectedReferentialId, setSelectedReferentialId] = useState<string>('');
+  const [selectedThemeId, setSelectedThemeId] = useState<string>('');
+  const [selectedBlocId, setSelectedBlocId] = useState<string>('');
+
   const getInitialState = useCallback((): QuestionWithId => {
     let baseState: Omit<QuestionWithId, 'referential' | 'theme'> & { blocId?: number | undefined } = {
       text: '',
@@ -31,7 +39,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
       correctAnswer: '',
       timeLimit: 30,
       isEliminatory: false,
-      image: undefined,
+      imageName: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       usageCount: 0,
@@ -61,18 +69,10 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
   const [question, setQuestion] = useState<QuestionWithId>(getInitialState);
   const [hasImage, setHasImage] = useState(false);
-  const [imageFile, setImageFile] = useState<Blob | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
-
-  const [availableReferentiels, setAvailableReferentiels] = useState<Referential[]>([]);
-  const [themes, setThemes] = useState<Theme[]>([]);
-  const [blocs, setBlocs] = useState<Bloc[]>([]);
-
-  const [selectedReferentialId, setSelectedReferentialId] = useState<string>('');
-  const [selectedThemeId, setSelectedThemeId] = useState<string>('');
-  const [selectedBlocId, setSelectedBlocId] = useState<string>('');
 
   useEffect(() => {
     StorageManager.getAllReferentiels().then(data => {
@@ -159,29 +159,15 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
                 setSelectedBlocId('');
             }
 
-            if (existingQuestion.image) {
-              if (typeof existingQuestion.image === 'string') {
-                try {
-                  const imageBase64 = await window.electronAPI?.readImageFile(existingQuestion.image);
-                  const blob = await (await fetch(`data:image/png;base64,${imageBase64}`)).blob();
-                  if (imagePreview) URL.revokeObjectURL(imagePreview);
-                  setHasImage(true);
-                  setImageFile(blob);
-                  setImagePreview(URL.createObjectURL(blob));
-                } catch (error) {
-                  logger.error(`Failed to load image from path: ${existingQuestion.image} - ${(error as Error).message}`);
-                  if (imagePreview) URL.revokeObjectURL(imagePreview);
-                  setHasImage(false); setImageFile(null); setImagePreview(null);
-                }
-              } else if (existingQuestion.image instanceof Blob) {
-                if (imagePreview) URL.revokeObjectURL(imagePreview);
-                setHasImage(true);
-                setImageFile(existingQuestion.image);
-                setImagePreview(URL.createObjectURL(existingQuestion.image));
-              }
+            if (existingQuestion.imageName) {
+              // We don't load the image for preview in edit mode,
+              // we just acknowledge it exists and show the name.
+              setHasImage(true);
+              setQuestion(q => ({...q, imageName: existingQuestion.imageName}));
             } else {
-              if (imagePreview) URL.revokeObjectURL(imagePreview);
-              setHasImage(false); setImageFile(null); setImagePreview(null);
+              setHasImage(false);
+              setImageFile(null);
+              setImagePreview(null);
             }
           } else {
             logger.error(`Question with id ${questionId} not found. Resetting form.`);
@@ -280,7 +266,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         }
         setImageFile(null);
         setImagePreview(null);
-        setQuestion((prev: QuestionWithId) => ({ ...prev, image: undefined }));
+        setQuestion((prev: QuestionWithId) => ({ ...prev, imageName: undefined }));
       }
     }
   };
@@ -374,17 +360,12 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         return;
     }
 
-    let imageToSave: Blob | undefined = undefined;
-    if (hasImage && imageFile) {
-      imageToSave = imageFile instanceof File ? new Blob([imageFile], { type: imageFile.type }) : imageFile;
-    }
-
     const { referential, theme, id: currentId, ...dataToSave } = question;
 
     const questionDataForSave: Omit<QuestionWithId, 'id' | 'referential' | 'theme'> & { id?: number, blocId: number } = {
       ...dataToSave,
       blocId: finalBlocId,
-      image: imageToSave,
+      imageName: imageFile ? imageFile.name : question.imageName,
       options: question.options?.map((opt: string) => opt.toString()) || [],
       createdAt: currentId ? question.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
