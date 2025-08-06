@@ -61,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
     <div className="w-64 bg-fond-clair-principal h-full shadow-sm border-r border-gris-moyen/50 flex flex-col">
       <div className="p-6">
         <div className="flex items-center">
-          <img src={logo} alt="easy'certif Logo" className="h-10" />
+          <img src={logo} alt="eval'active Logo" className="h-10" />
         </div>
       </div>
       

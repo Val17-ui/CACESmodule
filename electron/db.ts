@@ -14,7 +14,7 @@ let _db: Database;
 let _logger: ILogger;
 
 // Déterminer le chemin de la base de données de manière plus robuste
-const appName = 'easycertif'; // Nom de votre application
+const appName = 'evalactive'; // Nom de votre application
 const dbDir = path.join(app.getPath('userData'), appName, 'db_data');
 const dbPath = process.env.NODE_ENV === 'development'
   ? path.join(process.cwd(), 'src/db_data/database.sqlite3')
