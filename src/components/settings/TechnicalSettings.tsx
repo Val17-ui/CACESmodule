@@ -11,6 +11,7 @@ interface TechnicalSettingsData {
   backupFileName: string;
   orsSavePath: string;
   reportSavePath: string;
+  imagesFolderPath: string;
 }
 
 const TechnicalSettings: React.FC = () => {
@@ -20,6 +21,7 @@ const TechnicalSettings: React.FC = () => {
     backupFileName: 'CACES_Manager_Backup.json',
     orsSavePath: '',
     reportSavePath: '',
+    imagesFolderPath: '',
   });
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -32,6 +34,7 @@ const TechnicalSettings: React.FC = () => {
       const backupFileName = await StorageManager.getAdminSetting('backupFileName');
       const orsSavePath = await StorageManager.getAdminSetting('orsSavePath');
       const reportSavePath = await StorageManager.getAdminSetting('reportSavePath');
+      const imagesFolderPath = await StorageManager.getAdminSetting('imagesFolderPath');
 
       setSettings({
         reportPrefix: reportPrefix || 'Rapport_',
@@ -39,6 +42,7 @@ const TechnicalSettings: React.FC = () => {
         backupFileName: backupFileName || 'CACES_Manager_Backup.json',
         orsSavePath: orsSavePath || '',
         reportSavePath: reportSavePath || '',
+        imagesFolderPath: imagesFolderPath || '',
       });
       setIsLoading(false);
     };
@@ -53,6 +57,7 @@ const TechnicalSettings: React.FC = () => {
       await StorageManager.setAdminSetting('backupFileName', settings.backupFileName);
       await StorageManager.setAdminSetting('orsSavePath', settings.orsSavePath);
       await StorageManager.setAdminSetting('reportSavePath', settings.reportSavePath);
+      await StorageManager.setAdminSetting('imagesFolderPath', settings.imagesFolderPath);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
@@ -90,6 +95,21 @@ const TechnicalSettings: React.FC = () => {
       const result = await window.dbAPI.openDirectoryDialog();
       if (!result.canceled && result.path) {
         handleChange('reportSavePath', result.path);
+      }
+    } catch (error) {
+      console.error("Error opening directory dialog:", error);
+    }
+  };
+
+  const handleBrowseImagesFolderPath = async () => {
+    if (!window.dbAPI) {
+      console.error("dbAPI not available");
+      return;
+    }
+    try {
+      const result = await window.dbAPI.openDirectoryDialog();
+      if (!result.canceled && result.path) {
+        handleChange('imagesFolderPath', result.path);
       }
     } catch (error) {
       console.error("Error opening directory dialog:", error);
@@ -156,6 +176,21 @@ const TechnicalSettings: React.FC = () => {
               readOnly
             />
             <Button onClick={handleBrowseReportSavePath} type="button">
+              Parcourir
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+          <label className="font-medium text-gray-700">Dossier des images pour questionnaires</label>
+          <div className="flex items-center gap-2">
+            <Input
+              value={settings.imagesFolderPath}
+              onChange={e => handleChange('imagesFolderPath', e.target.value)}
+              placeholder="Ex: C:/Users/VotreNom/Documents/Images_CACES"
+              readOnly
+            />
+            <Button onClick={handleBrowseImagesFolderPath} type="button">
               Parcourir
             </Button>
           </div>

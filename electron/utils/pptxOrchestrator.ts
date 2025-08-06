@@ -94,8 +94,9 @@ function generateOmbeaSessionXml(
 import { ILogger } from '@electron/utils/logger';
 import { generatePPTXVal17 } from '@electron/utils/val17PptxGenerator';
 import { QuestionWithId, AdminPPTXSettings, Val17Question, Val17GenerationOptions, QuestionMapping, Val17SessionInfo, ParticipantForGenerator } from '@common/types';
+import { getAdminSetting } from '@electron/db';
 
-export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger): Val17Question[] {
+export function transformQuestionsForVal17Generator(storedQuestions: QuestionWithId[], logger: ILogger, imagesFolderPath?: string): Val17Question[] {
   logger.info('[LOG][pptxOrchestrator] Début de transformQuestionsForVal17Generator.');
   const result = storedQuestions.map((sq) => {
     let correctAnswerIndex: number | undefined = undefined;
@@ -111,9 +112,14 @@ export function transformQuestionsForVal17Generator(storedQuestions: QuestionWit
     }
 
     let imageUrl: string | undefined = undefined;
-    // Assuming sq.image is now a string (file path) or undefined
-    if (typeof sq.image === 'string' && sq.image.length > 0) {
+    // Construire le chemin complet de l'image si un dossier est fourni
+    if (imagesFolderPath && typeof sq.image === 'string' && sq.image.length > 0) {
+      imageUrl = path.join(imagesFolderPath, sq.image);
+      logger.info(`[IMAGE] Chemin de l'image construit : ${imageUrl}`);
+    } else if (typeof sq.image === 'string' && sq.image.length > 0) {
+      // Fallback pour les chemins absolus ou URL si aucun dossier n'est fourni
       imageUrl = sq.image;
+      logger.info(`[IMAGE] Chemin de l'image utilisé directement : ${imageUrl}`);
     }
 
     return {
@@ -144,6 +150,9 @@ export async function generatePresentation(
   logger.info(`[LOG][pptxOrchestrator] Nombre de questions: ${storedQuestions.length}`);
   logger.info(`[LOG][pptxOrchestrator] adminSettings: ${JSON.stringify(adminSettings)}`);
   
+  const imagesFolderPath = await getAdminSetting('imagesFolderPath');
+  logger.info(`[LOG][pptxOrchestrator] Dossier d'images récupéré des paramètres: ${imagesFolderPath}`);
+
   let templateBuffer: Buffer;
   if (templateFile) {
     logger.info('[LOG][pptxOrchestrator] Un fichier template a été fourni.');
@@ -171,7 +180,7 @@ export async function generatePresentation(
     templateBuffer = fs.readFileSync(defaultTemplatePath);
   }
 
-  const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions, logger);
+  const transformedQuestions = transformQuestionsForVal17Generator(storedQuestions, logger, imagesFolderPath);
   logger.info('[LOG][pptxOrchestrator] Questions transformées pour le générateur Val17.');
 
   const generationOptions: Val17GenerationOptions = {
