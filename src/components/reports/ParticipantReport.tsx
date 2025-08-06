@@ -3,8 +3,6 @@ import Card from '../ui/Card';
 import { StorageManager } from '../../services/StorageManager';
 import { Session, Participant, Referential, Theme, Bloc, QuestionWithId, VotingDevice, ThemeScoreDetails, SessionResult } from '@common/types';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-// import { saveAs } from 'file-saver'; // Retiré car pdf.save() le gère
 import {
   Table,
   TableHeader,
@@ -14,11 +12,28 @@ import {
   TableCell,
 } from '../ui/Table';
 import Input from '../ui/Input';
-// ChevronDown, ChevronRight retirés
-import { Search, ArrowLeft, HelpCircle, CheckCircle, XCircle, Download } from 'lucide-react';
+import { Search, ArrowLeft, Download } from 'lucide-react';
 import Button from '../ui/Button';
 import { calculateParticipantScore, calculateThemeScores, determineIndividualSuccess } from '../../utils/reportCalculators';
 import Badge from '../ui/Badge';
+
+// Interfaces pour le typage
+interface BlockData {
+  questions: EnrichedQuestionForParticipantReport[];
+  score: number;
+  correct: number;
+  total: number;
+}
+
+interface ThemeData {
+  themeId: number;
+  score: number;
+  blocks: { [blockKey: string]: BlockData };
+}
+
+interface StructuredReportData {
+  [themeName: string]: ThemeData;
+}
 
 interface EnrichedQuestionForParticipantReport extends QuestionWithId {
   resolvedThemeName?: string;
@@ -115,7 +130,7 @@ const ParticipantReport = () => {
       if (!startDate && !endDate) return true;
       const sessionDate = new Date(session.dateSession);
       const start = startDate ? new Date(startDate) : null;
-      if (start) start.setHours(0,0,0,0);
+      if (start) start.setHours(0, 0, 0, 0);
       if (start && sessionDate < start) return false;
 
       const end = endDate ? new Date(endDate) : null;
@@ -156,20 +171,7 @@ const ParticipantReport = () => {
       return {};
     }
 
-    const data: {
-      [themeName: string]: {
-        themeId: number;
-        score: number;
-        blocks: {
-          [blockKey: string]: {
-            questions: EnrichedQuestionForParticipantReport[];
-            score: number;
-            correct: number;
-            total: number;
-          };
-        };
-      };
-    } = {};
+    const data: StructuredReportData = {};
 
     detailedParticipation.questionsForDisplay.forEach(q => {
       const theme = allThemesDb.find(t => t.nom_complet === q.resolvedThemeName);
@@ -178,7 +180,7 @@ const ParticipantReport = () => {
       const themeName = theme.nom_complet;
       if (!data[themeName]) {
         data[themeName] = {
-          themeId: theme.id,
+          themeId: theme.id ?? 0, // Utiliser 0 par défaut si undefined
           blocks: {},
         };
       }
@@ -226,7 +228,7 @@ const ParticipantReport = () => {
     const targetParticipantRef = targetSession?.participants?.find(p => p.assignedGlobalDeviceId === participation.originalParticipantAssignedGlobalDeviceId);
 
     if (!targetSession || !targetSession.id || !targetParticipantRef || targetParticipantRef.assignedGlobalDeviceId === undefined || !deviceMap.size || !allThemesDb.length || !allBlocsDb.length) {
-      console.error("Données manquantes pour traiter la participation détaillée", {targetSession, targetParticipantRef, deviceMapSize: deviceMap.size, allThemesDbL: allThemesDb.length, allBlocsDbL: allBlocsDb.length});
+      console.error("Données manquantes pour traiter la participation détaillée", { targetSession, targetParticipantRef, deviceMapSize: deviceMap.size, allThemesDbL: allThemesDb.length, allBlocsDbL: allBlocsDb.length });
       return;
     }
 
@@ -290,187 +292,203 @@ const ParticipantReport = () => {
   };
 
   const generateSingleParticipantReportPDF = async () => {
-    if (!detailedParticipation) return;
-    setIsGeneratingPdf(true);
-    setSavedPdfPath(null);
+  if (!detailedParticipation) return;
+  setIsGeneratingPdf(true);
+  setSavedPdfPath(null);
 
-    const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, questionsForDisplay, num_session, num_stage } = detailedParticipation;
+  const { participantRef, nomSession, dateSession, referentielId, location, trainerId, participantScore, participantSuccess, questionsForDisplay, num_session, num_stage } = detailedParticipation;
 
-    const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.height;
-    const margin = 15;
-    let y = 20;
+  const doc = new jsPDF();
+  const pageHeight = doc.internal.pageSize.height;
+  const margin = 15;
+  let y = 20;
 
-    // --- Header ---
-    doc.setFontSize(18);
-    doc.setTextColor(33, 33, 33);
-    doc.text("Rapport Individuel de Session", doc.internal.pageSize.width / 2, y, { align: 'center' });
-    y += 10;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(margin, y, doc.internal.pageSize.width - margin, y);
-    y += 10;
+  // --- Header ---
+  doc.setFontSize(18);
+  doc.setTextColor(33, 33, 33);
+  doc.text("Rapport Individuel", doc.internal.pageSize.width / 2, y, { align: 'center' });
+  y += 10;
+  doc.setDrawColor(200, 200, 200);
+  doc.line(margin, y, doc.internal.pageSize.width - margin, y);
+  y += 10;
 
-    // --- Details Section (Two Columns) ---
-    const col1X = margin;
-    const col2X = doc.internal.pageSize.width / 2 + 5;
-    let yCol1 = y;
-    let yCol2 = y;
+  // --- Details Section (Two Columns) ---
+  const col1X = margin;
+  const col2X = doc.internal.pageSize.width / 2 + 5;
+  let yCol1 = y;
+  let yCol2 = y;
 
-    const currentReferential = referentielId ? allReferentiels.find(r => r.id === referentielId) : null;
-    const referentialDisplayForPdf = currentReferential ? `${currentReferential.code} - ${currentReferential.nom_complet}` : 'N/A';
+  const currentReferential = referentielId ? allReferentiels.find(r => r.id === referentielId) : null;
+  const referentialDisplayForPdf = currentReferential ? `${currentReferential.code} - ${currentReferential.nom_complet}` : 'N/A';
 
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text("Détails", col1X, yCol1);
-    yCol1 += 6;
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Participant : ${participantRef.prenom} ${participantRef.nom}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`ID Candidat : ${participantRef.identificationCode || 'N/A'}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`Organisation : ${participantRef.organization || 'N/A'}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`Session : ${nomSession}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`Référentiel : ${referentialDisplayForPdf}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`N° Session : ${num_session || 'N/A'}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`N° Stage : ${num_stage || 'N/A'}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`Date : ${new Date(dateSession).toLocaleDateString('fr-FR')}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`Formateur : ${trainerName}`, col1X, yCol1);
-    yCol1 += 5;
-    doc.text(`Lieu : ${location || 'N/A'}`, col1X, yCol1);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text("Détails", col1X, yCol1);
+  yCol1 += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Participant : ${participantRef.prenom} ${participantRef.nom}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`ID Candidat : ${participantRef.identificationCode || 'N/A'}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`Organisation : ${participantRef.organization || 'N/A'}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`Session : ${nomSession}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`Référentiel : ${referentialDisplayForPdf}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`N° Session : ${num_session || 'N/A'}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`N° Stage : ${num_stage || 'N/A'}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`Date : ${new Date(dateSession).toLocaleDateString('fr-FR')}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`Formateur : ${trainerName}`, col1X, yCol1);
+  yCol1 += 5;
+  doc.text(`Lieu : ${location || 'N/A'}`, col1X, yCol1);
 
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text("Scores par Thème", col2X, yCol2);
-    yCol2 += 6;
-    doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text("Scores par Thème", col2X, yCol2);
+  yCol2 += 6;
+  doc.setFont('helvetica', 'normal');
 
-    Object.entries(structuredReportData)
-      .sort(([_, a], [__, b]) => a.themeId - b.themeId)
-      .forEach(([themeName, themeData]) => {
-        doc.setTextColor(themeData.score < 50 ? 255 : 33, 0, 0);
-        doc.setFont('helvetica', 'bold');
-        doc.text(themeName, col2X, yCol2);
-        doc.setTextColor(33, 33, 33);
-        doc.setFont('helvetica', 'normal');
+  Object.entries(structuredReportData)
+    .sort(([_, a], [__, b]) => a.themeId - b.themeId)
+    .forEach(([themeName, themeData]) => {
+      doc.setTextColor(themeData.score < 50 ? 255 : 33, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.text(themeName, col2X, yCol2);
+      doc.setTextColor(33, 33, 33);
+      doc.setFont('helvetica', 'normal');
+      yCol2 += 5;
+
+      Object.entries(themeData.blocks).forEach(([blockKey, blockData]) => {
+        doc.text(`- ${blockKey}: ${blockData.score.toFixed(0)}% (${blockData.correct}/${blockData.total})`, col2X + 4, yCol2);
         yCol2 += 5;
-
-        Object.entries(themeData.blocks).forEach(([blockKey, blockData]) => {
-          doc.text(`- ${blockKey}: ${blockData.score.toFixed(0)}% (${blockData.correct}/${blockData.total})`, col2X + 4, yCol2);
-          yCol2 += 5;
-        });
       });
-
-    y = Math.max(yCol1, yCol2) + 10;
-
-    // --- Global Score ---
-    doc.setFillColor(participantSuccess ? 232 : 255, participantSuccess ? 245 : 235, participantSuccess ? 233 : 238);
-    doc.rect(margin, y, doc.internal.pageSize.width - margin * 2, 18, 'F');
-    y += 8;
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(participantSuccess ? 46 : 198, participantSuccess ? 125 : 40, participantSuccess ? 50 : 40);
-    doc.text(`Note Globale : ${participantScore !== undefined ? participantScore.toFixed(0) : 'N/A'} / 100`, doc.internal.pageSize.width / 2, y, { align: 'center' });
-    y += 7;
-    doc.setFontSize(12);
-    doc.text(`Mention : ${participantSuccess ? 'RÉUSSI' : 'AJOURNÉ'}`, doc.internal.pageSize.width / 2, y, { align: 'center' });
-    y += 10;
-
-    // --- Questions Section ---
-    y += 10;
-    doc.setFontSize(14);
-    doc.setTextColor(33, 33, 33);
-    doc.setFont('helvetica', 'bold');
-    doc.text("Détail des Questions", margin, y);
-    y += 8;
-
-    const sortedThemes = Object.entries(structuredReportData).sort(([_, a], [__, b]) => a.themeId - b.themeId);
-
-    const columnWidth = (doc.internal.pageSize.width - margin * 3) / 2;
-    const column1X = margin;
-    const column2X = margin + columnWidth + margin;
-    let y1 = y;
-    let y2 = y;
-    let currentColumn = 1;
-
-    const checkPageEnd = (currentY: number) => {
-        if (currentY > pageHeight - 20) {
-            if (currentColumn === 1) {
-                currentColumn = 2;
-                return y; // Return original y to start at top of next column
-            } else {
-                doc.addPage();
-                currentColumn = 1;
-                return 20; // Return start y for new page
-            }
-        }
-        return currentY;
-    }
-
-    sortedThemes.forEach(([themeName, themeData]) => {
-        let currentY = currentColumn === 1 ? y1 : y2;
-        currentY = checkPageEnd(currentY);
-        if (currentColumn === 1) y1 = currentY; else y2 = currentY;
-
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(63, 81, 181);
-        doc.text(themeName, currentColumn === 1 ? column1X : column2X, currentY);
-        currentY += 7;
-
-        Object.entries(themeData.blocks).forEach(([blockKey, blockData]) => {
-            currentY = checkPageEnd(currentY);
-            if (currentColumn === 1) y1 = currentY; else y2 = currentY;
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'italic');
-            doc.setTextColor(100, 100, 100);
-            doc.text(blockKey, currentColumn === 1 ? column1X : column2X, currentY);
-            currentY += 6;
-
-            blockData.questions.forEach(q => {
-                currentY = checkPageEnd(currentY);
-                if (currentColumn === 1) y1 = currentY; else y2 = currentY;
-
-                doc.setFontSize(9);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(33, 33, 33);
-                const questionTextLines = doc.splitTextToSize(q.text, columnWidth);
-                doc.text(questionTextLines, currentColumn === 1 ? column1X : column2X, currentY);
-                currentY += questionTextLines.length * 4;
-
-                doc.setFont('helvetica', 'normal');
-                const answerText = `Réponse : ${q.participantAnswer || 'Non répondu'}`;
-                const statusText = q.isCorrectAnswer ? 'Correct' : 'Incorrect';
-                const answerX = (currentColumn === 1 ? column1X : column2X) + 4;
-                const statusX = answerX + doc.getTextWidth(answerText) + 5;
-
-                doc.text(answerText, answerX, currentY);
-                doc.setTextColor(q.isCorrectAnswer ? 46 : 198, q.isCorrectAnswer ? 125 : 40, q.isCorrectAnswer ? 50 : 40);
-                doc.text(statusText, statusX, currentY);
-                currentY += 6;
-            });
-        });
-        if (currentColumn === 1) y1 = currentY; else y2 = currentY;
     });
 
-    const safeFileName = `Rapport_${participantRef.prenom}_${participantRef.nom}_${nomSession}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
-    const pdfBuffer = doc.output('arraybuffer');
-    const result = await window.dbAPI.saveReportFile(pdfBuffer, safeFileName);
+  y = Math.max(yCol1, yCol2) + 10;
 
-    if (result.success && result.filePath) {
-      setSavedPdfPath(result.filePath);
-    } else {
-      console.error("Failed to save PDF:", result.error);
+  // --- Global Score ---
+  doc.setFillColor(participantSuccess ? 232 : 255, participantSuccess ? 245 : 235, participantSuccess ? 233 : 238);
+  doc.rect(margin, y, doc.internal.pageSize.width - margin * 2, 18, 'F');
+  y += 8;
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(participantSuccess ? 46 : 198, participantSuccess ? 125 : 40, participantSuccess ? 50 : 40);
+  doc.text(`Note Globale : ${participantScore !== undefined ? participantScore.toFixed(0) : 'N/A'} / 100`, doc.internal.pageSize.width / 2, y, { align: 'center' });
+  y += 7;
+  doc.setFontSize(12);
+  doc.text(`Mention : ${participantSuccess ? 'RÉUSSI' : 'AJOURNÉ'}`, doc.internal.pageSize.width / 2, y, { align: 'center' });
+  y += 10;
+
+  // --- Questions Section ---
+  y += 10;
+  doc.setFontSize(14);
+  doc.setTextColor(33, 33, 33);
+  doc.setFont('helvetica', 'bold');
+  doc.text("Détail des Questions", margin, y);
+  y += 8;
+
+  const sortedThemes = Object.entries(structuredReportData).sort(([_, a], [__, b]) => a.themeId - b.themeId);
+
+  const columnCount = 3;
+  const columnWidth = (doc.internal.pageSize.width - margin * (columnCount + 1)) / columnCount;
+  const columnPositions = [
+    margin,
+    margin + columnWidth + margin,
+    margin + 2 * (columnWidth + margin)
+  ];
+
+  function addTheme(themeName: string, themeData: ThemeData) {
+    let columnY = [y, y, y]; // Initialiser toutes les colonnes au même niveau que y
+    let questionIndex = 0;
+    const allQuestions = Object.values(themeData.blocks).flatMap(block => block.questions);
+
+    // Ajouter l’en-tête du thème et calculer la hauteur maximale
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(63, 81, 181);
+    const themeTextLines = doc.splitTextToSize(themeName, columnWidth * 3); // Calculer la hauteur pour toute la largeur
+    doc.text(themeTextLines, columnPositions[0], columnY[0]);
+    columnY[0] += themeTextLines.length * 5; // Ajuster selon la taille de la police
+
+    const blockKeys = Object.keys(themeData.blocks)[0]; // Prendre le premier blockKey comme exemple
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 100, 100);
+    const blockTextLines = doc.splitTextToSize(blockKeys, columnWidth * 3);
+    doc.text(blockTextLines, columnPositions[0], columnY[0]);
+    columnY[0] += blockTextLines.length * 4; // Ajuster selon la taille de la police
+
+    // Mettre à jour columnY pour toutes les colonnes avec la hauteur maximale de l'en-tête
+    const headerHeight = columnY[0];
+    columnY = [headerHeight, headerHeight, headerHeight];
+
+    // Répartir les questions
+    while (questionIndex < allQuestions.length) {
+      const col = questionIndex % 3;
+
+      if (columnY[col] > pageHeight - 20) {
+        doc.addPage();
+        columnY = [20, 20, 20]; // Réinitialiser Y pour la nouvelle page
+      }
+
+      const q = allQuestions[questionIndex];
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(33, 33, 33);
+      const questionText = `Question ${q.id}`;
+      const questionTextLines = doc.splitTextToSize(questionText, columnWidth);
+      doc.text(questionTextLines, columnPositions[col], columnY[col]);
+      columnY[col] += questionTextLines.length * 4;
+
+      doc.setFont('helvetica', 'normal');
+      const answerText = `Réponse : ${q.participantAnswer || 'Non répondu'}`;
+      const statusText = q.isCorrectAnswer ? 'Correct' : 'Incorrect';
+      const answerX = columnPositions[col] + 4;
+      doc.text(answerText, answerX, columnY[col]);
+      doc.setTextColor(q.isCorrectAnswer ? 46 : 198, q.isCorrectAnswer ? 125 : 40, q.isCorrectAnswer ? 50 : 40);
+      doc.text(statusText, answerX + doc.getTextWidth(answerText) + 2, columnY[col]);
+      columnY[col] += 6;
+
+      questionIndex++;
     }
 
-    setIsGeneratingPdf(false);
-  };
+    // Ligne transversale
+    const maxY = Math.max(...columnY);
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, maxY + 5, doc.internal.pageSize.width - margin, maxY + 5);
+    y = maxY + 10;
+  }
+
+  // Appliquer la fonction addTheme pour chaque thème
+  sortedThemes.forEach(([themeName, themeData]) => {
+    addTheme(themeName, themeData);
+  });
+const addFooter = () => {
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(10);
+    doc.setTextColor(150);
+    doc.text(`Page ${i} de ${pageCount}`, doc.internal.pageSize.width / 2, pageHeight - 10, { align: 'center' });
+  }
+};
+addFooter(); // Appeler après avoir généré tout le contenu
+  const safeFileName = `Rapport_${participantRef.prenom}_${participantRef.nom}_${nomSession}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const pdfBuffer = doc.output('arraybuffer');
+  const result = await window.dbAPI.saveReportFile(pdfBuffer, safeFileName);
+
+  if (result.success && result.filePath) {
+    setSavedPdfPath(result.filePath);
+  } else {
+    console.error("Failed to save PDF:", result.error);
+  }
+
+  setIsGeneratingPdf(false);
+};
 
   if (detailedParticipation) {
     const { participantRef, participantScore, participantSuccess } = detailedParticipation;
@@ -594,12 +612,12 @@ const ParticipantReport = () => {
     <Card>
       <h2 className="text-xl font-bold mb-4">Rapport par Participant (Participations aux Sessions)</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <Input 
+        <Input
           placeholder="Rechercher..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="md:col-span-1"
-          icon={<Search size={16} className="text-gray-400"/>}
+          icon={<Search size={16} className="text-gray-400" />}
         />
         <Input
           type="date"
