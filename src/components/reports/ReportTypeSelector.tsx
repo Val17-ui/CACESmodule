@@ -18,7 +18,7 @@ const reportTypes: ReportItem[] = [
   // { id: 'period', title: 'Rapport par période', description: 'Analyser les tendances sur une plage de dates définie.', icon: Calendar }, // Supprimé
   // { id: 'referential', title: 'Rapport par référentiel', description: 'Comparer les statistiques entre différents référentiels CACES.', icon: Layers },
   { id: 'block', title: 'Rapport des tirages', description: 'Analyser les statistiques de tirage au sort des blocs de questions.', icon: BarChartHorizontal },
-  { id: 'custom', title: 'Rapport personnalisé', description: 'Créez vos propres rapports avec des filtres avancés.', icon: Sliders },
+  { id: 'custom', title: 'Rapport en Excel', description: 'Créez vos propres rapports avec un assistant guidé.', icon: Sliders },
 ];
 
 type ReportTypeSelectorProps = {

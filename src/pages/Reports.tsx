@@ -8,7 +8,7 @@ import ParticipantReport from '../components/reports/ParticipantReport';
 // import PeriodReport from '../components/reports/PeriodReport'; // Supprimé
 // import ReferentialReport from '../components/reports/ReferentialReport';
 import BlockReport from '../components/reports/BlockReport';
-import CustomReport from '../components/reports/CustomReport';
+import CustomReportWizard from '../components/reports/CustomReportWizard';
 import Button from '../components/ui/Button';
 import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
 // import { getAllSessions, getSessionById, getAllTrainers, getAllReferentiels } from '../db'; // Supprimé
@@ -273,7 +273,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
           </div>
         );
       case 'custom':
-        return <CustomReport />;
+        return <CustomReportWizard />;
       default:
         return (
           <>
@@ -294,7 +294,7 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
         // period: 'Rapports par Période', // Supprimé
         // referential: 'Rapports par Référentiel',
         block: 'Rapport des tirages',
-        custom: 'Rapport Personnalisé',
+        custom: 'Rapport en Excel',
       };
       return reportTitles[activeReport] || 'Rapports'; // Fallback au cas où
     }
