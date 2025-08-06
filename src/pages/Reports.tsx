@@ -6,7 +6,7 @@ import ReportsList from '../components/reports/ReportsList';
 import ReportDetails from '../components/reports/ReportDetails';
 import ParticipantReport from '../components/reports/ParticipantReport';
 // import PeriodReport from '../components/reports/PeriodReport'; // Supprimé
-import ReferentialReport from '../components/reports/ReferentialReport';
+// import ReferentialReport from '../components/reports/ReferentialReport';
 import BlockReport from '../components/reports/BlockReport';
 import CustomReport from '../components/reports/CustomReport';
 import Button from '../components/ui/Button';
@@ -31,8 +31,31 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
   const [trainerFilter, setTrainerFilter] = useState<string>('all');
   const [trainersListForFilter, setTrainersListForFilter] = useState<Trainer[]>([]);
   const [allReferentielsDb, setAllReferentielsDb] = useState<Referential[]>([]);
-  const [startDate, setStartDate] = useState<string>(''); // Nouvel état pour date de début
-  const [endDate, setEndDate] = useState<string>('');     // Nouvel état pour date de fin
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [yearFilter, setYearFilter] = useState('');
+
+  const handleYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const year = e.target.value;
+    setYearFilter(year);
+    if (year && /^\d{4}$/.test(year)) {
+      setStartDate(`${year}-01-01`);
+      setEndDate(`${year}-12-31`);
+    } else if (year === '') {
+      setStartDate('');
+      setEndDate('');
+    }
+  };
+
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setStartDate(e.target.value);
+    setYearFilter('');
+  };
+
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEndDate(e.target.value);
+    setYearFilter('');
+  };
 
   const referentialCodeMap = useMemo(() => {
     return new Map(allReferentielsDb.map(ref => [ref.id, ref.code]));
@@ -169,18 +192,26 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
             </div>
             <div className="mb-4 flex space-x-4">
               <Input
+                type="number"
+                label="Année"
+                placeholder="YYYY"
+                value={yearFilter}
+                onChange={handleYearChange}
+                className="w-1/5"
+              />
+              <Input
                 type="date"
                 label="Date de début"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-1/4"
+                onChange={handleStartDateChange}
+                className="w-1/3"
               />
               <Input
                 type="date"
                 label="Date de fin"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-1/4"
+                onChange={handleEndDateChange}
+                className="w-1/3"
               />
             </div>
             <ReportsList
@@ -195,10 +226,52 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
         return <ParticipantReport />;
       // case 'period': // Supprimé
       // return <PeriodReport />;
-      case 'referential':
-        return <ReferentialReport startDate={startDate} endDate={endDate} referentialMap={referentialCodeMap} />;
+      // case 'referential':
+        // return <ReferentialReport startDate={startDate} endDate={endDate} referentialMap={referentialCodeMap} />;
       case 'block':
-        return <BlockReport startDate={startDate} endDate={endDate} />;
+        return (
+          <div>
+            <div className="mb-4 flex space-x-4 items-end bg-gray-50 p-4 rounded-lg">
+                <div className="flex-1">
+                    <label htmlFor="referentiel-filter-block" className="block text-sm font-medium text-gray-700 mb-1">Référentiel</label>
+                    <Select
+                      id="referentiel-filter-block"
+                      value={referentialFilter}
+                      onChange={(e) => setReferentialFilter(e.target.value)}
+                      className="w-full"
+                      options={referentialOptionsForFilter}
+                    />
+                </div>
+                <div className="flex-1">
+                  <Input
+                    type="number"
+                    label="Année"
+                    placeholder="YYYY"
+                    value={yearFilter}
+                    onChange={handleYearChange}
+                  />
+                </div>
+                <div className="text-center pb-2 mx-2 text-gray-500">ou</div>
+                <div className="flex-1">
+                  <Input
+                    type="date"
+                    label="Date de début"
+                    value={startDate}
+                    onChange={handleStartDateChange}
+                  />
+                </div>
+                <div className="flex-1">
+                  <Input
+                    type="date"
+                    label="Date de fin"
+                    value={endDate}
+                    onChange={handleEndDateChange}
+                  />
+                </div>
+            </div>
+            <BlockReport startDate={startDate} endDate={endDate} referentialFilter={referentialFilter} />
+          </div>
+        );
       case 'custom':
         return <CustomReport />;
       default:
@@ -219,8 +292,8 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
         session: 'Rapports par Session',
         participant: 'Rapports par Participant',
         // period: 'Rapports par Période', // Supprimé
-        referential: 'Rapports par Référentiel',
-        block: 'Rapports par Bloc',
+        // referential: 'Rapports par Référentiel',
+        block: 'Rapport des tirages',
         custom: 'Rapport Personnalisé',
       };
       return reportTitles[activeReport] || 'Rapports'; // Fallback au cas où

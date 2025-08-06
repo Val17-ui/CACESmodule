@@ -3,6 +3,28 @@ import {
   ThemeScoreDetails, CalculatedBlockOverallStats, OverallThemeStats // Types maintenant importés
 } from '@common/types';
 
+export interface BlockDrawStat {
+  blocId: number;
+  blocCode: string;
+  usageCount: number;
+  usagePercentage: number;
+  totalReferentielUsage: number;
+}
+
+export interface ThemeDrawStat {
+  themeId: number;
+  themeCode: string;
+  themeName: string;
+  blocks: BlockDrawStat[];
+}
+
+export interface ReferentialDrawStat {
+  referentielId: number;
+  referentielCode: string;
+  totalSessionUsage: number;
+  themes: ThemeDrawStat[];
+}
+
 /**
  * Calcule la note globale d'un participant pour une session spécifique.
  * Prend en compte toutes les questions de la session, traitant les non-réponses comme incorrectes.
@@ -337,6 +359,115 @@ export const calculateNumericBlockPerformanceForSession = (
     averageScoreOnBlock: parseFloat(averageScoreOnBlock.toFixed(1)), // Garder une décimale
     successRateOnBlock: parseFloat(successRateOnBlock.toFixed(0)),
   };
+};
+
+export const calculateDrawStatistics = (
+  sessions: Session[],
+  allReferentiels: Referential[],
+  allThemes: Theme[],
+  allBlocs: Bloc[]
+): ReferentialDrawStat[] => {
+  if (!sessions.length) {
+    return [];
+  }
+
+  // 1. Calculate usage for each block and each referentiel
+  const blockUsage = new Map<number, number>();
+  const referentielUsage = new Map<number, number>();
+
+  for (const session of sessions) {
+    if (!session.selectedBlocIds || session.selectedBlocIds.length === 0) {
+      continue;
+    }
+
+    const seenReferentielsInSession = new Set<number>();
+
+    for (const blocId of session.selectedBlocIds) {
+      if (blocId === null || blocId === undefined) continue;
+
+      // Increment block usage
+      blockUsage.set(blocId, (blockUsage.get(blocId) || 0) + 1);
+
+      const bloc = allBlocs.find(b => b.id === blocId);
+      if (bloc?.theme_id) {
+        const theme = allThemes.find(t => t.id === bloc.theme_id);
+        if (theme?.referentiel_id) {
+          seenReferentielsInSession.add(theme.referentiel_id);
+        }
+      }
+    }
+
+    for (const refId of seenReferentielsInSession) {
+      referentielUsage.set(refId, (referentielUsage.get(refId) || 0) + 1);
+    }
+  }
+
+  // 2. Build the nested result structure, grouping by referentiel, then theme
+  const statsByReferentiel = new Map<number, ReferentialDrawStat>();
+
+  for (const bloc of allBlocs) {
+    const usage = blockUsage.get(bloc.id);
+    if (usage === undefined || usage === 0) continue;
+
+    const theme = allThemes.find(t => t.id === bloc.theme_id);
+    if (!theme) continue;
+
+    const referentiel = allReferentiels.find(r => r.id === theme.referentiel_id);
+    if (!referentiel) continue;
+
+    const totalRefUsage = referentielUsage.get(referentiel.id) || 0;
+    if (totalRefUsage === 0) continue;
+
+    // Ensure referentiel entry exists
+    if (!statsByReferentiel.has(referentiel.id)) {
+      statsByReferentiel.set(referentiel.id, {
+        referentielId: referentiel.id,
+        referentielCode: referentiel.code,
+        totalSessionUsage: totalRefUsage,
+        themes: [],
+      });
+    }
+
+    const referentielStat = statsByReferentiel.get(referentiel.id)!;
+
+    // Ensure theme entry exists
+    let themeStat = referentielStat.themes.find(t => t.themeId === theme.id);
+    if (!themeStat) {
+      themeStat = {
+        themeId: theme.id,
+        themeCode: theme.code_theme,
+        themeName: theme.nom_complet,
+        blocks: [],
+      };
+      referentielStat.themes.push(themeStat);
+    }
+
+    // Add block stat
+    themeStat.blocks.push({
+      blocId: bloc.id,
+      blocCode: bloc.code_bloc,
+      usageCount: usage,
+      totalReferentielUsage: totalRefUsage,
+      usagePercentage: (usage / totalRefUsage) * 100,
+    });
+  }
+
+  // 3. Convert map to array and sort
+  const result = Array.from(statsByReferentiel.values());
+
+  // Sort themes within each referentiel by ID
+  result.forEach(refStat => {
+    refStat.themes.sort((a, b) => a.themeId - b.themeId);
+    // Sort blocks within each theme by code
+    refStat.themes.forEach(themeStat => {
+        themeStat.blocks.sort((a,b) => a.blocCode.localeCompare(b.blocCode));
+    });
+  });
+
+  // Sort referentiels by code
+  result.sort((a, b) => a.referentielCode.localeCompare(b.referentielCode));
+
+  return result;
 };
 
 /**

@@ -251,7 +251,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
         const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
         const result = await window.dbAPI?.saveReportFile?.(pdfBuffer, fileName);
         if (result?.success) {
-          setLastSavedFilePath(result.filePath);
+          setLastSavedFilePath(result.filePath || null);
         } else {
           throw new Error(result?.error || 'Une erreur inconnue est survenue.');
         }
@@ -338,7 +338,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
       const fileName = `Rapports_Session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.zip`;
       const result = await window.dbAPI?.saveReportZipFile?.(zipBuffer, fileName);
       if (result?.success) {
-        setLastSavedFilePath(result.filePath);
+        setLastSavedFilePath(result.filePath || null);
       } else {
         throw new Error(result?.error || 'Une erreur inconnue est survenue.');
       }
@@ -523,7 +523,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                       <tr className={`${rowStyle} border-b-2 border-gray-300`}>
                         <td colSpan={5} className="px-6 py-2">
                           <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1 items-center">
-                            {participantData.themeScores && participantData.themeScores.map(themeScore => (
+                            {participantData.themeScores && Object.values(participantData.themeScores).map(themeScore => (
                               <span key={themeScore.themeCode} className="font-medium">
                                 {themeScore.themeCode}:
                                 <span className="font-normal ml-1">{themeScore.correct}/{themeScore.total}</span>
