@@ -363,7 +363,6 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         };
 
         try {
-            console.log('[DEBUG_IMPORT] Upserting question data:', JSON.stringify(newQuestionData, null, 2));
             await StorageManager.upsertQuestion(newQuestionData);
             questionsAdded++;
         } catch (e: any) {
