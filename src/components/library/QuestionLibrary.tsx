@@ -177,7 +177,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         correctanswer: 'correctAnswer',
         iseliminatory: 'isEliminatory',
         timelimit: 'timeLimit',
-        imagename: 'imageName',
+        imagename: 'imageName', // Corrigé
         version: 'version', // Nouveau
         // type: 'type', // Type column is no longer strictly needed for import logic, will default to multiple-choice
       };
@@ -352,7 +352,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           blocId: blocIdToStore, // Utiliser le blocId trouvé ou créé
           isEliminatory: isEliminatoryBool,
           timeLimit: parseInt(row[headerMap['timelimit']], 10) || 30,
-          imageName: (row[headerMap['imagename']] || '').toString().trim() || undefined,
+          imageName: (row[headerMap['imageName']] || '').toString().trim() || undefined,
           // referential et theme sont supprimés de StoredQuestion et gérés via blocId
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
