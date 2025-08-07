@@ -130,10 +130,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   });
 
   const handleDataChange = <T extends keyof SessionFormData>(field: T, value: SessionFormData[T]) => {
-    logger.debug(`[SessionForm] handleDataChange called for field: ${field}`, { value });
+    logger.info(`[SessionForm] handleDataChange called for field: ${field}`, { value });
     setFormData(prev => {
         const newState = { ...prev, [field]: value };
-        logger.debug('[SessionForm] New formData state:', newState);
+        logger.info('[SessionForm] New formData state:', newState);
         return newState;
     });
   };
@@ -441,8 +441,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 logger.info('[SessionForm Import] Calling parseFullSessionExcel...');
                 const { details, participants: parsedParticipants } = await parseFullSessionExcel(sessionToImport);
                 logger.info('[SessionForm Import] Successfully parsed Excel file.');
-                logger.debug('[SessionForm Import] Parsed Details:', details);
-                logger.debug('[SessionForm Import] Parsed Participants:', parsedParticipants);
+                logger.info('[SessionForm Import] Parsed Details:', details);
+                logger.info('[SessionForm Import] Parsed Participants:', parsedParticipants);
 
                 // Populate session details
                 const ref = details.referentielCode ? referentielsData.find(r => r.code === details.referentielCode) : null;
@@ -1614,7 +1614,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
             handleParticipantIterationChange={handleParticipantIterationChange}
             deviceKitsList={deviceKitsList}
             selectedKitIdState={formData.selectedKitIdState}
-            setSelectedKitIdState={(id: any) => handleDataChange('selectedKitIdState', id)}
+            setSelectedKitIdState={(id: number | null) => handleDataChange('selectedKitIdState', id)}
             votingDevicesInSelectedKit={votingDevicesInSelectedKit}
             isLoadingKits={isLoadingKits}
           />
