@@ -74,7 +74,8 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const [allBlocsDb, setAllBlocsDb] = useState<Bloc[]>([]);
   const [isGeneratingZip, setIsGeneratingZip] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [lastSavedFilePath, setLastSavedFilePath] = useState<string | null>(null);
+  const [lastZipPath, setLastZipPath] = useState<string | null>(null);
+  const [lastPdfPath, setLastPdfPath] = useState<string | null>(null);
 
   const participants = session.participants || [];
 
@@ -448,7 +449,7 @@ const generateAllParticipantsZip = async () => {
     return;
   }
   setIsGeneratingZip(true);
-  setLastSavedFilePath(null);
+  setLastZipPath(null);
 
   const zip = new JSZip();
 
@@ -464,7 +465,7 @@ const generateAllParticipantsZip = async () => {
     const fileName = `Rapports_Session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.zip`;
     const result = await window.dbAPI.saveReportZipFile(zipBuffer, fileName);
     if (result.success && result.filePath) {
-      setLastSavedFilePath(result.filePath);
+      setLastZipPath(result.filePath);
     } else {
       throw new Error(result.error || 'Une erreur inconnue est survenue lors de la sauvegarde du ZIP.');
     }
@@ -478,7 +479,7 @@ const generateAllParticipantsZip = async () => {
 
 const generateSessionReportPDF = async () => {
   setIsGeneratingPdf(true);
-  setLastSavedFilePath(null);
+  setLastPdfPath(null);
 
   const doc = new jsPDF();
   const margin = 15;
@@ -613,7 +614,7 @@ const pdfBuffer = doc.output('arraybuffer');
 const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
 const result = await window.dbAPI.saveReportFile(pdfBuffer, fileName);
 if (result.success && result.filePath) {
-  setLastSavedFilePath(result.filePath);
+  setLastPdfPath(result.filePath);
 } else {
   console.error("Erreur lors de la sauvegarde du PDF:", result.error);
 }
@@ -623,21 +624,24 @@ setIsGeneratingPdf(false);
 return (
   <div>
     <div className="flex justify-end mb-4 space-x-2 items-center">
-      {lastSavedFilePath && (
-        <div className="text-sm text-green-600 mr-4">
-          Fichier enregistré !{' '}
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              window.dbAPI?.openFile(lastSavedFilePath);
-            }}
-            className="underline hover:text-green-800"
-          >
-            Ouvrir le fichier
-          </a>
+        <div className="flex-grow">
+            {lastZipPath && (
+                <div className="text-sm text-green-600">
+                    ZIP enregistré !{' '}
+                    <a href="#" onClick={(e) => { e.preventDefault(); window.dbAPI?.openFile(lastZipPath); }} className="underline hover:text-green-800">
+                        Ouvrir le ZIP
+                    </a>
+                </div>
+            )}
+            {lastPdfPath && (
+                <div className="text-sm text-green-600 mt-1">
+                    PDF enregistré !{' '}
+                    <a href="#" onClick={(e) => { e.preventDefault(); window.dbAPI?.openFile(lastPdfPath); }} className="underline hover:text-green-800">
+                        Ouvrir le PDF
+                    </a>
+                </div>
+            )}
         </div>
-      )}
       <Button
         onClick={generateAllParticipantsZip}
         icon={<Download size={16} />}
