@@ -130,7 +130,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   });
 
   const handleDataChange = <T extends keyof SessionFormData>(field: T, value: SessionFormData[T]) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    logger.debug(`[SessionForm] handleDataChange called for field: ${field}`, { value });
+    setFormData(prev => {
+        const newState = { ...prev, [field]: value };
+        logger.debug('[SessionForm] New formData state:', newState);
+        return newState;
+    });
   };
 
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
@@ -244,12 +249,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   }, [formData.selectedTrainerId, formData.selectedKitIdState]);
 
   useEffect(() => {
+    logger.info('[SessionForm] useEffect for loading session triggered.', { sessionIdToLoad, isImporting, hardwareLoaded, referentielsData: referentielsData.length });
     if (sessionIdToLoad && !isImporting && hardwareLoaded && referentielsData.length > 0) {
       const loadSession = async () => {
-        console.log(`[SessionLoad] Loading session with ID: ${sessionIdToLoad}`);
+        logger.info(`[SessionForm] Loading session with ID: ${sessionIdToLoad}`);
         try {
           const sessionData = await StorageManager.getSessionById(sessionIdToLoad);
-          console.log('[SessionLoad] Raw data from DB:', sessionData);
+          logger.info('[SessionForm] Raw session data from DB:', { sessionData });
           setEditingSessionData(sessionData || null);
           if (sessionData) {
             setCurrentSessionDbId(sessionData.id ?? null);
@@ -430,10 +436,13 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
         }
         setIsImporting(true);
         const processImport = async () => {
+            logger.info('[SessionForm Import] Starting Excel import process...');
             try {
+                logger.info('[SessionForm Import] Calling parseFullSessionExcel...');
                 const { details, participants: parsedParticipants } = await parseFullSessionExcel(sessionToImport);
-                console.log('[SessionForm Import] Received data from parseFullSessionExcel. Details:', JSON.stringify(details, null, 2));
-                console.log('[SessionForm Import] Received data from parseFullSessionExcel. Participants:', JSON.stringify(parsedParticipants, null, 2));
+                logger.info('[SessionForm Import] Successfully parsed Excel file.');
+                logger.debug('[SessionForm Import] Parsed Details:', details);
+                logger.debug('[SessionForm Import] Parsed Participants:', parsedParticipants);
 
                 // Populate session details
                 const ref = details.referentielCode ? referentielsData.find(r => r.code === details.referentielCode) : null;
@@ -499,7 +508,9 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 setImportSummary(`${parsedParticipants.length} participants et les détails de la session ont été importés avec succès.`);
             } catch (error) {
                 console.error("Error processing imported session file:", error);
-                setImportSummary(`Erreur lors de l'importation du fichier de session: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                logger.error(`[SessionForm Import] Failed to process Excel file: ${errorMessage}`, { stack: error instanceof Error ? error.stack : undefined });
+                setImportSummary(`Erreur lors de l'importation du fichier de session: ${errorMessage}`);
             } finally {
                 setIsImporting(false);
                 setImportCompleted(true);
@@ -754,6 +765,7 @@ const handleGenerateQuestionnaire = async () => {
   };
 
   const prepareSessionDataForDb = async (includeOrsBlob?: string | Blob | ArrayBuffer | null): Promise<DBSession | null> => {
+    logger.info('[SessionForm] Preparing session data for DB...', { includeOrsBlob: !!includeOrsBlob });
     let currentReferentielId: number | undefined = formData.selectedReferentialId;
     if (!currentReferentielId && formData.selectedReferential) {
         const refObj = referentielsData.find(r => r.code === formData.selectedReferential);
@@ -986,8 +998,10 @@ if (savedIterationId) { // <-- On ajoute cette condition
   };
 
   const handleGenerateQuestionnaireAndOrs = async (iterationIndex?: number) => {
+    logger.info('[SessionForm] Starting questionnaire generation...', { iterationIndex });
     const refCodeToUse = formData.selectedReferential || (editingSessionData?.referentielId ? referentielsData.find(r => r.id === editingSessionData.referentielId)?.code : null);
     if (!refCodeToUse) {
+      logger.error('[SessionForm] No referential selected for questionnaire generation.');
       setImportSummary("Veuillez sélectionner un référentiel pour générer l'ORS.");
       return;
     }
@@ -995,16 +1009,20 @@ if (savedIterationId) { // <-- On ajoute cette condition
     setImportSummary("Sauvegarde de la session avant génération...");
     let sessionDataPreORS = await prepareSessionDataForDb();
     if (!sessionDataPreORS) {
+      logger.error('[SessionForm] Failed to prepare session data before generation.');
       setImportSummary("Erreur lors de la préparation des données de la session.");
       setIsGeneratingOrs(false); return;
     }
     const currentSavedId = await handleSaveSession(sessionDataPreORS);
     if (!currentSavedId) {
+      logger.error('[SessionForm] Failed to save session before generation.');
       setImportSummary("Erreur lors de la sauvegarde de la session avant la génération.");
       setIsGeneratingOrs(false); return;
     }
+    logger.info(`[SessionForm] Session saved with ID: ${currentSavedId}. Reloading data...`);
     let upToDateSessionData = await StorageManager.getSessionById(currentSavedId);
     if (!upToDateSessionData) {
+      logger.error('[SessionForm] Failed to reload session after saving.');
       setImportSummary("Erreur lors du rechargement de la session après sauvegarde.");
       setIsGeneratingOrs(false); return;
     }

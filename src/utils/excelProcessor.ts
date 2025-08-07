@@ -106,31 +106,34 @@ export interface ParsedParticipant {
   deviceName: string;
 }
 
+import { logger } from './logger';
+
 export async function parseFullSessionExcel(file: File): Promise<{ details: SessionDetails; participants: ParsedParticipant[] }> {
-  console.log(`[Excel Import] Starting to parse full session from file: ${file.name}`);
+  logger.info('[parseFullSessionExcel] Starting to process Excel file...', { fileName: file.name, fileSize: file.size });
   const details: SessionDetails = {};
   const participants: ParsedParticipant[] = [];
 
   const arrayBuffer = await file.arrayBuffer();
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(arrayBuffer);
+  logger.info('[parseFullSessionExcel] Workbook loaded.');
 
   // Log all available sheet names for debugging
   const availableSheetNames = workbook.worksheets.map(ws => ws.name);
-  console.log(`[Excel Import] Sheets found in the workbook: [${availableSheetNames.join(', ')}]`);
+  logger.info(`[parseFullSessionExcel] Sheets found in the workbook: [${availableSheetNames.join(', ')}]`);
 
   // Helper to find a sheet by name, case-insensitively
   const findSheet = (name: string) => {
     const lowerCaseName = name.toLowerCase();
     const sheet = workbook.worksheets.find(ws => ws.name.toLowerCase() === lowerCaseName);
-    console.log(`[Excel Import] Searching for sheet "${name}" (case-insensitive)... ${sheet ? `Found sheet named "${sheet.name}"` : 'Not found.'}`);
+    logger.info(`[parseFullSessionExcel] Searching for sheet "${name}" (case-insensitive)... ${sheet ? `Found sheet named "${sheet.name}"` : 'Not found.'}`);
     return sheet;
   };
 
   // Parse SessionDetails sheet
   const sessionDetailsSheet = findSheet('SessionDetails');
   if (sessionDetailsSheet) {
-    console.log(`[Excel Import] Parsing sheet: "${sessionDetailsSheet.name}" for session details.`);
+    logger.info(`[parseFullSessionExcel] Parsing sheet: "${sessionDetailsSheet.name}" for session details.`);
     const keyMapping: { [key: string]: string } = {
       'nom de la session': 'nomSession',
       'nomsession': 'nomSession',
@@ -170,15 +173,16 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
         }
       }
     });
-    console.log('[Excel Import] Parsed session details:', JSON.stringify(details, null, 2));
+    logger.info('[parseFullSessionExcel] Parsed session details:', { details });
   } else {
+    logger.error("[parseFullSessionExcel] 'SessionDetails' sheet not found.");
     throw new Error("La feuille 'SessionDetails' (ou 'sessiondetails') est introuvable dans le fichier Excel.");
   }
 
   // Parse Participants sheet
   const participantsSheet = findSheet('Participants');
   if (participantsSheet) {
-    console.log(`[Excel Import] Parsing sheet: "${participantsSheet.name}" for participants.`);
+    logger.info(`[parseFullSessionExcel] Parsing sheet: "${participantsSheet.name}" for participants.`);
     const headerRow = participantsSheet.getRow(1);
     const headerMap: { [key: string]: number } = {};
     headerRow.eachCell((cell, colNumber) => {
@@ -188,7 +192,7 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
         }
     });
 
-    console.log('[Excel Import] Found participant header map:', JSON.stringify(headerMap, null, 2));
+    logger.info('[parseFullSessionExcel] Found participant header map:', { headerMap });
 
     const getColNumber = (aliases: string[]) => {
         for (const alias of aliases) {
@@ -222,8 +226,9 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
         }
       }
     });
-    console.log(`[Excel Import] Parsed ${participants.length} participants.`, JSON.stringify(participants, null, 2));
+    logger.info(`[parseFullSessionExcel] Parsed ${participants.length} participants.`);
   } else {
+    logger.error("[parseFullSessionExcel] 'Participants' sheet not found.");
     throw new Error("La feuille 'Participants' (ou 'participants') est introuvable dans le fichier Excel.");
   }
 
