@@ -25,6 +25,22 @@ import AnomalyResolutionModal, { DetectedAnomalies } from './AnomalyResolutionMo
 import { ExpectedIssueResolution, UnknownDeviceResolution } from '@common/types';
 import { parseFullSessionExcel } from '../../utils/excelProcessor';
 
+// Centralized state for the form
+export type SessionFormData = {
+  sessionName: string;
+  sessionDate: string;
+  numSession: string;
+  numStage: string;
+  selectedReferential: CACESReferential | '';
+  selectedReferentialId: number | null;
+  location: string;
+  notes: string;
+  selectedTrainerId: number | null;
+  selectedKitIdState: number | null;
+  iterationCount: number;
+  iterationNames: string[];
+};
+
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binaryString = window.atob(base64);
   const len = binaryString.length;
@@ -97,16 +113,26 @@ const parseFrenchDate = (dateValue: string | Date | number): string => {
 
 const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImport }) => {
   const [currentSessionDbId, setCurrentSessionDbId] = useState<number | null>(sessionIdToLoad || null);
-  const [sessionName, setSessionName] = useState('');
-  const [sessionDate, setSessionDate] = useState('');
-  const [numSession, setNumSession] = useState('');
-  const [numStage, setNumStage] = useState('');
-  const [iterationCount, setIterationCount] = useState(1);
-  const [iterationNames, setIterationNames] = useState<string[]>(['Session_1']);
-  const [selectedReferential, setSelectedReferential] = useState<CACESReferential | ''>('');
-  const [selectedReferentialId, setSelectedReferentialId] = useState<number | null>(null);
-  const [location, setLocation] = useState('');
-  const [notes, setNotes] = useState('');
+
+  const [formData, setFormData] = useState<SessionFormData>({
+    sessionName: '',
+    sessionDate: '',
+    numSession: '',
+    numStage: '',
+    selectedReferential: '',
+    selectedReferentialId: null,
+    location: '',
+    notes: '',
+    selectedTrainerId: null,
+    selectedKitIdState: null,
+    iterationCount: 1,
+    iterationNames: ['Session_1'],
+  });
+
+  const handleDataChange = <T extends keyof SessionFormData>(field: T, value: SessionFormData[T]) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
   const [participants, setParticipants] = useState<FormParticipant[]>([]);
   const [selectedBlocIds, setSelectedBlocIds] = useState<number[]>([]);
   const [displayedBlockDetails, setDisplayedBlockDetails] = useState<Array<{ themeName: string, blocName: string }>>([]);
@@ -120,12 +146,10 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   const [iterationHasResults, setIterationHasResults] = useState<Record<number, boolean>>({});
   const [modifiedAfterOrsGeneration, setModifiedAfterOrsGeneration] = useState(false);
   const [trainersList, setTrainersList] = useState<Trainer[]>([]);
-  const [selectedTrainerId, setSelectedTrainerId] = useState<number | null>(null);
   const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
   const [allThemesData, setAllThemesData] = useState<Theme[]>([]);
   const [allBlocsData, setAllBlocsData] = useState<Bloc[]>([]);
   const [deviceKitsList, setDeviceKitsList] = useState<DeviceKit[]>([]);
-  const [selectedKitIdState, setSelectedKitIdState] = useState<number | null>(null);
   const [isLoadingKits, setIsLoadingKits] = useState(true);
   const [votingDevicesInSelectedKit, setVotingDevicesInSelectedKit] = useState<VotingDevice[]>([]);
   const [detectedAnomalies, setDetectedAnomalies] = useState<DetectedAnomalies | null>(null);
@@ -159,15 +183,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
         setIsLoadingKits(false);
 
         if (!sessionIdToLoad) {
-          if (trainers.length > 0) {
-            const defaultTrainer = trainers.find((t: Trainer) => t.isDefault === 1) || trainers[0];
-            if (defaultTrainer?.id) setSelectedTrainerId(defaultTrainer.id);
-          }
-          if (defaultKitResult?.id) {
-            setSelectedKitIdState(defaultKitResult.id);
-          } else if (kits.length > 0 && kits[0].id !== undefined) {
-            setSelectedKitIdState(kits[0].id);
-          }
+            const defaultTrainer = trainers.find((t: Trainer) => t.isDefault === 1) || (trainers.length > 0 ? trainers[0] : null);
+            const defaultKit = defaultKitResult || (kits.length > 0 ? kits[0] : null);
+
+            setFormData(prev => ({
+                ...prev,
+                selectedTrainerId: defaultTrainer?.id || null,
+                selectedKitIdState: defaultKit?.id || null,
+            }));
         }
       } catch (error) {
         console.error("Erreur lors du chargement des données globales:", error);
@@ -180,12 +203,12 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
 
   useEffect(() => {
     const fetchDevicesInKit = async () => {
-      if (selectedKitIdState !== null) {
+      if (formData.selectedKitIdState !== null) {
         try {
-          const devices = await StorageManager.getVotingDevicesForKit(selectedKitIdState);
+          const devices = await StorageManager.getVotingDevicesForKit(formData.selectedKitIdState);
           setVotingDevicesInSelectedKit(devices);
         } catch (error) {
-          console.error(`Erreur lors du chargement des boîtiers pour le kit ${selectedKitIdState}:`, error);
+          console.error(`Erreur lors du chargement des boîtiers pour le kit ${formData.selectedKitIdState}:`, error);
           setVotingDevicesInSelectedKit([]);
         }
       } else {
@@ -193,16 +216,24 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
       }
     };
     fetchDevicesInKit();
-  }, [selectedKitIdState]);
+  }, [formData.selectedKitIdState]);
 
   const resetFormTactic = useCallback(() => {
     setCurrentSessionDbId(null);
-    setSessionName('');
-    setSessionDate('');
-    setSelectedReferential('');
-    setSelectedReferentialId(null);
-    setLocation('');
-    setNotes('');
+    setFormData({
+        sessionName: '',
+        sessionDate: '',
+        numSession: '',
+        numStage: '',
+        selectedReferential: '',
+        selectedReferentialId: null,
+        location: '',
+        notes: '',
+        selectedTrainerId: formData.selectedTrainerId, // Keep default
+        selectedKitIdState: formData.selectedKitIdState, // Keep default
+        iterationCount: 1,
+        iterationNames: ['Session_1'],
+    });
     setParticipants([]);
     setSelectedBlocIds([]);
     setDisplayedBlockDetails([]);
@@ -210,7 +241,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
     setEditingSessionData(null);
     setActiveTab('details');
     setModifiedAfterOrsGeneration(false);
-  }, []);
+  }, [formData.selectedTrainerId, formData.selectedKitIdState]);
 
   useEffect(() => {
     if (sessionIdToLoad && !isImporting && hardwareLoaded && referentielsData.length > 0) {
@@ -222,39 +253,56 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
           setEditingSessionData(sessionData || null);
           if (sessionData) {
             setCurrentSessionDbId(sessionData.id ?? null);
-            setSessionName(sessionData.nomSession);
-            setSessionDate(sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '');
-              setNumSession(sessionData.num_session || '');
-              setNumStage(sessionData.num_stage || '');
+
+            let refCode: CACESReferential | '' = '';
+            let refId: number | null = null;
             if (sessionData.referentielId) {
               const refObj = referentielsData.find(r => r.id === sessionData.referentielId);
               if (refObj) {
-                setSelectedReferential(refObj.code as CACESReferential);
-                setSelectedReferentialId(refObj.id!);
+                refCode = refObj.code as CACESReferential;
+                refId = refObj.id!;
               } else {
                 console.warn(`Référentiel avec ID ${sessionData.referentielId} non trouvé dans referentielsData.`);
-                setSelectedReferential('');
-                setSelectedReferentialId(null);
               }
             } else {
               const oldRefCode = (sessionData as any).referentiel as CACESReferential | '';
-              setSelectedReferential(oldRefCode);
               const refObj = referentielsData.find(r => r.code === oldRefCode);
-              setSelectedReferentialId(refObj?.id || null);
+              refCode = oldRefCode;
+              refId = refObj?.id || null;
             }
-            setLocation(sessionData.location || '');
-            setNotes(sessionData.notes || '');
-            setSelectedTrainerId(sessionData.trainerId || null);
+
+            const count = sessionData.iteration_count || 1;
+            let names = sessionData.iterations?.map((iter: { name: any; }, index: number) => iter.name || `Session_${index + 1}`) || [];
+            if (names.length < count) {
+                const additionalNames = Array.from({ length: count - names.length }, (_, i) => `Session_${names.length + i + 1}`);
+                names = [...names, ...additionalNames];
+            }
+            if (names.length > count) {
+                names = names.slice(0, count);
+            }
+
+            setFormData({
+                sessionName: sessionData.nomSession,
+                sessionDate: sessionData.dateSession ? sessionData.dateSession.split('T')[0] : '',
+                numSession: sessionData.num_session || '',
+                numStage: sessionData.num_stage || '',
+                selectedReferential: refCode,
+                selectedReferentialId: refId,
+                location: sessionData.location || '',
+                notes: sessionData.notes || '',
+                selectedTrainerId: sessionData.trainerId || null,
+                selectedKitIdState: sessionData.selectedKitId || null,
+                iterationCount: count,
+                iterationNames: names.length > 0 ? names : ['Session_1'],
+            });
+
             setSelectedBlocIds(sessionData.selectedBlocIds || []);
-            setSelectedKitIdState(sessionData.selectedKitId || null);
 
             if (sessionData.orsFilePath) {
               setIsFirstGenerationDone(true);
             }
-            if (sessionData.iteration_count && sessionData.iteration_count > 0) {
-              const count = sessionData.iteration_count;
-              setIterationCount(count);
-              if (sessionData.iterations) {
+
+            if (sessionData.iterations) {
                 const hasResultsMap: Record<number, boolean> = {};
                 for (const iter of sessionData.iterations) {
                   if (iter.id) {
@@ -263,19 +311,6 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                   }
                 }
                 setIterationHasResults(hasResultsMap);
-              }
-              let names = sessionData.iterations?.map((iter: { name: any; }, index: number) => iter.name || `Session_${index + 1}`) || [];
-              if (names.length < count) {
-                const additionalNames = Array.from({ length: count - names.length }, (_, i) => `Session_${names.length + i + 1}`);
-                names = [...names, ...additionalNames];
-              }
-              if (names.length > count) {
-                names = names.slice(0, count);
-              }
-              setIterationNames(names);
-            } else {
-              setIterationCount(1);
-              setIterationNames(['Session_1']);
             }
 
             setModifiedAfterOrsGeneration(false);
@@ -378,14 +413,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   useEffect(() => {
     // If there is only one iteration, all participants should be assigned to it by default.
     // This is crucial because the iteration selection dropdown is not shown in the UI for single-iteration sessions.
-    if (iterationCount === 1) {
+    if (formData.iterationCount === 1) {
         const allParticipantIds = participants.map(p => ({ id: p.uiId, assignedGlobalDeviceId: p.assignedGlobalDeviceId || null }));
         // Only update the state if it's different to avoid an infinite loop.
         if (JSON.stringify(participantAssignments[0] || []) !== JSON.stringify(allParticipantIds)) {
             setParticipantAssignments({ 0: allParticipantIds });
         }
     }
-  }, [participants, iterationCount, participantAssignments]);
+  }, [participants, formData.iterationCount, participantAssignments]);
 
   useEffect(() => {
     if (sessionToImport) {
@@ -401,48 +436,28 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 console.log('[SessionForm Import] Received data from parseFullSessionExcel. Participants:', JSON.stringify(parsedParticipants, null, 2));
 
                 // Populate session details
-                if (details.nomSession) setSessionName(details.nomSession.toString());
-                if (details.dateSession) setSessionDate(parseFrenchDate(details.dateSession.toString()));
-                if (details.numSession) setNumSession(details.numSession.toString());
-                if (details.numStage) setNumStage(details.numStage.toString());
-                if (details.location) setLocation(details.location.toString());
-                if (details.notes) setNotes(details.notes.toString());
-
-                // Lookups
-                if (details.referentielCode) {
-                    const ref = referentielsData.find(r => r.code === details.referentielCode);
-                    if (ref) {
-                        setSelectedReferentialId(ref.id!);
-                        setSelectedReferential(ref.code as CACESReferential);
-                    } else {
-                        console.warn(`Referential with code ${details.referentielCode} not found.`);
-                    }
-                }
-                if (details.trainerName) {
-                    const trainer = trainersList.find(t => t.name === details.trainerName);
-                    if (trainer) {
-                        setSelectedTrainerId(trainer.id!);
-                    } else {
-                        console.warn(`Trainer with name ${details.trainerName} not found.`);
-                    }
-                }
-                if (details.kitName) {
-                    const kit = deviceKitsList.find(k => k.name === details.kitName);
-                    if (kit) {
-                        setSelectedKitIdState(kit.id!);
-                    } else {
-                        console.warn(`Kit with name ${details.kitName} not found.`);
-                    }
-                }
+                const ref = details.referentielCode ? referentielsData.find(r => r.code === details.referentielCode) : null;
+                const trainer = details.trainerName ? trainersList.find(t => t.name === details.trainerName) : null;
+                const kit = details.kitName ? deviceKitsList.find(k => k.name === details.kitName) : null;
+                const iterationCount = parseInt(details.iterationCount?.toString() || '1', 10);
+                const iterationNames = details.iterationNames ? details.iterationNames.toString().split(',').map((name: string) => name.trim()) : Array.from({ length: iterationCount }, (_, i) => `Session_${i + 1}`);
 
                 // Iterations
-                const iterationCount = parseInt(details.iterationCount?.toString() || '1', 10);
-                setIterationCount(iterationCount);
-                if (details.iterationNames) {
-                    setIterationNames(details.iterationNames.toString().split(',').map((name: string) => name.trim()));
-                } else {
-                    setIterationNames(Array.from({ length: iterationCount }, (_, i) => `Session_${i + 1}`));
-                }
+                setFormData(prev => ({
+                    ...prev,
+                    sessionName: details.nomSession?.toString() || '',
+                    sessionDate: details.dateSession ? parseFrenchDate(details.dateSession.toString()) : '',
+                    numSession: details.numSession?.toString() || '',
+                    numStage: details.numStage?.toString() || '',
+                    location: details.location?.toString() || '',
+                    notes: details.notes?.toString() || '',
+                    selectedReferential: ref ? ref.code as CACESReferential : '',
+                    selectedReferentialId: ref ? ref.id! : null,
+                    selectedTrainerId: trainer ? trainer.id! : null,
+                    selectedKitIdState: kit ? kit.id! : null,
+                    iterationCount: iterationCount,
+                    iterationNames: iterationNames,
+                }));
 
                 // Populate participants
                 const newFormParticipants: FormParticipant[] = parsedParticipants.map((p, index) => {
@@ -498,7 +513,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
 
   const handleAddParticipant = () => {
     if (editingSessionData?.orsFilePath && editingSessionData.status !== 'completed') { setModifiedAfterOrsGeneration(true); }
-    if (!selectedKitIdState) {
+    if (!formData.selectedKitIdState) {
       alert("Veuillez d'abord sélectionner un kit de boîtiers dans l'onglet 'Participants'.");
       setActiveTab('participants');
       return;
@@ -739,37 +754,29 @@ const handleGenerateQuestionnaire = async () => {
   };
 
   const prepareSessionDataForDb = async (includeOrsBlob?: string | Blob | ArrayBuffer | null): Promise<DBSession | null> => {
-    let currentReferentielId: number | undefined = undefined;
-    if (selectedReferentialId) {
-        currentReferentielId = selectedReferentialId;
-    } else if (selectedReferential) {
-        const refObj = referentielsData.find(r => r.code === selectedReferential);
-        if (refObj?.id) {
-            currentReferentielId = refObj.id;
-        } else {
-            console.error(`Impossible de trouver l'ID pour le code référentiel: ${selectedReferential}`);
-            setImportSummary(`Erreur: Référentiel ${selectedReferential} non valide.`);
-            return null;
-        }
+    let currentReferentielId: number | undefined = formData.selectedReferentielId;
+    if (!currentReferentielId && formData.selectedReferential) {
+        const refObj = referentielsData.find(r => r.code === formData.selectedReferential);
+        if (refObj) currentReferentielId = refObj.id;
     } else if (editingSessionData?.referentielId) {
         currentReferentielId = editingSessionData.referentielId;
     }
     const sessionToSave: Omit<DBSession, 'participants'> = {
       id: currentSessionDbId || undefined,
-      iteration_count: iterationCount,
-      nomSession: sessionName || `Session du ${new Date().toLocaleDateString()}`,
-      dateSession: sessionDate || new Date().toISOString().split('T')[0],
-      num_session: numSession,
-      num_stage: numStage,
+      iteration_count: formData.iterationCount,
+      nomSession: formData.sessionName || `Session du ${new Date().toLocaleDateString()}`,
+      dateSession: formData.sessionDate || new Date().toISOString().split('T')[0],
+      num_session: formData.numSession,
+      num_stage: formData.numStage,
       referentielId: currentReferentielId,
       selectedBlocIds: selectedBlocIds,
-      selectedKitId: selectedKitIdState,
+      selectedKitId: formData.selectedKitIdState,
       orsFilePath: includeOrsBlob !== undefined ? includeOrsBlob : editingSessionData?.orsFilePath,
       status: editingSessionData?.status || 'planned',
-      location: location,
+      location: formData.location,
       questionMappings: editingSessionData?.questionMappings,
-      notes: notes,
-      trainerId: selectedTrainerId ?? undefined,
+      notes: formData.notes,
+      trainerId: formData.selectedTrainerId ?? undefined,
       createdAt: editingSessionData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ignoredSlideGuids: editingSessionData?.ignoredSlideGuids,
@@ -781,7 +788,7 @@ const handleGenerateQuestionnaire = async () => {
 
   const validateSessionDataForGeneration = (iterationIndex?: number): string[] => {
     const errors: string[] = [];
-    const iterationsToValidate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: iterationCount }, (_, i) => i);
+    const iterationsToValidate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: formData.iterationCount }, (_, i) => i);
 
     const allAssignedParticipantUiIds = new Set(Object.values(participantAssignments).flat().map(p => p.id));
 
@@ -795,7 +802,7 @@ const handleGenerateQuestionnaire = async () => {
     }
 
     for (const i of iterationsToValidate) {
-      const iterationName = iterationNames[i] || `Itération ${i + 1}`;
+      const iterationName = formData.iterationNames[i] || `Itération ${i + 1}`;
       const assignedParticipants = (participantAssignments[i] || []).map(assignment => {
         return participants.find(p => p.uiId === assignment.id);
       }).filter((p): p is FormParticipant => p !== undefined);
@@ -886,14 +893,14 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
         }
 
         if (savedSessionId) {
-            for (let i = 0; i < iterationCount; i++) {
+            for (let i = 0; i < formData.iterationCount; i++) {
                 const existingIteration = editingSessionData?.iterations?.find(iter => iter.iteration_index === i);
 
                 const iterationToSave: any = {
                     id: existingIteration?.id,
                     session_id: savedSessionId,
                     iteration_index: i,
-                    name: iterationNames[i] || `Session_${i + 1}`,
+                    name: formData.iterationNames[i] || `Session_${i + 1}`,
                     status: existingIteration?.status || 'planned',
                     ors_file_path: existingIteration?.ors_file_path,
                     question_mappings: existingIteration?.question_mappings,
@@ -915,7 +922,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
                 session_iteration_id: savedIterationId, // Maintenant, c'est sûr que c'est un nombre
                 participant_id: dbPId,
                 voting_device_id: participantFormState.assignedGlobalDeviceId,
-                kit_id: selectedKitIdState || 0,
+                kit_id: formData.selectedKitIdState || 0,
             });
         }
     }
@@ -979,7 +986,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
   };
 
   const handleGenerateQuestionnaireAndOrs = async (iterationIndex?: number) => {
-    const refCodeToUse = selectedReferential || (editingSessionData?.referentielId ? referentielsData.find(r => r.id === editingSessionData.referentielId)?.code : null);
+    const refCodeToUse = formData.selectedReferential || (editingSessionData?.referentielId ? referentielsData.find(r => r.id === editingSessionData.referentielId)?.code : null);
     if (!refCodeToUse) {
       setImportSummary("Veuillez sélectionner un référentiel pour générer l'ORS.");
       return;
@@ -1038,19 +1045,18 @@ if (savedIterationId) { // <-- On ajoute cette condition
         allSelectedQuestionsForPptx = await StorageManager.getQuestionsByIds(questionIds);
       }
 
-      const iterationsToGenerate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: iterationCount }, (_, i) => i);
+      const iterationsToGenerate = iterationIndex !== undefined ? [iterationIndex] : Array.from({ length: formData.iterationCount }, (_, i) => i);
       for (const i of iterationsToGenerate) {
-        const iterationName = iterationNames[i];
+        const iterationName = formData.iterationNames[i];
         const assignedParticipantIds = (participantAssignments[i] || []).map((p: { id: string; assignedGlobalDeviceId: number | null }) => String(p.id));
         const participantsForIteration = participants.filter(p => assignedParticipantIds.includes(p.uiId));
         const participantsForGenerator = participantsForIteration.map(p => {
           const device = hardwareDevices.find(hd => hd.id === p.assignedGlobalDeviceId);
           return { idBoitier: device?.serialNumber || '', nom: p.lastName, prenom: p.firstName, identificationCode: p.identificationCode };
         });
-
         const templateFile = await getActivePptxTemplateFile();
         const { orsBlob, questionMappings } = await window.dbAPI?.generatePresentation(
-          { name: `${sessionName} - ${iterationName}`, date: sessionDate, referential: refCodeToUse as CACESReferential },
+          { name: `${formData.sessionName} - ${iterationName}`, date: formData.sessionDate, referential: refCodeToUse as CACESReferential },
           participantsForGenerator, allSelectedQuestionsForPptx, templateFile, {} as AdminPPTXSettings
         );
 
@@ -1060,7 +1066,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
             await StorageManager.updateSession(currentSavedId, { questionMappings: questionMappings });
           }
 
-          const safeSessionName = (sessionName || 'Session').replace(/ /g, '_');
+          const safeSessionName = (formData.sessionName || 'Session').replace(/ /g, '_');
           const safeIterationName = (iterationName || 'Iteration').replace(/ /g, '_');
           const fileName = `${safeSessionName}_${safeIterationName}.ors`;
           const saveResult = await window.dbAPI?.savePptxFile(orsBlob, fileName);
@@ -1562,31 +1568,13 @@ if (savedIterationId) { // <-- On ajoute cette condition
       case 'details':
         return (
           <SessionDetailsForm
+            formData={formData}
+            handleDataChange={handleDataChange}
             isReadOnly={isReadOnly}
-            sessionName={sessionName}
-            setSessionName={setSessionName}
-            sessionDate={sessionDate}
-            setSessionDate={setSessionDate}
             referentielsData={referentielsData}
-            selectedReferential={selectedReferential}
-            setSelectedReferential={setSelectedReferential}
-            setSelectedReferentialId={setSelectedReferentialId}
             editingSessionData={editingSessionData}
             trainersList={trainersList}
-            selectedTrainerId={selectedTrainerId}
-            setSelectedTrainerId={setSelectedTrainerId}
-            numSession={numSession}
-            setNumSession={setNumSession}
-            numStage={numStage}
-            setNumStage={setNumStage}
-            iterationCount={iterationCount}
-            setIterationCount={setIterationCount}
-            setIterationNames={setIterationNames}
             setParticipantAssignments={setParticipantAssignments}
-            location={location}
-            setLocation={setLocation}
-            notes={notes}
-            setNotes={setNotes}
             displayedBlockDetails={displayedBlockDetails}
           />
         );
@@ -1600,13 +1588,13 @@ if (savedIterationId) { // <-- On ajoute cette condition
             handleRemoveParticipant={handleRemoveParticipant}
             handleAddParticipant={handleAddParticipant}
             handleParticipantFileSelect={handleParticipantFileSelect}
-            iterationCount={iterationCount}
-            iterationNames={iterationNames}
+            iterationCount={formData.iterationCount}
+            iterationNames={formData.iterationNames}
             participantAssignments={participantAssignments}
             handleParticipantIterationChange={handleParticipantIterationChange}
             deviceKitsList={deviceKitsList}
-            selectedKitIdState={selectedKitIdState}
-            setSelectedKitIdState={setSelectedKitIdState}
+            selectedKitIdState={formData.selectedKitIdState}
+            setSelectedKitIdState={(id) => handleDataChange('selectedKitIdState', id)}
             votingDevicesInSelectedKit={votingDevicesInSelectedKit}
             isLoadingKits={isLoadingKits}
           />
@@ -1625,7 +1613,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
             importSummary={importSummary}
             activeTab={activeTab}
             currentSessionDbId={currentSessionDbId}
-            selectedReferential={selectedReferential}
+            selectedReferential={formData.selectedReferential}
           />
         );
       case 'importResults':

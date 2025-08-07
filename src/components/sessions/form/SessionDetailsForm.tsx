@@ -5,45 +5,24 @@ import Input from '../../ui/Input';
 import Select from '../../ui/Select';
 
 interface SessionDetailsFormProps {
+  formData: SessionFormData;
+  handleDataChange: <T extends keyof SessionFormData>(field: T, value: SessionFormData[T]) => void;
   isReadOnly: boolean;
-  sessionName: string;
-  setSessionName: (value: string) => void;
-  sessionDate: string;
-  setSessionDate: (value: string) => void;
   referentielsData: Referential[];
-  selectedReferential: CACESReferential | '';
-  setSelectedReferential: (value: CACESReferential | '') => void;
-  setSelectedReferentialId: (id: number | null) => void;
-  editingSessionData: any; // Simplified for now
+  editingSessionData: any;
   trainersList: Trainer[];
-  selectedTrainerId: number | null;
-  setSelectedTrainerId: (id: number | null) => void;
-  numSession: string;
-  setNumSession: (value: string) => void;
-  numStage: string;
-  setNumStage: (value: string) => void;
-  iterationCount: number;
-  setIterationCount: (value: number) => void;
-  setIterationNames: (names: string[]) => void;
   setParticipantAssignments: (assignments: any) => void;
-  location: string;
-  setLocation: (value: string) => void;
-  notes: string;
-  setNotes: (value: string) => void;
   displayedBlockDetails: Array<{ themeName: string, blocName: string }>;
 }
 
 const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
+  formData,
+  handleDataChange,
   isReadOnly,
-  sessionName, setSessionName,
-  sessionDate, setSessionDate,
-  referentielsData, selectedReferential, setSelectedReferential, setSelectedReferentialId, editingSessionData,
-  trainersList, selectedTrainerId, setSelectedTrainerId,
-  numSession, setNumSession,
-  numStage, setNumStage,
-  iterationCount, setIterationCount, setIterationNames, setParticipantAssignments,
-  location, setLocation,
-  notes, setNotes,
+  referentielsData,
+  editingSessionData,
+  trainersList,
+  setParticipantAssignments,
   displayedBlockDetails
 }) => {
 
@@ -58,16 +37,16 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
         <Input
           label="Nom de la session"
           placeholder="Ex: Formation CACES R489 - Groupe A"
-          value={sessionName}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionName(e.target.value)}
+          value={formData.sessionName}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDataChange('sessionName', e.target.value)}
           required
           disabled={isReadOnly}
         />
         <Input
           label="Date de la session"
           type="date"
-          value={sessionDate}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)}
+          value={formData.sessionDate}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDataChange('sessionDate', e.target.value)}
           required
           disabled={isReadOnly}
         />
@@ -76,15 +55,15 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
         <Select
           label="Référentiel"
           options={referentialOptionsFromData}
-          value={selectedReferential}
+          value={formData.selectedReferential}
           onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
             const newSelectedCode = e.target.value as CACESReferential | '';
-            setSelectedReferential(newSelectedCode);
+            handleDataChange('selectedReferential', newSelectedCode);
             if (newSelectedCode) {
               const refObj = referentielsData.find(r => r.code === newSelectedCode);
-              setSelectedReferentialId(refObj?.id || null);
+              handleDataChange('selectedReferentialId', refObj?.id || null);
             } else {
-              setSelectedReferentialId(null);
+              handleDataChange('selectedReferentialId', null);
             }
           }}
           placeholder="Sélectionner un référentiel"
@@ -94,8 +73,8 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
         <Select
           label="Formateur"
           options={trainersList.map((t: Trainer) => ({ value: t.id?.toString() || '', label: t.name }))}
-          value={selectedTrainerId?.toString() || ''}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTrainerId(e.target.value ? parseInt(e.target.value, 10) : null)}
+          value={formData.selectedTrainerId?.toString() || ''}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleDataChange('selectedTrainerId', e.target.value ? parseInt(e.target.value, 10) : null)}
           placeholder="Sélectionner un formateur"
           disabled={isReadOnly}
         />
@@ -104,15 +83,15 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
         <Input
           label="Numéro de session"
           placeholder="Ex: 2024-001"
-          value={numSession}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumSession(e.target.value)}
+          value={formData.numSession}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDataChange('numSession', e.target.value)}
           disabled={isReadOnly}
         />
         <Input
           label="Numéro de stage"
           placeholder="Ex: CACES-2024-A"
-          value={numStage}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumStage(e.target.value)}
+          value={formData.numStage}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDataChange('numStage', e.target.value)}
           disabled={isReadOnly}
         />
       </div>
@@ -120,21 +99,21 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
         <Input
           label="Lieu de formation"
           placeholder="Ex: Centre de formation Paris Nord"
-          value={location}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)}
+          value={formData.location}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDataChange('location', e.target.value)}
           disabled={isReadOnly}
         />
         <Input
           label="Nombre d’itérations"
           type="number"
           min={1}
-          value={iterationCount}
+          value={formData.iterationCount}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
             const count = parseInt(e.target.value, 10);
             if (count > 0) {
-              setIterationCount(count);
+              handleDataChange('iterationCount', count);
               const newIterationNames = Array.from({ length: count }, (_, i) => `Session_${i + 1}`);
-              setIterationNames(newIterationNames);
+              handleDataChange('iterationNames', newIterationNames);
               setParticipantAssignments((prev: any) => {
                 const newAssignments: Record<number, { id: string; assignedGlobalDeviceId: number | null }[]> = {};
                 for (let i = 0; i < count; i++) {
@@ -157,8 +136,8 @@ const SessionDetailsForm: React.FC<SessionDetailsFormProps> = ({
           rows={3}
           className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
           placeholder="Informations complémentaires..."
-          value={notes}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
+          value={formData.notes}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleDataChange('notes', e.target.value)}
           readOnly={isReadOnly}
         />
       </div>
