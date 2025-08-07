@@ -137,17 +137,21 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
           const enrichedQuestions = baseQuestions.map(question => {
             let resolvedThemeName = 'Thème non spécifié';
             let resolvedBlocCode = 'N/A';
+            let resolvedThemeCode = 'N/A';
             if (question.blocId) {
               const bloc = allBlocsDb.find(b => b.id === question.blocId);
               if (bloc) {
                 resolvedBlocCode = bloc.code_bloc;
                 if (bloc.theme_id) {
                   const theme = allThemesDb.find(t => t.id === bloc.theme_id);
-                  if (theme) resolvedThemeName = theme.nom_complet;
+                  if (theme) {
+                    resolvedThemeName = theme.nom_complet;
+                    resolvedThemeCode = theme.code_theme;
+                  }
                 }
               }
             }
-            return { ...question, resolvedThemeName, resolvedBlocCode };
+            return { ...question, resolvedThemeName, resolvedBlocCode, resolvedThemeCode };
           });
           setQuestionsForThisSession(enrichedQuestions);
         } else {
