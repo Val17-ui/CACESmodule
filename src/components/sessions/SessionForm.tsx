@@ -754,7 +754,7 @@ const handleGenerateQuestionnaire = async () => {
   };
 
   const prepareSessionDataForDb = async (includeOrsBlob?: string | Blob | ArrayBuffer | null): Promise<DBSession | null> => {
-    let currentReferentielId: number | undefined = formData.selectedReferentielId;
+    let currentReferentielId: number | undefined = formData.selectedReferentialId;
     if (!currentReferentielId && formData.selectedReferential) {
         const refObj = referentielsData.find(r => r.code === formData.selectedReferential);
         if (refObj) currentReferentielId = refObj.id;
