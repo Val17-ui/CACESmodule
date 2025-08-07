@@ -1084,6 +1084,8 @@ if (savedIterationId) { // <-- On ajoute cette condition
               question_mappings: questionMappings, // Garder aussi sur l'itération pour référence
             });
             setImportSummary(`Itération ${iterationName} générée.`);
+             // Update the main session as well to reflect that a file exists
+            await StorageManager.updateSession(currentSavedId, { orsFilePath: saveResult.filePath });
           } else { throw new Error(`Sauvegarde échouée pour ${iterationName}: ${saveResult?.error}`); }
         }
       }
