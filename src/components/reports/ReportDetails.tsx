@@ -516,7 +516,7 @@ const generateSessionReportPDF = async () => {
     ];
 
     details.forEach(detail => {
-      const splitValue = doc.splitTextToSize(detail.value, pageWidth / 2 - margin - 35);
+      const splitValue = doc.splitTextToSize(detail.value, pageWidth / 2 - margin - 40);
       doc.setFontSize(FONT_SIZES.body);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(COLORS.lightText);
@@ -532,18 +532,26 @@ const generateSessionReportPDF = async () => {
     doc.setFont('helvetica', 'bold');
     doc.text('Questionnaire généré', pageWidth / 2 + 5, yRight);
     yRight += 8;
-    doc.setFont('helvetica', 'normal');
 
-    const themesData = blockStats.map(bs => ({
-      text: `${bs.themeName} - ${bs.blocCode} (v${[...new Set(questionsForThisSession.filter(q => q.blocId === bs.blocId).map(q => q.version))][0] || 'N/A'}, ${bs.questionsInBlockCount}q)`
-    })).sort((a, b) => a.text.localeCompare(b.text));
+    const themesData = blockStats.map(bs => {
+        const version = [...new Set(questionsForThisSession.filter(q => q.blocId === bs.blocId).map(q => q.version))][0] || 'N/A';
+        const mainText = `${bs.themeName} - ${bs.blocCode}`;
+        const detailText = `(Version ${version}, ${bs.questionsInBlockCount} questions)`;
+        return { mainText, detailText };
+    }).sort((a, b) => a.mainText.localeCompare(b.mainText));
 
     themesData.forEach(theme => {
-      const splitText = doc.splitTextToSize(theme.text, pageWidth / 2 - margin - 10);
-      doc.setFontSize(FONT_SIZES.body);
-      doc.setTextColor(COLORS.text);
-      doc.text(splitText, pageWidth / 2 + 5, yRight);
-      yRight += (splitText.length * 5) + 4; // Add spacing
+        doc.setFontSize(FONT_SIZES.body);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(COLORS.text);
+        const splitText = doc.splitTextToSize(theme.mainText, pageWidth / 2 - margin - 10);
+        doc.text(splitText, pageWidth / 2 + 5, yRight);
+        yRight += (splitText.length * 5);
+
+        doc.setFontSize(FONT_SIZES.small);
+        doc.setTextColor(COLORS.lightText);
+        doc.text(theme.detailText, pageWidth / 2 + 5, yRight);
+        yRight += 6;
     });
 
     y = Math.max(y, yRight) + 10;
@@ -571,51 +579,52 @@ const generateSessionReportPDF = async () => {
           }))
         : [{ text: 'Scores non disponibles', color: COLORS.lightText }];
 
-      const subRow = {
+      const subRow = [{
         content: themeScoresContent,
         colSpan: 4,
         styles: {
           halign: 'left',
-          cellPadding: { top: 2, right: 2, bottom: 2, left: 5 },
+          cellPadding: { top: 2, right: 2, bottom: 2, left: margin + 5 },
           fontSize: FONT_SIZES.small,
         },
-      };
+      }];
       return [mainRow, subRow];
     });
 
     autoTable(doc, {
       startY: y,
-      head: [['Participant', 'Entreprise', 'Score Global', 'Résultat']],
+      head: [[
+          { content: 'Participant', dataKey: 'participant' },
+          { content: 'Entreprise', dataKey: 'company' },
+          { content: 'Score Global', dataKey: 'score' },
+          { content: 'Résultat', dataKey: 'result' },
+      ]],
       body: body,
       theme: 'grid',
-      styles: { fontSize: FONT_SIZES.body, cellPadding: 2, valign: 'middle' },
+      styles: { fontSize: FONT_SIZES.body, cellPadding: 2, valign: 'middle', overflow: 'linebreak' },
       headStyles: { fillColor: COLORS.blue, textColor: '#FFFFFF', fontStyle: 'bold' },
       columnStyles: {
         participant: { cellWidth: 'auto' },
         company: { cellWidth: 'auto' },
-        score: { cellWidth: 30, halign: 'center' },
-        result: { cellWidth: 30, halign: 'center' },
-      },
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.row.raw.hasOwnProperty('content')) {
-           data.cell.styles.halign = 'left';
-        }
+        score: { cellWidth: 35, halign: 'center' },
+        result: { cellWidth: 35, halign: 'center' },
       },
       willDrawCell: (data) => {
-        if (data.section === 'body' && data.row.raw.hasOwnProperty('content')) {
+        if (data.section === 'body' && Array.isArray(data.row.raw) && (data.row.raw as any[])[0].hasOwnProperty('content')) {
             doc.setFillColor(245, 245, 245);
         }
       },
       didDrawCell: (data) => {
-        if (data.section === 'body' && data.row.raw.hasOwnProperty('content')) {
-          let x = data.cell.x + 5;
-          const y = data.cell.y + data.cell.height / 2 + 1;
-          const content = data.row.raw.content as { text: string, color: string }[];
-          content.forEach((item, index) => {
+        if (data.section === 'body' && Array.isArray(data.row.raw) && (data.row.raw as any[])[0].hasOwnProperty('content')) {
+          const cellContent = (data.row.raw as any[])[0].content as { text: string, color: string }[];
+          let x = data.cell.x + 2;
+          const y = data.cell.y + data.cell.height / 2 + 1.5;
+
+          cellContent.forEach(item => {
             doc.setFontSize(FONT_SIZES.small);
             doc.setTextColor(item.color);
             doc.text(item.text, x, y);
-            x += doc.getTextWidth(item.text) + 5;
+            x += doc.getTextWidth(item.text) + 4;
           });
         }
       },
