@@ -3,10 +3,11 @@ import { CACESReferential, Referential, Trainer } from '@common/types';
 import Card from '../../ui/Card';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
+import { SessionFormData } from '../SessionForm';
 
 interface SessionDetailsFormProps {
   formData: SessionFormData;
-  handleDataChange: <T extends keyof SessionFormData>(field: T, value: SessionFormData[T]) => void;
+  handleDataChange: (field: keyof SessionFormData, value: any) => void;
   isReadOnly: boolean;
   referentielsData: Referential[];
   editingSessionData: any;
