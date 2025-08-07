@@ -930,7 +930,7 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
 
 const savedIterationId = await StorageManager.addOrUpdateSessionIteration(iterationToSave);
 
-if (savedIterationId) { // <-- On ajoute cette condition
+if (savedIterationId) { 
     const assignedFormParticipantIds = (participantAssignments[i] || []).map((p: {id: string}) => p.id);
     const assignmentsForDb = [];
 
@@ -939,10 +939,10 @@ if (savedIterationId) { // <-- On ajoute cette condition
         const participantFormState = participants.find(p => p.uiId === formPId);
         if (dbPId && participantFormState && participantFormState.assignedGlobalDeviceId) {
             assignmentsForDb.push({
-                session_iteration_id: savedIterationId, // Maintenant, c'est sûr que c'est un nombre
+                session_iteration_id: savedIterationId, 
                 participant_id: dbPId,
                 voting_device_id: participantFormState.assignedGlobalDeviceId,
-                kit_id: formData.selectedKitIdState || 0,
+                kit_id: formData.selectedKitIdState === null ? undefined : formData.selectedKitIdState,
             });
         }
     }
@@ -1462,7 +1462,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
                 serialNumber: device ? device.serialNumber : undefined,
             };
         })
-        .filter((p): p is { id: number; serialNumber: string } => !!p.id && !!p.serialNumber);
+        .filter((p: any): p is { id: number; serialNumber: string } => !!p.id && !!p.serialNumber);
 
       const sessionResultsToSave = transformParsedResponsesToSessionResults(
         finalResultsToImport,
@@ -1506,8 +1506,8 @@ if (savedIterationId) { // <-- On ajoute cette condition
                        if (finalUpdatedSessionWithScores && finalUpdatedSessionWithScores.iterations) {
                       setEditingSessionData(finalUpdatedSessionWithScores);
                           const allParticipantsFromIterations = (finalUpdatedSessionWithScores.iterations.flatMap((iter: any) => (iter as any).participants || [])) as DBParticipantType[];
-                          const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode, p])).values());
-                                                    const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
+                          const uniqueParticipants: DBParticipantType[] = Array.from(new Map(allParticipantsFromIterations.map((p: DBParticipantType) => [p.identificationCode,
+     p])).values());                                                    const formParticipantsToUpdate: FormParticipant[] = uniqueParticipants.map((p_db_updated: DBParticipantType, index: number) => {
                           const visualDeviceId = index + 1;
                           const currentFormParticipantState = participants[index];
                           return {
