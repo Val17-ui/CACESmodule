@@ -575,14 +575,13 @@ const generateSessionReportPDF = async () => {
     theme: 'grid',
     styles: { fontSize: 10, cellPadding: 2 },
     headStyles: { fillColor: [63, 81, 181], textColor: [255, 255, 255], fontStyle: 'bold' },
-    didDrawCell: (data) => {
-      // Custom styling for result cell based on success
-      if (data.section === 'body' && data.column.index === 3) {
-        const cellText = data.cell.text[0];
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 3 && data.cell.raw) {
+        const cellText = String(data.cell.raw).trim();
         if (cellText === 'Certifié') {
-          doc.setTextColor(46, 125, 50); // Green
+          data.cell.styles.textColor = [46, 125, 50];
         } else if (cellText === 'Ajourné') {
-          doc.setTextColor(198, 40, 40); // Red
+          data.cell.styles.textColor = [198, 40, 40];
         }
       }
     }
