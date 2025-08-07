@@ -505,7 +505,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 });
                 setParticipantAssignments(newAssignments);
 
-                setImportSummary(`${parsedParticipants.length} participants et les détails de la session ont été importés avec succès.`);
+                const sessionData = await prepareSessionDataForDb();
+                if (sessionData) {
+                    const savedId = await handleSaveSession(sessionData);
+                    if (savedId) {
+                        setImportSummary(`${parsedParticipants.length} participants et les détails de la session ont été importés et sauvegardés avec succès (ID: ${savedId}).`);
+                    } else {
+                        setImportSummary(`L'importation a réussi, mais la sauvegarde automatique a échoué.`);
+                    }
+                }
             } catch (error) {
                 console.error("Error processing imported session file:", error);
                 const errorMessage = error instanceof Error ? error.message : String(error);
