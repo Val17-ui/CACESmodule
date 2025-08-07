@@ -481,144 +481,145 @@ const generateSessionReportPDF = async () => {
   setIsGeneratingPdf(true);
   setLastPdfPath(null);
 
-  const doc = new jsPDF();
-  const margin = 15;
-  const pageWidth = doc.internal.pageSize.width;
-  const pageHeight = doc.internal.pageSize.height;
-  const columnWidth = (pageWidth - margin * 3) / 2; // Deux colonnes égales avec marge
+  try {
+    const doc = new jsPDF();
+    const margin = 15;
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const columnWidth = (pageWidth - margin * 3) / 2;
 
-  // --- En-tête ---
-  const logoSetting = await StorageManager.getAdminSetting('reportLogoBase64');
-  const currentLogo = logoSetting?.value || null;
-  if (currentLogo) {
-    try {
-      doc.addImage(currentLogo, 'PNG', pageWidth - margin - 25, margin, 20, 20);
-    } catch (e) {
-      console.error("Erreur d'ajout du logo au PDF:", e);
-    }
-  }
-  doc.setFontSize(18);
-  doc.setTextColor(33, 33, 33);
-  doc.text('Rapport de Session', pageWidth / 2, margin + 12, { align: 'center' });
-  doc.setFontSize(10);
-  doc.text(`Date: ${formatDate(session.dateSession)}`, margin, margin + 25);
-
-  // --- Deux colonnes ---
-  let y = margin + 35;
-
-  // Colonne de gauche: Détails
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Détails', margin, y);
-  y += 8;
-  doc.setFont('helvetica', 'normal');
-  const details = [
-    { label: 'Nom de la session', value: session.nomSession },
-    { label: 'Date', value: formatDate(session.dateSession) },
-    { label: 'Référentiel', value: referentialCode },
-    { label: 'Participants', value: participants.length.toString() },
-    { label: 'Formateur', value: trainerName },
-    { label: 'Lieu', value: session.location || 'N/A' },
-    { label: 'N° de session', value: session.num_session || 'N/A' },
-    { label: 'N° de stage', value: session.num_stage || 'N/A' },
-  ];
-  details.forEach((detail, index) => {
-    doc.setTextColor(50, 50, 50);
-    doc.text(`${detail.label}:`, margin, y + index * 6);
-    doc.setTextColor(100, 100, 100);
-    doc.text(detail.value, margin + 40, y + index * 6);
-  });
-
-  // Colonne de droite: Questionnaire généré
-  let yRight = margin + 35;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Questionnaire généré', margin + columnWidth + margin, yRight);
-  yRight += 8;
-  doc.setFont('helvetica', 'normal');
-  const themesData = blockStats.map(bs => ({
-    themeName: bs.themeName,
-    blocCode: bs.blocCode,
-    version: [...new Set(questionsForThisSession.filter(q => q.blocId === bs.blocId).map(q => q.version))][0] || 'N/A',
-    questionCount: bs.questionsInBlockCount,
-  })).sort((a, b) => a.blocCode.localeCompare(b.blocCode)); // Tri chronologique par code
-  themesData.forEach((theme, index) => {
-    const text = `${theme.themeName} - ${theme.blocCode} (v${theme.version}, ${theme.questionCount} questions)`;
-    doc.setTextColor(50, 50, 50);
-    doc.text(text, margin + columnWidth + margin, yRight + index * 6);
-  });
-
-  // Ajuster y à la plus grande hauteur des colonnes
-  y = Math.max(y + details.length * 6, yRight + themesData.length * 6);
- // --- Tableau des participants (full width) ---
-y += 10;
-doc.setFontSize(12);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(33, 33, 33);
-doc.text('Tableau des Participants', margin, y);
-y += 8;
-
-const participantsTableData = participantCalculatedData.map(p => [
-  p.prenom + ' ' + p.nom,
-  p.entreprise || '-',
-  p.score?.toFixed(0) || 'N/A',
-  p.reussite ? 'Certifié' : 'Ajourné'
-]);
-
-autoTable(doc, {
-  startY: y,
-  head: [['Participant', 'Entreprise', 'Score Global', 'Résultat']],
-  body: participantsTableData,
-  theme: 'grid',
-  styles: { fontSize: 10, cellPadding: 2 },
-  headStyles: { fillColor: [63, 81, 181], textColor: [255, 255, 255], fontStyle: 'bold' },
-});
-
-// Ajout des scores par thème après le tableau
-const table = doc.lastAutoTable;
-if (table && participantCalculatedData && participantCalculatedData.length > 0) {
-  participantCalculatedData.forEach((p, index) => {
-    if (index + 1 < table.rows.length) {
-      const themeScores = p.themeScores ? Object.values(p.themeScores) : [];
-      if (themeScores.length > 0) {
-        const startY = table.rows[index + 1].y + table.rows[index + 1].height;
-        themeScores.forEach((ts, i) => {
-          const text = `${ts.themeCode}: ${ts.correct}/${ts.total}`; // Utiliser themeCode et correct/total
-          const textColor = (ts.correct / ts.total) < 0.5 ? [255, 0, 0] : [0, 128, 0];
-          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-          doc.text(text, margin + 2, startY + i * 6);
-        });
-      } else {
-        console.warn(`No theme scores for participant ${p.nom} ${p.prenom}`);
+    // --- Header ---
+    const logoSetting = await StorageManager.getAdminSetting('reportLogoBase64');
+    if (logoSetting?.value) {
+      try {
+        doc.addImage(logoSetting.value, 'PNG', pageWidth - margin - 25, margin, 20, 20);
+      } catch (e) {
+        console.error("Error adding logo to PDF:", e);
       }
     }
-  });
-} else {
-  console.warn("No participant data or table rows available for PDF generation.");
-}
+    doc.setFontSize(18);
+    doc.setTextColor(33, 33, 33);
+    doc.text('Rapport de Session', pageWidth / 2, margin + 12, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`Date: ${formatDate(session.dateSession)}`, margin, margin + 25);
 
-// --- Pied de page ---
-const totalPages = (doc as any).internal.getNumberOfPages(); // Cast temporaire
-for (let i = 1; i <= totalPages; i++) {
-  doc.setPage(i);
-  doc.setFontSize(10);
-  doc.setTextColor(150);
-  doc.text(`Page ${i} / ${totalPages}`, pageWidth / 2, pageHeight - margin, { align: 'center' });
-  doc.setDrawColor(150, 150, 150);
-  doc.rect(margin, pageHeight - 20, 80, 15);
-  doc.setTextColor(100);
-  doc.text('Signature du Formateur:', margin + 2, pageHeight - 15);
-}
+    // --- Details Columns ---
+    let y = margin + 35;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Détails', margin, y);
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    const details = [
+      { label: 'Nom de la session', value: session.nomSession },
+      { label: 'Date', value: formatDate(session.dateSession) },
+      { label: 'Référentiel', value: referentialCode },
+      { label: 'Participants', value: participants.length.toString() },
+      { label: 'Formateur', value: trainerName },
+      { label: 'Lieu', value: session.location || 'N/A' },
+      { label: 'N° de session', value: session.num_session || 'N/A' },
+      { label: 'N° de stage', value: session.num_stage || 'N/A' },
+    ];
+    details.forEach((detail) => {
+      doc.setTextColor(50, 50, 50);
+      doc.text(`${detail.label}:`, margin, y);
+      doc.setTextColor(100, 100, 100);
+      doc.text(detail.value, margin + 40, y);
+      y += 6;
+    });
 
-// --- Sauvegarde du PDF ---
-const pdfBuffer = doc.output('arraybuffer');
-const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
-const result = await window.dbAPI.saveReportFile(pdfBuffer, fileName);
-if (result.success && result.filePath) {
-  setLastPdfPath(result.filePath);
-} else {
-  console.error("Erreur lors de la sauvegarde du PDF:", result.error);
-}
-setIsGeneratingPdf(false);
+    let yRight = margin + 35;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Questionnaire généré', margin + columnWidth + margin, yRight);
+    yRight += 8;
+    doc.setFont('helvetica', 'normal');
+    const themesData = blockStats.map(bs => ({
+      themeName: bs.themeName,
+      blocCode: bs.blocCode,
+      version: [...new Set(questionsForThisSession.filter(q => q.blocId === bs.blocId).map(q => q.version))][0] || 'N/A',
+      questionCount: bs.questionsInBlockCount,
+    })).sort((a, b) => a.blocCode.localeCompare(b.blocCode));
+    themesData.forEach((theme) => {
+      const text = `${theme.themeName} - ${theme.blocCode} (v${theme.version}, ${theme.questionCount}q)`;
+      doc.setTextColor(50, 50, 50);
+      doc.text(text, margin + columnWidth + margin, yRight);
+      yRight += 6;
+    });
+
+    y = Math.max(y, yRight) + 10;
+
+    // --- Participants Table ---
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(33, 33, 33);
+    doc.text('Tableau des Participants', margin, y);
+    y += 8;
+
+    const body: any[] = [];
+    participantCalculatedData.forEach(p => {
+      body.push([
+        `${p.prenom} ${p.nom}`,
+        p.entreprise || '-',
+        p.score?.toFixed(0) || 'N/A',
+        p.reussite ? 'Certifié' : 'Ajourné'
+      ]);
+      const themeScoresText = p.themeScores
+        ? Object.values(p.themeScores)
+            .map(ts => `${ts.themeCode}: ${ts.correct}/${ts.total}`)
+            .join(' | ')
+        : 'Scores non disponibles';
+      body.push([{ content: themeScoresText, colSpan: 4, styles: { fillColor: [245, 245, 245], textColor: 80, fontSize: 8, cellPadding: { top: 1, bottom: 2 } } }]);
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [['Participant', 'Entreprise', 'Score Global', 'Résultat']],
+      body: body,
+      theme: 'grid',
+      styles: { fontSize: 10, cellPadding: 2 },
+      headStyles: { fillColor: [63, 81, 181], textColor: [255, 255, 255], fontStyle: 'bold' },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 3 && data.cell.raw) {
+          const cellText = String(data.cell.raw).trim();
+          if (cellText === 'Certifié') {
+            data.cell.styles.textColor = [46, 125, 50];
+          } else if (cellText === 'Ajourné') {
+            data.cell.styles.textColor = [198, 40, 40];
+          }
+        }
+      }
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    // --- Footer ---
+    const totalPages = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(10);
+      doc.setTextColor(150);
+      doc.text(`Page ${i} / ${totalPages}`, pageWidth / 2, pageHeight - margin, { align: 'center' });
+      doc.setDrawColor(150, 150, 150);
+      doc.rect(margin, pageHeight - 20, 80, 15);
+      doc.setTextColor(100);
+      doc.text('Signature du Formateur:', margin + 2, pageHeight - 15);
+    }
+
+    // --- Save PDF ---
+    const pdfBuffer = doc.output('arraybuffer');
+    const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
+    const result = await window.dbAPI.saveReportFile(pdfBuffer, fileName);
+    if (result.success && result.filePath) {
+      setLastPdfPath(result.filePath);
+    } else {
+      throw new Error(result.error || "Erreur inconnue lors de la sauvegarde du PDF.");
+    }
+  } catch (error) {
+    console.error("Erreur lors de la génération ou sauvegarde du PDF:", error);
+    alert(`Erreur lors de la génération du PDF: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    setIsGeneratingPdf(false);
+  }
 };
 
 return (
