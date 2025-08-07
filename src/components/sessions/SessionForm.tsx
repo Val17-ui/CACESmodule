@@ -35,7 +35,7 @@ export type SessionFormData = {
   selectedReferentialId: number | null;
   location: string;
   notes: string;
-  selectedTrainerId: number | null | undefined;
+  selectedTrainerId: number | null;
   selectedKitIdState: number | null;
   iterationCount: number;
   iterationNames: string[];
@@ -1628,7 +1628,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
             handleParticipantIterationChange={handleParticipantIterationChange}
             deviceKitsList={deviceKitsList}
             selectedKitIdState={formData.selectedKitIdState}
-            setSelectedKitIdState={(id: number | null) => handleDataChange('selectedKitIdState', id)}
+            setSelectedKitIdState={(id: any) => handleDataChange('selectedKitIdState', id)}
             votingDevicesInSelectedKit={votingDevicesInSelectedKit}
             isLoadingKits={isLoadingKits}
           />
