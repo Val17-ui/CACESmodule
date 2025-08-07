@@ -485,14 +485,13 @@ const generateSessionReportPDF = async () => {
   const margin = 15;
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
-  const columnWidth = (pageWidth - margin * 3) / 2; // Deux colonnes égales avec marge
+  const columnWidth = (pageWidth - margin * 3) / 2;
 
-  // --- En-tête ---
+  // --- Header ---
   const logoSetting = await StorageManager.getAdminSetting('reportLogoBase64');
-  const currentLogo = logoSetting?.value || null;
-  if (currentLogo) {
+  if (logoSetting?.value) {
     try {
-      doc.addImage(currentLogo, 'PNG', pageWidth - margin - 25, margin, 20, 20);
+      doc.addImage(logoSetting.value, 'PNG', pageWidth - margin - 25, margin, 20, 20);
     } catch (e) {
       console.error("Erreur d'ajout du logo au PDF:", e);
     }
@@ -503,10 +502,8 @@ const generateSessionReportPDF = async () => {
   doc.setFontSize(10);
   doc.text(`Date: ${formatDate(session.dateSession)}`, margin, margin + 25);
 
-  // --- Deux colonnes ---
+  // --- Details Columns ---
   let y = margin + 35;
-
-  // Colonne de gauche: Détails
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('Détails', margin, y);
@@ -529,7 +526,6 @@ const generateSessionReportPDF = async () => {
     doc.text(detail.value, margin + 40, y + index * 6);
   });
 
-  // Colonne de droite: Questionnaire généré
   let yRight = margin + 35;
   doc.setFont('helvetica', 'bold');
   doc.text('Questionnaire généré', margin + columnWidth + margin, yRight);
@@ -540,85 +536,89 @@ const generateSessionReportPDF = async () => {
     blocCode: bs.blocCode,
     version: [...new Set(questionsForThisSession.filter(q => q.blocId === bs.blocId).map(q => q.version))][0] || 'N/A',
     questionCount: bs.questionsInBlockCount,
-  })).sort((a, b) => a.blocCode.localeCompare(b.blocCode)); // Tri chronologique par code
+  })).sort((a, b) => a.blocCode.localeCompare(b.blocCode));
   themesData.forEach((theme, index) => {
-    const text = `${theme.themeName} - ${theme.blocCode} (v${theme.version}, ${theme.questionCount} questions)`;
+    const text = `${theme.themeName} - ${theme.blocCode} (v${theme.version}, ${theme.questionCount}q)`;
     doc.setTextColor(50, 50, 50);
     doc.text(text, margin + columnWidth + margin, yRight + index * 6);
   });
 
-  // Ajuster y à la plus grande hauteur des colonnes
-  y = Math.max(y + details.length * 6, yRight + themesData.length * 6);
- // --- Tableau des participants (full width) ---
-y += 10;
-doc.setFontSize(12);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(33, 33, 33);
-doc.text('Tableau des Participants', margin, y);
-y += 8;
+  y = Math.max(y + details.length * 6, yRight + themesData.length * 6) + 10;
 
-const participantsTableData = participantCalculatedData.map(p => [
-  p.prenom + ' ' + p.nom,
-  p.entreprise || '-',
-  p.score?.toFixed(0) || 'N/A',
-  p.reussite ? 'Certifié' : 'Ajourné'
-]);
+  // --- Participants Table ---
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(33, 33, 33);
+  doc.text('Tableau des Participants', margin, y);
+  y += 8;
 
-autoTable(doc, {
-  startY: y,
-  head: [['Participant', 'Entreprise', 'Score Global', 'Résultat']],
-  body: participantsTableData,
-  theme: 'grid',
-  styles: { fontSize: 10, cellPadding: 2 },
-  headStyles: { fillColor: [63, 81, 181], textColor: [255, 255, 255], fontStyle: 'bold' },
-});
+  const body: any[] = [];
+  participantCalculatedData.forEach(p => {
+    body.push([
+      `${p.prenom} ${p.nom}`,
+      p.entreprise || '-',
+      p.score?.toFixed(0) || 'N/A',
+      p.reussite ? 'Certifié' : 'Ajourné'
+    ]);
+    const themeScoresText = p.themeScores
+      ? Object.values(p.themeScores)
+          .map(ts => `${ts.themeCode}: ${ts.correct}/${ts.total}`)
+          .join(' | ');
+      : 'Scores non disponibles';
+    body.push([{ content: themeScoresText, colSpan: 4, styles: { fillColor: [245, 245, 245], textColor: 80, fontSize: 8, cellPadding: {top: 1, bottom: 2} } }]);
+  });
 
-// Ajout des scores par thème après le tableau
-const table = doc.lastAutoTable;
-if (table && participantCalculatedData && participantCalculatedData.length > 0) {
-  participantCalculatedData.forEach((p, index) => {
-    if (index + 1 < table.rows.length) {
-      const themeScores = p.themeScores ? Object.values(p.themeScores) : [];
-      if (themeScores.length > 0) {
-        const startY = table.rows[index + 1].y + table.rows[index + 1].height;
-        themeScores.forEach((ts, i) => {
-          const text = `${ts.themeCode}: ${ts.correct}/${ts.total}`; // Utiliser themeCode et correct/total
-          const textColor = (ts.correct / ts.total) < 0.5 ? [255, 0, 0] : [0, 128, 0];
-          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-          doc.text(text, margin + 2, startY + i * 6);
-        });
-      } else {
-        console.warn(`No theme scores for participant ${p.nom} ${p.prenom}`);
+  autoTable(doc, {
+    startY: y,
+    head: [['Participant', 'Entreprise', 'Score Global', 'Résultat']],
+    body: body,
+    theme: 'grid',
+    styles: { fontSize: 10, cellPadding: 2 },
+    headStyles: { fillColor: [63, 81, 181], textColor: [255, 255, 255], fontStyle: 'bold' },
+    didDrawCell: (data) => {
+      // Custom styling for result cell based on success
+      if (data.section === 'body' && data.column.index === 3) {
+        const cellText = data.cell.text[0];
+        if (cellText === 'Certifié') {
+          doc.setTextColor(46, 125, 50); // Green
+        } else if (cellText === 'Ajourné') {
+          doc.setTextColor(198, 40, 40); // Red
+        }
       }
     }
   });
-} else {
-  console.warn("No participant data or table rows available for PDF generation.");
-}
 
-// --- Pied de page ---
-const totalPages = (doc as any).internal.getNumberOfPages(); // Cast temporaire
-for (let i = 1; i <= totalPages; i++) {
-  doc.setPage(i);
-  doc.setFontSize(10);
-  doc.setTextColor(150);
-  doc.text(`Page ${i} / ${totalPages}`, pageWidth / 2, pageHeight - margin, { align: 'center' });
-  doc.setDrawColor(150, 150, 150);
-  doc.rect(margin, pageHeight - 20, 80, 15);
-  doc.setTextColor(100);
-  doc.text('Signature du Formateur:', margin + 2, pageHeight - 15);
-}
+  y = (doc as any).lastAutoTable.finalY + 10;
 
-// --- Sauvegarde du PDF ---
-const pdfBuffer = doc.output('arraybuffer');
-const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
-const result = await window.dbAPI.saveReportFile(pdfBuffer, fileName);
-if (result.success && result.filePath) {
-  setLastPdfPath(result.filePath);
-} else {
-  console.error("Erreur lors de la sauvegarde du PDF:", result.error);
-}
-setIsGeneratingPdf(false);
+  // --- Footer ---
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(10);
+    doc.setTextColor(150);
+    doc.text(`Page ${i} / ${totalPages}`, pageWidth / 2, pageHeight - margin, { align: 'center' });
+    doc.setDrawColor(150, 150, 150);
+    doc.rect(margin, pageHeight - 20, 80, 15);
+    doc.setTextColor(100);
+    doc.text('Signature du Formateur:', margin + 2, pageHeight - 15);
+  }
+
+  // --- Save PDF ---
+  try {
+    const pdfBuffer = doc.output('arraybuffer');
+    const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
+    const result = await window.dbAPI.saveReportFile(pdfBuffer, fileName);
+    if (result.success && result.filePath) {
+      setLastPdfPath(result.filePath);
+    } else {
+      throw new Error(result.error || "Erreur inconnue lors de la sauvegarde du PDF.");
+    }
+  } catch(error) {
+    console.error("Erreur lors de la génération ou sauvegarde du PDF:", error);
+    alert(`Erreur lors de la génération du PDF: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    setIsGeneratingPdf(false);
+  }
 };
 
 return (
