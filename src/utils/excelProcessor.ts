@@ -100,7 +100,7 @@ export interface SessionDetails {
 export interface ParsedParticipant {
   prenom: string;
   nom: string;
-  organization: string;
+  entreprise: string;
   identificationCode: string;
   iterationNumber: number;
   deviceName: string;
@@ -205,7 +205,7 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
 
     const prenomCol = getColNumber(['prénom', 'prenom', 'firstname', 'first name']);
     const nomCol = getColNumber(['nom', 'lastname', 'last name']);
-    const organizationCol = getColNumber(['organisation', 'organization', 'société', 'societe']);
+    const organizationCol = getColNumber(['entreprise', 'organisation', 'organization', 'société', 'societe']);
     const identificationCodeCol = getColNumber(['code identification', 'identificationcode', 'code']);
     const iterationNumberCol = getColNumber(['itération', 'iteration', 'iterationnumber']);
     const deviceNameCol = getColNumber(['boîtier', 'boitier', 'devicename']);
@@ -218,7 +218,7 @@ export async function parseFullSessionExcel(file: File): Promise<{ details: Sess
           participants.push({
             prenom,
             nom,
-            organization: organizationCol !== -1 ? row.getCell(organizationCol).value?.toString() || '' : '',
+            entreprise: organizationCol !== -1 ? row.getCell(organizationCol).value?.toString() || '' : '',
             identificationCode: identificationCodeCol !== -1 ? row.getCell(identificationCodeCol).value?.toString() || '' : '',
             iterationNumber: iterationNumberCol !== -1 ? parseInt(row.getCell(iterationNumberCol).value?.toString() || '1', 10) : 1,
             deviceName: deviceNameCol !== -1 ? row.getCell(deviceNameCol).value?.toString() || '' : '',

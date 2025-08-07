@@ -74,7 +74,7 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
               {iterationCount > 1 && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Itération</th>}
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Prénom</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Organisation</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Entreprise</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code Identification</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Boîtier</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -98,7 +98,7 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
                   )}
                   <td className="px-4 py-2"><Input value={p.firstName} onChange={(e) => handleParticipantChange(p.uiId, 'firstName', e.target.value)} disabled={isReadOnly} /></td>
                   <td className="px-4 py-2"><Input value={p.lastName} onChange={(e) => handleParticipantChange(p.uiId, 'lastName', e.target.value)} disabled={isReadOnly} /></td>
-                  <td className="px-4 py-2"><Input value={p.organization || ''} onChange={(e) => handleParticipantChange(p.uiId, 'organization', e.target.value)} disabled={isReadOnly} /></td>
+                  <td className="px-4 py-2"><Input value={p.entreprise || ''} onChange={(e) => handleParticipantChange(p.uiId, 'entreprise', e.target.value)} disabled={isReadOnly} /></td>
                   <td className="px-4 py-2"><Input value={p.identificationCode || ''} onChange={(e) => handleParticipantChange(p.uiId, 'identificationCode', e.target.value)} disabled={isReadOnly} /></td>
                   <td className="px-4 py-2">
                     <Select

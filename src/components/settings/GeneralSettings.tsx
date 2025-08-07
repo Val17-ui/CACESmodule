@@ -3,7 +3,7 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 
 const GeneralSettings: React.FC = () => {
-  const [organizationName, setOrganizationName] = useState('');
+  const [entrepriseName, setEntrepriseName] = useState('');
   const [defaultLanguage, setDefaultLanguage] = useState('fr');
   const [autoSaveInterval, setAutoSaveInterval] = useState(5);
   const [logLevel, setLogLevel] = useState('INFO');
@@ -23,12 +23,12 @@ const GeneralSettings: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Informations de l'organisation</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Informations de l'entreprise</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Input
-            label="Nom de l'organisation"
-            value={organizationName}
-            onChange={(e) => setOrganizationName(e.target.value)}
+            label="Nom de l'entreprise"
+            value={entrepriseName}
+            onChange={(e) => setEntrepriseName(e.target.value)}
             placeholder="Ex: Centre de Formation CACES"
           />
           

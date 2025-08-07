@@ -480,7 +480,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
               <thead className="bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entreprise</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Identification</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score Global</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Session</th>
@@ -496,7 +496,7 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
                           <div className="text-sm font-medium text-gray-900">{participantData.nom} {participantData.prenom}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap align-middle">
-                          <div className="text-sm text-gray-700">{participantData.organization || '-'}</div>
+                          <div className="text-sm text-gray-700">{participantData.entreprise || '-'}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap align-middle">
                           <div className="text-sm text-gray-700">{participantData.identificationCode || '-'}</div>

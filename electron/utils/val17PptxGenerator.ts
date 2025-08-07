@@ -436,12 +436,12 @@ function generateTableRowsXml(
 ): string {
   logger.info('[LOG][val17PptxGenerator] Début de generateTableRowsXml.');
   let tableRowsXml = "";
-  const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
+  const hasOrganizationData = participants.some(p => p.entreprise && p.entreprise.trim() !== "");
 
   tableRowsXml += `<a:tr h="${rowHeightEMU}">`;
   const headers = ["N°", "ID Boîtier", "Nom", "Prénom"];
   if (hasOrganizationData) {
-    headers.push("Organisation");
+    headers.push("Entreprise");
   }
 
   headers.forEach(headerText => {
@@ -456,7 +456,7 @@ function generateTableRowsXml(
     tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.nom || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.prenom || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     if (hasOrganizationData) {
-      tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.organization || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      tableRowsXml += `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR"/><a:t>${escapeXml(participant.entreprise || "", logger)}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
     }
     tableRowsXml += `</a:tr>`;
   });
@@ -466,7 +466,7 @@ function generateTableRowsXml(
 
 function generateTableGraphicFrame(participants: ParticipantForGenerator[], baseSpId: number, logger: ILogger): string {
     logger.info('[LOG][val17PptxGenerator] Début de generateTableGraphicFrame.');
-    const hasOrganizationData = participants.some(p => p.organization && p.organization.trim() !== "");
+    const hasOrganizationData = participants.some(p => p.entreprise && p.entreprise.trim() !== "");
 
     const slideWidthEMU = 12192000;
     const slideHeightEMU = 6858000;

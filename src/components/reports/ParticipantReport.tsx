@@ -330,7 +330,7 @@ const ParticipantReport = () => {
   yCol1 += 5;
   doc.text(`ID Candidat : ${participantRef.identificationCode || 'N/A'}`, col1X, yCol1);
   yCol1 += 5;
-  doc.text(`Organisation : ${participantRef.organization || 'N/A'}`, col1X, yCol1);
+  doc.text(`Entreprise : ${participantRef.entreprise || 'N/A'}`, col1X, yCol1);
   yCol1 += 5;
   doc.text(`Session : ${nomSession}`, col1X, yCol1);
   yCol1 += 5;
@@ -527,7 +527,7 @@ addFooter(); // Appeler après avoir généré tout le contenu
             <Card className="p-4 space-y-2">
               <div><strong>Participant :</strong> {participantRef.prenom} {participantRef.nom}</div>
               <div><strong>ID Candidat :</strong> {participantRef.identificationCode || 'N/A'}</div>
-              <div><strong>Organisation :</strong> {participantRef.organization || 'N/A'}</div>
+              <div><strong>Entreprise :</strong> {participantRef.entreprise || 'N/A'}</div>
               <hr className="my-2" />
               <div><strong>Session :</strong> {detailedParticipation.nomSession}</div>
               <div><strong>Référentiel :</strong> <Badge variant="default">{referentialCodeMap.get(detailedParticipation.referentielId) || 'N/A'}</Badge></div>

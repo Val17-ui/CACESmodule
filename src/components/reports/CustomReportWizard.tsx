@@ -32,7 +32,7 @@ const fieldConfig = {
         "Statistiques": [ { id: 'session.nbParticipants', label: 'Nombre de participants' }, { id: 'session.scoreMoyen', label: 'Score moyen (%)' }, { id: 'session.tauxReussite', label: 'Taux de réussite (%)' }, ]
     },
     participants: {
-        "Détails Participant": [ { id: 'participant.nom', label: 'Nom' }, { id: 'participant.prenom', label: 'Prénom' }, { id: 'participant.organisation', label: 'Organisation' }, ],
+        "Détails Participant": [ { id: 'participant.nom', label: 'Nom' }, { id: 'participant.prenom', label: 'Prénom' }, { id: 'participant.entreprise', label: 'Entreprise' }, ],
         "Contexte Session": [ { id: 'session.nom', label: 'Nom de la session' }, { id: 'session.date', label: 'Date' }, ],
         "Résultats": [ { id: 'resultat.scoreGlobal', label: 'Score Global (%)' }, { id: 'resultat.statut', label: 'Statut Réussite' }, { id: 'resultat.scoresParTheme', label: 'Scores par Thème (JSON)' }, ]
     }

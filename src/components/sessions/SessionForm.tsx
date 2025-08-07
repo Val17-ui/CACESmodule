@@ -651,11 +651,11 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
     if (hasPrenom && hasNom) {
       headers = potentialHeaders; dataStartIndex = 1;
     } else {
-      headers = ['prénom', 'nom', 'organisation', 'code identification', 'itération']; dataStartIndex = 0;
+      headers = ['prénom', 'nom', 'entreprise', 'code identification', 'itération']; dataStartIndex = 0;
     }
     const prenomIndex = headers.findIndex(h => h === 'prénom' || h === 'prenom');
     const nomIndex = headers.findIndex(h => h === 'nom');
-    const orgIndex = headers.findIndex(h => h === 'organisation');
+    const orgIndex = headers.findIndex(h => h === 'entreprise');
     const codeIndex = headers.findIndex(h => h === 'code identification' || h === 'code');
     const iterationIndex = headers.findIndex(h => h === 'itération' || h === 'iteration');
     for (let i = dataStartIndex; i < jsonData.length; i++) {
@@ -666,7 +666,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
         if (prenom || nom) {
             parsed.push({
             prenom, nom,
-            organization: orgIndex !== -1 ? row[orgIndex]?.toString().trim() || '' : row[2]?.toString().trim() || '',
+            entreprise: orgIndex !== -1 ? row[orgIndex]?.toString().trim() || '' : row[2]?.toString().trim() || '',
             identificationCode: codeIndex !== -1 ? row[codeIndex]?.toString().trim() || '' : row[3]?.toString().trim() || '',
             iteration: iterationIndex !== -1 ? parseInt(row[iterationIndex]?.toString().trim(), 10) : 1,
             } as Partial<DBParticipantType> & { iteration?: number });
@@ -693,7 +693,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
         uiId: `imported-${Date.now()}-${index}`,
         firstName: p.prenom || '',
         lastName: p.nom || '',
-        organization: (p as any).organization || '',
+        entreprise: (p as any).entreprise || '',
         deviceId: null,
         hasSigned: false,
       }));

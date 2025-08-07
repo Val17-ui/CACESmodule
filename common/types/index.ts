@@ -133,7 +133,7 @@ export interface Participant {
   idBoitier?: string; // Identifiant du boîtier de vote - REMPLACÉ par assignedGlobalDeviceId
   nom: string;
   prenom: string;
-  organization?: string;
+  entreprise?: string;
   identificationCode?: string; // Code d'identification optionnel
   score?: number; // Score total du participant pour cette session
   reussite?: boolean; // Statut de réussite du participant pour cette session
@@ -353,7 +353,7 @@ export interface AdminSettings {
     idBoitier?: string;
     nom: string;
     prenom: string;
-    organization?: string;
+    entreprise?: string;
     identificationCode?: string;
   }
   
