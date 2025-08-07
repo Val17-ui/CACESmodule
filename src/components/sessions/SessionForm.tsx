@@ -1019,6 +1019,7 @@ if (savedIterationId) { // <-- On ajoute cette condition
       setImportSummary("Erreur lors de la sauvegarde de la session avant la génération.");
       setIsGeneratingOrs(false); return;
     }
+    setCurrentSessionDbId(currentSavedId); // Ensure the ID is in state
     logger.info(`[SessionForm] Session saved with ID: ${currentSavedId}. Reloading data...`);
     let upToDateSessionData = await StorageManager.getSessionById(currentSavedId);
     if (!upToDateSessionData) {
