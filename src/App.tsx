@@ -11,11 +11,22 @@ import { logger } from './utils/logger';
 function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [currentSessionId, setCurrentSessionId] = useState<number | undefined>(undefined);
+  const [activeSubPage, setActiveSubPage] = useState<string | undefined>(undefined);
 
-  const handlePageChange = (page: string, sessionId?: number) => {
-    logger.info(`Navigation vers ${page}${sessionId ? ` (Session ID: ${sessionId})` : ''}`);
+  const handlePageChange = (page: string, details?: number | string) => {
+    logger.info(`Navigation vers ${page}${details ? ` (Details: ${details})` : ''}`);
     setActivePage(page);
-    setCurrentSessionId(sessionId);
+
+    if (page === 'sessions' && typeof details === 'number') {
+      setCurrentSessionId(details);
+      setActiveSubPage(undefined);
+    } else if (page === 'settings' && typeof details === 'string') {
+      setActiveSubPage(details);
+      setCurrentSessionId(undefined);
+    } else {
+      setCurrentSessionId(undefined);
+      setActiveSubPage(undefined);
+    }
   };
 
   const renderPage = () => {
@@ -23,18 +34,13 @@ function App() {
       case 'dashboard':
         return <Dashboard activePage={activePage} onPageChange={handlePageChange} />;
       
-      // case 'questionnaires': // Supprimé
-      //   return <Questionnaires activePage={activePage} onPageChange={handlePageChange} />; // Supprimé
       case 'sessions':
-        // Passe currentSessionId au composant Sessions
-        // Ce composant devra gérer l'affichage de la liste ou d'un détail basé sur la présence de cet ID
         return <Sessions activePage={activePage} onPageChange={handlePageChange} sessionId={currentSessionId} />;
-      // case 'exams': // Supprimé car la fonctionnalité Mode Examen est enlevée
-      //   return <Exams activePage={activePage} onPageChange={handlePageChange} />;
+
       case 'reports':
         return <Reports activePage={activePage} onPageChange={handlePageChange} />;
       case 'settings':
-        return <Settings activePage={activePage} onPageChange={handlePageChange} />;
+        return <Settings activePage={activePage} onPageChange={handlePageChange} activeTabId={activeSubPage} />;
       default:
         return <Dashboard activePage={activePage} onPageChange={handlePageChange} />;
     }

@@ -1,73 +1,143 @@
-import React from 'react';
-import { Users, Calendar, CheckCircle, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
-import { Session } from '@common/types';
+import { OnboardingStatus, QuestionWithId, DeviceKit, Trainer } from '@common/types';
+import { StorageManager } from '../../services/StorageManager';
+import { CheckCircle, Circle } from 'lucide-react';
+import { logger } from '../../utils/logger';
+
+// Define the structure for each onboarding step
+interface OnboardingStep {
+  id: keyof OnboardingStatus;
+  title: string;
+  isCompleted: boolean;
+  link: string;
+  page: string;
+}
 
 type DashboardCardsProps = {
-  sessions: Session[];
+  onPageChange: (page: string, details?: number | string) => void;
 };
 
-const DashboardCards: React.FC<DashboardCardsProps> = ({ sessions }) => {
-  // Débogage : inspecter les sessions reçues
-  console.log('Sessions dans DashboardCards :', sessions);
+const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Compter les sessions planifiées (planned ou ready)
-  const plannedSessionsCount = sessions.filter(s => s.status === 'planned' || s.status === 'ready').length;
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      setIsLoading(true);
+      try {
+        const storedStatus = await StorageManager.getAdminSetting('onboardingStatus');
+        const initialStatus: OnboardingStatus = storedStatus || {
+          hasAddedQuestions: false,
+          hasCreatedKits: false,
+          hasAddedTrainers: false,
+          hasConfiguredTechnicalSettings: false,
+        };
 
-  // Compter les participants dans les sessions planned, ready ou in-progress
-  const totalParticipantsInPlannedOrInProgress = sessions
-    .filter(s => s.status === 'planned' || s.status === 'ready' || s.status === 'in-progress')
-    .reduce((acc, session) => acc + (session.participants?.length || 0), 0);
+        // Fetch actual data to verify status
+        const [questions, kits, trainers, orsSavePath, reportSavePath, imagesFolderPath] = await Promise.all([
+          window.dbAPI.getAllQuestions(),
+          window.dbAPI.getAllDeviceKits(),
+          window.dbAPI.getAllTrainers(),
+          StorageManager.getAdminSetting('orsSavePath'),
+          StorageManager.getAdminSetting('reportSavePath'),
+          StorageManager.getAdminSetting('imagesFolderPath'),
+        ]);
 
-  // TODO: Calculer le taux de réussite et les certifications à partir des données réelles si possible.
-  // Pour l'instant, utilisons des placeholders.
-  const successRate = 'N/A'; // Exemple: calculer à partir des sessionResults
-  const certificationsCount = 'N/A'; // Exemple: nombre de participants avec reussite: true
+        const actualStatus: OnboardingStatus = {
+          hasAddedQuestions: questions.length > 0,
+          hasCreatedKits: kits.filter(k => !k.is_global).length > 0,
+          hasAddedTrainers: trainers.length > 0,
+          hasConfiguredTechnicalSettings: !!(orsSavePath && reportSavePath && imagesFolderPath),
+        };
 
-  const cards = [
-    { 
-      title: 'Sessions planifiées',
-      value: plannedSessionsCount.toString(),
-      icon: <Calendar size={24} className="text-rouge-accent" />,
-      change: '' // Pourrait être "X cette semaine" si on ajoute une logique de date
-    },
-    { 
-      title: 'Participants (planifiés/en cours)',
-      value: totalParticipantsInPlannedOrInProgress.toString(),
-      icon: <Users size={24} className="text-rouge-accent" />,
-      change: '' // Pourrait être "Y ce mois"
-    },
-    { 
-      title: 'Taux de réussite global',
-      value: successRate,
-      icon: <CheckCircle size={24} className="text-rouge-accent" />,
-      change: '' // Pourrait être "Z% vs. mois dernier"
-    },
-    { 
-      title: 'Certifications émises',
-      value: certificationsCount,
-      icon: <Clock size={24} className="text-rouge-accent" />,
-      change: '' // Pourrait être "W en attente"
-    },
+        // If the actual status is different from the stored status, update it
+        if (JSON.stringify(initialStatus) !== JSON.stringify(actualStatus)) {
+          await StorageManager.setAdminSetting('onboardingStatus', actualStatus);
+          setOnboardingStatus(actualStatus);
+          logger.info('Onboarding status updated.', actualStatus);
+        } else {
+          setOnboardingStatus(initialStatus);
+        }
+
+      } catch (error) {
+        logger.error('Failed to check onboarding status:', error);
+        // Fallback to a default state in case of error
+        setOnboardingStatus({
+          hasAddedQuestions: false,
+          hasCreatedKits: false,
+          hasAddedTrainers: false,
+          hasConfiguredTechnicalSettings: false,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkOnboardingStatus();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <Card className="border border-gris-moyen/50 mb-6">
+        <p>Chargement de la carte de personnalisation...</p>
+      </Card>
+    );
+  }
+
+  const allStepsCompleted = onboardingStatus && Object.values(onboardingStatus).every(status => status);
+
+  if (allStepsCompleted) {
+    return null;
+  }
+
+  const steps: OnboardingStep[] = [
+    { id: 'hasAddedQuestions', title: 'Ajouter les questions dans la bibliothèque', isCompleted: onboardingStatus?.hasAddedQuestions || false, page: 'settings', link: 'library' },
+    { id: 'hasCreatedKits', title: 'Ajouter vos boîtiers de vote et créer des kits', isCompleted: onboardingStatus?.hasCreatedKits || false, page: 'settings', link: 'devicesAndKits' },
+    { id: 'hasAddedTrainers', title: 'Ajouter le nom de vos formateurs', isCompleted: onboardingStatus?.hasAddedTrainers || false, page: 'settings', link: 'trainers' },
+    { id: 'hasConfiguredTechnicalSettings', title: 'Configurer les liens dans les préférences techniques', isCompleted: onboardingStatus?.hasConfiguredTechnicalSettings || false, page: 'settings', link: 'technical' },
   ];
 
+  const completedCount = steps.filter(step => step.isCompleted).length;
+  const totalSteps = steps.length;
+  const progressPercentage = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-      {cards.map((card, index) => (
-        <Card key={index} className="border border-gris-moyen/50">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-texte-principal/80">{card.title}</p>
-              <p className="mt-1 text-3xl font-semibold text-texte-principal">{card.value}</p>
-              {card.change && <p className="mt-2 text-xs text-texte-principal/80">{card.change}</p>}
+    <Card title="Installation & personnalisation" className="border-2 border-accent-neutre/50 mb-6">
+      <div className="mb-4">
+        <div className="flex justify-between items-center mb-1">
+          <p className="text-sm font-medium text-texte-principal/80">
+            {completedCount}/{totalSteps} étapes complétées
+          </p>
+        </div>
+        <div className="w-full bg-gris-moyen/30 rounded-full h-2.5">
+          <div
+            className="bg-vert-succes h-2.5 rounded-full transition-all duration-500"
+            style={{ width: `${progressPercentage}%` }}
+          ></div>
+        </div>
+      </div>
+
+      <ul className="space-y-3">
+        {steps.map((step) => (
+          <li key={step.id} className="flex items-center justify-between p-2 rounded-md hover:bg-gris-clair/50">
+            <div className="flex items-center">
+              {step.isCompleted ? (
+                <CheckCircle size={20} className="text-vert-succes mr-3" />
+              ) : (
+                <Circle size={20} className="text-gris-moyen mr-3" />
+              )}
+              <span className={`text-sm ${step.isCompleted ? 'line-through text-texte-principal/60' : 'text-texte-principal'}`}>
+                {step.title}
+              </span>
             </div>
-            <div className="p-2 rounded-lg bg-gris-moyen/20">
-              {card.icon}
-            </div>
-          </div>
-        </Card>
-      ))}
-    </div>
+            <a href="#" onClick={(e) => { e.preventDefault(); onPageChange(step.page, step.link); }} className="text-sm font-medium text-accent-neutre hover:underline">
+              {step.isCompleted ? 'Vérifier' : 'Commencer'}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 };
 

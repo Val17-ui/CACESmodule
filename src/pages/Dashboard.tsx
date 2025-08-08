@@ -10,7 +10,7 @@ import { Session, Referential } from '@common/types';
 
 type DashboardProps = {
   activePage: string;
-  onPageChange: (page: string, sessionId?: number) => void; // sessionId est optionnel
+  onPageChange: (page: string, details?: number | string) => void;
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
@@ -69,7 +69,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
       activePage={activePage}
       onPageChange={onPageChange}
     >
-      <DashboardCards sessions={sessions} />
+      <DashboardCards onPageChange={onPageChange} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-2">
           <DashboardSessionsOverview sessions={sessions} onPageChange={onPageChange} referentiels={referentiels} />

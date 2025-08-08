@@ -18,7 +18,7 @@ import Select from '../components/ui/Select';
 
 type ReportsProps = {
   activePage: string;
-  onPageChange: (page: string) => void;
+  onPageChange: (page: string, details?: number | string) => void;
 };
 
 const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {

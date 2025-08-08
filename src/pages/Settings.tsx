@@ -19,7 +19,8 @@ import { Users2, FileText as LogIcon } from 'lucide-react';
 
 type SettingsProps = {
   activePage: string;
-  onPageChange: (page: string) => void;
+  onPageChange: (page: string, details?: number | string) => void;
+  activeTabId?: string;
 };
 
 // 'files' retiré de AdminTab
@@ -28,10 +29,16 @@ type AdminTab = 'devicesAndKits' | 'preferences' | 'library' | 'trainers' | 'bac
 // Removed duplicate import of React, useState, useEffect
 // import TechnicalSettings from '../components/settings/TechnicalSettings'; // This import is fine if not duplicated
 
-const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange }) => {
+const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange, activeTabId }) => {
   // Mettre à jour l'état initial pour pointer vers un onglet valide, par exemple 'devicesAndKits'
-  const [activeTab, setActiveTab] = useState<AdminTab>('devicesAndKits');
+  const [activeTab, setActiveTab] = useState<AdminTab>(activeTabId as AdminTab || 'devicesAndKits');
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null); // For QuestionForm
+
+  useEffect(() => {
+    if (activeTabId && activeTabId !== activeTab) {
+      setActiveTab(activeTabId as AdminTab);
+    }
+  }, [activeTabId, activeTab]);
 
   // Effect to reset editingQuestionId when activeTab changes to something other than 'library'
   useEffect(() => {

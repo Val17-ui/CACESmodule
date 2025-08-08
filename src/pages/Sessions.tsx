@@ -11,7 +11,7 @@ import Select from '../components/ui/Select';
 
 type SessionsProps = {
   activePage: string;
-  onPageChange: (page: string, sessionId?: number) => void;
+  onPageChange: (page: string, details?: number | string) => void;
   sessionId?: number;
 };
 

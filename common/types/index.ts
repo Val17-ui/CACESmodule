@@ -456,3 +456,10 @@ export interface BlockUsage {
   blockId: string;
   usageCount: number;
 }
+
+export type OnboardingStatus = {
+  hasAddedQuestions: boolean;
+  hasCreatedKits: boolean;
+  hasAddedTrainers: boolean;
+  hasConfiguredTechnicalSettings: boolean;
+};
