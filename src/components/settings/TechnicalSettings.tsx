@@ -6,9 +6,6 @@ import { Save, CheckCircle } from 'lucide-react';
 import { StorageManager } from '../../services/StorageManager';
 
 interface TechnicalSettingsData {
-  reportPrefix: string;
-  pptxPrefix: string;
-  backupFileName: string;
   orsSavePath: string;
   reportSavePath: string;
   imagesFolderPath: string;
@@ -16,9 +13,6 @@ interface TechnicalSettingsData {
 
 const TechnicalSettings: React.FC = () => {
   const [settings, setSettings] = useState<TechnicalSettingsData>({
-    reportPrefix: 'Rapport_',
-    pptxPrefix: 'Questionnaire_',
-    backupFileName: 'CACES_Manager_Backup.json',
     orsSavePath: '',
     reportSavePath: '',
     imagesFolderPath: '',
@@ -29,17 +23,11 @@ const TechnicalSettings: React.FC = () => {
   useEffect(() => {
     const loadSettings = async () => {
       setIsLoading(true);
-      const reportPrefix = await StorageManager.getAdminSetting('reportPrefix');
-      const pptxPrefix = await StorageManager.getAdminSetting('pptxPrefix');
-      const backupFileName = await StorageManager.getAdminSetting('backupFileName');
       const orsSavePath = await StorageManager.getAdminSetting('orsSavePath');
       const reportSavePath = await StorageManager.getAdminSetting('reportSavePath');
       const imagesFolderPath = await StorageManager.getAdminSetting('imagesFolderPath');
 
       setSettings({
-        reportPrefix: reportPrefix || 'Rapport_',
-        pptxPrefix: pptxPrefix || 'Questionnaire_',
-        backupFileName: backupFileName || 'CACES_Manager_Backup.json',
         orsSavePath: orsSavePath || '',
         reportSavePath: reportSavePath || '',
         imagesFolderPath: imagesFolderPath || '',
@@ -52,9 +40,6 @@ const TechnicalSettings: React.FC = () => {
   const handleSave = async () => {
     setSaveStatus('saving');
     try {
-      await StorageManager.setAdminSetting('reportPrefix', settings.reportPrefix);
-      await StorageManager.setAdminSetting('pptxPrefix', settings.pptxPrefix);
-      await StorageManager.setAdminSetting('backupFileName', settings.backupFileName);
       await StorageManager.setAdminSetting('orsSavePath', settings.orsSavePath);
       await StorageManager.setAdminSetting('reportSavePath', settings.reportSavePath);
       await StorageManager.setAdminSetting('imagesFolderPath', settings.imagesFolderPath);
@@ -122,35 +107,8 @@ const TechnicalSettings: React.FC = () => {
 
   return (
     <Card title="Paramètres Techniques">
-      <p className="text-sm text-gray-600 mb-6">Configurez les noms par défaut des fichiers exportés.</p>
+      <p className="text-sm text-gray-600 mb-6">Configurez vos dossiers:</p>
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-          <label className="font-medium text-gray-700">Préfixe des rapports PDF</label>
-          <Input
-            value={settings.reportPrefix}
-            onChange={e => handleChange('reportPrefix', e.target.value)}
-            placeholder="Ex: Rapport_"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-          <label className="font-medium text-gray-700">Préfixe des questionnaires PPTX</label>
-          <Input
-            value={settings.pptxPrefix}
-            onChange={e => handleChange('pptxPrefix', e.target.value)}
-            placeholder="Ex: Questionnaire_"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-          <label className="font-medium text-gray-700">Nom du fichier de sauvegarde</label>
-          <Input
-            value={settings.backupFileName}
-            onChange={e => handleChange('backupFileName', e.target.value)}
-            placeholder="Ex: CACES_Manager_Backup.json"
-          />
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
           <label className="font-medium text-gray-700">Dossier de sauvegarde des ORS</label>
           <div className="flex items-center gap-2">

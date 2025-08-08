@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
 import { OnboardingStatus, QuestionWithId, DeviceKit, Trainer } from '@common/types';
 import { StorageManager } from '../../services/StorageManager';
-import { CheckCircle, Circle } from 'lucide-react';
+import { CheckCircle, Circle, Wrench } from 'lucide-react';
 import { logger } from '../../utils/logger';
 
 // Define the structure for each onboarding step
@@ -103,7 +103,11 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
   const progressPercentage = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
 
   return (
-    <Card title="Installation & personnalisation" className="border-2 border-accent-neutre/50 mb-6">
+    <Card
+      title="Installation & personnalisation"
+      icon={<Wrench size={20} className="text-rouge-accent" />}
+      className="border-2 border-rouge-accent/50 mb-6"
+    >
       <div className="mb-4">
         <div className="flex justify-between items-center mb-1">
           <p className="text-sm font-medium text-texte-principal/80">
@@ -131,7 +135,7 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
                 {step.title}
               </span>
             </div>
-            <a href="#" onClick={(e) => { e.preventDefault(); onPageChange(step.page, step.link); }} className="text-sm font-medium text-accent-neutre hover:underline">
+            <a href="#" onClick={(e) => { e.preventDefault(); onPageChange(step.page, step.link); }} className={`text-sm font-medium ${step.isCompleted ? 'text-accent-neutre hover:underline' : 'text-rouge-accent hover:underline'}`}>
               {step.isCompleted ? 'Vérifier' : 'Commencer'}
             </a>
           </li>
