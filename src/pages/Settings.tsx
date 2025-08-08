@@ -10,7 +10,6 @@ import { User, BookOpen, Database, Wrench, Plus, SlidersHorizontal } from 'lucid
 import UserPreferences from '../components/settings/UserPreferences';
 import QuestionLibrary from '../components/library/QuestionLibrary';
 import QuestionForm from '../components/library/QuestionForm';
-import BackupRestore from '../components/settings/BackupRestore';
 import TechnicalSettings from '../components/settings/TechnicalSettings';
 import TrainerSettings from '../components/settings/TrainerSettings';
 
@@ -24,7 +23,7 @@ type SettingsProps = {
 };
 
 // 'files' retiré de AdminTab
-type AdminTab = 'devicesAndKits' | 'preferences' | 'library' | 'trainers' | 'backup' | 'technical' | 'systemLog';
+type AdminTab = 'devicesAndKits' | 'preferences' | 'library' | 'trainers' | 'technical' | 'systemLog';
 
 // Removed duplicate import of React, useState, useEffect
 // import TechnicalSettings from '../components/settings/TechnicalSettings'; // This import is fine if not duplicated
@@ -68,8 +67,6 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange, activeTab
     { id: 'preferences', label: 'Préférences', icon: <User size={20} /> },
     { id: 'library', label: 'Bibliothèque', icon: <BookOpen size={20} /> },
     { id: 'trainers', label: 'Formateurs', icon: <Users2 size={20} /> },
-    { id: 'backup', label: 'Sauvegarde & Restauration', icon: <Database size={20} /> },
-    
     { id: 'technical', label: 'Paramètres Techniques', icon: <Wrench size={20} /> },
   ];
 
@@ -105,9 +102,6 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange, activeTab
             <QuestionLibrary onEditQuestion={handleEditQuestion} />
           </>
         );
-      case 'backup':
-        // setEditingQuestionId(null); // REMOVED
-        return <BackupRestore />;
       case 'technical':
         // setEditingQuestionId(null); // REMOVED
         return <TechnicalSettings />;
