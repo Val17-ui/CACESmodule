@@ -198,118 +198,111 @@ const UserPreferences: React.FC = () => {
         Ces paramètres affectent la génération des questionnaires.
       </p>
 
-      {/* Save button section */}
-      <div className="mb-6 pb-6 border-b border-gray-200 flex justify-end items-center gap-4">
-        {saveStatus === 'success' && (
-          <div className="flex items-center text-green-600">
-            <CheckCircle size={18} className="mr-1.5" />
-            <span className="text-sm font-medium">Préférences enregistrées !</span>
-          </div>
-        )}
-        {saveStatus === 'error' && (
-          <p className="text-red-500 text-sm font-medium">Erreur lors de la sauvegarde.</p>
-        )}
-        <Button
-            onClick={handleSave}
-            disabled={saveStatus === 'saving' || isLoading}
-            className="min-w-[180px]"
-        >
-          <Save size={16} className="mr-2" />
-          {saveStatus === 'saving' ? 'Enregistrement...' : 'Enregistrer les préférences'}
-        </Button>
-      </div>
-
-      {/* Existing preferences form */}
-      <div className="space-y-6">
-        {/* Ouverture du vote */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-          <label className="font-medium text-gray-700">Ouverture du vote</label>
-          <Select
-            options={[
-              { value: 'Automatic', label: 'Automatique' },
-              { value: 'Manual', label: 'Manuel' },
-            ]}
-            value={preferences.pollStartMode}
-            onChange={e => handleChange('pollStartMode', e.target.value)}
-          />
-        </div>
-
-        {/* Style des réponses */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-          <label className="font-medium text-gray-700">Style des réponses</label>
-          <Select
-            options={[
-              { value: 'ppBulletAlphaUCParenRight', label: 'A) B) C)' },
-              { value: 'ppBulletAlphaUCPeriod', label: 'A. B. C.' },
-              { value: 'ppBulletArabicParenRight', label: '1) 2) 3)' },
-              { value: 'ppBulletArabicPeriod', label: '1. 2. 3.' },
-            ]}
-            value={preferences.answersBulletStyle}
-            onChange={e => handleChange('answersBulletStyle', e.target.value)}
-          />
-        </div>
-
-        {/* Durée du compte à rebours */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-          <label className="font-medium text-gray-700">Durée du compte à rebours (secondes)</label>
-          <Input
-            type="number"
-            min="0"
-            value={preferences.pollTimeLimit}
-            onChange={e => handleChange('pollTimeLimit', parseInt(e.target.value, 10) || 0)}
-            placeholder="Ex: 30"
-          />
-        </div>
-
-        {/* Déclenchement du chrono */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-          <label className="font-medium text-gray-700">Déclenchement du chrono</label>
-          <Select
-            options={[
-              { value: 'Automatic', label: 'Automatique' },
-              { value: 'Manual', label: 'Manuel' },
-            ]}
-            value={preferences.pollCountdownStartMode}
-            onChange={e => handleChange('pollCountdownStartMode', e.target.value)}
-          />
-        </div>
-
-        {/* Passage à la diapositive suivante */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-            <label className="font-medium text-gray-700">Passage à la diapositive suivante (questions)</label>
-            <Select
-                options={[
-                    { value: 'Manual', label: 'Manuel' },
-                    { value: 'Automatic', label: 'Automatique' },
-                ]}
-                value={preferences.questionSlideTransition}
-                onChange={e => handleChange('questionSlideTransition', e.target.value)}
-            />
-        </div>
-
-        {/* Délai de passage automatique */}
-        {preferences.questionSlideTransition === 'Automatic' && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 lg:gap-8">
+        {/* Left Column: Preferences */}
+        <div className="space-y-6">
+            {/* Ouverture du vote */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                <label className="font-medium text-gray-700">Délai avant passage (secondes)</label>
-                <Input
-                    type="number"
-                    min="2"
-                    value={preferences.questionSlideTransitionDelay}
-                    onChange={e => {
-                        const value = parseInt(e.target.value, 10);
-                        handleChange('questionSlideTransitionDelay', value < 2 ? 2 : value);
-                    }}
-                    placeholder="Min: 2"
+                <label className="font-medium text-gray-700">Ouverture du vote</label>
+                <Select
+                    options={[{ value: 'Automatic', label: 'Automatique' }, { value: 'Manual', label: 'Manuel' }]}
+                    value={preferences.pollStartMode}
+                    onChange={e => handleChange('pollStartMode', e.target.value)}
                 />
             </div>
-        )}
-      </div>
 
-      {/* Nouvelle section pour les modèles PowerPoint */}
-      <div className="mt-8 pt-6 border-t border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Gestion des Modèles PowerPoint</h3>
+            {/* Style des réponses */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="font-medium text-gray-700">Style des réponses</label>
+                <Select
+                    options={[
+                        { value: 'ppBulletAlphaUCParenRight', label: 'A) B) C)' },
+                        { value: 'ppBulletAlphaUCPeriod', label: 'A. B. C.' },
+                        { value: 'ppBulletArabicParenRight', label: '1) 2) 3)' },
+                        { value: 'ppBulletArabicPeriod', label: '1. 2. 3.' },
+                    ]}
+                    value={preferences.answersBulletStyle}
+                    onChange={e => handleChange('answersBulletStyle', e.target.value)}
+                />
+            </div>
 
-        <div className="mb-6 p-4 border border-dashed border-gray-300 rounded-lg">
+            {/* Durée du compte à rebours */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="font-medium text-gray-700">Durée du compte à rebours (secondes)</label>
+                <Input
+                    type="number"
+                    min="0"
+                    value={preferences.pollTimeLimit}
+                    onChange={e => handleChange('pollTimeLimit', parseInt(e.target.value, 10) || 0)}
+                    placeholder="Ex: 30"
+                />
+            </div>
+
+            {/* Déclenchement du chrono */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="font-medium text-gray-700">Déclenchement du chrono</label>
+                <Select
+                    options={[{ value: 'Automatic', label: 'Automatique' }, { value: 'Manual', label: 'Manuel' }]}
+                    value={preferences.pollCountdownStartMode}
+                    onChange={e => handleChange('pollCountdownStartMode', e.target.value)}
+                />
+            </div>
+
+            {/* Passage à la diapositive suivante */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="font-medium text-gray-700">Passage à la diapositive suivante (questions)</label>
+                <Select
+                    options={[{ value: 'Manual', label: 'Manuel' }, { value: 'Automatic', label: 'Automatique' }]}
+                    value={preferences.questionSlideTransition}
+                    onChange={e => handleChange('questionSlideTransition', e.target.value)}
+                />
+            </div>
+
+            {/* Délai de passage automatique */}
+            {preferences.questionSlideTransition === 'Automatic' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <label className="font-medium text-gray-700">Délai avant passage (secondes)</label>
+                    <Input
+                        type="number"
+                        min="2"
+                        value={preferences.questionSlideTransitionDelay}
+                        onChange={e => {
+                            const value = parseInt(e.target.value, 10);
+                            handleChange('questionSlideTransitionDelay', !value || value < 2 ? 2 : value);
+                        }}
+                        placeholder="Min: 2"
+                    />
+                </div>
+            )}
+        </div>
+
+        {/* Right Column: Save Button and Template Management */}
+        <div className="space-y-6">
+            {/* Save button section */}
+            <div className="flex justify-end items-center gap-4">
+                {saveStatus === 'success' && (
+                    <div className="flex items-center text-green-600">
+                        <CheckCircle size={18} className="mr-1.5" />
+                        <span className="text-sm font-medium">Préférences enregistrées !</span>
+                    </div>
+                )}
+                {saveStatus === 'error' && (
+                    <p className="text-red-500 text-sm font-medium">Erreur lors de la sauvegarde.</p>
+                )}
+                <Button
+                    onClick={handleSave}
+                    disabled={saveStatus === 'saving' || isLoading}
+                    className="min-w-[180px]"
+                >
+                    <Save size={16} className="mr-2" />
+                    {saveStatus === 'saving' ? 'Enregistrement...' : 'Enregistrer les préférences'}
+                </Button>
+            </div>
+
+            {/* Template Management Section */}
+            <div className="pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Gestion des Modèles PowerPoint</h3>
+              <div className="mb-6 p-4 border border-dashed border-gray-300 rounded-lg">
           <label htmlFor="template-upload" className="block text-sm font-medium text-gray-700 mb-1">
             Téléverser un nouveau modèle personnalisé (.pptx)
           </label>
@@ -388,7 +381,8 @@ const UserPreferences: React.FC = () => {
           ))}
         </ul>
       </div>
-
+      </div>
+      </div>
     </Card>
   );
 };
