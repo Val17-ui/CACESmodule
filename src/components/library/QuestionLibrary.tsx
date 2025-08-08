@@ -845,26 +845,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                     />
                 </div>
             </div>
-            <div className="ml-4 flex-shrink-0 mt-6 space-y-2">
-              <Tooltip
-                content={
-                  <div className="text-left">
-                    <p className="font-bold">Format Questions (.xlsx):</p>
-                    <p>id_question, texte, referentiel_code, theme_code, bloc_code, optionA, optionB, optionC, optionD, correctAnswer, isEliminatory, version</p>
-                  </div>
-                }
-                position="left"
-              >
-                <Button
-                    variant="primary"
-                    icon={<Upload size={16}/>}
-                    onClick={triggerFileInput}
-                    disabled={isImporting}
-                    className="w-full"
-                >
-                    {isImporting ? 'Importation Questions...' : 'Importer Questions'}
-                </Button>
-              </Tooltip>
+            <div className="ml-4 flex-shrink-0 mt-6 space-y-2 flex flex-col">
               <Tooltip
                 content={
                   <div className="text-left">
@@ -901,6 +882,25 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                     className="w-full"
                 >
                     {isImportingThemes ? 'Importation Thèmes...' : 'Importer Thèmes'}
+                </Button>
+              </Tooltip>
+              <Tooltip
+                content={
+                  <div className="text-left">
+                    <p className="font-bold">Format Questions (.xlsx):</p>
+                    <p>id_question, texte, referentiel_code, theme_code, bloc_code, optionA, optionB, optionC, optionD, correctAnswer, isEliminatory, version</p>
+                  </div>
+                }
+                position="left"
+              >
+                <Button
+                    variant="primary"
+                    icon={<Upload size={16}/>}
+                    onClick={triggerFileInput}
+                    disabled={isImporting}
+                    className="w-full"
+                >
+                    {isImporting ? 'Importation Questions...' : 'Importer Questions'}
                 </Button>
               </Tooltip>
             </div>

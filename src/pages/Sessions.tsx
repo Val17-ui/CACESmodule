@@ -343,7 +343,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
                 </ul>
               </div>
             }
-            position="top"
+            position="bottom"
           >
             <Button
               variant="outline"
