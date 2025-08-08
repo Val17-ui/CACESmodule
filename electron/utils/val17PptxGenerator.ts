@@ -676,7 +676,7 @@ function createSlideXml(
   if (ombeaConfig?.questionSlideTransition === 'Automatic') {
     const delayInSeconds = ombeaConfig.questionSlideTransitionDelay ?? 2;
     const delayInMilliseconds = Math.max(delayInSeconds, 2) * 1000;
-    transitionXml = `<p:transition advTm="${delayInMilliseconds}"><p:advanceAfterTime/></p:transition>`;
+    transitionXml = `<p:transition advTm="${delayInMilliseconds}" />`;
   }
 
   xmlContent += `</p:spTree><p:custDataLst><p:tags r:id="rId1"/></p:custDataLst><p:extLst><p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}"><p14:creationId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="${
