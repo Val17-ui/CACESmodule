@@ -1,7 +1,7 @@
 {
   "name": "evalactive",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "eval'active - Application de bureau qui permet la création, la gestion et l'importation de fichiers ORS (fichiers de sessions interactives au format PowerPoint enrichi), destinée à être utilisée avec des boîtiers de vote avec importation, analyse et reporting des résultats",
   "author": "Altern'active Systems <info@alternactive-systems.fr",
   "type": "module",
@@ -21,7 +21,7 @@
     "appId": "com.evalactive.app",
     "productName": "EvalActive",
     "files": [
-      "dist/renderer/**/*",
+      "dist/**/*",
       "dist-electron/**/*"
     ],
     "directories": {

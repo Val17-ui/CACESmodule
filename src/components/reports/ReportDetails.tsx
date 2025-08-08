@@ -25,7 +25,7 @@ declare module 'jspdf' {
     } | undefined;
   }
 }
-
+type HAlignType = 'left' | 'center' | 'right';
 interface ParticipantCalculatedData extends Participant {
   score?: number;
   reussite?: boolean;
@@ -490,19 +490,19 @@ const generateSessionReportPDF = async () => {
     const FONT_SIZES = { title: 18, subtitle: 12, body: 10, small: 8 };
     const COLORS = { blue: '#1A4F8B', red: '#FF6161', green: '#6BAF92', text: '#2D2D2D', lightText: '#505050' };
     const margin = 15;
-    const pageWidth = doc.internal.pageSize.width;
+    const pageWidth = doc.internal.pageSize.width - margin * 2; // ~190 mm utilisable
     const pageHeight = doc.internal.pageSize.height;
 
     // --- Header ---
     const logoSetting = await StorageManager.getAdminSetting('reportLogoBase64');
     if (logoSetting?.value) {
-      try { doc.addImage(logoSetting.value, 'PNG', pageWidth - margin - 25, margin, 20, 20); }
+      try { doc.addImage(logoSetting.value, 'PNG', pageWidth + margin - 25, margin, 20, 20); }
       catch (e) { console.error("Error adding logo to PDF:", e); }
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(FONT_SIZES.title);
     doc.setTextColor(COLORS.text);
-    doc.text('Rapport de Session', pageWidth / 2, margin + 12, { align: 'center' });
+    doc.text('Rapport de Session', pageWidth / 2 + margin, margin + 12, { align: 'center' });
 
     // --- Details Columns ---
     let y = margin + 35;
@@ -520,7 +520,7 @@ const generateSessionReportPDF = async () => {
     ];
 
     details.forEach(detail => {
-      const splitValue = doc.splitTextToSize(detail.value, pageWidth / 2 - margin - 40);
+      const splitValue = doc.splitTextToSize(detail.value, pageWidth / 2 - 40);
       doc.setFontSize(FONT_SIZES.body);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(COLORS.lightText);
@@ -534,107 +534,112 @@ const generateSessionReportPDF = async () => {
     let yRight = margin + 35;
     doc.setFontSize(FONT_SIZES.subtitle);
     doc.setFont('helvetica', 'bold');
-    doc.text('Questionnaire généré', pageWidth / 2 + 5, yRight);
+    doc.text('Questionnaire généré', pageWidth / 2 + margin + 5, yRight);
     yRight += 8;
 
     const themesData = blockStats.map(bs => {
-        const version = [...new Set(questionsForThisSession.filter(q => q.blocId === bs.blocId).map(q => q.version))][0] || 'N/A';
-        const mainText = `${bs.themeName} - ${bs.blocCode}`;
-        const detailText = `(Version ${version}, ${bs.questionsInBlockCount} questions)`;
-        return { mainText, detailText };
+      const version = [...new Set(questionsForThisSession.filter(q => q.blocId === bs.blocId).map(q => q.version))][0] || 'N/A';
+      const mainText = `${bs.themeName} - ${bs.blocCode}`;
+      const detailText = `(Version ${version}, ${bs.questionsInBlockCount} questions)`;
+      return { mainText, detailText };
     }).sort((a, b) => a.mainText.localeCompare(b.mainText));
 
     themesData.forEach(theme => {
-        doc.setFontSize(FONT_SIZES.body);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(COLORS.text);
-        const splitText = doc.splitTextToSize(theme.mainText, pageWidth / 2 - margin - 10);
-        doc.text(splitText, pageWidth / 2 + 5, yRight);
-        yRight += (splitText.length * 5);
+      doc.setFontSize(FONT_SIZES.body);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(COLORS.text);
+      const splitText = doc.splitTextToSize(theme.mainText, pageWidth / 2 - 10);
+      doc.text(splitText, pageWidth / 2 + margin + 5, yRight);
+      yRight += (splitText.length * 5);
 
-        doc.setFontSize(FONT_SIZES.small);
-        doc.setTextColor(COLORS.lightText);
-        doc.text(theme.detailText, pageWidth / 2 + 5, yRight);
-        yRight += 6;
+      doc.setFontSize(FONT_SIZES.small);
+      doc.setTextColor(COLORS.lightText);
+      doc.text(theme.detailText, pageWidth / 2 + margin + 5, yRight);
+      yRight += 6;
     });
 
     y = Math.max(y, yRight) + 10;
 
-    // --- Participants Table ---
+    // --- Participants Table (En-têtes globaux) ---
     doc.setFontSize(FONT_SIZES.subtitle);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(COLORS.text);
     doc.text('Tableau des Participants', margin, y);
-    y += 8;
+    y += 10;
 
-    const body = participantCalculatedData.flatMap(p => {
-      const mainRow = {
-        participant: `${p.prenom} ${p.nom}`,
-        company: p.entreprise || '-',
-        score: p.score?.toFixed(0) || 'N/A',
-        result: p.reussite ? 'Certifié' : 'Ajourné'
-      };
-
-      const scores = p.themeScores ? Object.values(p.themeScores) : [];
-      const themeScoresContent = scores.length > 0
-        ? scores.map(ts => ({
-            text: `${ts.themeCode}: ${ts.correct}/${ts.total}`,
-            color: (ts.correct / ts.total) < 0.5 ? COLORS.red : COLORS.green
-          }))
-        : [{ text: 'Scores non disponibles', color: COLORS.lightText }];
-
-      const subRow = [{
-        content: themeScoresContent,
-        colSpan: 4,
-        styles: {
-          halign: 'left',
-          cellPadding: { top: 2, right: 2, bottom: 2, left: margin + 5 },
-          fontSize: FONT_SIZES.small,
-        },
-      }];
-      return [mainRow, subRow];
-    });
-
+    const head = [['Participant', 'Entreprise', 'Score Global', 'Résultat']];
     autoTable(doc, {
       startY: y,
-      head: [[
-          { content: 'Participant', dataKey: 'participant' },
-          { content: 'Entreprise', dataKey: 'company' },
-          { content: 'Score Global', dataKey: 'score' },
-          { content: 'Résultat', dataKey: 'result' },
-      ]],
-      body: body,
+      head: head,
+      body: [],
       theme: 'grid',
-      styles: { fontSize: FONT_SIZES.body, cellPadding: 2, valign: 'middle', overflow: 'linebreak' },
+      styles: { fontSize: FONT_SIZES.body, cellPadding: 2, valign: 'middle' },
       headStyles: { fillColor: COLORS.blue, textColor: '#FFFFFF', fontStyle: 'bold' },
       columnStyles: {
-        participant: { cellWidth: 'auto' },
-        company: { cellWidth: 'auto' },
-        score: { cellWidth: 35, halign: 'center' },
-        result: { cellWidth: 35, halign: 'center' },
-      },
-      willDrawCell: (data) => {
-        if (data.section === 'body' && Array.isArray(data.row.raw) && (data.row.raw as any[])[0].hasOwnProperty('content')) {
-            doc.setFillColor(245, 245, 245);
-        }
-      },
-      didDrawCell: (data) => {
-        if (data.section === 'body' && Array.isArray(data.row.raw) && (data.row.raw as any[])[0].hasOwnProperty('content')) {
-          const cellContent = (data.row.raw as any[])[0].content as { text: string, color: string }[];
-          let x = data.cell.x + 2;
-          const y = data.cell.y + data.cell.height / 2 + 1.5;
-
-          cellContent.forEach(item => {
-            doc.setFontSize(FONT_SIZES.small);
-            doc.setTextColor(item.color);
-            doc.text(item.text, x, y);
-            x += doc.getTextWidth(item.text) + 4;
-          });
-        }
+        0: { cellWidth: 70, halign: 'left' as HAlignType },
+        1: { cellWidth: 70, halign: 'left' as HAlignType },
+        2: { cellWidth: 25, halign: 'center' as HAlignType },
+        3: { cellWidth: 25, halign: 'center' as HAlignType }
       },
     });
+    y = (doc as any).lastAutoTable.finalY + 5;
 
-    y = (doc as any).lastAutoTable.finalY + 10;
+    // --- Mini-tables par participant ---
+    participantCalculatedData.forEach((p) => {
+      const body = [
+        [
+          { content: `${p.prenom} ${p.nom}`, styles: { halign: 'left' as HAlignType, cellWidth: 70 } },
+          { content: p.entreprise || '-', styles: { halign: 'left' as HAlignType, cellWidth: 70 } },
+          { content: p.score?.toFixed(0) || 'N/A', styles: { halign: 'center' as HAlignType, cellWidth: 25 } },
+          { content: p.reussite ? 'Certifié' : 'Ajourné', styles: { halign: 'center' as HAlignType, cellWidth: 25 } }
+        ],
+        [
+          { content: p.themeScores ? Object.values(p.themeScores).map((ts: ThemeScoreDetails) => `${ts.themeCode}: ${ts.correct}/${ts.total}`).join(', ') : 'Aucun score', colSpan: 4, styles: { halign: 'left' as HAlignType, fontSize: FONT_SIZES.small, cellWidth: 190 } }
+        ]
+      ];
+
+      autoTable(doc, {
+        startY: y,
+        body: body,
+        theme: 'grid',
+        rowHeight: 12,
+        styles: { fontSize: FONT_SIZES.body, cellPadding: 2, valign: 'middle' },
+        columnStyles: {
+          0: { cellWidth: 70, halign: 'left' as HAlignType },
+          1: { cellWidth: 70, halign: 'left' as HAlignType },
+          2: { cellWidth: 25, halign: 'center' as HAlignType },
+          3: { cellWidth: 25, halign: 'center' as HAlignType }
+        },
+        didDrawCell: (data) => {
+          console.log("Drawing cell:", data.column.index, "raw:", data.cell.raw, "row:", data.row.index);
+          if (data.section === 'body') {
+            if (data.column.index === 3 && data.row.index === 0) { // Colonne Résultat (première ligne)
+              const result = data.cell.raw as string;
+              data.cell.styles.textColor = result === 'Ajourné' ? COLORS.red : result === 'Certifié' ? COLORS.green : COLORS.text;
+            }
+            if (data.row.index === 1 && data.column.index === 0) { // Scores par thème (deuxième ligne)
+              const themeScoresText = data.cell.raw as string;
+              if (typeof themeScoresText === 'string') {
+                const items = themeScoresText.split(', ');
+                let x = data.cell.x + 2;
+                const y = data.cell.y + data.cell.height / 2 + 1.5;
+                items.forEach(item => {
+                  const [_, scorePart] = item.split(': ');
+                  const [correct, total] = scorePart ? scorePart.split('/') : ['0', '0'];
+                  const rate = parseInt(total) > 0 ? parseInt(correct) / parseInt(total) : 0;
+                  const color = rate < 0.5 ? COLORS.red : COLORS.green;
+                  doc.setFontSize(FONT_SIZES.small);
+                  doc.setTextColor(color);
+                  doc.text(item, x, y);
+                  x += doc.getTextWidth(item) + 4;
+                });
+              }
+            }
+          }
+        },
+      });
+      y = (doc as any).lastAutoTable.finalY + 5;
+    });
 
     // --- Footer ---
     const totalPages = (doc as any).internal.getNumberOfPages();
@@ -642,25 +647,33 @@ const generateSessionReportPDF = async () => {
       doc.setPage(i);
       doc.setFontSize(FONT_SIZES.small);
       doc.setTextColor(150);
-      doc.text(`Page ${i} / ${totalPages}`, pageWidth / 2, pageHeight - margin, { align: 'center' });
+      doc.text(`Page ${i} / ${totalPages}`, pageWidth / 2 + margin, pageHeight - margin, { align: 'center' });
       doc.setDrawColor(150, 150, 150);
       doc.rect(margin, pageHeight - 20, 80, 15);
       doc.setTextColor(100);
       doc.text('Signature du Formateur:', margin + 2, pageHeight - 15);
     }
 
-    // --- Save PDF ---
+    // --- Save PDF avec gestion d'erreur EBUSY ---
     const pdfBuffer = doc.output('arraybuffer');
     const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
-    const result = await window.dbAPI.saveReportFile(pdfBuffer, fileName);
-    if (result.success && result.filePath) {
-      setLastPdfPath(result.filePath);
-    } else {
-      throw new Error(result.error || "Erreur inconnue lors de la sauvegarde du PDF.");
+    let success = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await window.dbAPI.saveReportFile(pdfBuffer, fileName);
+      if (result.success && result.filePath) {
+        setLastPdfPath(result.filePath);
+        success = true;
+        break;
+      } else if (result.error && !result.error.includes('EBUSY')) {
+        throw new Error(result.error || "Erreur inconnue lors de la sauvegarde du PDF.");
+      }
+    }
+    if (!success) {
+      throw new Error("Impossible de sauvegarder le PDF après plusieurs tentatives. Veuillez fermer tout lecteur PDF ouvert.");
     }
   } catch (error) {
     console.error("Erreur lors de la génération ou sauvegarde du PDF:", error);
-    alert(`Erreur lors de la génération du PDF: ${error instanceof Error ? error.message : String(error)}`);
+    alert(`Erreur : ${error instanceof Error ? error.message : String(error)}. Si le problème persiste, assurez-vous qu'aucun autre programme n'utilise le fichier PDF.`);
   } finally {
     setIsGeneratingPdf(false);
   }
