@@ -322,6 +322,8 @@ export interface AdminSettings {
     pollTimeLimit?: number;
     pollCountdownStartMode?: string;
     pollMultipleResponse?: string;
+    questionSlideTransition?: 'Manual' | 'Automatic';
+    questionSlideTransitionDelay?: number;
   }
 
   export interface Val17Question {

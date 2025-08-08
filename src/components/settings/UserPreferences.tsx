@@ -12,6 +12,8 @@ interface UserPreferencesData {
   answersBulletStyle: 'ppBulletAlphaUCParenRight' | 'ppBulletAlphaUCPeriod' | 'ppBulletArabicParenRight' | 'ppBulletArabicPeriod';
   pollTimeLimit: number;
   pollCountdownStartMode: 'Automatic' | 'Manual';
+  questionSlideTransition: 'Manual' | 'Automatic';
+  questionSlideTransitionDelay: number;
 }
 
 // Nouvelle définition de type pour les modèles PPTX utilisateur
@@ -31,6 +33,8 @@ const UserPreferences: React.FC = () => {
     answersBulletStyle: 'ppBulletArabicPeriod',
     pollTimeLimit: 0,
     pollCountdownStartMode: 'Automatic',
+    questionSlideTransition: 'Manual',
+    questionSlideTransitionDelay: 5,
   });
 
   // Nouveaux états pour les modèles PPTX
@@ -52,6 +56,8 @@ const UserPreferences: React.FC = () => {
           answersBulletStyle,
           pollTimeLimit,
           pollCountdownStartMode,
+          questionSlideTransition,
+          questionSlideTransitionDelay,
           loadedTemplates,
           defaultTemplateId,
         ] = await Promise.all([
@@ -59,6 +65,8 @@ const UserPreferences: React.FC = () => {
           StorageManager.getAdminSetting('answersBulletStyle'),
           StorageManager.getAdminSetting('pollTimeLimit'),
           StorageManager.getAdminSetting('pollCountdownStartMode'),
+          StorageManager.getAdminSetting('questionSlideTransition'),
+          StorageManager.getAdminSetting('questionSlideTransitionDelay'),
           StorageManager.getAdminSetting('userPptxTemplates'),
           StorageManager.getAdminSetting('userDefaultPptxTemplateId'),
         ]);
@@ -68,6 +76,8 @@ const UserPreferences: React.FC = () => {
           answersBulletStyle: answersBulletStyle || 'ppBulletArabicPeriod',
           pollTimeLimit: pollTimeLimit !== undefined ? pollTimeLimit : 30,
           pollCountdownStartMode: pollCountdownStartMode || 'Automatic',
+          questionSlideTransition: questionSlideTransition || 'Manual',
+          questionSlideTransitionDelay: questionSlideTransitionDelay !== undefined ? questionSlideTransitionDelay : 5,
         });
 
         setUserPptxTemplates(loadedTemplates || []);
@@ -92,6 +102,8 @@ const UserPreferences: React.FC = () => {
       await StorageManager.setAdminSetting('answersBulletStyle', preferences.answersBulletStyle);
       await StorageManager.setAdminSetting('pollTimeLimit', preferences.pollTimeLimit);
       await StorageManager.setAdminSetting('pollCountdownStartMode', preferences.pollCountdownStartMode);
+      await StorageManager.setAdminSetting('questionSlideTransition', preferences.questionSlideTransition);
+      await StorageManager.setAdminSetting('questionSlideTransitionDelay', preferences.questionSlideTransitionDelay);
 
       // Sauvegarde des préférences de modèles
       await StorageManager.setAdminSetting('userPptxTemplates', userPptxTemplates);
@@ -239,6 +251,36 @@ const UserPreferences: React.FC = () => {
             onChange={e => handleChange('pollCountdownStartMode', e.target.value)}
           />
         </div>
+
+        {/* Passage à la diapositive suivante */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+            <label className="font-medium text-gray-700">Passage à la diapositive suivante (questions)</label>
+            <Select
+                options={[
+                    { value: 'Manual', label: 'Manuel' },
+                    { value: 'Automatic', label: 'Automatique' },
+                ]}
+                value={preferences.questionSlideTransition}
+                onChange={e => handleChange('questionSlideTransition', e.target.value)}
+            />
+        </div>
+
+        {/* Délai de passage automatique */}
+        {preferences.questionSlideTransition === 'Automatic' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="font-medium text-gray-700">Délai avant passage (secondes)</label>
+                <Input
+                    type="number"
+                    min="2"
+                    value={preferences.questionSlideTransitionDelay}
+                    onChange={e => {
+                        const value = parseInt(e.target.value, 10);
+                        handleChange('questionSlideTransitionDelay', value < 2 ? 2 : value);
+                    }}
+                    placeholder="Min: 2"
+                />
+            </div>
+        )}
       </div>
 
       {/* Nouvelle section pour les modèles PowerPoint */}

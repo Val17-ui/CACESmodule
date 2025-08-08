@@ -672,9 +672,16 @@ function createSlideXml(
       countdownDisplayText
     )}</a:t></a:r><a:endParaRPr lang="fr-FR" sz="4400"/></a:p></p:txBody></p:sp>`;
   }
+  let transitionXml = '';
+  if (ombeaConfig?.questionSlideTransition === 'Automatic') {
+    const delayInSeconds = ombeaConfig.questionSlideTransitionDelay ?? 2;
+    const delayInMilliseconds = Math.max(delayInSeconds, 2) * 1000;
+    transitionXml = `<p:transition advTm="${delayInMilliseconds}"><p:advanceAfterTime/></p:transition>`;
+  }
+
   xmlContent += `</p:spTree><p:custDataLst><p:tags r:id="rId1"/></p:custDataLst><p:extLst><p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}"><p14:creationId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="${
     Math.floor(Math.random() * 2147483647) + 1
-  }"/></p:ext></p:extLst></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr><p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"/></p:par></p:tnLst></p:timing></p:sld>`;
+  }"/></p:ext></p:extLst></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml}<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"/></p:par></p:tnLst></p:timing></p:sld>`;
   logger.info(`[LOG][val17PptxGenerator] Fin de createSlideXml pour la slide ${slideNumber}.`);
   return xmlContent;
 }
@@ -821,11 +828,15 @@ function createSlideTagFiles(
     .join(",");
 
   const tags: TagInfo[] = [];
+  const isAutoTransition = ombeaConfig?.questionSlideTransition === 'Automatic';
+  const pollStartMode = isAutoTransition ? 'Automatic' : (ombeaConfig?.pollStartMode || 'Automatic');
+  const countdownStartMode = isAutoTransition ? 'Automatic' : (ombeaConfig?.pollCountdownStartMode || 'Automatic');
+
   tags.push({
     tagNumber: baseTagNumber,
     fileName: `tag${baseTagNumber}.xml`,
     content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tag name="OR_SLIDE_GUID" val="${slideGuid}"/><p:tag name="OR_OFFICE_MAJOR_VERSION" val="14"/><p:tag name="OR_POLL_START_MODE" val="${
-      ombeaConfig?.pollStartMode || "Automatic"
+      pollStartMode
     }"/><p:tag name="OR_CHART_VALUE_LABEL_FORMAT" val="${
       ombeaConfig?.chartValueLabelFormat || "Response_Count"
     }"/><p:tag name="OR_CHART_RESPONSE_DENOMINATOR" val="Responses"/><p:tag name="OR_CHART_FIXED_RESPONSE_DENOMINATOR" val="100"/><p:tag name="OR_CHART_COLOR_MODE" val="Color_Scheme"/><p:tag name="OR_CHART_APPLY_OMBEA_TEMPLATE" val="True"/><p:tag name="OR_POLL_DEFAULT_ANSWER_OPTION" val="None"/><p:tag name="OR_SLIDE_TYPE" val="OR_QUESTION_SLIDE"/><p:tag name="OR_ANSWERS_BULLET_STYLE" val="${
@@ -835,7 +846,7 @@ function createSlideTagFiles(
         ? ombeaConfig.pollTimeLimit
         : duration
     }"/><p:tag name="OR_POLL_COUNTDOWN_START_MODE" val="${
-      ombeaConfig?.pollCountdownStartMode || "Automatic"
+      countdownStartMode
     }"/><p:tag name="OR_POLL_MULTIPLE_RESPONSES" val="${
       ombeaConfig?.pollMultipleResponse !== undefined
         ? ombeaConfig.pollMultipleResponse
