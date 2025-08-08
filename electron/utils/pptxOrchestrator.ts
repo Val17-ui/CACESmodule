@@ -200,6 +200,8 @@ export async function generatePresentation(
       pollTimeLimit: adminSettings.pollTimeLimit,
       pollCountdownStartMode: adminSettings.pollCountdownStartMode,
       pollMultipleResponse: adminSettings.pollMultipleResponse,
+      questionSlideTransition: adminSettings.questionSlideTransition,
+      questionSlideTransitionDelay: adminSettings.questionSlideTransitionDelay,
     },
     introSlideLayouts: {
       titleLayoutName: "Title Slide Layout",
