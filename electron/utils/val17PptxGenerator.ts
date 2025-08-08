@@ -1638,6 +1638,7 @@ export async function generatePPTXVal17(
   logger: ILogger,
   sessionInfo?: Val17SessionInfo
 ): Promise<{ pptxBlob: Blob; questionMappings: QuestionMapping[]; preExistingQuestionSlideGuids: string[]; } | null> {
+  logger.debug(`[DEBUG][val17PptxGenerator] Received ombeaConfig: ${JSON.stringify(options.ombeaConfig, null, 2)}`);
   logger.debug(`[LOG][val17PptxGenerator] Final participants for generator: ${JSON.stringify(participants)}`);
   logger.debug(`  - Nombre de questions: ${questions.length}`);
   logger.debug(`  - Options: ${JSON.stringify(options)}`);

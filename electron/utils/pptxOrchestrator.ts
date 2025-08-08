@@ -211,6 +211,7 @@ export async function generatePresentation(
     date: sessionInfo.date,
   };
   logger.info(`[LOG][pptxOrchestrator] Options de génération créées: ${JSON.stringify(generationOptions)}`);
+  logger.debug(`[DEBUG][pptxOrchestrator] Passing ombeaConfig to generatePPTXVal17: ${JSON.stringify(generationOptions.ombeaConfig, null, 2)}`);
 
   try {
     logger.debug('[LOG][pptxOrchestrator] Appel de generatePPTXVal17...');
