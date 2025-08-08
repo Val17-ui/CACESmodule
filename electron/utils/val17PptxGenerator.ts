@@ -674,14 +674,24 @@ function createSlideXml(
   }
   xmlContent += `</p:spTree><p:custDataLst><p:tags r:id="rId1"/></p:custDataLst><p:extLst><p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}"><p14:creationId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="${
     Math.floor(Math.random() * 2147483647) + 1
-  }"/></p:ext></p:extLst></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr><p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"/></p:par></p:tnLst></p:timing></p:sld>`;
+  }"/></p:ext></p:extLst></p:cSld>`;
 
+  // Add clrMapOvr
+  xmlContent += `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>`;
+
+  // Add transition and timing
   if (ombeaConfig?.questionSlideTransition === 'Automatic') {
     const delayInSeconds = ombeaConfig.questionSlideTransitionDelay ?? 2;
     const delayInMilliseconds = Math.max(delayInSeconds, 2) * 1000;
-    const transitionXml = `<p:transition advClick="0" advTm="${delayInMilliseconds}"/>`;
-    xmlContent = xmlContent.replace(/(<\/p:cSld>)/, `$1${transitionXml}`);
+
+    xmlContent += `<p:transition advClick="0" advTm="${delayInMilliseconds}"/>`;
+    xmlContent += `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="${delayInMilliseconds}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn></p:par></p:tnLst></p:timing>`;
+  } else {
+    xmlContent += `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"/></p:par></p:tnLst></p:timing>`;
   }
+
+  // Close the slide tag
+  xmlContent += `</p:sld>`;
   logger.info(`[LOG][val17PptxGenerator] Fin de createSlideXml pour la slide ${slideNumber}.`);
   return xmlContent;
 }
