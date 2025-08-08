@@ -410,6 +410,14 @@ ipcMain.handle(
     const { generatePresentation } = await import('@electron/utils/pptxOrchestrator');
     loggerInstance.debug(`[IPC] pptx-generate: Generating presentation for session ${sessionInfo.name}`);
 
+    // Fetch all admin settings to ensure they are up-to-date
+    const allSettings = await getAllAdminSettings();
+    const fullAdminSettings: AdminPPTXSettings = allSettings.reduce((acc, setting) => {
+      acc[setting.key] = setting.value;
+      return acc;
+    }, {} as any);
+
+
     let templateArrayBuffer: ArrayBuffer;
 
     if (template === 'tool_default_template') {
@@ -439,7 +447,7 @@ ipcMain.handle(
       throw new Error('Invalid template format provided to pptx-generate IPC handler.');
     }
 
-    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, adminSettings, loggerInstance);
+    return generatePresentation(sessionInfo, participants, questions, templateArrayBuffer, fullAdminSettings, loggerInstance);
   }
 );
 
