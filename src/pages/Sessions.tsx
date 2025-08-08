@@ -4,6 +4,7 @@ import SessionsList from '../components/sessions/SessionsList';
 import SessionForm from '../components/sessions/SessionForm';
 import Button from '../components/ui/Button';
 import { Plus, Upload } from 'lucide-react';
+import Tooltip from '../components/ui/Tooltip';
 // import { getAllSessions, getSessionById } from '../db'; // Supprimé
 import { Session as DBSession, Referential } from '@common/types';
 import Input from '../components/ui/Input';
@@ -331,13 +332,27 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     <div className="flex items-center space-x-3">
       {!isCreating && !managingSessionId && (
         <>
-          <Button
-            variant="outline"
-            icon={<Upload size={16} />}
-            onClick={handleImportClick}
+          <Tooltip
+            content={
+              <div className="text-left">
+                <p className="font-bold">Format attendu (.xlsx):</p>
+                <p>Doit contenir 2 feuilles:</p>
+                <ul className="list-disc list-inside">
+                  <li>'SessionDetails': Clé en colonne A, Valeur en B.</li>
+                  <li>'Participants': prénom, nom, etc.</li>
+                </ul>
+              </div>
+            }
+            position="top"
           >
-            Importer une session
-          </Button>
+            <Button
+              variant="outline"
+              icon={<Upload size={16} />}
+              onClick={handleImportClick}
+            >
+              Importer une session
+            </Button>
+          </Tooltip>
           <input
             type="file"
             ref={fileInputRef}

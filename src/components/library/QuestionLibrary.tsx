@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
+import Tooltip from '../ui/Tooltip';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
 // Removed CACESReferential, referentials, questionThemes from here as they will be dynamic
@@ -844,39 +845,64 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                     />
                 </div>
             </div>
-            <div className="ml-4 flex-shrink-0 mt-6 space-y-2"> {/* Adjusted margin and added space-y-2 for button stacking */}
-                
+            <div className="ml-4 flex-shrink-0 mt-6 space-y-2">
+              <Tooltip
+                content={
+                  <div className="text-left">
+                    <p className="font-bold">Format Questions (.xlsx):</p>
+                    <p>id_question, texte, referentiel_code, theme_code, bloc_code, optionA, optionB, optionC, optionD, correctAnswer, isEliminatory, version</p>
+                  </div>
+                }
+                position="left"
+              >
                 <Button
                     variant="primary"
                     icon={<Upload size={16}/>}
                     onClick={triggerFileInput}
                     disabled={isImporting}
-                    className="w-full" // Make button full width
+                    className="w-full"
                 >
                     {isImporting ? 'Importation Questions...' : 'Importer Questions'}
                 </Button>
-
-                
+              </Tooltip>
+              <Tooltip
+                content={
+                  <div className="text-left">
+                    <p className="font-bold">Format Référentiels (.xlsx):</p>
+                    <p>code, nom_complet</p>
+                  </div>
+                }
+                position="left"
+              >
                 <Button
-                    variant="secondary" // Different color for distinction
+                    variant="secondary"
                     icon={<Upload size={16}/>}
                     onClick={triggerReferentialFileInput}
                     disabled={isImportingReferentiels}
-                    className="w-full" // Make button full width
+                    className="w-full"
                 >
                     {isImportingReferentiels ? 'Importation Référentiels...' : 'Importer Référentiels'}
                 </Button>
-
-                
+              </Tooltip>
+              <Tooltip
+                content={
+                  <div className="text-left">
+                    <p className="font-bold">Format Thèmes (.xlsx):</p>
+                    <p>code_theme, nom_complet, referentiel_code</p>
+                  </div>
+                }
+                position="left"
+              >
                 <Button
-                    variant="secondary" // Different color for distinction
+                    variant="secondary"
                     icon={<Upload size={16}/>}
                     onClick={triggerThemeFileInput}
                     disabled={isImportingThemes}
-                    className="w-full" // Make button full width
+                    className="w-full"
                 >
                     {isImportingThemes ? 'Importation Thèmes...' : 'Importer Thèmes'}
                 </Button>
+              </Tooltip>
             </div>
         </div>
 

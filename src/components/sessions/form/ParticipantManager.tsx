@@ -2,6 +2,7 @@ import React from 'react';
 import { FileUp, Trash2, UserPlus } from 'lucide-react';
 import { FormParticipant, VotingDevice, DeviceKit } from '@common/types';
 import Button from '../../ui/Button';
+import Tooltip from '../../ui/Tooltip';
 import Card from '../../ui/Card';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
@@ -57,11 +58,25 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
           <h4 className="text-sm font-medium text-gray-700 mb-2">Actions</h4>
           <div className="flex space-x-2">
             <Button onClick={handleAddParticipant} icon={<UserPlus size={16} />} disabled={isReadOnly}>Ajouter</Button>
-            <label className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">
-              <FileUp size={16} className="-ml-1 mr-2 h-5 w-5" />
-              Importer
-              <input type="file" className="hidden" onChange={handleParticipantFileSelect} accept=".csv, .xlsx, .xls" disabled={isReadOnly} />
-            </label>
+            <Tooltip
+              content={
+                <div className="text-left">
+                  <p className="font-bold">Format attendu (.xlsx, .csv):</p>
+                  <ul className="list-disc list-inside">
+                    <li>prénom, nom, entreprise, code identification, itération</li>
+                  </ul>
+                  <p className="mt-2 font-bold">Exemple:</p>
+                  <p>John,Doe,ACME Corp,JD001,1</p>
+                </div>
+              }
+              position="top"
+            >
+              <label className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">
+                <FileUp size={16} className="-ml-1 mr-2 h-5 w-5" />
+                Importer
+                <input type="file" className="hidden" onChange={handleParticipantFileSelect} accept=".csv, .xlsx, .xls" disabled={isReadOnly} />
+              </label>
+            </Tooltip>
           </div>
         </div>
       </div>

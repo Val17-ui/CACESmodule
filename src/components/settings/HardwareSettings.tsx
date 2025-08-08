@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'; // ChangeEvent removed
 import Card from '../ui/Card';
 import Button from '../ui/Button';
+import Tooltip from '../ui/Tooltip';
 import Input from '../ui/Input';
 import { Plus, Upload, Trash2, Save, AlertCircle } from 'lucide-react';
 import { VotingDevice } from '@common/types'; // VotingDevice importé depuis types
@@ -230,11 +231,27 @@ const HardwareSettings: React.FC = () => {
       </div>
 
       <div className="flex justify-end space-x-2 mb-4">
-        <label htmlFor="excel-import" className="inline-flex">
-          <Button variant="outline" icon={<Upload size={16}/>} onClick={() => document.getElementById('excel-import')?.click()} type="button">
-            Importer IDs boîtier OMBEA (.xlsx)
-          </Button>
-        </label>
+        <Tooltip
+          content={
+            <div className="text-left">
+              <p className="font-bold">Format attendu (.xlsx):</p>
+              <ul className="list-disc list-inside">
+                <li>Colonne 1: Nom (Optionnel)</li>
+                <li>Colonne 2: Numéro de Série (ID)</li>
+              </ul>
+              <p className="mt-2 font-bold">Exemple:</p>
+              <p>Nom | Numéro de Série</p>
+              <p>Boîtier 01 | F01A5B</p>
+            </div>
+          }
+          position="top"
+        >
+          <label htmlFor="excel-import" className="inline-flex">
+            <Button variant="outline" icon={<Upload size={16}/>} onClick={() => document.getElementById('excel-import')?.click()} type="button">
+              Importer IDs boîtier OMBEA (.xlsx)
+            </Button>
+          </label>
+        </Tooltip>
         <input type="file" id="excel-import" accept=".xlsx, .csv" className="hidden" onChange={handleImport} />
       </div>
 
