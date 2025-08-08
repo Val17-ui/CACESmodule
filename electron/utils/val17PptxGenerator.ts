@@ -684,11 +684,17 @@ function createSlideXml(
     const delayInSeconds = ombeaConfig.questionSlideTransitionDelay ?? 2;
     const delayInMilliseconds = Math.max(delayInSeconds, 2) * 1000;
 
-    xmlContent += `<p:transition advClick="0" advTm="${delayInMilliseconds}"/>`;
-    xmlContent += `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="${delayInMilliseconds}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn></p:par></p:tnLst></p:timing>`;
-  } else {
-    xmlContent += `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"/></p:par></p:tnLst></p:timing>`;
+    xmlContent += `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">`;
+    xmlContent += `<mc:Choice xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" Requires="p14">`;
+    xmlContent += `<p:transition spd="slow" p14:dur="${delayInMilliseconds}" advClick="0" advTm="${delayInMilliseconds}"/>`;
+    xmlContent += `</mc:Choice>`;
+    xmlContent += `<mc:Fallback>`;
+    xmlContent += `<p:transition spd="slow" advClick="0" advTm="${delayInMilliseconds}"/>`;
+    xmlContent += `</mc:Fallback>`;
+    xmlContent += `</mc:AlternateContent>`;
   }
+
+  xmlContent += `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"/></p:par></p:tnLst></p:timing>`;
 
   // Close the slide tag
   xmlContent += `</p:sld>`;
