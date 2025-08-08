@@ -194,9 +194,31 @@ const UserPreferences: React.FC = () => {
 
   return (
     <Card title="Préférences Utilisateur">
-      <p className="text-sm text-gray-600 mb-6">
-        Ces paramètres affectent la génération des questionnaires .pptx et .ors.
+      <p className="text-sm text-gray-600 mb-4">
+        Ces paramètres affectent la génération des questionnaires.
       </p>
+
+      {/* Save button section */}
+      <div className="mb-6 pb-6 border-b border-gray-200 flex justify-end items-center gap-4">
+        {saveStatus === 'success' && (
+          <div className="flex items-center text-green-600">
+            <CheckCircle size={18} className="mr-1.5" />
+            <span className="text-sm font-medium">Préférences enregistrées !</span>
+          </div>
+        )}
+        {saveStatus === 'error' && (
+          <p className="text-red-500 text-sm font-medium">Erreur lors de la sauvegarde.</p>
+        )}
+        <Button
+            onClick={handleSave}
+            disabled={saveStatus === 'saving' || isLoading}
+            className="min-w-[180px]"
+        >
+          <Save size={16} className="mr-2" />
+          {saveStatus === 'saving' ? 'Enregistrement...' : 'Enregistrer les préférences'}
+        </Button>
+      </div>
+
       {/* Existing preferences form */}
       <div className="space-y-6">
         {/* Ouverture du vote */}
@@ -367,26 +389,6 @@ const UserPreferences: React.FC = () => {
         </ul>
       </div>
 
-      {/* Save button */}
-      <div className="mt-10 pt-6 border-t border-gray-300 flex justify-end items-center">
-         {saveStatus === 'success' && (
-            <div className="flex items-center text-green-600 mr-4">
-              <CheckCircle size={18} className="mr-1.5" />
-              <span className="text-sm font-medium">Préférences enregistrées !</span>
-            </div>
-          )}
-           {saveStatus === 'error' && (
-             <p className="text-red-500 text-sm mr-4 font-medium">Erreur lors de la sauvegarde.</p>
-           )}
-        <Button
-            onClick={handleSave}
-            disabled={saveStatus === 'saving' || isLoading}
-            className="min-w-[180px]" // Pour éviter le changement de taille du bouton
-        >
-          <Save size={16} className="mr-2" />
-          {saveStatus === 'saving' ? 'Enregistrement...' : 'Enregistrer les préférences'}
-        </Button>
-      </div>
     </Card>
   );
 };
