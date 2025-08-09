@@ -219,7 +219,7 @@ export interface Theme {
 export interface Bloc {
   id?: number;
   code_bloc: string; // Ex: R489PR_A
-  // nom_complet: string; // Pas spécifié dans le plan initial, mais pourrait être utile
+  nom_complet: string; // Pas spécifié dans le plan initial, mais pourrait être utile
   theme_id: number; // FK vers Theme.id
 }
 

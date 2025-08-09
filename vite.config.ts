@@ -36,6 +36,8 @@ export default defineConfig({
                 alias({
                   entries: {
                     '@electron': path.resolve(__dirname, 'electron'),
+                    '@common': path.resolve(__dirname, 'common'),
+                    '@types': path.resolve(__dirname, 'common/types'),
                   },
                 }),
                 analyze({ summaryOnly: false, limit: 20 }),
@@ -62,6 +64,8 @@ export default defineConfig({
                 alias({
                   entries: {
                     '@electron': path.resolve(__dirname, 'electron'),
+                    '@common': path.resolve(__dirname, 'common'),
+                    '@types': path.resolve(__dirname, 'common/types'),
                   },
                 }),
                 analyze({ summaryOnly: false, limit: 20 }),

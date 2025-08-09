@@ -123,20 +123,22 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   }, [selectedTheme]);
 
   const handleFileImport = async () => {
-    setIsImporting(true);
     setImportStatusMessage(null);
     setImportError(null);
     setImportProgress({ current: 0, total: 0 });
 
     try {
       const fileDialogResult = await window.dbAPI?.openExcelFileDialog();
-      if (fileDialogResult?.canceled) {
-        setIsImporting(false);
+
+      if (fileDialogResult?.canceled || !fileDialogResult || !fileDialogResult.fileBuffer) {
+        // User canceled, no file selected, or dialog error
+        if (fileDialogResult?.error) {
+          setImportError(`Erreur d'ouverture du fichier : ${fileDialogResult.error}`);
+        }
         return;
       }
-      if (!fileDialogResult || fileDialogResult.error || !fileDialogResult.fileBuffer) {
-        throw new Error(`Erreur de lecture du fichier: ${fileDialogResult?.error || 'inconnue'}`);
-      }
+
+      setIsImporting(true);
 
       const fileBuffer = window.electronAPI?.Buffer_from(fileDialogResult.fileBuffer, 'base64');
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });

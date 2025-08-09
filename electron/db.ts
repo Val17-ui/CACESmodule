@@ -121,6 +121,19 @@ const archiveOldSessions = async (): Promise<void> => {
   });
 };
 
+const countQuestions = async (): Promise<number> => {
+  return asyncDbRun(() => {
+    try {
+      const stmt = getDb().prepare("SELECT COUNT(*) as count FROM questions");
+      const result = stmt.get() as { count: number };
+      return result.count;
+    } catch (error) {
+      _logger?.debug(`[DB Questions] Error counting questions: ${error}`);
+      throw error;
+    }
+  });
+};
+
 const bulkUpsertQuestions = async (questions: Omit<QuestionWithId, 'id'>[]): Promise<void> => {
   return asyncDbRun(() => {
     const upsertStmt = getDb().prepare(`
@@ -343,7 +356,7 @@ const createSchema = () => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         first_name TEXT NOT NULL,
         last_name TEXT NOT NULL,
-        organization TEXT,
+        entreprise TEXT,
         identification_code TEXT
     );`,
 
@@ -608,8 +621,8 @@ const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<num
     return asyncDbRun(() => {
         try {
             const stmt = getDb().prepare(`
-                INSERT INTO participants (first_name, last_name, organization, identification_code)
-                VALUES (@first_name, @last_name, @organization, @identification_code)
+                INSERT INTO participants (first_name, last_name, entreprise, identification_code)
+                VALUES (@first_name, @last_name, @entreprise, @identification_code)
             `);
             const result = stmt.run(participant);
             return result.lastInsertRowid as number;
@@ -622,7 +635,7 @@ const addParticipant = async (participant: Omit<Participant, 'id'>): Promise<num
 
 const upsertParticipant = async (participant: Participant): Promise<number | undefined> => {
     return asyncDbRun(() => {
-        const { prenom, nom, organization, identificationCode } = participant;
+        const { prenom, nom, entreprise, identificationCode } = participant;
 
         // If a non-empty identification code is provided, try to find an existing participant.
         if (identificationCode && identificationCode.trim() !== '') {
@@ -633,20 +646,20 @@ const upsertParticipant = async (participant: Participant): Promise<number | und
                 // Update existing participant if found
                 const updateStmt = getDb().prepare(`
                     UPDATE participants
-                    SET first_name = ?, last_name = ?, organization = ?
+                    SET first_name = ?, last_name = ?, entreprise = ?
                     WHERE id = ?
                 `);
-                updateStmt.run(prenom, nom, organization, existing.id);
+                updateStmt.run(prenom, nom, entreprise, existing.id);
                 return existing.id;
             }
         }
 
         // In all other cases (no code, or code not found), insert a new participant.
         const insertStmt = getDb().prepare(`
-            INSERT INTO participants (first_name, last_name, organization, identification_code)
+            INSERT INTO participants (first_name, last_name, entreprise, identification_code)
             VALUES (?, ?, ?, ?)
         `);
-        const result = insertStmt.run(prenom, nom, organization, identificationCode);
+        const result = insertStmt.run(prenom, nom, entreprise, identificationCode);
         return result.lastInsertRowid as number;
     });
 };
@@ -738,7 +751,7 @@ const addQuestion = async (question: Omit<QuestionWithId, 'id'>): Promise<number
   return asyncDbRun(() => {
     try {
       const { text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updatedAt } = question;
-      const blocId = question.blocId === undefined || question.blocId === null ? null : question.blocId;
+      const blocId = question.blocId === null ? undefined : question.blocId;
       const stmt = getDb().prepare(`
         INSERT INTO questions (blocId, text, type, correctAnswer, timeLimit, isEliminatory, createdAt, usageCount, correctResponseRate, slideGuid, options, version, updated_at)
         VALUES (@blocId, @text, @type, @correctAnswer, @timeLimit, @isEliminatory, @createdAt, @usageCount, @correctResponseRate, @slideGuid, @options, @version, @updated_at)
@@ -1105,7 +1118,7 @@ const getAllSessions = async (): Promise<Session[]> => {
           if (!iter.id) return;
 
           const assignments = getDb().prepare(`
-            SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
+            SELECT p.id as participant_id, p.first_name, p.last_name, p.entreprise, p.identification_code, pa.voting_device_id
             FROM participant_assignments pa
             JOIN participants p ON pa.participant_id = p.id
             WHERE pa.session_iteration_id = ?
@@ -1116,7 +1129,7 @@ const getAllSessions = async (): Promise<Session[]> => {
               id: a.participant_id,
               nom: a.last_name,
               prenom: a.first_name,
-              organization: a.organization,
+              entreprise: a.entreprise,
               identificationCode: a.identification_code,
               assignedGlobalDeviceId: a.voting_device_id,
             };
@@ -1167,7 +1180,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
         }
 
         const assignments = getDb().prepare(`
-          SELECT p.id as participant_id, p.first_name, p.last_name, p.organization, p.identification_code, pa.voting_device_id
+          SELECT p.id as participant_id, p.first_name, p.last_name, p.entreprise, p.identification_code, pa.voting_device_id
           FROM participant_assignments pa
           JOIN participants p ON pa.participant_id = p.id
           WHERE pa.session_iteration_id = ?
@@ -1177,7 +1190,7 @@ const getSessionById = async (id: number): Promise<Session | undefined> => {
           id: a.participant_id,
           nom: a.last_name,
           prenom: a.first_name,
-          organization: a.organization,
+          entreprise: a.entreprise,
           identificationCode: a.identification_code,
           assignedGlobalDeviceId: a.voting_device_id,
         }));
@@ -2623,4 +2636,4 @@ const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean
     });
 };
 
-export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, bulkUpsertQuestions, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, hasResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus, importQuestionsFromData };
+export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, bulkUpsertQuestions, getAllQuestions, countQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, hasResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus, importQuestionsFromData };
