@@ -4,6 +4,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
+import Checkbox from '../ui/Checkbox';
 import { QuestionType, CACESReferential, Referential, Theme, Bloc, QuestionWithId } from '@common/types';
 import { StorageManager } from '../../services/StorageManager';
 import { logger } from '../../utils/logger';
@@ -388,8 +389,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
           />
           <div className="flex items-center space-x-4 mt-6">
             <label htmlFor="isEliminatoryCheckbox" className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="isEliminatoryCheckbox"
                 name="isEliminatory"
                 checked={!!question.isEliminatory}

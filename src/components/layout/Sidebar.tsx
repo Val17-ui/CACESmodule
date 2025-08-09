@@ -6,7 +6,7 @@ import {
   Settings, 
 } from 'lucide-react';
 import logo from '../../assets/images/logo.png';
-
+import Button from '../../components/ui/Button';
 type SidebarItemProps = {
   icon: React.ReactNode;
   label: string;
@@ -22,7 +22,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
 }) => {
   return (
     <li>
-      <button
+      <Button
         onClick={onClick}
         className={`
           w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg
@@ -35,7 +35,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
       >
         <span className="mr-3">{icon}</span>
         {label}
-      </button>
+      </Button>
     </li>
   );
 };

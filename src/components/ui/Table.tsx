@@ -75,6 +75,7 @@ type TableHeadProps = {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  scope?: string;
 };
 
 const TableHead: React.FC<TableHeadProps> = ({ children, className = '', onClick }) => {

@@ -1,11 +1,7 @@
 // src/types/index.ts
 export type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
-export interface User {
-  id: string;
-  name: string;
-  role: 'admin' | 'instructor' | 'viewer';
-}
+
 
 // Nouvelle interface Session pour le stockage
 export interface Session {
@@ -228,14 +224,7 @@ export interface Bloc {
 }
 
 
-export interface QuestionStatistics {
-  questionId: string;
-  usageCount: number;
-  correctResponses: number;
-  totalResponses: number;
-  correctResponseRate: number;
-  lastUsed?: string;
-}
+
 
 export interface DeviceMapping {
   deviceId: number;
@@ -243,14 +232,7 @@ export interface DeviceMapping {
   isActive: boolean;
 }
 
-export interface GeneralSettings {
-  deviceMappings: DeviceMapping[];
-  maxDevices: number;
-  defaultSuccessThreshold?: number; // Seuil de réussite global par défaut (ex: 70 pour 70%)
-  defaultThemeThreshold?: number; // Seuil de réussite par thème par défaut (ex: 50 pour 50%)
-  reportLogoBase64?: string; // Logo pour les rapports PDF, encodé en Base64
-  // Potentiellement d'autres paramètres globaux pour les rapports ici
-}
+
 
 export enum CACESReferential {
   R482 = 'R482',
@@ -359,16 +341,9 @@ export interface AdminSettings {
     identificationCode?: string;
   }
   
-export interface PPTXQuestion {
-  question: string;
-  correctAnswer: boolean;
-  duration?: number;
-  imagePath?: string;
-}
 
-export interface PPTXGenerationOptions {
-  fileName?: string;
-}
+
+
 
 // Ajouté depuis reportCalculators.ts pour une portée globale
 export interface ThemeScoreDetails {
@@ -396,6 +371,7 @@ export interface QuestionWithId {
   usageCount?: number;
   correctResponseRate?: number;
   slideGuid?: string;
+  image?: Blob; // Changed to Blob based on usage in QuestionLibrary.tsx
   imageName?: string;
   version?: number; // New: Version number for the question
   theme?: string; // Added

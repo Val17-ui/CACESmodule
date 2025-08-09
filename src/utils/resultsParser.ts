@@ -26,7 +26,7 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "application/xml");
 
-  // logger.info("XML content snippet for debugging (first 500 chars):", xmlString.substring(0, 500)); // DEBUG
+  
 
   const parserErrorNode = xmlDoc.querySelector("parsererror");
   if (parserErrorNode) {
@@ -53,13 +53,13 @@ export const parseOmbeaResultsXml = (xmlString: string): ExtractedResultFromXml[
   if(respondentToDeviceMap.size === 0) {
     logger.warning("Aucun mappage RespondentID vers DeviceID n'a pu être créé à partir de RespondentList. Le parsing des réponses pourrait échouer à trouver les DeviceID.");
   } else {
-    // logger.info("Map RespondentID vers DeviceID créé:", respondentToDeviceMap); // DEBUG
+    
   }
 
 
   // 2. Itérer sur chaque <ors:Question>
   const questionNodes = xmlDoc.querySelectorAll("ORSession > Questions > Question");
-  // logger.info(`Nombre de <Question> trouvées dans le XML: ${questionNodes.length}`); // DEBUG
+  
 
   questionNodes.forEach((qNode, qIndex) => {
     const slideGuid = qNode.getAttribute("SlideGUID");

@@ -3,6 +3,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
+import Checkbox from '../ui/Checkbox';
 import { ArrowLeft, ArrowRight, Download, Save } from 'lucide-react';
 import { StorageManager } from '../../services/StorageManager';
 import { Referential, Trainer, Session, QuestionWithId, Theme, Bloc, SessionResult, Participant } from '@common/types';
@@ -216,14 +217,14 @@ const CustomReportWizard = () => {
             <div>
               <h3 className="text-lg font-semibold mb-4">Étape 1: Choisissez le type de rapport</h3>
               <div className="space-y-2">
-                <button onClick={() => setConfig(prev => ({ ...prev, reportType: 'sessions' }))} className={`w-full text-left p-4 rounded-lg border ${config.reportType === 'sessions' ? 'bg-blue-100 border-blue-500' : 'bg-white hover:bg-gray-50'}`}>
+                <Button onClick={() => setConfig(prev => ({ ...prev, reportType: 'sessions' }))} className={`w-full text-left p-4 rounded-lg border ${config.reportType === 'sessions' ? 'bg-blue-100 border-blue-500' : 'bg-white hover:bg-gray-50'}`}>
                   <h4 className="font-bold">Rapport par Sessions</h4>
                   <p className="text-sm text-gray-600">Génère une ligne par session.</p>
-                </button>
-                <button onClick={() => setConfig(prev => ({ ...prev, reportType: 'participants' }))} className={`w-full text-left p-4 rounded-lg border ${config.reportType === 'participants' ? 'bg-blue-100 border-blue-500' : 'bg-white hover:bg-gray-50'}`}>
+                </Button>
+                <Button onClick={() => setConfig(prev => ({ ...prev, reportType: 'participants' }))} className={`w-full text-left p-4 rounded-lg border ${config.reportType === 'participants' ? 'bg-blue-100 border-blue-500' : 'bg-white hover:bg-gray-50'}`}>
                   <h4 className="font-bold">Rapport par Participants</h4>
                   <p className="text-sm text-gray-600">Génère une ligne par participant et par session.</p>
-                </button>
+                </Button>
               </div>
             </div>
         );
@@ -248,7 +249,7 @@ const CustomReportWizard = () => {
                     {Object.entries(currentFields).map(([groupName, fields]) => (
                         <div key={groupName}><h4 className="font-bold text-gray-700 mb-2 border-b pb-1">{groupName}</h4><div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                             {fields.map((field: any) => (<label key={field.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-100 cursor-pointer">
-                                <input type="checkbox" checked={config.fields.has(field.id)} onChange={() => handleFieldChange(field.id)} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                                <Checkbox checked={config.fields.has(field.id)} onChange={() => handleFieldChange(field.id)} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
                                 <span className="text-sm text-gray-800">{field.label}</span>
                             </label>))}
                         </div></div>

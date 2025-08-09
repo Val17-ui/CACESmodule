@@ -3,6 +3,7 @@ import { CalendarClock, ChevronRight } from 'lucide-react'; // AlertTriangle sup
 import { Session, Referential } from '@common/types';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
+import Button from '../ui/Button';
 
 type DashboardSessionsOverviewProps = {
   sessions: Session[];
@@ -140,12 +141,12 @@ const DashboardSessionsOverview: React.FC<DashboardSessionsOverviewProps> = ({ s
       {renderSection("Dernières sessions terminées", sessionsTerminees, "Aucune session terminée récemment.", referentiels)}
 
       <div className="mt-4 pt-4 border-t border-gris-moyen/50">
-        <button
+        <Button
           onClick={() => onPageChange('sessions')}
           className="text-sm font-medium text-rouge-accent hover:text-rouge-accent/80"
         >
           Voir toutes les sessions
-        </button>
+        </Button>
       </div>
     </Card>
   );

@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import Dashboard from './pages/Dashboard';
-
-// import Questionnaires from './pages/Questionnaires'; // Supprimé
 import Sessions from './pages/Sessions';
-// import Exams from './pages/Exams'; // Supprimé car la fonctionnalité Mode Examen est enlevée
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import { logger } from './utils/logger';

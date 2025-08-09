@@ -6,6 +6,7 @@ import Tooltip from '../../ui/Tooltip';
 import Card from '../../ui/Card';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/Table';
 
 interface ParticipantManagerProps {
   isReadOnly: boolean;
@@ -83,25 +84,25 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
 
       <h3 className="text-xl font-semibold mb-4">Liste Globale des Participants</h3>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
+        <Table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
-            <tr>
-              {iterationCount > 1 && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Itération</th>}
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Prénom</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Entreprise</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code Identification</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Boîtier</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
+            <TableRow>
+              {iterationCount > 1 && <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Itération</TableHead>}
+              <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Prénom</TableHead>
+              <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</TableHead>
+              <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Entreprise</TableHead>
+              <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code Identification</TableHead>
+              <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Boîtier</TableHead>
+              <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</TableHead>
+            </TableRow>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <TableBody className="bg-white divide-y divide-gray-200">
             {participants.map((p) => {
               const assignedIteration = Object.keys(participantAssignments).find(iterIndex => participantAssignments[parseInt(iterIndex)].some(pa => pa.id === p.uiId));
               return (
-                <tr key={p.uiId}>
+                <TableRow key={p.uiId}>
                   {iterationCount > 1 && (
-                    <td className="px-4 py-2">
+                    <TableCell className="px-4 py-2">
                       <Select
                         value={assignedIteration || ''}
                         onChange={(e) => handleParticipantIterationChange(p.uiId, parseInt(e.target.value, 10))}
@@ -109,13 +110,13 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
                         placeholder="N/A"
                         disabled={isReadOnly}
                       />
-                    </td>
+                    </TableCell>
                   )}
-                  <td className="px-4 py-2"><Input value={p.firstName} onChange={(e) => handleParticipantChange(p.uiId, 'firstName', e.target.value)} disabled={isReadOnly} /></td>
-                  <td className="px-4 py-2"><Input value={p.lastName} onChange={(e) => handleParticipantChange(p.uiId, 'lastName', e.target.value)} disabled={isReadOnly} /></td>
-                  <td className="px-4 py-2"><Input value={p.entreprise || ''} onChange={(e) => handleParticipantChange(p.uiId, 'entreprise', e.target.value)} disabled={isReadOnly} /></td>
-                  <td className="px-4 py-2"><Input value={p.identificationCode || ''} onChange={(e) => handleParticipantChange(p.uiId, 'identificationCode', e.target.value)} disabled={isReadOnly} /></td>
-                  <td className="px-4 py-2">
+                  <TableCell className="px-4 py-2"><Input value={p.firstName} onChange={(e) => handleParticipantChange(p.uiId, 'firstName', e.target.value)} disabled={isReadOnly} /></TableCell>
+                  <TableCell className="px-4 py-2"><Input value={p.lastName} onChange={(e) => handleParticipantChange(p.uiId, 'lastName', e.target.value)} disabled={isReadOnly} /></TableCell>
+                  <TableCell className="px-4 py-2"><Input value={p.entreprise || ''} onChange={(e) => handleParticipantChange(p.uiId, 'entreprise', e.target.value)} disabled={isReadOnly} /></TableCell>
+                  <TableCell className="px-4 py-2"><Input value={p.identificationCode || ''} onChange={(e) => handleParticipantChange(p.uiId, 'identificationCode', e.target.value)} disabled={isReadOnly} /></TableCell>
+                  <TableCell className="px-4 py-2">
                     <Select
                       value={p.assignedGlobalDeviceId?.toString() || ''}
                       onChange={(e) => handleParticipantChange(p.uiId, 'assignedGlobalDeviceId', e.target.value ? parseInt(e.target.value, 10) : null)}
@@ -123,13 +124,13 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({
                       placeholder="N/A"
                       disabled={isReadOnly}
                     />
-                  </td>
-                  <td className="px-4 py-2"><Button variant="danger" size="sm" onClick={() => handleRemoveParticipant(p.uiId)} disabled={isReadOnly}><Trash2 size={14} /></Button></td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="px-4 py-2"><Button variant="danger" size="sm" onClick={() => handleRemoveParticipant(p.uiId)} disabled={isReadOnly}><Trash2 size={14} /></Button></TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </Card>
   );

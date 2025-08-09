@@ -1,6 +1,6 @@
 import { logger } from './logger';
 // src/utils/templateManager.ts
-// import { getAdminSetting } from '../db'; // Supprimé
+
 import { UserPptxTemplate } from '../components/settings/UserPreferences'; // Importer le type
 // Le modèle est maintenant dans le dossier `public`, donc on peut y accéder avec un chemin absolu.
 

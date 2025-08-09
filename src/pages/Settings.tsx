@@ -124,7 +124,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange, activeTab
          <div className="border-b border-gris-moyen/50">
           <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
             {tabs.map((tab) => (
-              <button
+              <Button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
@@ -137,7 +137,7 @@ const Settings: React.FC<SettingsProps> = ({ activePage, onPageChange, activeTab
               >
                 <span className="mr-2">{tab.icon}</span>
                 {tab.label}
-              </button>
+              </Button>
             ))}
           </nav>
         </div>

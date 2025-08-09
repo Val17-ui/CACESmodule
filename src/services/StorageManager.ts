@@ -632,7 +632,7 @@ export const StorageManager = {
 // Example usage (optional, for testing or demonstration within this file):
 /*
 async function testStorageManager() {
-  console.log("Testing StorageManager...");
+  
 
   // Test addQuestion
   const newQuestionData: Omit<StoredQuestion, 'id'> = {
@@ -646,35 +646,35 @@ async function testStorageManager() {
     createdAt: new Date().toISOString(),
   };
   const addedId = await StorageManager.addQuestion(newQuestionData);
-  console.log("Added question with ID:", addedId);
+  
 
   if (addedId) {
     // Test getQuestionById
     const fetchedQuestion = await StorageManager.getQuestionById(addedId);
-    console.log("Fetched question by ID:", fetchedQuestion);
+    
 
     // Test updateQuestion
     const updates: Partial<StoredQuestion> = { text: "What is two plus two?" };
     const updatedCount = await StorageManager.updateQuestion(addedId, updates);
-    console.log("Updated question, count:", updatedCount);
+    
     const updatedQuestion = await StorageManager.getQuestionById(addedId);
-    console.log("Fetched updated question:", updatedQuestion);
+    
 
 
     // Test getAllQuestions
-    // const allQuestions = await StorageManager.getAllQuestions();
-    // console.log("All questions:", allQuestions);
+    
+    
 
 
     // Test deleteQuestion
-    // await StorageManager.deleteQuestion(addedId);
-    // console.log("Deleted question with ID:", addedId);
-    // const deletedQuestion = await StorageManager.getQuestionById(addedId);
-    // console.log("Attempt to fetch deleted question:", deletedQuestion); // Should be undefined
+    
+    
+    
+    
   }
 
    const allQuestions = await StorageManager.getAllQuestions();
-   console.log("All questions at end:", allQuestions);
+   
 }
 
 // testStorageManager(); // Uncomment to run test

@@ -15,6 +15,8 @@ import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
 import { Session, Trainer, Referential } from '@common/types'; // Ajout de Referential, CACESReferential enlevé
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import { sortBySessionDateDesc, sortByNameAsc, sortByNomCompletAsc } from '../utils/sorters';
+import { filterSessionsBySearchTerm } from '../utils/filters';
 
 type ReportsProps = {
   activePage: string;
@@ -89,9 +91,9 @@ const Reports: React.FC<ReportsProps> = ({ activePage, onPageChange }) => {
           window.dbAPI.getAllReferentiels()
         ]);
 
-        setSessions(fetchedSessions.sort((a: Session, b: Session) => new Date(b.dateSession).getTime() - new Date(a.dateSession).getTime()));
-        setTrainersListForFilter(fetchedTrainers.sort((a: Trainer, b: Trainer) => a.name.localeCompare(b.name)));
-        setAllReferentielsDb(fetchedReferentiels.sort((a: Referential, b: Referential) => a.nom_complet.localeCompare(b.nom_complet)));
+        setSessions(fetchedSessions.sort(sortBySessionDateDesc));
+        setTrainersListForFilter(fetchedTrainers.sort(sortByNameAsc));
+        setAllReferentielsDb(fetchedReferentiels.sort(sortByNomCompletAsc));
       } catch (error) {
         console.error("[Reports Page] Error fetching initial data via IPC:", error);
         // Gérer l'erreur pour l'utilisateur

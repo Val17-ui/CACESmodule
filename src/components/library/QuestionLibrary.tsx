@@ -7,8 +7,7 @@ import Button from '../ui/Button';
 import Tooltip from '../ui/Tooltip';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
-// Removed CACESReferential, referentials, questionThemes from here as they will be dynamic
-// Removed QuestionTheme, CACESReferential
+import { Table, TableHead, TableBody, TableRow, TableCell } from '../ui/Table';
 import { Referential, Theme, Bloc, QuestionType } from '@common/types';
 import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 type QuestionLibraryProps = {
@@ -359,7 +358,6 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           updatedAt: new Date().toISOString(),
           usageCount: 0,
           correctResponseRate: 0,
-          image: undefined, // Actual image blob not handled from this import
           version: (row[headerMap['version']] || '').toString().trim(), // Read version as string
         };
 
@@ -951,48 +949,48 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
       <Card title={`Référentiels (${referentielsData.length})`} className="mb-6">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <Table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Complet</th>
-              </tr>
+              <TableRow>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Complet</TableHead>
+              </TableRow>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <TableBody className="bg-white divide-y divide-gray-200">
               {referentielsData.map((ref) => (
-                <tr key={ref.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ref.code}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ref.nom_complet}</td>
-                </tr>
+                <TableRow key={ref.id}>
+                  <TableCell className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ref.code}</TableCell>
+                  <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ref.nom_complet}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </Card>
 
       <Card title={`Thèmes (${allThemesData.length})`} className="mb-6">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <Table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Thème</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Complet</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référentiel</th>
-              </tr>
+              <TableRow>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Thème</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Complet</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référentiel</TableHead>
+              </TableRow>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <TableBody className="bg-white divide-y divide-gray-200">
               {allThemesData.map((theme) => {
                 const referentiel = referentielsData.find(r => r.id === theme.referentiel_id);
                 return (
-                  <tr key={theme.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{theme.code_theme}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{theme.nom_complet}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{referentiel ? referentiel.code : 'N/A'}</td>
-                  </tr>
+                  <TableRow key={theme.id}>
+                    <TableCell className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{theme.code_theme}</TableCell>
+                    <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{theme.nom_complet}</TableCell>
+                    <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{referentiel ? referentiel.code : 'N/A'}</TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </Card>
 

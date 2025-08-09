@@ -4,6 +4,7 @@ import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Select from '../ui/Select';
 import Input from '../ui/Input'; // Assurez-vous qu'il est bien importé
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 
 // Informations sur les réponses d'un boîtier attendu (pour savoir ce qui manque)
 export interface ExpectedDeviceResponseInfo {
@@ -208,29 +209,29 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
           Boîtiers Attendus avec Réponses Manquantes ({expectedHavingIssues.length})
         </h3>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <Table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N° Visuel</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S/N Boîtier</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Réponses</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
+              <TableRow>
+                <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N° Visuel</TableHead>
+                <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</TableHead>
+                <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S/N Boîtier</TableHead>
+                <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Réponses</TableHead>
+                <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</TableHead>
+              </TableRow>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <TableBody className="bg-white divide-y divide-gray-200">
               {expectedHavingIssues.map(e => {
                 const currentResolution = expectedIssueResolutions.find(r => r.serialNumber === e.serialNumber);
                 return (
-                  <tr key={e.serialNumber}>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm">{e.visualId}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm">{e.participantName}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm">{e.serialNumber}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-red-500">
+                  <TableRow key={e.serialNumber}>
+                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm">{e.visualId}</TableCell>
+                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm">{e.participantName}</TableCell>
+                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm">{e.serialNumber}</TableCell>
+                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm text-red-500">
                       {e.responseInfo.respondedToQuestionsGuids.length} / {e.responseInfo.totalSessionQuestionsCount} répondues
                       ({e.responseInfo.missedQuestionsGuids.length} manquante(s))
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm">
+                    </TableCell>
+                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm">
                       <div className="flex flex-col space-y-1">
                         <Select
                           value={currentResolution?.action || 'pending'}
@@ -266,12 +267,12 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
                             <p className="text-xs text-yellow-600 mt-1">Aucun boîtier inconnu disponible pour l'agrégation.</p>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     );
@@ -285,13 +286,13 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
           Boîtiers Inconnus Ayant Répondu ({unknownThatResponded.length})
         </h3>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <Table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S/N Boîtier Inconnu</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nb Réponses Fournies</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
+              <TableRow>
+                <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S/N Boîtier Inconnu</TableHead>
+                <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nb Réponses Fournies</TableHead>
+                <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</TableHead>
+              </TableRow>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {unknownThatResponded.map(u => {
@@ -301,10 +302,10 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
                 );
 
                 return (
-                  <tr key={u.serialNumber}>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm">{u.serialNumber}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm">{u.responses.length}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm">
+                  <TableRow key={u.serialNumber}>
+                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm">{u.serialNumber}</TableCell>
+                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm">{u.responses.length}</TableCell>
+                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm">
                       <div className="flex flex-col space-y-1">
                         {isUsedForAggregation ? (
                           <span className="text-xs text-blue-600 italic">Utilisé pour agréger avec un boîtier attendu.</span>
@@ -333,12 +334,12 @@ const AnomalyResolutionModal: React.FC<AnomalyResolutionModalProps> = ({
                           />
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
             </tbody>
-          </table>
+          </Table>
         </div>
       </div>
     );

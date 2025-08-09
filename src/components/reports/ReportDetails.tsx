@@ -6,6 +6,7 @@ import { Session, Participant, SessionResult, QuestionWithId, Theme, Bloc, Votin
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
 import { FontStyle, autoTable, HAlignType } from 'jspdf-autotable'; 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table'; 
 import JSZip from 'jszip';
 import { StorageManager } from '../../services/StorageManager';
 import {
@@ -1014,32 +1015,32 @@ return (
 
       <Card className="mb-6">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <Table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entreprise</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Identification</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score Global</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Session</th>
-              </tr>
-            </thead>
-<tbody className="bg-white">
+              <TableRow>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participant</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entreprise</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code Identification</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score Global</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Session</TableHead>
+              </TableRow>
+            </thead >
+<TableBody className="bg-white">
   {participantCalculatedData.map((participantData, index) => {
     const rowStyle = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
     return (
       <React.Fragment key={participantData.assignedGlobalDeviceId || `pd-${index}`}>
-        <tr className={`${rowStyle} hover:bg-blue-50`}>
-          <td className="px-6 py-4 whitespace-nowrap align-middle">
+        <TableRow className={`${rowStyle} hover:bg-blue-50`}>
+          <TableCell className="px-6 py-4 whitespace-nowrap align-middle">
             <div className="text-sm font-medium text-gray-900">{participantData.nom} {participantData.prenom}</div>
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap align-middle">
+          </TableCell>
+          <TableCell className="px-6 py-4 whitespace-nowrap align-middle">
             <div className="text-sm text-gray-700">{participantData.entreprise || '-'}</div>
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap align-middle">
+          </TableCell>
+          <TableCell className="px-6 py-4 whitespace-nowrap align-middle">
             <div className="text-sm text-gray-700">{participantData.identificationCode || '-'}</div>
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap align-middle">
+          </TableCell>
+          <TableCell className="px-6 py-4 whitespace-nowrap align-middle">
             <div className="flex items-center">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 ${participantData.reussite ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                 {participantData.score !== undefined ? participantData.score.toFixed(0) : '-'}
@@ -1051,15 +1052,15 @@ return (
                 ></div>
               </div>
             </div>
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap align-middle">
+          </TableCell>
+          <TableCell className="px-6 py-4 whitespace-nowrap align-middle">
             {participantData.reussite === true && <Badge variant="success">Certifié</Badge>}
             {participantData.reussite === false && <Badge variant="danger">Ajourné</Badge>}
             {participantData.reussite === undefined && <Badge variant="default">-</Badge>}
-          </td>
-        </tr>
-        <tr className={`${rowStyle} border-b-2 border-gray-300`}>
-          <td colSpan={5} className="px-6 py-2">
+          </TableCell>
+        </TableRow>
+        <TableRow className={`${rowStyle} border-b-2 border-gray-300`}>
+          <TableCell colSpan={5} className="px-6 py-2">
             <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1 items-center">
               {participantData.themeScores && Object.values(participantData.themeScores).map(themeScore => (
                 <span key={themeScore.themeCode} className="font-medium">
@@ -1067,13 +1068,13 @@ return (
                 </span>
               ))}
             </div>
-          </td>
-        </tr>
+          </TableCell>
+        </TableRow>
       </React.Fragment>
     );
   })}
-</tbody>
-          </table>
+</TableBody>
+          </Table>
         </div>
       </Card>
     </div>

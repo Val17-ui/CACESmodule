@@ -465,7 +465,7 @@ ipcMain.handle(
     }
   });
 
-  ipcMain.handle('save-pptx-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
+    ipcMain.handle('save-pptx-file', async (_event: IpcMainInvokeEvent, fileBuffer: ArrayBuffer, fileName: string) => {
     loggerInstance.debug(`[IPC] save-pptx-file: ${fileName}`);
     try {
       const orsSavePath = await getAdminSetting('orsSavePath');
@@ -473,7 +473,7 @@ ipcMain.handle(
         throw new Error("Le chemin de sauvegarde des ORS n'est pas configuré dans les paramètres techniques.");
       }
       const filePath = path.join(orsSavePath, fileName);
-      await fs.writeFile(filePath, Buffer.from(fileBuffer));
+      await fs.writeFile(filePath, Buffer.from(fileBuffer)); // Original: no mkdir here
       return { success: true, filePath };
     } catch (error: any) {
       loggerInstance.debug(`Failed to save PPTX file: ${error}`);

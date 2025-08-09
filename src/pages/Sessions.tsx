@@ -9,6 +9,7 @@ import Tooltip from '../components/ui/Tooltip';
 import { Session as DBSession, Referential } from '@common/types';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import { filterSessionsBySearchTerm, filterSessionsByPeriod } from '../utils/filters';
 
 type SessionsProps = {
   activePage: string;
@@ -266,27 +267,10 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
     });
 
     // 2. Filtrage par période
-    if (selectedPeriod !== 'all' && sessionsToProcess.length > 0) {
-      const filterOption = periodFilters.find(f => f.value === selectedPeriod);
-      if (filterOption && filterOption.getDateRange) {
-        const { start, end } = filterOption.getDateRange();
-        sessionsToProcess = sessionsToProcess.filter(session => {
-          if (!session.dateSession) return false; // Ne pas traiter les sessions sans date
-          const sessionDate = new Date(session.dateSession);
-          sessionDate.setHours(0,0,0,0); // Normaliser pour comparer uniquement le jour
-          return sessionDate >= start && sessionDate <= end;
-        });
-      }
-    }
+    sessionsToProcess = filterSessionsByPeriod(sessionsToProcess, selectedPeriod, periodFilters);
 
     // 3. Filtrage par terme de recherche
-    if (searchTerm && sessionsToProcess.length > 0) {
-      const term = searchTerm.toLowerCase();
-      sessionsToProcess = sessionsToProcess.filter(session =>
-        session.nomSession.toLowerCase().includes(term) ||
-        (session.referentielId && referentielsData.find(r => r.id === session.referentielId)?.code.toLowerCase().includes(term))
-      );
-    }
+    sessionsToProcess = filterSessionsBySearchTerm(sessionsToProcess, searchTerm, referentielsData);
 
     setProcessedSessions(sessionsToProcess);
 
@@ -420,7 +404,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
         <>
             <div className="border-b border-gray-200 mb-4">
               <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                <button
+                <Button
                   onClick={() => setActiveList('sessions')}
                   className={`${
                     activeList === 'sessions'
@@ -429,8 +413,8 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
                   } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                 >
                   Sessions
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => setActiveList('archives')}
                   className={`${
                     activeList === 'archives'
@@ -439,7 +423,7 @@ const Sessions: React.FC<SessionsProps> = ({ activePage, onPageChange, sessionId
                   } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                 >
                   Archives
-                </button>
+                </Button>
               </nav>
             </div>
           <div className="flex flex-wrap gap-4 mb-4">

@@ -3,9 +3,9 @@ import Layout from '../components/layout/Layout';
 import DashboardCards from '../components/dashboard/DashboardCards';
 import DashboardSessionsOverview from '../components/dashboard/DashboardSessionsOverview';
 import AlertsNotifications from '../components/dashboard/AlertsNotifications'; // Ajout de l'import
-// import QuickActions from '../components/dashboard/QuickActions'; // Supprimé
+
 // import { mockSessions } from '../data/mockData'; // Plus besoin des mocks ici directement
-// import { getAllSessions } from '../db'; // Supprimé
+
 import { Session, Referential } from '@common/types';
 
 type DashboardProps = {
@@ -52,7 +52,6 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
       <Layout
         title="Tableau de bord"
         subtitle="Vue d'ensemble des activités" // MODIFIÉ
-        // actions={headerActions} // SUPPRIMÉ
         activePage={activePage}
         onPageChange={onPageChange}
       >
@@ -65,7 +64,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activePage, onPageChange }) => {
     <Layout
       title="Tableau de bord"
       subtitle="Vue d'ensemble des activités" // MODIFIÉ
-      // actions={headerActions} // SUPPRIMÉ
+      
       activePage={activePage}
       onPageChange={onPageChange}
     >

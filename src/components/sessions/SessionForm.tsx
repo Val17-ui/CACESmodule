@@ -133,7 +133,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
     logger.info(`[SessionForm] handleDataChange called for field: ${field}`, { value });
     setFormData(prev => {
         const newState = { ...prev, [field]: value };
-        logger.info('[SessionForm] New formData state:', newState);
+        logger.info('[SessionForm] New formData state after handleDataChange:', newState);
         return newState;
     });
   };
@@ -191,11 +191,15 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
             const defaultTrainer = trainers.find((t: Trainer) => t.isDefault === 1) || (trainers.length > 0 ? trainers[0] : null);
             const defaultKit = defaultKitResult || (kits.length > 0 ? kits[0] : null);
 
-            setFormData(prev => ({
-                ...prev,
-                selectedTrainerId: defaultTrainer?.id || null,
-                selectedKitIdState: defaultKit?.id || null,
-            }));
+            setFormData(prev => {
+                const newState = {
+                    ...prev,
+                    selectedTrainerId: defaultTrainer?.id || null,
+                    selectedKitIdState: defaultKit?.id || null,
+                };
+                logger.info('[SessionForm] Setting default trainer/kit in fetchGlobalData:', newState.selectedTrainerId, newState.selectedKitIdState);
+                return newState;
+            });
         }
       } catch (error) {
         console.error("Erreur lors du chargement des données globales:", error);
@@ -224,20 +228,25 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
   }, [formData.selectedKitIdState]);
 
   const resetFormTactic = useCallback(() => {
+    logger.info('[SessionForm] resetFormTactic called. Current selectedTrainerId before reset:', formData.selectedTrainerId);
     setCurrentSessionDbId(null);
-    setFormData({
-        sessionName: '',
-        sessionDate: '',
-        numSession: '',
-        numStage: '',
-        selectedReferential: '',
-        selectedReferentialId: null,
-        location: '',
-        notes: '',
-        selectedTrainerId: formData.selectedTrainerId, // Keep default
-        selectedKitIdState: formData.selectedKitIdState, // Keep default
-        iterationCount: 1,
-        iterationNames: ['Session_1'],
+    setFormData(prev => {
+        const newState = {
+            sessionName: '',
+            sessionDate: '',
+            numSession: '',
+            numStage: '',
+            selectedReferential: '',
+            selectedReferentialId: null,
+            location: '',
+            notes: '',
+            selectedTrainerId: null, // Reset to null for new session
+            selectedKitIdState: null, // Reset to null for new session
+            iterationCount: 1,
+            iterationNames: ['Session_1'],
+        };
+        logger.info('[SessionForm] resetFormTactic completed. selectedTrainerId after reset:', newState.selectedTrainerId);
+        return newState;
     });
     setParticipants([]);
     setSelectedBlocIds([]);
@@ -246,7 +255,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
     setEditingSessionData(null);
     setActiveTab('details');
     setModifiedAfterOrsGeneration(false);
-  }, [formData.selectedTrainerId, formData.selectedKitIdState]);
+  }, []);
 
   useEffect(() => {
     logger.info('[SessionForm] useEffect for loading session triggered.', { sessionIdToLoad, isImporting, hardwareLoaded, referentielsData: referentielsData.length });
@@ -301,6 +310,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                 iterationCount: count,
                 iterationNames: names.length > 0 ? names : ['Session_1'],
             });
+            logger.info('[SessionForm] Setting formData from loaded session. selectedTrainerId:', sessionData.trainerId);
 
             setSelectedBlocIds(sessionData.selectedBlocIds || []);
 
@@ -340,7 +350,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                     firstName: p_db.prenom,
                     lastName: p_db.nom,
                     deviceId: p_db.assignedGlobalDeviceId || null,
-                    organization: p_db.organization || '',
+                    organization: p_db.entreprise || '',
                     hasSigned: false,
                 }));
                 console.log('[SessionLoad-LOG] Step 4: Mapped participants to FormParticipant shape:', JSON.parse(JSON.stringify(formParticipants)));
@@ -475,7 +485,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
                         uiId: `imported-${Date.now()}-${index}`,
                         firstName: p.prenom,
                         lastName: p.nom,
-                        organization: p.organization,
+                        organization: p.entreprise,
                         identificationCode: p.identificationCode,
                         deviceId: null, // This is a visual ID, not the hardware ID. Let's see how it's used.
                         assignedGlobalDeviceId: device?.id ?? null,
@@ -556,7 +566,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ sessionIdToLoad, sessionToImp
       uiId: Date.now().toString(),
       firstName: '',
       lastName: '',
-      organization: '',
+      entreprise: '',
       deviceId: null,
       hasSigned: false,
     };
@@ -882,7 +892,7 @@ const handleSaveSession = async (sessionDataToSave: DBSession | null) => {
             const dbParticipant: DBParticipantType = {
     nom: p.lastName,
     prenom: p.firstName,
-    organization: p.organization,
+    entreprise: p.entreprise,
     identificationCode: p.identificationCode,
 };
             const dbId = await StorageManager.upsertParticipant(dbParticipant);
@@ -1228,6 +1238,10 @@ if (savedIterationId) {
       const responsesFromExpectedDevices: ExtractedResultFromXml[] = [];
       const expectedSerialNumbers = new Set(sessionBoitiers.map((b: any) => b.serialNumber));
 
+      logger.info(`[Import Results] Anomaly Detection - Expected Serial Numbers: ${JSON.stringify(Array.from(expectedSerialNumbers))}`);
+      logger.info(`[Import Results] Anomaly Detection - Final Extracted Results (Participant IDs and Question GUIDs): ${JSON.stringify(finalExtractedResults.map(r => ({ pId: r.participantDeviceID, qGuid: r.questionSlideGuid })))}`);
+      logger.info(`[Import Results] Anomaly Detection - Relevant Session Question GUIDs: ${JSON.stringify(Array.from(relevantSessionQuestionGuids))}`);
+
       finalExtractedResults.forEach(result => {
         if (expectedSerialNumbers.has(result.participantDeviceID)) {
           responsesFromExpectedDevices.push(result);
@@ -1244,6 +1258,7 @@ if (savedIterationId) {
       sessionBoitiers.forEach((boitier: any) => {
         const respondedGuids = new Set(finalExtractedResults.filter(r => r.participantDeviceID === boitier.serialNumber).map(r => r.questionSlideGuid));
         const missedGuids = [...relevantSessionQuestionGuids].filter(guid => !respondedGuids.has(guid as string));
+        logger.info(`[Import Results] Anomaly Check for Boitier ${boitier.serialNumber} (${boitier.participantName}): Responded GUIDs: ${JSON.stringify(Array.from(respondedGuids))}, Missed GUIDs: ${JSON.stringify(missedGuids)}`);
         if (missedGuids.length > 0) {
           detectedAnomaliesData.expectedHavingIssues.push({
             serialNumber: boitier.serialNumber,
@@ -1260,6 +1275,7 @@ if (savedIterationId) {
       });
 
       if ((detectedAnomaliesData.expectedHavingIssues.length || 0) > 0 || (detectedAnomaliesData.unknownThatResponded.length || 0) > 0) {
+        logger.warning(`[Import Results] Anomalies detected! Expected issues: ${detectedAnomaliesData.expectedHavingIssues.length}, Unknown responders: ${detectedAnomaliesData.unknownThatResponded.length}`);
         setImportSummary(`Anomalies détectées: ${detectedAnomaliesData.expectedHavingIssues.length || 0} boîtier(s) attendu(s) avec problèmes, ${detectedAnomaliesData.unknownThatResponded.length || 0} boîtier(s) inconnu(s). Résolution nécessaire.`);
         setDetectedAnomalies(detectedAnomaliesData);
         setPendingValidResults(responsesFromExpectedDevices);
@@ -1523,7 +1539,7 @@ if (savedIterationId) {
                             firstName: p_db_updated.prenom,
                             lastName: p_db_updated.nom,
                             deviceId: currentFormParticipantState?.deviceId ?? visualDeviceId,
-                            organization: currentFormParticipantState?.organization || '',
+                            organization: currentFormParticipantState?.entreprise || '',
                             hasSigned: currentFormParticipantState?.hasSigned || false,
                           };
                       });

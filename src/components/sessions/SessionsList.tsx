@@ -3,6 +3,7 @@ import { CalendarClock, ClipboardList, Download, AlertTriangle } from 'lucide-re
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { Session as DBSession, Referential } from '@common/types'; // Ajout Referential
 import { saveAs } from 'file-saver';
 
@@ -72,22 +73,22 @@ const SessionsList: React.FC<SessionsListProps> = ({
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-3 text-gray-700">{title}</h2>
         <div className="overflow-x-auto border rounded-lg">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référentiel</th>
-                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Nb. Part.</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">.ORS</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+          <Table className="min-w-full divide-y divide-gray-200">
+            <TableHeader className="bg-gray-50">
+              <TableRow>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référentiel</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Nb. Part.</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">.ORS</TableHead>
+                <TableHead scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="bg-white divide-y divide-gray-200">
               {filteredSessions.map((session) => (
-                <tr key={session.id} className="hover:bg-gray-50 transition-colors duration-150 ease-in-out">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                <TableRow key={session.id} className="hover:bg-gray-50 transition-colors duration-150 ease-in-out">
+                  <TableCell className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 p-2 rounded-lg bg-accent-neutre/10 text-accent-neutre"><CalendarClock size={20} /></div>
                       <div className="ml-4">
@@ -95,9 +96,9 @@ const SessionsList: React.FC<SessionsListProps> = ({
                         <div className="text-xs text-gray-500">ID: {session.id}</div>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{formatDate(session.dateSession)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  </TableCell>
+                  <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{formatDate(session.dateSession)}</TableCell>
+                  <TableCell className="px-6 py-4 whitespace-nowrap">
                     {(() => {
                       if (session.referentielId && referentielsData.length > 0) {
                         const refObj = referentielsData.find(r => r.id === session.referentielId);
@@ -106,13 +107,13 @@ const SessionsList: React.FC<SessionsListProps> = ({
                       if ((session as any).referentiel) { return <Badge variant="default">{(session as any).referentiel}</Badge>; }
                       return <Badge variant="default">N/A</Badge>;
                     })()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">{session.participantCount ?? 0}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(session.status)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                  </TableCell>
+                  <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">{session.participantCount ?? 0}</TableCell>
+                  <TableCell className="px-6 py-4 whitespace-nowrap">{getStatusBadge(session.status)}</TableCell>
+                  <TableCell className="px-6 py-4 whitespace-nowrap text-center">
                     {session.donneesOrs instanceof Blob ? <Badge variant="success">Oui</Badge> : <Badge variant="default">Non</Badge>}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  </TableCell>
+                  <TableCell className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end space-x-2">
                       <Button variant="outline" size="sm" icon={<ClipboardList size={16} />} onClick={() => session.id && onManageSession(session.id)} title="Gérer la session">Gérer</Button>
                       {session.donneesOrs instanceof Blob && (
@@ -120,11 +121,11 @@ const SessionsList: React.FC<SessionsListProps> = ({
                       )}
 
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     );

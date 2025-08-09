@@ -1,5 +1,6 @@
 import React from 'react';
 import { FileUp } from 'lucide-react';
+import { getStatusMessageClass } from '../../../utils/messageUtils';
 import Button from '../../ui/Button';
 import Card from '../../ui/Card';
 
@@ -60,7 +61,7 @@ const ResultsImporter: React.FC<ResultsImporterProps> = ({
               })}
             </div>
             {importSummary && activeTab === 'importResults' && (
-              <div className={`mt-4 p-3 rounded-md text-sm ${importSummary.toLowerCase().includes("erreur") || importSummary.toLowerCase().includes("échoué") || importSummary.toLowerCase().includes("impossible") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+              <div className={`mt-4 p-3 rounded-md text-sm ${getStatusMessageClass(importSummary)}`}>
                 <p style={{ whiteSpace: 'pre-wrap' }}>{importSummary}</p>
               </div>
             )}
