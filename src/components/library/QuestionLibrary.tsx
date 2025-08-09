@@ -38,6 +38,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   const [isImporting, setIsImporting] = useState(false);
   const [importStatusMessage, setImportStatusMessage] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   
 
   // États pour les messages d'import spécifiques
@@ -127,29 +128,26 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
   const handleFileImport = async () => {
     setIsImporting(true);
-    setImportStatusMessage(`Ouverture de la boîte de dialogue...`);
+    setImportStatusMessage(null);
     setImportError(null);
+    setImportProgress({ current: 0, total: 0 });
 
     try {
       const fileDialogResult = await window.dbAPI?.openExcelFileDialog();
 
       if (fileDialogResult?.canceled) {
-        setImportStatusMessage('Importation annulée.');
         setIsImporting(false);
         return;
       }
 
-      // Ensure fileDialogResult is not null/undefined before proceeding
       if (!fileDialogResult) {
         throw new Error("File dialog did not return a result.");
       }
 
-      // Use fileDialogResult directly
       if (fileDialogResult.error) {
         throw new Error(`Erreur de lecture du fichier: ${fileDialogResult.error}`);
       }
       const fileBuffer = window.electronAPI?.Buffer_from(fileDialogResult.fileBuffer || '', 'base64');
-      setImportStatusMessage(`Importation du fichier ${fileDialogResult.fileName || 'inconnu'}...`);
 
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
@@ -160,16 +158,16 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         throw new Error("Le fichier est vide ou ne contient pas de données de question.");
       }
 
+      const dataRows = jsonRows.slice(1);
+      setImportProgress({ current: 0, total: dataRows.length });
+
       const headerRow = jsonRows[0] as string[];
-      // Define expected headers based on user's list (keys are normalized for internal use)
       const expectedHeaders: Record<string, string> = {
-        id_question: 'userQuestionId', // Nouveau
+        id_question: 'userQuestionId',
         texte: 'texte',
-        // referential: 'referential', // Remplacé
-        // theme: 'theme', // Remplacé
-        referentiel_code: 'referentiel_code', // Nouveau
-        theme_code: 'theme_code',         // Nouveau
-        bloc_code: 'bloc_code',           // Nouveau
+        referentiel_code: 'referentiel_code',
+        theme_code: 'theme_code',
+        bloc_code: 'bloc_code',
         optiona: 'optionA',
         optionb: 'optionB',
         optionc: 'optionC',
@@ -177,35 +175,32 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         correctanswer: 'correctAnswer',
         iseliminatory: 'isEliminatory',
         timelimit: 'timeLimit',
-        imagename: 'imageName', // Corrigé
-        version: 'version', // Nouveau
-        // type: 'type', // Type column is no longer strictly needed for import logic, will default to multiple-choice
+        imagename: 'imageName',
+        version: 'version',
       };
 
-      const headerMap: Record<string, number> = {}; // Maps internal key to column index
+      const headerMap: Record<string, number> = {};
       headerRow.forEach((header, index) => {
         const normalizedHeader = (header || '').toString().toLowerCase().replace(/\s+/g, '');
-        if (expectedHeaders[normalizedHeader]) { // If direct match with a normalized key
+        if (expectedHeaders[normalizedHeader]) {
             headerMap[expectedHeaders[normalizedHeader]] = index;
-        } else { // Fallback to check against display values if needed (less strict)
+        } else {
             for (const key in expectedHeaders) {
                 if (normalizedHeader === expectedHeaders[key].toLowerCase().replace(/\s+/g, '')) {
-                    headerMap[expectedHeaders[key]] = index; // Map internal key to index
+                    headerMap[expectedHeaders[key]] = index;
                     break;
                 }
             }
         }
       });
 
-      // Validate required headers (using internal keys) - 'type' is removed from here
       const requiredImportKeys = ['userQuestionId', 'texte', 'referentiel_code', 'theme_code', 'bloc_code', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory', 'version'];
       for (const key of requiredImportKeys) {
         if (headerMap[key] === undefined) {
-          // Try to find the display name for the error message
           let displayNameForKey = key;
           for (const k in expectedHeaders) {
             if (expectedHeaders[k] === key) {
-              displayNameForKey = k; // Use the original key from expectedHeaders if found (e.g. 'referentiel_code')
+              displayNameForKey = k;
               break;
             }
           }
@@ -216,25 +211,23 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       let questionsAdded = 0;
       const errorsEncountered: string[] = [];
 
-      for (let i = 1; i < jsonRows.length; i++) {
-        const row = jsonRows[i] as any[];
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i] as any[];
+        setImportProgress(prev => ({ ...prev, current: i + 1 }));
+
         if (row.every(cell => cell === null || cell === undefined || cell.toString().trim() === '')) {
             continue; // Skip empty row
         }
 
         const questionText = row[headerMap['texte']];
         if (!questionText || questionText.toString().trim() === '') {
-            errorsEncountered.push(`Ligne ${i + 1}: Le champ 'texte' est manquant.`);
+            errorsEncountered.push(`Ligne ${i + 2}: Le champ 'texte' est manquant.`);
             continue;
         }
-
-        // All questions are now 'multiple-choice'
         
         let options: string[] = [];
         let correctAnswerStr: string = '';
 
-        // Check if it looks like a True/False question based on options (e.g. optionA is "Vrai", optionB is "Faux", C & D are empty)
-        // This is an interpretation based on common patterns if the 'type' column is absent or ignored.
         const optA = (row[headerMap['optionA']] || '').toString().trim();
         const optB = (row[headerMap['optionB']] || '').toString().trim();
         const optC = (row[headerMap['optionC']] || '').toString().trim();
@@ -243,20 +236,19 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         options = [optA, optB];
         if (optC !== '') options.push(optC);
         if (optD !== '') options.push(optD);
-        options = options.filter(opt => opt !== ''); // Remove any fully empty options that might have been added
+        options = options.filter(opt => opt !== '');
 
         if (options.length < 2) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Au moins 2 options (OptionA et OptionB) doivent être renseignées.`);
+            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Au moins 2 options (OptionA et OptionB) doivent être renseignées.`);
             continue;
         }
 
-        // Get referentiel_code, theme_code, bloc_code
         const referentielCode = (row[headerMap['referentiel_code']] || '').toString().trim();
         const themeCode = (row[headerMap['theme_code']] || '').toString().trim();
         const blocCode = (row[headerMap['bloc_code']] || '').toString().trim();
 
         if (!referentielCode || !themeCode || !blocCode) {
-          errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): 'referentiel_code', 'theme_code', et 'bloc_code' sont requis.`);
+          errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): 'referentiel_code', 'theme_code', et 'bloc_code' sont requis.`);
           continue;
         }
 
@@ -264,40 +256,37 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         try {
           const referentiel = await StorageManager.getReferentialByCode(referentielCode);
           if (!referentiel || !referentiel.id) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel avec code "${referentielCode}" non trouvé.`);
+            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Référentiel avec code "${referentielCode}" non trouvé.`);
             continue;
           }
           const theme = await StorageManager.getThemeByCodeAndReferentialId(themeCode, referentiel.id);
           if (!theme || !theme.id) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Thème avec code "${themeCode}" non trouvé pour le référentiel "${referentielCode}".`);
+            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Thème avec code "${themeCode}" non trouvé pour le référentiel "${referentielCode}".`);
             continue;
           }
           const bloc = await StorageManager.getBlocByCodeAndThemeId(blocCode, theme.id);
           if (!bloc || !bloc.id) {
-            // MODIFICATION: Tentative de création de n'importe quel bloc (GEN ou non-GEN) s'il n'existe pas.
             console.log(`Bloc "${blocCode}" non trouvé pour le thème "${themeCode}". Tentative de création...`);
             const newBlocId = await StorageManager.addBloc({ code_bloc: blocCode, nom_complet: blocCode, theme_id: theme.id });
             if (newBlocId) {
               blocIdToStore = newBlocId;
               console.log(`Bloc "${blocCode}" créé automatiquement pour le thème "${themeCode}" avec ID: ${newBlocId}.`);
             } else {
-              errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Création automatique du bloc "${blocCode}" pour le thème "${themeCode}" a échoué.`);
+              errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Création automatique du bloc "${blocCode}" pour le thème "${themeCode}" a échoué.`);
               continue;
             }
           } else {
             blocIdToStore = bloc.id;
           }
         } catch (dbError: any) {
-          errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Erreur DB lors de la recherche/création de référentiel/thème/bloc: ${dbError.message}`);
+          errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Erreur DB lors de la recherche/création de référentiel/thème/bloc: ${dbError.message}`);
           continue;
         }
 
         if (blocIdToStore === undefined) {
-            // This should ideally be caught by earlier checks, but as a safeguard:
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Impossible de déterminer le blocId.`);
+            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Impossible de déterminer le blocId.`);
             continue;
         }
-
 
         const correctAnswerLetter = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
         if (correctAnswerLetter === 'A') correctAnswerStr = "0";
@@ -305,67 +294,56 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         else if (correctAnswerLetter === 'C' && options.length > 2) correctAnswerStr = "2";
         else if (correctAnswerLetter === 'D' && options.length > 3) correctAnswerStr = "3";
         else {
-            // For a 2-option question that might be True/False, allow 'VRAI'/'FAUX' as correct answer
             if (options.length === 2) {
                 if (correctAnswerLetter === 'VRAI' && (optA.toUpperCase() === 'VRAI' || options[0].toUpperCase() === correctAnswerLetter)) correctAnswerStr = "0";
                 else if (correctAnswerLetter === 'FAUX' && (optB.toUpperCase() === 'FAUX' || options[1].toUpperCase() === correctAnswerLetter)) correctAnswerStr = "1";
                 else {
-                     errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide. Utilisez A, B, C, D ou Vrai/Faux pour les questions à 2 options.`);
+                     errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide. Utilisez A, B, C, D ou Vrai/Faux pour les questions à 2 options.`);
                      continue;
                 }
             } else {
-                errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide ou option correspondante non disponible.`);
+                errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide ou option correspondante non disponible.`);
                 continue;
             }
         }
 
-        // Validate if the selected correct option actually has content
         const caIdx = parseInt(correctAnswerStr, 10);
-        if (!options[caIdx]?.trim()) { // Check against the potentially filtered options list
-           errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): L'option correcte '${correctAnswerLetter}' est vide ou non définie.`);
+        if (!options[caIdx]?.trim()) {
+           errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): L'option correcte '${correctAnswerLetter}' est vide ou non définie.`);
            continue;
         }
-
-        // OBSOLETE VALIDATION BLOCK - referential is now determined by referentiel_code, theme_code, bloc_code
-        // const referentialRaw = (row[headerMap['referential']] || '').toString().toUpperCase();
-        // if (!Object.values(CACESReferential).includes(referentialRaw as CACESReferential)) {
-        //     errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Référentiel "${referentialRaw}" invalide.`);
-        //     continue;
-        // }
 
         const isEliminatoryRaw = (row[headerMap['isEliminatory']] || 'Non').toString().trim().toUpperCase();
         let isEliminatoryBool = false;
         if (isEliminatoryRaw === 'OUI' || isEliminatoryRaw === 'TRUE' || isEliminatoryRaw === '1') {
             isEliminatoryBool = true;
         } else if (isEliminatoryRaw !== 'NON' && isEliminatoryRaw !== 'FALSE' && isEliminatoryRaw !== '0') {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Valeur pour 'isEliminatory' (${isEliminatoryRaw}) invalide. Utilisez Oui/Non, True/False, 0/1.`);
+            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Valeur pour 'isEliminatory' (${isEliminatoryRaw}) invalide. Utilisez Oui/Non, True/False, 0/1.`);
             continue;
         }
 
-        // Construire l'objet newQuestionData avec blocIdToStore
         const newQuestionData: Omit<StoredQuestion, 'id'> = {
-          userQuestionId: (row[headerMap['userQuestionId']] || '').toString().trim(), // Read userQuestionId
+          userQuestionId: (row[headerMap['userQuestionId']] || '').toString().trim(),
           text: questionText.toString(),
           type: QuestionType.QCM,
           options: options,
           correctAnswer: correctAnswerStr,
-          blocId: blocIdToStore, // Utiliser le blocId trouvé ou créé
+          blocId: blocIdToStore,
           isEliminatory: isEliminatoryBool,
           timeLimit: parseInt(row[headerMap['timelimit']], 10) || 30,
           imageName: (row[headerMap['imageName']] || '').toString().trim() || undefined,
-          // referential et theme sont supprimés de StoredQuestion et gérés via blocId
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           usageCount: 0,
           correctResponseRate: 0,
-          version: (row[headerMap['version']] || '').toString().trim(), // Read version as string
+          version: (row[headerMap['version']] || '').toString().trim(),
         };
 
         try {
             await StorageManager.upsertQuestion(newQuestionData);
             questionsAdded++;
         } catch (e: any) {
-            errorsEncountered.push(`Ligne ${i + 1} (${questionText.substring(0,20)}...): Erreur DB - ${e.message}`);
+            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Erreur DB - ${e.message}`);
         }
       }
 
@@ -379,7 +357,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       }
       setImportStatusMessage(summaryMessage);
       if (questionsAdded > 0) {
-        await fetchQuestions(); // Refresh list
+        await fetchQuestions();
       }
 
     } catch (err: any) {
@@ -388,7 +366,6 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       setImportStatusMessage(null);
     } finally {
       setIsImporting(false);
-      
     }
   };
 
@@ -423,12 +400,10 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         return;
       }
 
-      // Ensure fileDialogResult is not null/undefined before proceeding
       if (!fileDialogResult) {
         throw new Error("File dialog did not return a result.");
       }
 
-      // Use fileDialogResult directly
       if (fileDialogResult.error) {
         throw new Error(`Erreur de lecture du fichier: ${fileDialogResult.error}`);
       }
@@ -474,10 +449,8 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         }
 
         try {
-          // Vérifier si le référentiel existe déjà par son code
           const existing = await StorageManager.getReferentialByCode(code);
           if (existing) {
-            // Ne pas ajouter d'erreur si le référentiel existe déjà, juste ignorer l'ajout.
             console.log(`Ligne ${i + 1}: Le référentiel avec le code "${code}" existe déjà (ID: ${existing.id}). Ignoré.`);
             continue;
           }
@@ -498,15 +471,12 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         setImportReferentielsError(null);
       }
       setImportReferentielsStatusMessage(summaryMessage);
-      // TODO: Rafraîchir la liste des référentiels si elle est affichée quelque part dynamiquement.
-      // Pour l'instant, les filtres de questions sont statiques ou basés sur 'types/index.ts'
 
     } catch (err: any) {
       setImportReferentielsError(`Erreur lors de l'importation des référentiels: ${err.message}`);
       setImportReferentielsStatusMessage(null);
     } finally {
       setIsImportingReferentiels(false);
-      
     }
   };
 
@@ -528,12 +498,10 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         return;
       }
 
-      // Ensure fileDialogResult is not null/undefined before proceeding
       if (!fileDialogResult) {
         throw new Error("File dialog did not return a result.");
       }
 
-      // Use fileDialogResult directly
       if (fileDialogResult.error) {
         throw new Error(`Erreur de lecture du fichier: ${fileDialogResult.error}`);
       }
@@ -593,12 +561,11 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
           const existingTheme = await StorageManager.getThemeByCodeAndReferentialId(code_theme, parentReferentiel.id);
           if (existingTheme) {
-            // Ne pas ajouter d'erreur si le thème existe déjà, juste ignorer l'ajout.
             console.log(`Ligne ${i + 1}: Le thème avec le code "${code_theme}" existe déjà pour le référentiel "${referentiel_code}". Ignoré.`);
             continue;
           }
 
-          await StorageManager.addTheme({ // Corrected: Call addTheme directly
+          await StorageManager.addTheme({
             code_theme,
             nom_complet,
             referentiel_id: parentReferentiel.id
@@ -619,14 +586,12 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         setImportThemesError(null);
       }
       setImportThemesStatusMessage(summaryMessage);
-      // TODO: Rafraîchir la liste des thèmes si nécessaire
 
     } catch (err: any) {
       setImportThemesError(`Erreur lors de l'importation des thèmes: ${err.message}`);
       setImportThemesStatusMessage(null);
     } finally {
       setIsImportingThemes(false);
-      
     }
   };
 
@@ -642,7 +607,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
   const blocOptions = useMemo(() => [
     { value: '', label: 'Tous les blocs' },
-    ...blocsData.map(b => ({ value: b.id!.toString(), label: b.code_bloc })) // Supposant que code_bloc est suffisant pour l'affichage
+    ...blocsData.map(b => ({ value: b.id!.toString(), label: b.code_bloc }))
   ], [blocsData]);
 
   const eliminatoryOptions = [
@@ -699,16 +664,11 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     return sortableItems;
   }, [filteredQuestions, sortBy]);
 
-  // Enrichir les questions avec les noms de référentiel, thème, bloc
   const enrichedQuestions = useMemo(() => {
-    // Use allReferentielsData, allThemesData, allBlocsData for enrichment lookups
-    // Ensure these are populated before trying to enrich.
-    // referentielsData is also fine as it contains all referentiels.
     if (isLoading || !referentielsData.length || !allThemesData.length || !allBlocsData.length) {
-        // Show placeholders if master lookup data is not ready or questions are loading
         return sortedQuestions.map(q => ({
             ...q,
-            referentialCode: q.blocId ? `ID Bloc: ${q.blocId}` : 'N/A', // Placeholder will be replaced by actual code or N/A
+            referentialCode: q.blocId ? `ID Bloc: ${q.blocId}` : 'N/A',
             themeName: q.blocId ? 'Chargement...' : 'N/A',
             blocName: q.blocId ? 'Chargement...' : 'N/A'
         }));
@@ -729,16 +689,16 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
         return { ...question, referentialCode: 'Erreur Thème', themeName: `ID Thème: ${bloc.theme_id}`, blocName: bloc.code_bloc };
       }
 
-      const referentiel = referentielsData.find(r => r.id === theme.referentiel_id); // referentielsData has all referentiels
+      const referentiel = referentielsData.find(r => r.id === theme.referentiel_id);
       if (!referentiel) {
         return { ...question, referentialCode: `ID Réf: ${theme.referentiel_id}`, themeName: theme.nom_complet, blocName: bloc.code_bloc };
       }
 
       return {
         ...question,
-        referentialCode: referentiel.code, // Use referentiel.code for display
-        themeName: theme.nom_complet,    // Use theme.nom_complet for display
-        blocName: bloc.code_bloc,        // Use bloc.code_bloc for display
+        referentialCode: referentiel.code,
+        themeName: theme.nom_complet,
+        blocName: bloc.code_bloc,
       };
     });
   }, [sortedQuestions, referentielsData, allThemesData, allBlocsData, isLoading]);
@@ -748,7 +708,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     const newPreviews: Record<string, string> = {};
     const urlsCreatedInThisRun: string[] = [];
 
-    enrichedQuestions.forEach(question => { // Use enrichedQuestions here
+    enrichedQuestions.forEach(question => {
       if (question.id && question.image instanceof Blob) {
         const url = URL.createObjectURL(question.image);
         newPreviews[question.id.toString()] = url;
@@ -756,7 +716,6 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
       }
     });
 
-    // Revoke old URLs that are not in the new set
     Object.keys(imagePreviews).forEach(questionId => {
       if (!newPreviews[questionId]) {
         URL.revokeObjectURL(imagePreviews[questionId]);
@@ -799,7 +758,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     <div>
       <Card title="Filtres et recherche" className="mb-6">
         <div className="flex justify-between items-start mb-4">
-            <div> {/* Container for filter elements to allow them to take their natural space */}
+            <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Select
                         label="Recommandation"
@@ -812,14 +771,14 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                         options={themeOptions}
                         value={selectedTheme}
                         onChange={(e) => setSelectedTheme(e.target.value)}
-                        disabled={!selectedReferential || themesData.length === 0} // Désactiver si aucun référentiel sélectionné ou pas de thèmes
+                        disabled={!selectedReferential || themesData.length === 0}
                     />
                     <Select
-                        label="Bloc" // Nouveau filtre
+                        label="Bloc"
                         options={blocOptions}
                         value={selectedBloc}
                         onChange={(e) => setSelectedBloc(e.target.value)}
-                        disabled={!selectedTheme || blocsData.length === 0} // Désactiver si aucun thème sélectionné ou pas de blocs
+                        disabled={!selectedTheme || blocsData.length === 0}
                     />
                     <Select
                         label="Type"
@@ -898,14 +857,28 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                     disabled={isImporting}
                     className="w-full"
                 >
-                    {isImporting ? 'Importation Questions...' : 'Importer Questions'}
+                    {isImporting ? 'Importation en cours...' : 'Importer Questions'}
                 </Button>
               </Tooltip>
             </div>
         </div>
 
-        {/* Display Import Status for Questions */}
-        {importStatusMessage && (
+        {isImporting && (
+          <div className="mt-4 p-4 rounded-md bg-blue-50 border border-blue-200">
+            <p className="font-semibold text-blue-800">Importation en cours...</p>
+            <p className="text-sm text-blue-700 mb-2">Veuillez patienter. Ne quittez pas cette page.</p>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full"
+                style={{ width: `${(importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0)}%` }}
+              ></div>
+            </div>
+            <p className="text-right text-sm text-blue-700 mt-1">
+              {importProgress.current} / {importProgress.total} questions traitées
+            </p>
+          </div>
+        )}
+        {!isImporting && importStatusMessage && (
           <div className="mt-4 p-3 rounded-md bg-blue-100 text-blue-700 flex items-center">
             <CheckCircle size={20} className="mr-2" />
             <span>Questions: {importStatusMessage}</span>
@@ -918,28 +891,26 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           </div>
         )}
 
-        {/* Display Import Status for Referentiels */}
         {importReferentielsStatusMessage && (
           <div className={`mt-2 p-3 rounded-md ${importReferentielsError ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'} flex items-center`}>
             {importReferentielsError ? <XCircle size={20} className="mr-2" /> : <CheckCircle size={20} className="mr-2" />}
             <span>Référentiels: {importReferentielsStatusMessage}</span>
           </div>
         )}
-         {importReferentielsError && !importReferentielsStatusMessage && ( // Cas où il y a une erreur mais pas de message de statut (erreur initiale)
+         {importReferentielsError && !importReferentielsStatusMessage && (
           <div className="mt-2 p-3 rounded-md bg-red-100 text-red-700 flex items-center">
             <XCircle size={20} className="mr-2" />
             <span>Référentiels: {importReferentielsError}</span>
           </div>
         )}
 
-        {/* Display Import Status for Themes */}
         {importThemesStatusMessage && (
           <div className={`mt-2 p-3 rounded-md ${importThemesError ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'} flex items-center`}>
             {importThemesError ? <XCircle size={20} className="mr-2" /> : <CheckCircle size={20} className="mr-2" />}
             <span>Thèmes: {importThemesStatusMessage}</span>
           </div>
         )}
-        {importThemesError && !importThemesStatusMessage && ( // Cas où il y a une erreur mais pas de message de statut
+        {importThemesError && !importThemesStatusMessage && (
           <div className="mt-2 p-3 rounded-md bg-red-100 text-red-700 flex items-center">
             <XCircle size={20} className="mr-2" />
             <span>Thèmes: {importThemesError}</span>
@@ -1008,7 +979,6 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Thème
                 </th>
-                {/* Utilisation column removed */}
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Taux de réussite
                 </th>
@@ -1022,7 +992,6 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {enrichedQuestions.map((question) => {
-                // Cast question to include new properties for type safety in JSX
                 const displayQuestion = question as StoredQuestion & { referentialCode?: string; themeName?: string; blocName?: string; };
                 const imageUrl = displayQuestion.id ? imagePreviews[displayQuestion.id.toString()] : null;
                 return (
@@ -1070,7 +1039,6 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                       {displayQuestion.themeName || 'N/A'} <br />
                       <span className="text-xs text-gray-400">{displayQuestion.blocName || 'N/A'}</span>
                     </td>
-                    {/* Corresponding <td> for "Utilisation" removed */}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <span className="text-sm text-gray-900 mr-2">
@@ -1092,22 +1060,11 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
                       >
                         Modifier
                       </Button>
-                      {/* "Dupliquer" Button Removed
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Copy size={16} />}
-                        type="button"
-                      >
-                        Dupliquer
-                      </Button>
-                      */}
                       <Button
                         variant="ghost"
                         size="sm"
                         icon={<Trash2 size={16} />}
                         type="button"
-                        // onClick={() => handleDelete(question.id)} // Placeholder
                       >
                         Supprimer
                       </Button>
