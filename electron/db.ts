@@ -2596,6 +2596,7 @@ const importQuestionsFromData = async (
       usageCount: 0,
       correctResponseRate: 0,
       version: (row[headerMap['version']] || '').toString().trim(),
+      slideGuid: undefined,
     });
   }
 
