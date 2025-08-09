@@ -1,12 +1,12 @@
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
+import { QuestionType } from '@common/types';
 import type {
     QuestionWithId, Session, SessionResult, Trainer,
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
     VotingDevice, DeviceKit, DeviceKitAssignment,
-    SessionIteration, Participant, ParticipantAssignment,
-    QuestionType
+    SessionIteration, Participant, ParticipantAssignment
   } from '@common/types';
 import { getLogger, ILogger } from '@electron/utils/logger';
 import type { Database } from 'better-sqlite3';

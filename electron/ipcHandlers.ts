@@ -20,7 +20,7 @@ import {
   addTheme, getThemeByCodeAndReferentialId, getThemesByReferentialId, getThemeById, getAllThemes,
   addBloc, getBlocByCodeAndThemeId, getBlocsByThemeId, getBlocById, getAllBlocs,
   addQuestion, upsertQuestion, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
-  getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks,
+  getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks, countQuestions,
   getAdminSetting, setAdminSetting, getAllAdminSettings,
   exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
@@ -369,6 +369,11 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
   ipcMain.handle('db-get-questions-for-session-blocks', async (_event: IpcMainInvokeEvent, blocIds?: number[]) => {
     loggerInstance.debug(`[IPC] db-get-questions-for-session-blocks: ${blocIds?.length || 0} blocIds`);
     return getQuestionsForSessionBlocks(blocIds);
+  });
+
+  ipcMain.handle('db-count-questions', async () => {
+    loggerInstance.debug('[IPC] db-count-questions');
+    return countQuestions();
   });
 
   // Participants

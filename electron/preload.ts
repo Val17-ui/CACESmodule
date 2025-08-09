@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   getAllQuestions: () => ipcRenderer.invoke('db-get-all-questions'),
   getQuestionsByIds: (ids: number[]) => ipcRenderer.invoke('db-get-questions-by-ids', ids),
   getQuestionsForSessionBlocks: (blocIds?: number[]) => ipcRenderer.invoke('db-get-questions-for-session-blocks', blocIds),
+  countQuestions: () => ipcRenderer.invoke('db-count-questions'),
 
   // AdminSettings
   getAdminSetting: (key: string) => ipcRenderer.invoke('db-get-admin-setting', key),
