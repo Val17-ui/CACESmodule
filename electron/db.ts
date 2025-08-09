@@ -5,7 +5,8 @@ import type {
     QuestionWithId, Session, SessionResult, Trainer,
     SessionQuestion, SessionBoitier, Referential, Theme, Bloc,
     VotingDevice, DeviceKit, DeviceKitAssignment,
-    SessionIteration, Participant, ParticipantAssignment
+    SessionIteration, Participant, ParticipantAssignment,
+    QuestionType
   } from '@common/types';
 import { getLogger, ILogger } from '@electron/utils/logger';
 import type { Database } from 'better-sqlite3';
@@ -2453,6 +2454,145 @@ const initializeDefaultAdminSettings = async (): Promise<void> => {
   });
 };
 
+const importQuestionsFromData = async (
+  rows: any[][],
+  progressCallback: (progress: { current: number; total: number }) => void
+): Promise<{ questionsAdded: number; errors: string[] }> => {
+
+  const headerRow = rows[0] as string[];
+  const dataRows = rows.slice(1);
+  const total = dataRows.length;
+
+  const expectedHeaders: Record<string, string> = {
+    id_question: 'userQuestionId', texte: 'texte', referentiel_code: 'referentiel_code',
+    theme_code: 'theme_code', bloc_code: 'bloc_code', optiona: 'optionA', optionb: 'optionB',
+    optionc: 'optionC', optiond: 'optionD', correctanswer: 'correctAnswer',
+    iseliminatory: 'isEliminatory', timelimit: 'timeLimit', imagename: 'imageName', version: 'version',
+  };
+
+  const headerMap: Record<string, number> = {};
+  headerRow.forEach((header, index) => {
+    const normalizedHeader = (header || '').toString().toLowerCase().replace(/\s+/g, '');
+    const internalKey = Object.keys(expectedHeaders).find(k => k === normalizedHeader || expectedHeaders[k].toLowerCase().replace(/\s+/g, '') === normalizedHeader);
+    if (internalKey) {
+        headerMap[expectedHeaders[internalKey]] = index;
+    }
+  });
+
+  const requiredImportKeys = ['userQuestionId', 'texte', 'referentiel_code', 'theme_code', 'bloc_code', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory', 'version'];
+  for (const key of requiredImportKeys) {
+    if (headerMap[key] === undefined) {
+      const displayName = Object.keys(expectedHeaders).find(k => expectedHeaders[k] === key) || key;
+      throw new Error(`Colonne manquante ou mal nommée dans le fichier Excel : "${displayName}"`);
+    }
+  }
+
+  const questionsToUpsert: Omit<QuestionWithId, 'id'>[] = [];
+  const errorsEncountered: string[] = [];
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i] as any[];
+    progressCallback({ current: i + 1, total });
+
+    if (row.every(cell => cell === null || cell === undefined || cell.toString().trim() === '')) continue;
+
+    const questionText = row[headerMap['texte']];
+    if (!questionText || questionText.toString().trim() === '') {
+        errorsEncountered.push(`Ligne ${i + 2}: Le champ 'texte' est manquant.`);
+        continue;
+    }
+
+    const options = [
+        (row[headerMap['optionA']] || '').toString().trim(),
+        (row[headerMap['optionB']] || '').toString().trim(),
+        (row[headerMap['optionC']] || '').toString().trim(),
+        (row[headerMap['optionD']] || '').toString().trim()
+    ].filter(opt => opt !== '');
+
+    if (options.length < 2) {
+        errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Au moins 2 options (OptionA et OptionB) doivent être renseignées.`);
+        continue;
+    }
+
+    const referentielCode = (row[headerMap['referentiel_code']] || '').toString().trim();
+    const themeCode = (row[headerMap['theme_code']] || '').toString().trim();
+    const blocCode = (row[headerMap['bloc_code']] || '').toString().trim();
+
+    if (!referentielCode || !themeCode || !blocCode) {
+      errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): 'referentiel_code', 'theme_code', et 'bloc_code' sont requis.`);
+      continue;
+    }
+
+    let blocIdToStore: number | undefined;
+    try {
+      const referentiel = await getReferentialByCode(referentielCode);
+      if (!referentiel?.id) { throw new Error(`Référentiel avec code "${referentielCode}" non trouvé.`); }
+
+      const theme = await getThemeByCodeAndReferentialId(themeCode, referentiel.id);
+      if (!theme?.id) { throw new Error(`Thème avec code "${themeCode}" non trouvé pour le référentiel "${referentielCode}".`); }
+
+      let bloc = await getBlocByCodeAndThemeId(blocCode, theme.id);
+      if (!bloc?.id) {
+        const newBlocId = await addBloc({ code_bloc: blocCode, nom_complet: blocCode, theme_id: theme.id });
+        if (!newBlocId) throw new Error(`Création automatique du bloc "${blocCode}" a échoué.`);
+        blocIdToStore = newBlocId;
+      } else {
+        blocIdToStore = bloc.id;
+      }
+    } catch (dbError: any) {
+      errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Erreur de structure - ${dbError.message}`);
+      continue;
+    }
+
+    const correctAnswerLetter = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
+    let correctAnswerStr = '';
+    const letterMap: { [key: string]: string } = { 'A': '0', 'B': '1', 'C': '2', 'D': '3' };
+    correctAnswerStr = letterMap[correctAnswerLetter];
+
+    if (!correctAnswerStr && options.length === 2) {
+        if (correctAnswerLetter === 'VRAI') correctAnswerStr = '0';
+        else if (correctAnswerLetter === 'FAUX') correctAnswerStr = '1';
+    }
+
+    if (!correctAnswerStr || !options[parseInt(correctAnswerStr, 10)]?.trim()) {
+        errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): 'correctAnswer' ('${correctAnswerLetter}') invalide ou l'option est vide.`);
+        continue;
+    }
+
+    const isEliminatoryRaw = (row[headerMap['isEliminatory']] || 'Non').toString().trim().toUpperCase();
+    let isEliminatoryBool = false;
+    if (['OUI', 'TRUE', '1'].includes(isEliminatoryRaw)) {
+        isEliminatoryBool = true;
+    } else if (!['NON', 'FALSE', '0'].includes(isEliminatoryRaw)) {
+        errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Valeur pour 'isEliminatory' invalide. Utilisez Oui/Non, True/False, 0/1.`);
+        continue;
+    }
+
+    questionsToUpsert.push({
+      userQuestionId: (row[headerMap['userQuestionId']] || '').toString().trim(),
+      text: questionText.toString(),
+      type: QuestionType.QCM,
+      options: options,
+      correctAnswer: correctAnswerStr,
+      blocId: blocIdToStore,
+      isEliminatory: isEliminatoryBool,
+      timeLimit: parseInt(row[headerMap['timelimit']], 10) || 30,
+      imageName: (row[headerMap['imageName']] || '').toString().trim() || undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      usageCount: 0,
+      correctResponseRate: 0,
+      version: (row[headerMap['version']] || '').toString().trim(),
+    });
+  }
+
+  if (questionsToUpsert.length > 0) {
+    await bulkUpsertQuestions(questionsToUpsert);
+  }
+
+  return { questionsAdded: questionsToUpsert.length, errors: errorsEncountered };
+};
+
 const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean> => {
     return asyncDbRun(() => {
         try {
@@ -2483,4 +2623,4 @@ const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean
     });
 };
 
-export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, bulkUpsertQuestions, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, hasResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus };
+export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, bulkUpsertQuestions, getAllQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, hasResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus, importQuestionsFromData };

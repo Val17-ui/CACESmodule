@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 
 contextBridge.exposeInMainWorld('dbAPI', {
   // Sessions
@@ -87,6 +87,7 @@ contextBridge.exposeInMainWorld('dbAPI', {
   // Questions
   addQuestion: (data: any) => ipcRenderer.invoke('db-add-question', data),
   upsertQuestion: (data: any) => ipcRenderer.invoke('db-upsert-question', data),
+  handleQuestionImport: (rows: any[][]) => ipcRenderer.invoke('handle-question-import', rows),
   getQuestionById: (id: number) => ipcRenderer.invoke('db-get-question-by-id', id),
   getQuestionsByBlocId: (blocId: number) => ipcRenderer.invoke('db-get-questions-by-bloc-id', blocId),
   updateQuestion: (id: number, updates: any) => ipcRenderer.invoke('db-update-question', id, updates),
@@ -120,6 +121,16 @@ contextBridge.exposeInMainWorld('dbAPI', {
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  on: (channel: string, callback: (...args: any[]) => void) => {
+    const validChannels = ['import-progress'];
+    if (validChannels.includes(channel)) {
+      // Deliberately strip event as it includes `sender`
+      const newCallback = (_: IpcRendererEvent, ...args: any[]) => callback(...args);
+      ipcRenderer.on(channel, newCallback);
+      // Return a function to remove the listener
+      return () => ipcRenderer.removeListener(channel, newCallback);
+    }
+  },
   readImageFile: (path: string | Blob | null) => ipcRenderer.invoke('read-image-file', path),
   readFileBuffer: (filePath: string) => ipcRenderer.invoke('read-file-buffer', filePath),
   Buffer_from: (buffer: string, encoding: string) => Buffer.from(buffer, encoding as BufferEncoding),

@@ -19,13 +19,14 @@ import {
   getAllTrainers, addTrainer, deleteTrainer, setDefaultTrainer, updateTrainer, getTrainerById,
   addTheme, getThemeByCodeAndReferentialId, getThemesByReferentialId, getThemeById, getAllThemes,
   addBloc, getBlocByCodeAndThemeId, getBlocsByThemeId, getBlocById, getAllBlocs,
-  addQuestion, upsertQuestion, bulkUpsertQuestions, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
+  addQuestion, upsertQuestion, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
   getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks,
   getAdminSetting, setAdminSetting, getAllAdminSettings,
   exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
   updateParticipantStatusInIteration,
-  checkAndFinalizeSessionStatus
+  checkAndFinalizeSessionStatus,
+  importQuestionsFromData
 } from '@electron/db';
 
 import { getLogger, ILogger } from '@electron/utils/logger';
@@ -325,11 +326,20 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
     return upsertQuestion(questionToUpsert as Omit<QuestionWithId, 'id'>);
   });
 
-  ipcMain.handle('db-bulk-upsert-questions', async (_event: IpcMainInvokeEvent, questions: Question[]) => {
-    loggerInstance.debug(`[IPC] db-bulk-upsert-questions: upserting ${questions.length} questions`);
-    // The type from the frontend will be `Question[]`, but the db function expects `Omit<QuestionWithId, 'id'>[]`
-    // The types are compatible, so we can cast.
-    return bulkUpsertQuestions(questions as Omit<QuestionWithId, 'id'>[]);
+  ipcMain.handle('handle-question-import', async (event, rows: any[][]) => {
+    loggerInstance.debug(`[IPC] handle-question-import: starting import for ${rows.length - 1} questions.`);
+
+    const progressCallback = (progress: { current: number; total: number }) => {
+      event.sender.send('import-progress', progress);
+    };
+
+    try {
+      const result = await importQuestionsFromData(rows, progressCallback);
+      return { success: true, ...result };
+    } catch (error: any) {
+      loggerInstance.error(`[IPC] handle-question-import: Import failed: ${error.message}`);
+      return { success: false, error: error.message };
+    }
   });
 
   ipcMain.handle('db-get-question-by-id', async (_event: IpcMainInvokeEvent, id: number) => {
