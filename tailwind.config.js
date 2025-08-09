@@ -7,8 +7,8 @@ export default {
         'fond-clair-principal': '#F5F6F8',
         'texte-principal': '#2D2D2D',
         'accent-neutre': {
-          DEFAULT: '#3A3E46', // R:58, G:62, B:70
-          hover: '#4C515C',
+          DEFAULT: '#2e3e4f',
+          hover: '#4A5A6A',
         },
         'vert-validation': '#6BAF92',
         'rouge-accent': '#FF6161',
