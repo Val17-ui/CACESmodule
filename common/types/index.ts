@@ -439,6 +439,7 @@ export type OnboardingStepStatus = 'pending' | 'completed_by_action' | 'complete
 
 export type OnboardingStatus = {
   addQuestions: OnboardingStepStatus;
+  addVotingDevices: OnboardingStepStatus;
   addTrainers: OnboardingStepStatus;
   createKits: OnboardingStepStatus;
   modifyPreferences: OnboardingStepStatus;

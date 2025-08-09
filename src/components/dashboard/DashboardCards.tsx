@@ -24,6 +24,7 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
 
   const stepsDefinition: OnboardingStep[] = [
     { id: 'addQuestions', title: 'Ajouter les questions dans la bibliothèque', isOptional: false, page: 'settings', link: 'library' },
+    { id: 'addVotingDevices', title: 'Ajouter vos boîtiers de vote', isOptional: false, page: 'settings', link: 'devicesAndKits' },
     { id: 'addTrainers', title: 'Ajouter le nom de vos formateurs', isOptional: false, page: 'settings', link: 'trainers' },
     { id: 'createKits', title: 'Créer des kits de boîtiers', isOptional: true, page: 'settings', link: 'devicesAndKits' },
     { id: 'modifyPreferences', title: 'Modification des préférences', isOptional: true, page: 'settings', link: 'preferences' },
@@ -37,28 +38,26 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
         const storedStatus = await StorageManager.getAdminSetting('onboardingStatus');
         const initialStatus: OnboardingStatus = storedStatus || {
           addQuestions: 'pending',
+          addVotingDevices: 'pending',
           addTrainers: 'pending',
           createKits: 'pending',
           modifyPreferences: 'pending',
           configureTechnicalSettings: 'pending',
         };
 
-        const [questions, kits, trainers, orsSavePath, reportSavePath, imagesSavePath] = await Promise.all([
+        const [questions, votingDevices, kits, trainers] = await Promise.all([
           window.dbAPI.getAllQuestions(),
+          window.dbAPI.getAllVotingDevices(),
           window.dbAPI.getAllDeviceKits(),
           window.dbAPI.getAllTrainers(),
-          StorageManager.getAdminSetting('orsSavePath'),
-          StorageManager.getAdminSetting('reportSavePath'),
-          StorageManager.getAdminSetting('imagesSavePath'), // Corrected key
         ]);
 
         const newStatus: OnboardingStatus = { ...initialStatus };
 
         if (questions.length > 0) newStatus.addQuestions = 'completed_by_action';
+        if (votingDevices.length > 0) newStatus.addVotingDevices = 'completed_by_action';
         if (trainers.length > 0) newStatus.addTrainers = 'completed_by_action';
         if (kits.filter(k => !k.is_global).length > 0) newStatus.createKits = 'completed_by_action';
-        // 'modifyPreferences' can only be completed by user action
-        if (orsSavePath && reportSavePath && imagesSavePath) newStatus.configureTechnicalSettings = 'completed_by_action';
 
         // Don't downgrade a step completed by the user
         for (const key in newStatus) {
@@ -80,6 +79,7 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
         logger.error('Failed to check onboarding status:', error);
         setOnboardingStatus({
             addQuestions: 'pending',
+            addVotingDevices: 'pending',
             addTrainers: 'pending',
             createKits: 'pending',
             modifyPreferences: 'pending',
@@ -162,9 +162,14 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
                    </a>
                 ) : (
                     step.isOptional ? (
-                        <Button onClick={() => handleMarkAsDone(step.id)} variant="outline" size="sm" className="mr-2">
-                            Marquer comme fait
-                        </Button>
+                        <div className="flex items-center">
+                            <a href="#" onClick={(e) => { e.preventDefault(); onPageChange(step.page, step.link); }} className="text-sm font-medium text-rouge-accent hover:underline mr-4">
+                                Commencer
+                            </a>
+                            <Button onClick={() => handleMarkAsDone(step.id)} variant="ghost" size="sm" className="text-xs italic text-gray-500">
+                                Marquer comme fait
+                            </Button>
+                        </div>
                     ) : (
                         <a href="#" onClick={(e) => { e.preventDefault(); onPageChange(step.page, step.link); }} className="text-sm font-medium text-rouge-accent hover:underline">
                             Commencer
