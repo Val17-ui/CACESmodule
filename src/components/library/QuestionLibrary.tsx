@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, Edit, Trash2, Image, AlertTriangle, TrendingUp, TrendingDown, Upload, CheckCircle, XCircle } from 'lucide-react'; // Removed Copy
+import { FileText, Edit, Trash2, Image, AlertTriangle, TrendingUp, TrendingDown, Upload, CheckCircle, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
@@ -10,14 +10,15 @@ import Input from '../ui/Input';
 import { Table, TableHead, TableBody, TableRow, TableCell } from '../ui/Table';
 import { Referential, Theme, Bloc, QuestionType } from '@common/types';
 import { StorageManager, StoredQuestion } from '../../services/StorageManager';
+
 type QuestionLibraryProps = {
   onEditQuestion: (id: string) => void;
 };
 
 const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => {
-  const [selectedReferential, setSelectedReferential] = useState<string>(''); // Store ID
-  const [selectedTheme, setSelectedTheme] = useState<string>(''); // Store ID
-  const [selectedBloc, setSelectedBloc] = useState<string>(''); // Store ID, New filter
+  const [selectedReferential, setSelectedReferential] = useState<string>('');
+  const [selectedTheme, setSelectedTheme] = useState<string>('');
+  const [selectedBloc, setSelectedBloc] = useState<string>('');
   const [selectedEliminatory, setSelectedEliminatory] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const [sortBy, setSortBy] = useState<string>('recent');
@@ -25,23 +26,18 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Data for filters
-  const [referentielsData, setReferentielsData] = useState<Referential[]>([]); // For filters and enrichment
-  const [themesData, setThemesData] = useState<Theme[]>([]); // For filter dropdowns
-  const [blocsData, setBlocsData] = useState<Bloc[]>([]); // For filter dropdowns
-
-  const [allThemesData, setAllThemesData] = useState<Theme[]>([]); // For enrichment lookup
-  const [allBlocsData, setAllBlocsData] = useState<Bloc[]>([]); // For enrichment lookup
-
+  const [referentielsData, setReferentielsData] = useState<Referential[]>([]);
+  const [themesData, setThemesData] = useState<Theme[]>([]);
+  const [blocsData, setBlocsData] = useState<Bloc[]>([]);
+  const [allThemesData, setAllThemesData] = useState<Theme[]>([]);
+  const [allBlocsData, setAllBlocsData] = useState<Bloc[]>([]);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
 
   const [isImporting, setIsImporting] = useState(false);
   const [importStatusMessage, setImportStatusMessage] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
-  
 
-  // États pour les messages d'import spécifiques
   const [isImportingReferentiels, setIsImportingReferentiels] = useState(false);
   const [importReferentielsStatusMessage, setImportReferentielsStatusMessage] = useState<string | null>(null);
   const [importReferentielsError, setImportReferentielsError] = useState<string | null>(null);
@@ -50,8 +46,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   const [importThemesStatusMessage, setImportThemesStatusMessage] = useState<string | null>(null);
   const [importThemesError, setImportThemesError] = useState<string | null>(null);
 
-
-  const fetchQuestions = async () => { // Made fetchQuestions a standalone function
+  const fetchQuestions = async () => {
     setIsLoading(true);
     try {
       const fetchedQuestions = await StorageManager.getAllQuestions();
@@ -74,20 +69,13 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   const loadFilterData = async () => {
     try {
       const refs = await StorageManager.getAllReferentiels();
-      setReferentielsData(refs); // Used for filters and enrichment
-
+      setReferentielsData(refs);
       const allThemes = await StorageManager.getAllThemes();
-      setAllThemesData(allThemes); // Used for enrichment
-
+      setAllThemesData(allThemes);
       const allBlocs = await StorageManager.getAllBlocs();
-      setAllBlocsData(allBlocs); // Used for enrichment
-
-      // Initial load for filter-specific themes and blocs can be empty
-      // or based on a default selection if any.
-      // These will be populated by the useEffect hooks below based on filter selections.
-      setThemesData([]); // For filter dropdown
-      setBlocsData([]);  // For filter dropdown
-
+      setAllBlocsData(allBlocs);
+      setThemesData([]);
+      setBlocsData([]);
     } catch (error) {
       console.error("Error loading filter data:", error);
       setError("Erreur lors du chargement des données de filtre.");
@@ -95,34 +83,32 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   };
 
   useEffect(() => {
-    // Load themes for FILTER dropdown when selectedReferential changes
     if (selectedReferential) {
       StorageManager.getThemesByReferentialId(parseInt(selectedReferential, 10))
-        .then(themes => setThemesData(themes)) // Populates themesData for the filter dropdown
+        .then(themes => setThemesData(themes))
         .catch(error => {
           console.error("Error loading themes for filter:", error);
-          setThemesData([]); // Ensure it's reset on error
+          setThemesData([]);
         });
-      setSelectedTheme(''); // Reset theme filter selection
-      setBlocsData([]);   // Clear bloc filter dropdown
+      setSelectedTheme('');
+      setBlocsData([]);
     } else {
-      setThemesData([]); // Clear theme filter dropdown if no referential is selected
-      setBlocsData([]);   // Clear bloc filter dropdown
+      setThemesData([]);
+      setBlocsData([]);
     }
   }, [selectedReferential]);
 
   useEffect(() => {
-    // Load blocs for FILTER dropdown when selectedTheme changes
     if (selectedTheme) {
       StorageManager.getBlocsByThemeId(parseInt(selectedTheme, 10))
-        .then(blocs => setBlocsData(blocs)) // Populates blocsData for the filter dropdown
+        .then(blocs => setBlocsData(blocs))
         .catch(error => {
           console.error("Error loading blocs for filter:", error);
-          setBlocsData([]); // Ensure it's reset on error
+          setBlocsData([]);
         });
-      setSelectedBloc(''); // Reset bloc filter selection
+      setSelectedBloc('');
     } else {
-      setBlocsData([]); // Clear bloc filter dropdown if no theme is selected
+      setBlocsData([]);
     }
   }, [selectedTheme]);
 
@@ -134,109 +120,71 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
 
     try {
       const fileDialogResult = await window.dbAPI?.openExcelFileDialog();
-
       if (fileDialogResult?.canceled) {
         setIsImporting(false);
         return;
       }
-
-      if (!fileDialogResult) {
-        throw new Error("File dialog did not return a result.");
+      if (!fileDialogResult || fileDialogResult.error) {
+        throw new Error(`Erreur de lecture du fichier: ${fileDialogResult?.error || 'inconnue'}`);
       }
 
-      if (fileDialogResult.error) {
-        throw new Error(`Erreur de lecture du fichier: ${fileDialogResult.error}`);
-      }
       const fileBuffer = window.electronAPI?.Buffer_from(fileDialogResult.fileBuffer || '', 'base64');
-
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-      if (jsonRows.length < 2) { // Header + at least one data row
-        throw new Error("Le fichier est vide ou ne contient pas de données de question.");
-      }
+      if (jsonRows.length < 2) throw new Error("Le fichier est vide ou ne contient pas de données de question.");
 
+      const headerRow = jsonRows[0] as string[];
       const dataRows = jsonRows.slice(1);
       setImportProgress({ current: 0, total: dataRows.length });
 
-      const headerRow = jsonRows[0] as string[];
       const expectedHeaders: Record<string, string> = {
-        id_question: 'userQuestionId',
-        texte: 'texte',
-        referentiel_code: 'referentiel_code',
-        theme_code: 'theme_code',
-        bloc_code: 'bloc_code',
-        optiona: 'optionA',
-        optionb: 'optionB',
-        optionc: 'optionC',
-        optiond: 'optionD',
-        correctanswer: 'correctAnswer',
-        iseliminatory: 'isEliminatory',
-        timelimit: 'timeLimit',
-        imagename: 'imageName',
-        version: 'version',
+        id_question: 'userQuestionId', texte: 'texte', referentiel_code: 'referentiel_code',
+        theme_code: 'theme_code', bloc_code: 'bloc_code', optiona: 'optionA', optionb: 'optionB',
+        optionc: 'optionC', optiond: 'optionD', correctanswer: 'correctAnswer',
+        iseliminatory: 'isEliminatory', timelimit: 'timeLimit', imagename: 'imageName', version: 'version',
       };
 
       const headerMap: Record<string, number> = {};
       headerRow.forEach((header, index) => {
         const normalizedHeader = (header || '').toString().toLowerCase().replace(/\s+/g, '');
-        if (expectedHeaders[normalizedHeader]) {
-            headerMap[expectedHeaders[normalizedHeader]] = index;
-        } else {
-            for (const key in expectedHeaders) {
-                if (normalizedHeader === expectedHeaders[key].toLowerCase().replace(/\s+/g, '')) {
-                    headerMap[expectedHeaders[key]] = index;
-                    break;
-                }
-            }
+        const internalKey = Object.keys(expectedHeaders).find(k => k === normalizedHeader || expectedHeaders[k].toLowerCase().replace(/\s+/g, '') === normalizedHeader);
+        if (internalKey) {
+            headerMap[expectedHeaders[internalKey]] = index;
         }
       });
 
       const requiredImportKeys = ['userQuestionId', 'texte', 'referentiel_code', 'theme_code', 'bloc_code', 'correctAnswer', 'optionA', 'optionB', 'isEliminatory', 'version'];
       for (const key of requiredImportKeys) {
         if (headerMap[key] === undefined) {
-          let displayNameForKey = key;
-          for (const k in expectedHeaders) {
-            if (expectedHeaders[k] === key) {
-              displayNameForKey = k;
-              break;
-            }
-          }
-          throw new Error(`Colonne manquante ou mal nommée dans le fichier Excel : "${displayNameForKey}"`);
+          const displayName = Object.keys(expectedHeaders).find(k => expectedHeaders[k] === key) || key;
+          throw new Error(`Colonne manquante ou mal nommée dans le fichier Excel : "${displayName}"`);
         }
       }
 
-      let questionsAdded = 0;
+      const questionsToUpsert: Omit<StoredQuestion, 'id'>[] = [];
       const errorsEncountered: string[] = [];
 
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i] as any[];
         setImportProgress(prev => ({ ...prev, current: i + 1 }));
 
-        if (row.every(cell => cell === null || cell === undefined || cell.toString().trim() === '')) {
-            continue; // Skip empty row
-        }
+        if (row.every(cell => cell === null || cell === undefined || cell.toString().trim() === '')) continue;
 
         const questionText = row[headerMap['texte']];
         if (!questionText || questionText.toString().trim() === '') {
             errorsEncountered.push(`Ligne ${i + 2}: Le champ 'texte' est manquant.`);
             continue;
         }
-        
-        let options: string[] = [];
-        let correctAnswerStr: string = '';
 
-        const optA = (row[headerMap['optionA']] || '').toString().trim();
-        const optB = (row[headerMap['optionB']] || '').toString().trim();
-        const optC = (row[headerMap['optionC']] || '').toString().trim();
-        const optD = (row[headerMap['optionD']] || '').toString().trim();
-
-        options = [optA, optB];
-        if (optC !== '') options.push(optC);
-        if (optD !== '') options.push(optD);
-        options = options.filter(opt => opt !== '');
+        const options = [
+            (row[headerMap['optionA']] || '').toString().trim(),
+            (row[headerMap['optionB']] || '').toString().trim(),
+            (row[headerMap['optionC']] || '').toString().trim(),
+            (row[headerMap['optionD']] || '').toString().trim()
+        ].filter(opt => opt !== '');
 
         if (options.length < 2) {
             errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Au moins 2 options (OptionA et OptionB) doivent être renseignées.`);
@@ -252,77 +200,52 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           continue;
         }
 
-        let blocIdToStore: number | undefined = undefined;
+        let blocIdToStore: number | undefined;
         try {
           const referentiel = await StorageManager.getReferentialByCode(referentielCode);
-          if (!referentiel || !referentiel.id) {
-            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Référentiel avec code "${referentielCode}" non trouvé.`);
-            continue;
-          }
+          if (!referentiel?.id) { throw new Error(`Référentiel avec code "${referentielCode}" non trouvé.`); }
+
           const theme = await StorageManager.getThemeByCodeAndReferentialId(themeCode, referentiel.id);
-          if (!theme || !theme.id) {
-            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Thème avec code "${themeCode}" non trouvé pour le référentiel "${referentielCode}".`);
-            continue;
-          }
-          const bloc = await StorageManager.getBlocByCodeAndThemeId(blocCode, theme.id);
-          if (!bloc || !bloc.id) {
-            console.log(`Bloc "${blocCode}" non trouvé pour le thème "${themeCode}". Tentative de création...`);
+          if (!theme?.id) { throw new Error(`Thème avec code "${themeCode}" non trouvé pour le référentiel "${referentielCode}".`); }
+
+          let bloc = await StorageManager.getBlocByCodeAndThemeId(blocCode, theme.id);
+          if (!bloc?.id) {
             const newBlocId = await StorageManager.addBloc({ code_bloc: blocCode, nom_complet: blocCode, theme_id: theme.id });
-            if (newBlocId) {
-              blocIdToStore = newBlocId;
-              console.log(`Bloc "${blocCode}" créé automatiquement pour le thème "${themeCode}" avec ID: ${newBlocId}.`);
-            } else {
-              errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Création automatique du bloc "${blocCode}" pour le thème "${themeCode}" a échoué.`);
-              continue;
-            }
+            if (!newBlocId) throw new Error(`Création automatique du bloc "${blocCode}" a échoué.`);
+            blocIdToStore = newBlocId;
           } else {
             blocIdToStore = bloc.id;
           }
         } catch (dbError: any) {
-          errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Erreur DB lors de la recherche/création de référentiel/thème/bloc: ${dbError.message}`);
+          errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Erreur de structure - ${dbError.message}`);
           continue;
         }
 
-        if (blocIdToStore === undefined) {
-            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Impossible de déterminer le blocId.`);
-            continue;
-        }
-
         const correctAnswerLetter = (row[headerMap['correctAnswer']] || '').toString().toUpperCase();
-        if (correctAnswerLetter === 'A') correctAnswerStr = "0";
-        else if (correctAnswerLetter === 'B') correctAnswerStr = "1";
-        else if (correctAnswerLetter === 'C' && options.length > 2) correctAnswerStr = "2";
-        else if (correctAnswerLetter === 'D' && options.length > 3) correctAnswerStr = "3";
-        else {
-            if (options.length === 2) {
-                if (correctAnswerLetter === 'VRAI' && (optA.toUpperCase() === 'VRAI' || options[0].toUpperCase() === correctAnswerLetter)) correctAnswerStr = "0";
-                else if (correctAnswerLetter === 'FAUX' && (optB.toUpperCase() === 'FAUX' || options[1].toUpperCase() === correctAnswerLetter)) correctAnswerStr = "1";
-                else {
-                     errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide. Utilisez A, B, C, D ou Vrai/Faux pour les questions à 2 options.`);
-                     continue;
-                }
-            } else {
-                errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Valeur de 'correctAnswer' (${correctAnswerLetter}) invalide ou option correspondante non disponible.`);
-                continue;
-            }
+        let correctAnswerStr = '';
+        const letterMap: { [key: string]: string } = { 'A': '0', 'B': '1', 'C': '2', 'D': '3' };
+        correctAnswerStr = letterMap[correctAnswerLetter];
+
+        if (!correctAnswerStr && options.length === 2) {
+            if (correctAnswerLetter === 'VRAI') correctAnswerStr = '0';
+            else if (correctAnswerLetter === 'FAUX') correctAnswerStr = '1';
         }
 
-        const caIdx = parseInt(correctAnswerStr, 10);
-        if (!options[caIdx]?.trim()) {
-           errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): L'option correcte '${correctAnswerLetter}' est vide ou non définie.`);
-           continue;
+        if (!correctAnswerStr || !options[parseInt(correctAnswerStr, 10)]?.trim()) {
+            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): 'correctAnswer' ('${correctAnswerLetter}') invalide ou l'option est vide.`);
+            continue;
         }
 
         const isEliminatoryRaw = (row[headerMap['isEliminatory']] || 'Non').toString().trim().toUpperCase();
         let isEliminatoryBool = false;
-        if (isEliminatoryRaw === 'OUI' || isEliminatoryRaw === 'TRUE' || isEliminatoryRaw === '1') {
+        if (['OUI', 'TRUE', '1'].includes(isEliminatoryRaw)) {
             isEliminatoryBool = true;
-        } else if (isEliminatoryRaw !== 'NON' && isEliminatoryRaw !== 'FALSE' && isEliminatoryRaw !== '0') {
-            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Valeur pour 'isEliminatory' (${isEliminatoryRaw}) invalide. Utilisez Oui/Non, True/False, 0/1.`);
+        } else if (!['NON', 'FALSE', '0'].includes(isEliminatoryRaw)) {
+            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Valeur pour 'isEliminatory' invalide. Utilisez Oui/Non, True/False, 0/1.`);
             continue;
         }
 
-        const newQuestionData: Omit<StoredQuestion, 'id'> = {
+        questionsToUpsert.push({
           userQuestionId: (row[headerMap['userQuestionId']] || '').toString().trim(),
           text: questionText.toString(),
           type: QuestionType.QCM,
@@ -337,38 +260,34 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
           usageCount: 0,
           correctResponseRate: 0,
           version: (row[headerMap['version']] || '').toString().trim(),
-        };
-
-        try {
-            await StorageManager.upsertQuestion(newQuestionData);
-            questionsAdded++;
-        } catch (e: any) {
-            errorsEncountered.push(`Ligne ${i + 2} (${questionText.substring(0,20)}...): Erreur DB - ${e.message}`);
-        }
+        });
       }
 
-      let summaryMessage = `${questionsAdded} question(s) importée(s) avec succès.`;
+      if (questionsToUpsert.length > 0) {
+        await StorageManager.bulkUpsertQuestions(questionsToUpsert);
+      }
+
+      let summaryMessage = `${questionsToUpsert.length} question(s) importée(s) avec succès.`;
       if (errorsEncountered.length > 0) {
         summaryMessage += ` ${errorsEncountered.length} erreur(s) rencontrée(s).`;
         setImportError(errorsEncountered.join('\n'));
-        console.error("Erreurs d'importation:", errorsEncountered);
       } else {
         setImportError(null);
       }
       setImportStatusMessage(summaryMessage);
-      if (questionsAdded > 0) {
+      if (questionsToUpsert.length > 0) {
         await fetchQuestions();
       }
 
     } catch (err: any) {
       console.error("Error importing file: ", err);
       setImportError(`Erreur lors de l'importation: ${err.message}`);
-      setImportStatusMessage(null);
     } finally {
       setIsImporting(false);
     }
   };
 
+  // ... (rest of the file is the same)
   const triggerFileInput = () => {
     handleFileImport();
   };

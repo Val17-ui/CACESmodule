@@ -48,6 +48,16 @@ export const StorageManager = {
     }
   },
 
+  async bulkUpsertQuestions(questionsData: Omit<StoredQuestion, 'id'>[]): Promise<void> {
+    if (!window.dbAPI?.['db-bulk-upsert-questions']) throw new Error("dbAPI.db-bulk-upsert-questions is not available.");
+    try {
+      await window.dbAPI['db-bulk-upsert-questions'](questionsData);
+    } catch (error) {
+      console.error("StorageManager: Error bulk upserting questions via IPC", error);
+      throw error;
+    }
+  },
+
   /**
    * Retrieves all questions from the database.
    * @returns An array of StoredQuestion objects.

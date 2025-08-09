@@ -19,7 +19,7 @@ import {
   getAllTrainers, addTrainer, deleteTrainer, setDefaultTrainer, updateTrainer, getTrainerById,
   addTheme, getThemeByCodeAndReferentialId, getThemesByReferentialId, getThemeById, getAllThemes,
   addBloc, getBlocByCodeAndThemeId, getBlocsByThemeId, getBlocById, getAllBlocs,
-  addQuestion, upsertQuestion, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
+  addQuestion, upsertQuestion, bulkUpsertQuestions, getQuestionById, getQuestionsByBlocId, updateQuestion, deleteQuestion,
   getAllQuestions, getQuestionsByIds, getQuestionsForSessionBlocks,
   getAdminSetting, setAdminSetting, getAllAdminSettings,
   exportAllData, importAllData, getVotingDevicesForKit, calculateBlockUsage,
@@ -324,6 +324,14 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
     };
     return upsertQuestion(questionToUpsert as Omit<QuestionWithId, 'id'>);
   });
+
+  ipcMain.handle('db-bulk-upsert-questions', async (_event: IpcMainInvokeEvent, questions: Question[]) => {
+    loggerInstance.debug(`[IPC] db-bulk-upsert-questions: upserting ${questions.length} questions`);
+    // The type from the frontend will be `Question[]`, but the db function expects `Omit<QuestionWithId, 'id'>[]`
+    // The types are compatible, so we can cast.
+    return bulkUpsertQuestions(questions as Omit<QuestionWithId, 'id'>[]);
+  });
+
   ipcMain.handle('db-get-question-by-id', async (_event: IpcMainInvokeEvent, id: number) => {
     loggerInstance.debug(`[IPC] db-get-question-by-id: ${id}`);
     return getQuestionById(id);
