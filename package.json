@@ -52,7 +52,8 @@
     
     
     
-    "zustand": "^4.5.2"
+    "zustand": "^4.5.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/jspdf": "^1.3.3",

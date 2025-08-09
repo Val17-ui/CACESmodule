@@ -435,9 +435,12 @@ export interface BlockUsage {
   usageCount: number;
 }
 
+export type OnboardingStepStatus = 'pending' | 'completed_by_action' | 'completed_by_user';
+
 export type OnboardingStatus = {
-  hasAddedQuestions: boolean;
-  hasCreatedKits: boolean;
-  hasAddedTrainers: boolean;
-  hasConfiguredTechnicalSettings: boolean;
+  addQuestions: OnboardingStepStatus;
+  addTrainers: OnboardingStepStatus;
+  createKits: OnboardingStepStatus;
+  modifyPreferences: OnboardingStepStatus;
+  configureTechnicalSettings: OnboardingStepStatus;
 };

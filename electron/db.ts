@@ -81,6 +81,14 @@ async function initializeDatabase(loggerInstance: ILogger) {
     _logger.error(`[DB SETUP] Failed to archive old sessions: ${err}`);
   }
 
+  try {
+    _logger.debug('[DB SETUP] Initializing default admin settings...');
+    await initializeDefaultAdminSettings();
+    _logger.debug('[DB SETUP] Default admin settings initialized.');
+  } catch (err) {
+    _logger.error(`[DB SETUP] Failed to initialize default admin settings: ${err}`);
+  }
+
   _logger.info("[DB SETUP] Database initialization process finished successfully.");
 }
 
@@ -2372,6 +2380,49 @@ async function importAllData(data: unknown): Promise<void> {
 // 6. Transactions: The schema creation is wrapped in a transaction. Individual CRUD operations
 //    that involve multiple steps (e.g., updating a default flag) should also use transactions.
 // 7. Logging: Added more console _logger?.debugs with prefixes for easier debugging of setup and stub calls.
+
+const initializeDefaultAdminSettings = async (): Promise<void> => {
+  return asyncDbRun(() => {
+    const db = getDb();
+    const transaction = db.transaction(() => {
+      try {
+        const documentsPath = app.getPath('documents');
+        const baseAppDir = path.join(documentsPath, 'evalactive');
+
+        const orsSavePath = path.join(baseAppDir, 'ors');
+        const reportSavePath = path.join(baseAppDir, 'rapports');
+        const imagesSavePath = path.join(baseAppDir, 'images');
+
+        // Create directories if they don't exist
+        // Using fs.mkdirSync because we are in a sync transaction
+        fs.mkdirSync(orsSavePath, { recursive: true });
+        fs.mkdirSync(reportSavePath, { recursive: true });
+        fs.mkdirSync(imagesSavePath, { recursive: true });
+
+        const stmt = db.prepare(`
+          INSERT INTO adminSettings (key, value)
+          VALUES (@key, @value)
+          ON CONFLICT(key) DO NOTHING
+        `);
+
+        // Set tutorial flag
+        stmt.run({ key: 'tutorialCompleted', value: JSON.stringify(false) });
+
+        // Set default paths
+        stmt.run({ key: 'orsSavePath', value: orsSavePath });
+        stmt.run({ key: 'reportSavePath', value: reportSavePath });
+        stmt.run({ key: 'imagesSavePath', value: imagesSavePath });
+
+        _logger.info('[DB SETUP] Default admin settings applied successfully.');
+      } catch (error) {
+        _logger.error(`[DB SETUP] Error while initializing default admin settings: ${error}`);
+        throw error; // Rollback transaction
+      }
+    });
+
+    transaction();
+  });
+};
 
 const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean> => {
     return asyncDbRun(() => {

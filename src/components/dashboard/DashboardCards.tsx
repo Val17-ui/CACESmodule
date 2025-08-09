@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../ui/Card';
-import { OnboardingStatus, QuestionWithId, DeviceKit, Trainer } from '@common/types';
+import Button from '../ui/Button';
+import { OnboardingStatus, OnboardingStepStatus } from '@common/types';
 import { StorageManager } from '../../services/StorageManager';
 import { CheckCircle, Circle, Wrench } from 'lucide-react';
 import { logger } from '../../utils/logger';
 
-// Define the structure for each onboarding step
 interface OnboardingStep {
   id: keyof OnboardingStatus;
   title: string;
-  isCompleted: boolean;
-  link: string;
+  isOptional: boolean;
   page: string;
+  link: string;
 }
 
 type DashboardCardsProps = {
@@ -22,52 +22,68 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const stepsDefinition: OnboardingStep[] = [
+    { id: 'addQuestions', title: 'Ajouter les questions dans la bibliothèque', isOptional: false, page: 'settings', link: 'library' },
+    { id: 'addTrainers', title: 'Ajouter le nom de vos formateurs', isOptional: false, page: 'settings', link: 'trainers' },
+    { id: 'createKits', title: 'Créer des kits de boîtiers', isOptional: true, page: 'settings', link: 'devicesAndKits' },
+    { id: 'modifyPreferences', title: 'Modification des préférences', isOptional: true, page: 'settings', link: 'preferences' },
+    { id: 'configureTechnicalSettings', title: 'Paramètres techniques', isOptional: true, page: 'settings', link: 'technical' },
+  ];
+
   useEffect(() => {
     const checkOnboardingStatus = async () => {
       setIsLoading(true);
       try {
         const storedStatus = await StorageManager.getAdminSetting('onboardingStatus');
         const initialStatus: OnboardingStatus = storedStatus || {
-          hasAddedQuestions: false,
-          hasCreatedKits: false,
-          hasAddedTrainers: false,
-          hasConfiguredTechnicalSettings: false,
+          addQuestions: 'pending',
+          addTrainers: 'pending',
+          createKits: 'pending',
+          modifyPreferences: 'pending',
+          configureTechnicalSettings: 'pending',
         };
 
-        // Fetch actual data to verify status
-        const [questions, kits, trainers, orsSavePath, reportSavePath, imagesFolderPath] = await Promise.all([
+        const [questions, kits, trainers, orsSavePath, reportSavePath, imagesSavePath] = await Promise.all([
           window.dbAPI.getAllQuestions(),
           window.dbAPI.getAllDeviceKits(),
           window.dbAPI.getAllTrainers(),
           StorageManager.getAdminSetting('orsSavePath'),
           StorageManager.getAdminSetting('reportSavePath'),
-          StorageManager.getAdminSetting('imagesFolderPath'),
+          StorageManager.getAdminSetting('imagesSavePath'), // Corrected key
         ]);
 
-        const actualStatus: OnboardingStatus = {
-          hasAddedQuestions: questions.length > 0,
-          hasCreatedKits: kits.filter(k => !k.is_global).length > 0,
-          hasAddedTrainers: trainers.length > 0,
-          hasConfiguredTechnicalSettings: !!(orsSavePath && reportSavePath && imagesFolderPath),
-        };
+        const newStatus: OnboardingStatus = { ...initialStatus };
 
-        // If the actual status is different from the stored status, update it
-        if (JSON.stringify(initialStatus) !== JSON.stringify(actualStatus)) {
-          await StorageManager.setAdminSetting('onboardingStatus', actualStatus);
-          setOnboardingStatus(actualStatus);
-          logger.info('Onboarding status updated.', actualStatus);
+        if (questions.length > 0) newStatus.addQuestions = 'completed_by_action';
+        if (trainers.length > 0) newStatus.addTrainers = 'completed_by_action';
+        if (kits.filter(k => !k.is_global).length > 0) newStatus.createKits = 'completed_by_action';
+        // 'modifyPreferences' can only be completed by user action
+        if (orsSavePath && reportSavePath && imagesSavePath) newStatus.configureTechnicalSettings = 'completed_by_action';
+
+        // Don't downgrade a step completed by the user
+        for (const key in newStatus) {
+            const stepKey = key as keyof OnboardingStatus;
+            if(initialStatus[stepKey] === 'completed_by_user') {
+                newStatus[stepKey] = 'completed_by_user';
+            }
+        }
+
+        if (JSON.stringify(initialStatus) !== JSON.stringify(newStatus)) {
+          await StorageManager.setAdminSetting('onboardingStatus', newStatus);
+          setOnboardingStatus(newStatus);
+          logger.info('Onboarding status updated.', newStatus);
         } else {
           setOnboardingStatus(initialStatus);
         }
 
       } catch (error) {
         logger.error('Failed to check onboarding status:', error);
-        // Fallback to a default state in case of error
         setOnboardingStatus({
-          hasAddedQuestions: false,
-          hasCreatedKits: false,
-          hasAddedTrainers: false,
-          hasConfiguredTechnicalSettings: false,
+            addQuestions: 'pending',
+            addTrainers: 'pending',
+            createKits: 'pending',
+            modifyPreferences: 'pending',
+            configureTechnicalSettings: 'pending',
         });
       } finally {
         setIsLoading(false);
@@ -77,7 +93,14 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
     checkOnboardingStatus();
   }, []);
 
-  if (isLoading) {
+  const handleMarkAsDone = async (stepId: keyof OnboardingStatus) => {
+    if (!onboardingStatus) return;
+    const newStatus = { ...onboardingStatus, [stepId]: 'completed_by_user' };
+    setOnboardingStatus(newStatus);
+    await StorageManager.setAdminSetting('onboardingStatus', newStatus);
+  };
+
+  if (isLoading || !onboardingStatus) {
     return (
       <Card className="border border-gris-moyen/50 mb-6">
         <p>Chargement de la carte de personnalisation...</p>
@@ -85,21 +108,16 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
     );
   }
 
-  const allStepsCompleted = onboardingStatus && Object.values(onboardingStatus).every(status => status);
+  const isStepCompleted = (status: OnboardingStepStatus) => status !== 'pending';
+
+  const allStepsCompleted = stepsDefinition.every(step => isStepCompleted(onboardingStatus[step.id]));
 
   if (allStepsCompleted) {
     return null;
   }
 
-  const steps: OnboardingStep[] = [
-    { id: 'hasAddedQuestions', title: 'Ajouter les questions dans la bibliothèque', isCompleted: onboardingStatus?.hasAddedQuestions || false, page: 'settings', link: 'library' },
-    { id: 'hasCreatedKits', title: 'Ajouter vos boîtiers de vote et créer des kits', isCompleted: onboardingStatus?.hasCreatedKits || false, page: 'settings', link: 'devicesAndKits' },
-    { id: 'hasAddedTrainers', title: 'Ajouter le nom de vos formateurs', isCompleted: onboardingStatus?.hasAddedTrainers || false, page: 'settings', link: 'trainers' },
-    { id: 'hasConfiguredTechnicalSettings', title: 'Configurer les liens dans les préférences techniques', isCompleted: onboardingStatus?.hasConfiguredTechnicalSettings || false, page: 'settings', link: 'technical' },
-  ];
-
-  const completedCount = steps.filter(step => step.isCompleted).length;
-  const totalSteps = steps.length;
+  const completedCount = stepsDefinition.filter(step => isStepCompleted(onboardingStatus[step.id])).length;
+  const totalSteps = stepsDefinition.length;
   const progressPercentage = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
 
   return (
@@ -116,30 +134,47 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({ onPageChange }) => {
         </div>
         <div className="w-full bg-gris-moyen/30 rounded-full h-2.5">
           <div
-            className="bg-vert-succes h-2.5 rounded-full transition-all duration-500"
+            className="bg-vert-validation h-2.5 rounded-full transition-all duration-500"
             style={{ width: `${progressPercentage}%` }}
           ></div>
         </div>
       </div>
 
       <ul className="space-y-3">
-        {steps.map((step) => (
-          <li key={step.id} className="flex items-center justify-between p-2 rounded-md hover:bg-gris-clair/50">
-            <div className="flex items-center">
-              {step.isCompleted ? (
-                <CheckCircle size={20} className="text-vert-succes mr-3" />
-              ) : (
-                <Circle size={20} className="text-gris-moyen mr-3" />
-              )}
-              <span className={`text-sm ${step.isCompleted ? 'line-through text-texte-principal/60' : 'text-texte-principal'}`}>
-                {step.title}
-              </span>
-            </div>
-            <a href="#" onClick={(e) => { e.preventDefault(); onPageChange(step.page, step.link); }} className={`text-sm font-medium ${step.isCompleted ? 'text-accent-neutre hover:underline' : 'text-rouge-accent hover:underline'}`}>
-              {step.isCompleted ? 'Vérifier' : 'Commencer'}
-            </a>
-          </li>
-        ))}
+        {stepsDefinition.map((step) => {
+          const isCompleted = isStepCompleted(onboardingStatus[step.id]);
+          return (
+            <li key={step.id} className="flex items-center justify-between p-2 rounded-md hover:bg-gris-clair/50">
+              <div className="flex items-center">
+                {isCompleted ? (
+                  <CheckCircle size={20} className="text-vert-validation mr-3" />
+                ) : (
+                  <Circle size={20} className="text-gris-moyen mr-3" />
+                )}
+                <span className={`text-sm ${isCompleted ? 'line-through text-texte-principal/60' : 'text-texte-principal'}`}>
+                  {step.title} {step.isOptional && '(Optionnel)'}
+                </span>
+              </div>
+              <div>
+                {isCompleted ? (
+                   <a href="#" onClick={(e) => { e.preventDefault(); onPageChange(step.page, step.link); }} className="text-sm font-medium text-accent-neutre hover:underline">
+                     Vérifier
+                   </a>
+                ) : (
+                    step.isOptional ? (
+                        <Button onClick={() => handleMarkAsDone(step.id)} variant="outline" size="sm" className="mr-2">
+                            Marquer comme fait
+                        </Button>
+                    ) : (
+                        <a href="#" onClick={(e) => { e.preventDefault(); onPageChange(step.page, step.link); }} className="text-sm font-medium text-rouge-accent hover:underline">
+                            Commencer
+                        </a>
+                    )
+                )}
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </Card>
   );
