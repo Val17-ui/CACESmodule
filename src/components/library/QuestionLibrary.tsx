@@ -189,11 +189,105 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
   };
 
   const handleReferentialFileImport = async () => {
-    // ... (implementation remains the same)
+    setImportReferentielsStatusMessage(null);
+    setImportReferentielsError(null);
+
+    try {
+      const fileDialogResult = await window.dbAPI?.openExcelFileDialog();
+      if (fileDialogResult?.canceled || !fileDialogResult || !fileDialogResult.fileBuffer) {
+        if (fileDialogResult?.error) {
+          setImportReferentielsError(`Erreur d'ouverture du fichier : ${fileDialogResult.error}`);
+        }
+        return;
+      }
+
+      setIsImportingReferentiels(true);
+
+      const fileBuffer = window.electronAPI?.Buffer_from(fileDialogResult.fileBuffer, 'base64');
+      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      if (jsonRows.length < 2) {
+        throw new Error("Le fichier est vide ou ne contient pas de données.");
+      }
+
+      const result = await window.dbAPI.handleReferentialImport(jsonRows);
+
+      if (result.success) {
+        let summaryMessage = `${result.referentielsAdded} ajouté(s), ${result.referentielsUpdated} mis à jour.`;
+        if (result.errors.length > 0) {
+          summaryMessage += ` ${result.errors.length} erreur(s).`;
+          setImportReferentielsError(result.errors.join('\\n'));
+        } else {
+          setImportReferentielsError(null);
+        }
+        setImportReferentielsStatusMessage(summaryMessage);
+        if (result.referentielsAdded > 0 || result.referentielsUpdated > 0) {
+          await loadFilterData();
+        }
+      } else {
+        throw new Error(result.error || "Une erreur inconnue est survenue lors de l'importation des référentiels.");
+      }
+
+    } catch (err: any) {
+      console.error("Error importing referentials: ", err);
+      setImportReferentielsError(`Erreur: ${err.message}`);
+    } finally {
+      setIsImportingReferentiels(false);
+    }
   };
 
   const handleThemeFileImport = async () => {
-    // ... (implementation remains the same)
+    setImportThemesStatusMessage(null);
+    setImportThemesError(null);
+
+    try {
+      const fileDialogResult = await window.dbAPI?.openExcelFileDialog();
+      if (fileDialogResult?.canceled || !fileDialogResult || !fileDialogResult.fileBuffer) {
+        if (fileDialogResult?.error) {
+          setImportThemesError(`Erreur d'ouverture du fichier : ${fileDialogResult.error}`);
+        }
+        return;
+      }
+
+      setIsImportingThemes(true);
+
+      const fileBuffer = window.electronAPI?.Buffer_from(fileDialogResult.fileBuffer, 'base64');
+      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      if (jsonRows.length < 2) {
+        throw new Error("Le fichier est vide ou ne contient pas de données.");
+      }
+
+      const result = await window.dbAPI.handleThemeImport(jsonRows);
+
+      if (result.success) {
+        let summaryMessage = `${result.themesAdded} ajouté(s), ${result.themesUpdated} mis à jour.`;
+        if (result.errors.length > 0) {
+          summaryMessage += ` ${result.errors.length} erreur(s).`;
+          setImportThemesError(result.errors.join('\\n'));
+        } else {
+          setImportThemesError(null);
+        }
+        setImportThemesStatusMessage(summaryMessage);
+        if (result.themesAdded > 0 || result.themesUpdated > 0) {
+          await loadFilterData();
+        }
+      } else {
+        throw new Error(result.error || "Une erreur inconnue est survenue lors de l'importation des thèmes.");
+      }
+
+    } catch (err: any) {
+      console.error("Error importing themes: ", err);
+      setImportThemesError(`Erreur: ${err.message}`);
+    } finally {
+      setIsImportingThemes(false);
+    }
   };
 
   const referentialOptions = useMemo(() => [

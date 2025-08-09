@@ -88,6 +88,8 @@ contextBridge.exposeInMainWorld('dbAPI', {
   addQuestion: (data: any) => ipcRenderer.invoke('db-add-question', data),
   upsertQuestion: (data: any) => ipcRenderer.invoke('db-upsert-question', data),
   handleQuestionImport: (rows: any[][]) => ipcRenderer.invoke('handle-question-import', rows),
+  handleReferentialImport: (rows: any[][]) => ipcRenderer.invoke('handle-referential-import', rows),
+  handleThemeImport: (rows: any[][]) => ipcRenderer.invoke('handle-theme-import', rows),
   getQuestionById: (id: number) => ipcRenderer.invoke('db-get-question-by-id', id),
   getQuestionsByBlocId: (blocId: number) => ipcRenderer.invoke('db-get-questions-by-bloc-id', blocId),
   updateQuestion: (id: number, updates: any) => ipcRenderer.invoke('db-update-question', id, updates),

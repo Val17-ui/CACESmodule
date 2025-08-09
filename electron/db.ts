@@ -2607,6 +2607,143 @@ const importQuestionsFromData = async (
   return { questionsAdded: questionsToUpsert.length, errors: errorsEncountered };
 };
 
+const importReferentielsFromData = async (
+  rows: any[][]
+): Promise<{ referentielsAdded: number; referentielsUpdated: number; errors: string[] }> => {
+
+  const headerRow = rows[0] as string[];
+  const dataRows = rows.slice(1);
+
+  const expectedHeaders: Record<string, string> = {
+    code: 'code',
+    nom_complet: 'nom_complet',
+  };
+
+  const headerMap: Record<string, number> = {};
+  headerRow.forEach((header, index) => {
+    const normalizedHeader = (header || '').toString().toLowerCase().replace(/\s+/g, '');
+    if (expectedHeaders[normalizedHeader]) {
+      headerMap[expectedHeaders[normalizedHeader]] = index;
+    }
+  });
+
+  if (headerMap['code'] === undefined || headerMap['nom_complet'] === undefined) {
+    throw new Error(`Colonnes manquantes ou mal nommées. Attendu: "code", "nom_complet".`);
+  }
+
+  let added = 0;
+  let updated = 0;
+  const errors: string[] = [];
+
+  const getStmt = getDb().prepare("SELECT id FROM referentiels WHERE code = ?");
+  const insertStmt = getDb().prepare("INSERT INTO referentiels (code, nom_complet) VALUES (?, ?)");
+  const updateStmt = getDb().prepare("UPDATE referentiels SET nom_complet = ? WHERE code = ?");
+
+  const transaction = getDb().transaction(() => {
+    for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const code = row[headerMap['code']];
+        const nom_complet = row[headerMap['nom_complet']];
+
+        if (!code || code.toString().trim() === '') {
+            errors.push(`Ligne ${i + 2}: Le champ 'code' est manquant.`);
+            continue;
+        }
+
+        try {
+            const existing = getStmt.get(code);
+            if (existing) {
+                updateStmt.run(nom_complet, code);
+                updated++;
+            } else {
+                insertStmt.run(code, nom_complet);
+                added++;
+            }
+        } catch (dbError: any) {
+            errors.push(`Ligne ${i + 2}: Erreur base de données pour le code "${code}" - ${dbError.message}`);
+        }
+    }
+  });
+
+  transaction();
+
+  return { referentielsAdded: added, referentielsUpdated: updated, errors: errors };
+};
+
+const importThemesFromData = async (
+  rows: any[][]
+): Promise<{ themesAdded: number; themesUpdated: number; errors: string[] }> => {
+
+  const headerRow = rows[0] as string[];
+  const dataRows = rows.slice(1);
+
+  const expectedHeaders: Record<string, string> = {
+    code_theme: 'code_theme',
+    nom_complet: 'nom_complet',
+    referentiel_code: 'referentiel_code',
+  };
+
+  const headerMap: Record<string, number> = {};
+  headerRow.forEach((header, index) => {
+    const normalizedHeader = (header || '').toString().toLowerCase().replace(/\s+/g, '');
+    if (expectedHeaders[normalizedHeader]) {
+      headerMap[expectedHeaders[normalizedHeader]] = index;
+    }
+  });
+
+  if (headerMap['code_theme'] === undefined || headerMap['nom_complet'] === undefined || headerMap['referentiel_code'] === undefined) {
+    throw new Error(`Colonnes manquantes ou mal nommées. Attendu: "code_theme", "nom_complet", "referentiel_code".`);
+  }
+
+  let added = 0;
+  let updated = 0;
+  const errors: string[] = [];
+
+  const allReferentiels = getDb().prepare("SELECT id, code FROM referentiels").all() as {id: number, code: string}[];
+  const referentielCodeToIdMap = new Map(allReferentiels.map(r => [r.code, r.id]));
+
+  const getStmt = getDb().prepare("SELECT id FROM themes WHERE code_theme = ? AND referentiel_id = ?");
+  const insertStmt = getDb().prepare("INSERT INTO themes (code_theme, nom_complet, referentiel_id) VALUES (?, ?, ?)");
+  const updateStmt = getDb().prepare("UPDATE themes SET nom_complet = ? WHERE code_theme = ? AND referentiel_id = ?");
+
+  const transaction = getDb().transaction(() => {
+    for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const code_theme = row[headerMap['code_theme']];
+        const nom_complet = row[headerMap['nom_complet']];
+        const referentiel_code = row[headerMap['referentiel_code']];
+
+        if (!code_theme || code_theme.toString().trim() === '' || !referentiel_code || referentiel_code.toString().trim() === '') {
+            errors.push(`Ligne ${i + 2}: Les champs 'code_theme' et 'referentiel_code' sont obligatoires.`);
+            continue;
+        }
+
+        const referentiel_id = referentielCodeToIdMap.get(referentiel_code);
+        if (!referentiel_id) {
+            errors.push(`Ligne ${i + 2}: Le 'referentiel_code' "${referentiel_code}" n'existe pas.`);
+            continue;
+        }
+
+        try {
+            const existing = getStmt.get(code_theme, referentiel_id);
+            if (existing) {
+                updateStmt.run(nom_complet, code_theme, referentiel_id);
+                updated++;
+            } else {
+                insertStmt.run(code_theme, nom_complet, referentiel_id);
+                added++;
+            }
+        } catch (dbError: any) {
+            errors.push(`Ligne ${i + 2}: Erreur base de données pour le thème "${code_theme}" - ${dbError.message}`);
+        }
+    }
+  });
+
+  transaction();
+
+  return { themesAdded: added, themesUpdated: updated, errors: errors };
+};
+
 const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean> => {
     return asyncDbRun(() => {
         try {
@@ -2637,4 +2774,4 @@ const checkAndFinalizeSessionStatus = async (sessionId: number): Promise<boolean
     });
 };
 
-export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, bulkUpsertQuestions, getAllQuestions, countQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, hasResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus, importQuestionsFromData };
+export { initializeDatabase, getDb, createSchema, addOrUpdateSessionIteration, getSessionIterationsBySessionId, updateSessionIteration, addParticipant, upsertParticipant, addParticipantAssignment, getParticipantAssignmentsByIterationId, updateParticipantStatusInIteration, clearAssignmentsForIteration,   addQuestion, upsertQuestion, bulkUpsertQuestions, getAllQuestions, countQuestions, getQuestionById, getQuestionsByIds, updateQuestion, deleteQuestion, getQuestionsByBlocId, getQuestionsForSessionBlocks, getAdminSetting, setAdminSetting, getAllAdminSettings, getGlobalPptxTemplate, addSession, getAllSessions, getSessionById, updateSession, deleteSession, addSessionResult, addBulkSessionResults, getAllResults, getResultsForSession, getResultBySessionAndQuestion, updateSessionResult, deleteResultsForSession, deleteResultsForIteration, hasResultsForIteration, addVotingDevice, getAllVotingDevices, updateVotingDevice, deleteVotingDevice, bulkAddVotingDevices, addTrainer, getAllTrainers, getTrainerById, updateTrainer, deleteTrainer, setDefaultTrainer, getDefaultTrainer, addSessionQuestion, addBulkSessionQuestions, getSessionQuestionsBySessionId, deleteSessionQuestionsBySessionId, addSessionBoitier, addBulkSessionBoitiers, getSessionBoitiersBySessionId, deleteSessionBoitiersBySessionId, addReferential, getAllReferentiels, getReferentialByCode, getReferentialById, addTheme, getAllThemes, getThemesByReferentialId, getThemeByCodeAndReferentialId, getThemeById, addBloc, getAllBlocs, getBlocsByThemeId, getBlocByCodeAndThemeId, getBlocById, addDeviceKit, getAllDeviceKits, getDeviceKitById, updateDeviceKit, deleteDeviceKit, getDefaultDeviceKit, setDefaultDeviceKit, createOrUpdateGlobalKit, assignDeviceToKit, removeDeviceFromKit, getVotingDevicesForKit, getKitsForVotingDevice, removeAssignmentsByKitId, removeAssignmentsByVotingDeviceId, calculateBlockUsage, exportAllData, importAllData, checkAndFinalizeSessionStatus, importQuestionsFromData, importReferentielsFromData, importThemesFromData };

@@ -26,7 +26,9 @@ import {
   upsertParticipant, clearAssignmentsForIteration, addParticipantAssignment,
   updateParticipantStatusInIteration,
   checkAndFinalizeSessionStatus,
-  importQuestionsFromData
+  importQuestionsFromData,
+  importReferentielsFromData,
+  importThemesFromData
 } from '@electron/db';
 
 import { getLogger, ILogger } from '@electron/utils/logger';
@@ -338,6 +340,28 @@ export function initializeIpcHandlers(loggerInstance: ILogger) {
       return { success: true, ...result };
     } catch (error: any) {
       loggerInstance.error(`[IPC] handle-question-import: Import failed: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('handle-referential-import', async (_event, rows: any[][]) => {
+    loggerInstance.debug(`[IPC] handle-referential-import: starting import for ${rows.length - 1} referentiels.`);
+    try {
+      const result = await importReferentielsFromData(rows);
+      return { success: true, ...result };
+    } catch (error: any) {
+      loggerInstance.error(`[IPC] handle-referential-import: Import failed: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('handle-theme-import', async (_event, rows: any[][]) => {
+    loggerInstance.debug(`[IPC] handle-theme-import: starting import for ${rows.length - 1} themes.`);
+    try {
+      const result = await importThemesFromData(rows);
+      return { success: true, ...result };
+    } catch (error: any) {
+      loggerInstance.error(`[IPC] handle-theme-import: Import failed: ${error.message}`);
       return { success: false, error: error.message };
     }
   });
