@@ -5,7 +5,7 @@ import { UserCheck, Calendar, Download, MapPin, User, BookOpen, Bookmark } from 
 import { Session, Participant, SessionResult, QuestionWithId, Theme, Bloc, VotingDevice, ThemeScoreDetails } from '@common/types';
 import Button from '../ui/Button';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { FontStyle, autoTable, HAlignType } from 'jspdf-autotable'; 
 import JSZip from 'jszip';
 import { StorageManager } from '../../services/StorageManager';
 import {
@@ -25,7 +25,21 @@ declare module 'jspdf' {
     } | undefined;
   }
 }
-type HAlignType = 'left' | 'center' | 'right';
+type CellInput = {
+  content: string;
+  colSpan?: number; // Ajoutez cette ligne
+  styles?: {
+    halign?: HAlignType;
+    fillColor?: [number, number, number];
+    textColor?: [number, number, number];
+    fontStyle?: 'normal' | 'bold' | 'italic' | 'bolditalic';
+    cellPadding?: number;
+    fontSize?: number;
+    minCellHeight?: number;
+  };
+};
+
+type RowInput = CellInput[];
 interface ParticipantCalculatedData extends Participant {
   score?: number;
   reussite?: boolean;
@@ -78,7 +92,14 @@ const ReportDetails: React.FC<ReportDetailsProps> = ({ session }) => {
   const [lastPdfPath, setLastPdfPath] = useState<string | null>(null);
 
   const participants = session.participants || [];
-
+const hexToRgb = (hex: string): [number, number, number] => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? [
+    parseInt(result[1], 16),
+    parseInt(result[2], 16),
+    parseInt(result[3], 16)
+  ] : [0, 0, 0];
+};
   const deviceMap = useMemo(() => {
     return new Map(votingDevices.map(device => [device.id, device.serialNumber]));
   }, [votingDevices]);
@@ -485,26 +506,46 @@ const generateSessionReportPDF = async () => {
   setIsGeneratingPdf(true);
   setLastPdfPath(null);
 
+  const COLORS = { 
+    blue: '#1A4F8B', 
+    red: '#FF6161', 
+    green: '#6BAF92', 
+    text: '#2D2D2D', 
+    lightText: '#505050',
+    black: '#000000'
+  };
+
+  // Convertir les couleurs HEX en RGB
+  const COLORS_RGB = {
+    red: hexToRgb(COLORS.red),
+    green: hexToRgb(COLORS.green),
+    text: hexToRgb(COLORS.text),
+    black: hexToRgb(COLORS.black)
+  };
+
   try {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const FONT_SIZES = { title: 18, subtitle: 12, body: 10, small: 8 };
-    const COLORS = { blue: '#1A4F8B', red: '#FF6161', green: '#6BAF92', text: '#2D2D2D', lightText: '#505050' };
     const margin = 15;
-    const pageWidth = doc.internal.pageSize.width - margin * 2; // ~190 mm utilisable
-    const pageHeight = doc.internal.pageSize.height;
+    const fullPageWidth = doc.internal.pageSize.getWidth();
+    const usablePageWidth = fullPageWidth - margin * 2;
+    const pageHeight = doc.internal.pageSize.getHeight();
 
     // --- Header ---
     const logoSetting = await StorageManager.getAdminSetting('reportLogoBase64');
     if (logoSetting?.value) {
-      try { doc.addImage(logoSetting.value, 'PNG', pageWidth + margin - 25, margin, 20, 20); }
-      catch (e) { console.error("Error adding logo to PDF:", e); }
+      try {
+        doc.addImage(logoSetting.value, 'PNG', fullPageWidth - margin - 20, margin, 20, 20);
+      } catch (e) {
+        console.error("Error adding logo to PDF:", e);
+      }
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(FONT_SIZES.title);
     doc.setTextColor(COLORS.text);
-    doc.text('Rapport de Session', pageWidth / 2 + margin, margin + 12, { align: 'center' });
+    doc.text('Rapport de Session', fullPageWidth / 2, margin + 12, { align: 'center' });
 
-    // --- Details Columns ---
+    // --- Details ---
     let y = margin + 35;
     doc.setFontSize(FONT_SIZES.subtitle);
     doc.setFont('helvetica', 'bold');
@@ -520,7 +561,7 @@ const generateSessionReportPDF = async () => {
     ];
 
     details.forEach(detail => {
-      const splitValue = doc.splitTextToSize(detail.value, pageWidth / 2 - 40);
+      const splitValue = doc.splitTextToSize(detail.value || '', usablePageWidth / 2 - 20);
       doc.setFontSize(FONT_SIZES.body);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(COLORS.lightText);
@@ -531,115 +572,278 @@ const generateSessionReportPDF = async () => {
       y += (splitValue.length * 5) + 2;
     });
 
+    // --- Right column (questionnaire) ---
     let yRight = margin + 35;
     doc.setFontSize(FONT_SIZES.subtitle);
     doc.setFont('helvetica', 'bold');
-    doc.text('Questionnaire généré', pageWidth / 2 + margin + 5, yRight);
+    doc.text('Questionnaire généré', fullPageWidth / 2 + 5, yRight);
     yRight += 8;
 
     const themesData = blockStats.map(bs => {
       const version = [...new Set(questionsForThisSession.filter(q => q.blocId === bs.blocId).map(q => q.version))][0] || 'N/A';
-      const mainText = `${bs.themeName} - ${bs.blocCode}`;
-      const detailText = `(Version ${version}, ${bs.questionsInBlockCount} questions)`;
-      return { mainText, detailText };
+      return {
+        mainText: `${bs.themeName} - ${bs.blocCode}`,
+        detailText: `(Version ${version}, ${bs.questionsInBlockCount} questions)`
+      };
     }).sort((a, b) => a.mainText.localeCompare(b.mainText));
 
     themesData.forEach(theme => {
       doc.setFontSize(FONT_SIZES.body);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(COLORS.text);
-      const splitText = doc.splitTextToSize(theme.mainText, pageWidth / 2 - 10);
-      doc.text(splitText, pageWidth / 2 + margin + 5, yRight);
+      const splitText = doc.splitTextToSize(theme.mainText, usablePageWidth / 2 - 10);
+      doc.text(splitText, fullPageWidth / 2 + 5, yRight);
       yRight += (splitText.length * 5);
 
       doc.setFontSize(FONT_SIZES.small);
       doc.setTextColor(COLORS.lightText);
-      doc.text(theme.detailText, pageWidth / 2 + margin + 5, yRight);
+      doc.text(theme.detailText, fullPageWidth / 2 + 5, yRight);
       yRight += 6;
     });
 
     y = Math.max(y, yRight) + 10;
 
-    // --- Participants Table (En-têtes globaux) ---
-    doc.setFontSize(FONT_SIZES.subtitle);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(COLORS.text);
-    doc.text('Tableau des Participants', margin, y);
-    y += 10;
+    // -----------------------
+    // --- TABLE SETUP ------
+    // -----------------------
+    const desiredColWidths = [70, 70, 25, 25]; // Largeurs désirées en mm
+    const totalDesiredWidth = desiredColWidths.reduce((a, b) => a + b, 0);
 
-    const head = [['Participant', 'Entreprise', 'Score Global', 'Résultat']];
+    // Ajuster si nécessaire
+    let adjustedColWidths = [...desiredColWidths];
+    let tableWidth = totalDesiredWidth;
+    if (totalDesiredWidth > usablePageWidth) {
+      const scale = usablePageWidth / totalDesiredWidth;
+      adjustedColWidths = desiredColWidths.map(w => w * scale);
+      tableWidth = usablePageWidth;
+    }
+
+    const body: RowInput[] = [];
+
+    // 1. En-tête du tableau
+    body.push([
+      { 
+        content: 'Participant', 
+        styles: { 
+          halign: 'left' as HAlignType,
+          fillColor: [0, 32, 96],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold' as FontStyle,
+          cellPadding: 2,
+          minCellHeight: 7 // Réduit pour compacité
+        } 
+      },
+      { 
+        content: 'Entreprise', 
+        styles: { 
+          halign: 'left' as HAlignType,
+          fillColor: [0, 32, 96],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold' as FontStyle,
+          cellPadding: 2,
+          minCellHeight: 7
+        } 
+      },
+      { 
+        content: 'Score Global', 
+        styles: { 
+          halign: 'center' as HAlignType,
+          fillColor: [0, 32, 96],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold' as FontStyle,
+          cellPadding: 2,
+          minCellHeight: 7
+        } 
+      },
+      { 
+        content: 'Résultat', 
+        styles: { 
+          halign: 'center' as HAlignType,
+          fillColor: [0, 32, 96],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold' as FontStyle,
+          cellPadding: 2,
+          minCellHeight: 7
+        } 
+      }
+    ]);
+
+    // 2. Ajout des participants
+    participantCalculatedData.forEach((p) => {
+      const score = p.score || 0;
+      const reussite = score >= 70;
+      const resultColor = reussite ? COLORS_RGB.green : COLORS_RGB.red;
+
+      // Ligne 1: Infos du participant
+      body.push([
+        { 
+          content: `${p.prenom} ${p.nom}`, 
+          styles: { halign: 'left' as HAlignType, minCellHeight: 7 }
+        },
+        { 
+          content: p.entreprise || '-', 
+          styles: { halign: 'left' as HAlignType, minCellHeight: 7 }
+        },
+        { 
+          content: score?.toFixed(0) || 'N/A', 
+          styles: { halign: 'center' as HAlignType, minCellHeight: 7 }
+        },
+        { 
+          content: reussite ? 'Réussi' : 'Ajourné', 
+          styles: { 
+            halign: 'center' as HAlignType,
+            textColor: resultColor,
+            fontStyle: 'bold' as FontStyle,
+            minCellHeight: 7
+          } 
+        }
+      ]);
+
+      // Ligne 2: Scores par thème dans content avec tirets
+      const themeScores = p.themeScores ? Object.values(p.themeScores) : [];
+      themeScores.sort((a, b) => a.themeCode?.localeCompare(b.themeCode || '') || 0);
+      let themeText = 'Score par thème: ';
+      if (themeScores.length > 0) {
+        themeText += themeScores.map(ts => `${ts.themeCode || 'N/A'}: ${ts.correct}/${ts.total}`).join(' - ');
+      } else {
+        themeText += 'Aucun score';
+      }
+      body.push([
+        { 
+          content: themeText, 
+          colSpan: 4,
+          styles: { 
+            fontSize: FONT_SIZES.small, 
+            halign: 'left' as HAlignType,
+            cellPadding: 2,
+            minCellHeight: 7, // Réduit pour compacité
+            textColor: COLORS_RGB.text
+          } 
+        }
+      ]);
+    });
+
+    // Débogage : Afficher participantCalculatedData
+    console.log('[Debug] participantCalculatedData:', JSON.stringify(participantCalculatedData, null, 2));
+
+    let tableStartY = y;
+    let tableEndY = y;
+    let tableStartX = margin;
+
     autoTable(doc, {
       startY: y,
-      head: head,
-      body: [],
-      theme: 'grid',
-      styles: { fontSize: FONT_SIZES.body, cellPadding: 2, valign: 'middle' },
-      headStyles: { fillColor: COLORS.blue, textColor: '#FFFFFF', fontStyle: 'bold' },
-      columnStyles: {
-        0: { cellWidth: 70, halign: 'left' as HAlignType },
-        1: { cellWidth: 70, halign: 'left' as HAlignType },
-        2: { cellWidth: 25, halign: 'center' as HAlignType },
-        3: { cellWidth: 25, halign: 'center' as HAlignType }
+      body: body,
+      theme: 'plain', // Supprime toutes les bordures par défaut
+      margin: { left: margin, right: margin },
+      tableWidth: tableWidth,
+      styles: { 
+        cellPadding: 2,
+        valign: 'middle', 
+        overflow: 'linebreak',
+        lineWidth: 0, // Pas de bordures par défaut
+        minCellHeight: 7 // Réduit pour compacité
       },
-    });
-    y = (doc as any).lastAutoTable.finalY + 5;
+      columnStyles: {
+        0: { cellWidth: adjustedColWidths[0] },
+        1: { cellWidth: adjustedColWidths[1] },
+        2: { cellWidth: adjustedColWidths[2] },
+        3: { cellWidth: adjustedColWidths[3] },
+      },
+      tableLineWidth: 0,
+      showHead: 'firstPage',
+      didDrawCell: (data) => {
+        console.log(`[Debug] didDrawCell: row ${data.row.index}, column ${data.column.index}, cell.y: ${data.cell.y}, cell.height: ${data.cell.height}, cell.width: ${data.cell.width}, colSpan: ${data.cell.colSpan || 1}`);
+        
+        // Mettre à jour tableEndY pour les bordures extérieures
+        if (data.row.index === 0 && data.column.index === 0) {
+          tableStartY = data.cell.y;
+          tableStartX = data.cell.x;
+        }
+        if (data.cell.y + data.cell.height > tableEndY) {
+          tableEndY = data.cell.y + data.cell.height;
+        }
 
-    // --- Mini-tables par participant ---
-    participantCalculatedData.forEach((p) => {
-      const body = [
-        [
-          { content: `${p.prenom} ${p.nom}`, styles: { halign: 'left' as HAlignType, cellWidth: 70 } },
-          { content: p.entreprise || '-', styles: { halign: 'left' as HAlignType, cellWidth: 70 } },
-          { content: p.score?.toFixed(0) || 'N/A', styles: { halign: 'center' as HAlignType, cellWidth: 25 } },
-          { content: p.reussite ? 'Certifié' : 'Ajourné', styles: { halign: 'center' as HAlignType, cellWidth: 25 } }
-        ],
-        [
-          { content: p.themeScores ? Object.values(p.themeScores).map((ts: ThemeScoreDetails) => `${ts.themeCode}: ${ts.correct}/${ts.total}`).join(', ') : 'Aucun score', colSpan: 4, styles: { halign: 'left' as HAlignType, fontSize: FONT_SIZES.small, cellWidth: 190 } }
-        ]
-      ];
+        // Dessiner les lignes horizontales entre les participants (après chaque deuxième ligne)
+        if (
+          data.section === 'body' &&
+          data.row.index > 0 &&
+          data.row.index % 2 === 0 && // Deuxième ligne (index pair)
+          data.column.index === 0
+        ) {
+          doc.setDrawColor(COLORS.black);
+          doc.setLineWidth(0.2);
+          const totalWidth = adjustedColWidths.reduce((a, b) => a + b, 0);
+          doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + totalWidth, data.cell.y + data.cell.height);
+        }
 
-      autoTable(doc, {
-        startY: y,
-        body: body,
-        theme: 'grid',
-        rowHeight: 12,
-        styles: { fontSize: FONT_SIZES.body, cellPadding: 2, valign: 'middle' },
-        columnStyles: {
-          0: { cellWidth: 70, halign: 'left' as HAlignType },
-          1: { cellWidth: 70, halign: 'left' as HAlignType },
-          2: { cellWidth: 25, halign: 'center' as HAlignType },
-          3: { cellWidth: 25, halign: 'center' as HAlignType }
-        },
-        didDrawCell: (data) => {
-          console.log("Drawing cell:", data.column.index, "raw:", data.cell.raw, "row:", data.row.index);
-          if (data.section === 'body') {
-            if (data.column.index === 3 && data.row.index === 0) { // Colonne Résultat (première ligne)
-              const result = data.cell.raw as string;
-              data.cell.styles.textColor = result === 'Ajourné' ? COLORS.red : result === 'Certifié' ? COLORS.green : COLORS.text;
-            }
-            if (data.row.index === 1 && data.column.index === 0) { // Scores par thème (deuxième ligne)
-              const themeScoresText = data.cell.raw as string;
-              if (typeof themeScoresText === 'string') {
-                const items = themeScoresText.split(', ');
-                let x = data.cell.x + 2;
-                const y = data.cell.y + data.cell.height / 2 + 1.5;
-                items.forEach(item => {
-                  const [_, scorePart] = item.split(': ');
-                  const [correct, total] = scorePart ? scorePart.split('/') : ['0', '0'];
-                  const rate = parseInt(total) > 0 ? parseInt(correct) / parseInt(total) : 0;
-                  const color = rate < 0.5 ? COLORS.red : COLORS.green;
-                  doc.setFontSize(FONT_SIZES.small);
-                  doc.setTextColor(color);
-                  doc.text(item, x, y);
-                  x += doc.getTextWidth(item) + 4;
-                });
-              }
+        // Appliquer les couleurs pour les scores par thème
+        if (
+          data.section === 'body' &&
+          data.row.index > 0 &&
+          data.row.index % 2 === 0 && // Deuxième ligne (index pair)
+          data.column.index === 0
+        ) {
+          const participantIndex = Math.floor(data.row.index / 2) - 1;
+          const p = participantCalculatedData[participantIndex];
+
+          if (p) {
+            console.log(`[Debug] Applying colors for row ${data.row.index}, participant index ${participantIndex}, cell.y: ${data.cell.y}, cell.height: ${data.cell.height}, cell.width: ${data.cell.width}, colSpan: ${data.cell.colSpan || 1}`);
+            const themeScores = p.themeScores ? Object.values(p.themeScores) : [];
+            themeScores.sort((a, b) => a.themeCode?.localeCompare(b.themeCode || '') || 0);
+
+            // Masquer le texte original en dessinant un rectangle blanc
+            doc.setFillColor(255, 255, 255);
+            doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+
+            // Réécrire le texte avec couleurs et tirets
+            doc.setFontSize(FONT_SIZES.small);
+            doc.setFont('helvetica', 'normal');
+            let x = data.cell.x + 2;
+            const yTxt = data.cell.y + data.cell.height / 2; // Centrage vertical
+
+            // Texte "Score par thème:"
+            doc.setTextColor(COLORS_RGB.text[0], COLORS_RGB.text[1], COLORS_RGB.text[2]);
+            doc.text('Score par thème:', x, yTxt);
+            x += doc.getTextWidth('Score par thème:') + 2;
+
+            if (themeScores.length > 0) {
+              themeScores.forEach((ts, index) => {
+                const correct = Number(ts.correct) || 0;
+                const total = Number(ts.total) || 0;
+                const rate = total > 0 ? correct / total : 0;
+                const color = rate < 0.5 ? COLORS_RGB.red : COLORS_RGB.green;
+                const themeText = `${ts.themeCode || 'N/A'}: ${correct}/${total}`;
+                
+                doc.setTextColor(color[0], color[1], color[2]);
+                doc.setFont('helvetica', 'bold');
+                doc.text(themeText, x, yTxt);
+                x += doc.getTextWidth(themeText) + 2;
+
+                // Ajouter un tiret si ce n'est pas le dernier score
+                if (index < themeScores.length - 1) {
+                  doc.setTextColor(COLORS_RGB.text[0], COLORS_RGB.text[1], COLORS_RGB.text[2]);
+                  doc.setFont('helvetica', 'normal');
+                  doc.text('-', x, yTxt);
+                  x += doc.getTextWidth('-') + 2;
+                }
+              });
+            } else {
+              doc.setTextColor(COLORS_RGB.text[0], COLORS_RGB.text[1], COLORS_RGB.text[2]);
+              doc.text('Aucun score', x, yTxt);
             }
           }
-        },
-      });
-      y = (doc as any).lastAutoTable.finalY + 5;
+        }
+      },
+      didDrawPage: (data) => {
+        // Dessiner les bordures extérieures du tableau
+        doc.setDrawColor(COLORS.black);
+        doc.setLineWidth(0.2);
+        const totalWidth = adjustedColWidths.reduce((a, b) => a + b, 0);
+        doc.rect(tableStartX, tableStartY, totalWidth, tableEndY - tableStartY);
+      }
     });
+
+    y = (doc as any).lastAutoTable.finalY + 10;
 
     // --- Footer ---
     const totalPages = (doc as any).internal.getNumberOfPages();
@@ -647,21 +851,21 @@ const generateSessionReportPDF = async () => {
       doc.setPage(i);
       doc.setFontSize(FONT_SIZES.small);
       doc.setTextColor(150);
-      doc.text(`Page ${i} / ${totalPages}`, pageWidth / 2 + margin, pageHeight - margin, { align: 'center' });
+      doc.text(`Page ${i} / ${totalPages}`, fullPageWidth / 2, pageHeight - margin, { align: 'center' });
       doc.setDrawColor(150, 150, 150);
       doc.rect(margin, pageHeight - 20, 80, 15);
       doc.setTextColor(100);
       doc.text('Signature du Formateur:', margin + 2, pageHeight - 15);
     }
 
-    // --- Save PDF avec gestion d'erreur EBUSY ---
+    // --- Save PDF ---
     const pdfBuffer = doc.output('arraybuffer');
     const fileName = `rapport_session_${session.nomSession.replace(/[^a-zA-Z0-9_.-]/g, '_')}.pdf`;
     let success = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       const result = await window.dbAPI.saveReportFile(pdfBuffer, fileName);
       if (result.success && result.filePath) {
-        setLastPdfPath(result.filePath);
+        setLastPdfPath(result.filePath || null);
         success = true;
         break;
       } else if (result.error && !result.error.includes('EBUSY')) {
@@ -669,7 +873,7 @@ const generateSessionReportPDF = async () => {
       }
     }
     if (!success) {
-      throw new Error("Impossible de sauvegarder le PDF après plusieurs tentatives. Veuillez fermer tout lecteur PDF ouvert.");
+      throw new Error("Impossible de sauvegarde le PDF après plusieurs tentatives. Veuillez fermer tout lecteur PDF ouvert.");
     }
   } catch (error) {
     console.error("Erreur lors de la génération ou sauvegarde du PDF:", error);
@@ -878,3 +1082,4 @@ return (
 };
 
 export default ReportDetails;
+
