@@ -8,7 +8,7 @@ import Tooltip from '../ui/Tooltip';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
 import { Table, TableHead, TableBody, TableRow, TableCell } from '../ui/Table';
-import { Referential, Theme, Bloc } from '@common/types';
+import { Referential, Theme, Bloc, ImportProgress } from '@common/types';
 import { StorageManager, StoredQuestion } from '../../services/StorageManager';
 
 type QuestionLibraryProps = {
@@ -65,7 +65,7 @@ const QuestionLibrary: React.FC<QuestionLibraryProps> = ({ onEditQuestion }) => 
     fetchQuestions();
     loadFilterData();
 
-    const removeListener = window.electronAPI.on('import-progress', (progress) => {
+    const removeListener = window.electronAPI.on('import-progress', (progress: ImportProgress) => {
       setImportProgress(progress);
     });
 

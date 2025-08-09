@@ -445,3 +445,8 @@ export type OnboardingStatus = {
   modifyPreferences: OnboardingStepStatus;
   configureTechnicalSettings: OnboardingStepStatus;
 };
+
+export type ImportProgress = {
+  current: number;
+  total: number;
+};

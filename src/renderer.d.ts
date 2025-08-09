@@ -39,6 +39,9 @@ declare global {
       getAllBlocs: () => Promise<Bloc[]>;
       addQuestion: (data: Omit<QuestionWithId, 'id'>) => Promise<number | undefined>;
       upsertQuestion: (questionData: Omit<QuestionWithId, 'id'>) => Promise<number | undefined>;
+      handleQuestionImport: (rows: any[][]) => Promise<{ success: boolean; questionsAdded: number; errors: string[]; error?: string; }>;
+      handleReferentialImport: (rows: any[][]) => Promise<{ success: boolean; referentielsAdded: number; referentielsUpdated: number; errors: string[]; error?: string; }>;
+      handleThemeImport: (rows: any[][]) => Promise<{ success: boolean; themesAdded: number; themesUpdated: number; errors: string[]; error?: string; }>;
       upsertParticipant: (participant: any) => Promise<number | undefined>;
       getQuestionById: (id: number) => Promise<QuestionWithId | undefined>;
       getQuestionsByBlocId: (blocId: number) => Promise<QuestionWithId[]>;
@@ -94,6 +97,7 @@ declare global {
 }
 
 interface ElectronAPI {
+  on: (channel: string, callback: (...args: any[]) => void) => () => void;
   readImageFile: (path: string | Blob | null) => Promise<string>;
   readFileBuffer: (filePath: string) => Promise<{ canceled: boolean; fileName: string | null; fileBuffer: string | null; error: string | null; }>;
   Buffer_from: (data: string, encoding: string) => Buffer;
